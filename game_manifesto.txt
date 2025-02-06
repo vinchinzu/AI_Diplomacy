@@ -1,0 +1,37 @@
+=== S1901M ===
+PARSABLE OUTPUT:
+{
+  "orders": [
+    "In phase S1901M, most powers’ units remained in their original locations, with very little territory changing hands.",
+    "Austria’s orders mostly held: A BUD remained secure, while its order for A VIE was void, leaving that unit in place, and F TRI also stayed at TRI.",
+    "England’s moves saw F EDI’s order go void, while F LON and A LVP maintained their positions, so no territory shifted.",
+    "France attempted to move A PAR toward BUR and F BRE toward MAO while A MAR held; however, the board state shows that A PAR and the other units remained where they were, indicating these moves did not result in a change of location.",
+    "Germany’s orders – with F KIE moving toward DEN, A MUN heading for RUH, and A BER holding – did not ultimately alter unit positions, as A BER and A MUN are still at their original locations and F KIE’s movement was inconsequential in the final state.",
+    "Italy’s orders, including F NAP’s push toward ION and an operation involving A ROM supporting A VEN’s move to APU, ultimately left units in NAP, ROM, and VEN, with no successful change reported.",
+    "In Russia’s case, while A WAR and A MOS held and F STP/SC remained in place, F SEV’s move to BLA bounced, so that unit stayed at SEV.",
+    "Turkey experienced a similar setback with F ANK’s attempted move to BLA bouncing; conversely, A CON’s order to move to BUL succeeded, and A SMY held.",
+    "Overall, there were no captures, dislodgements, or retreats, and the majority of orders resulted in holds or failed moves, leaving the board state largely unchanged this turn."
+  ]
+}
+
+=== F1901M ===
+PARSABLE OUTPUT:
+{
+  "orders": [
+    "In phase F1901M, several powers experienced notable shifts. Austria’s F ALB order, intended to support F ION, ended up void, and although their units attempted maneuvers (with A BUD and A VIE involved in a support for a move toward GAL), they lost the F TRI unit but gained F ALB from a previous adjustment.",
+    "England’s fleet orders from EDI and ENG bounced when trying to move to NTH, while their army from YOR successfully moved to WAL. This turn brought England new units (F ENG and A YOR) even as they lost F LON and A LVP from the past phase.",
+    "France managed to move A MAR to SPA, even though additional support orders from F MAO and A BUR were void. The net result was France gaining A BUR and F MAO while losing A PAR and F BRE, which altered their presence on the board.",
+    "Germany’s F DEN order held firm, and while A RUH’s support worked out and A BER’s support order did not have additional effect, Germany gained F DEN and A RUH but lost F KIE and A MUN relative to the previous turn.",
+    "For Italy, the F ION order bounced, preventing movement in that area, but they secured a gain with the addition of A APU while maintaining A ROM. This followed losses of A VEN and F NAP, indicating a shift in their unit distribution.",
+    "Russia saw its A WAR order bounce and F SEV experience a similar fate, though F STP/SC and A MOS remained in place, keeping much of their position constant.",
+    "Turkey faced a bounce with F ANK as it tried to move to BLA, but A BUL successfully moved, and A SMY held, resulting in Turkey gaining A BUL and losing A CON."
+  ]
+}
+
+=== W1901A ===
+{
+    "orders": [
+        "During the W1901A phase, several notable shifts in power occurred. Austria lost its unit in Budapest but reinforced its position by adding an army in Galicia. England replaced its lost unit in Yorkshire with a new unit in Wales. For France, the fleet move from Brest executed successfully while the army move from Paris was void; however, France still expanded its holdings by capturing the SPA center. In Germany’s case, the attempt from Kiel failed as the order was void, but the Munich army's move succeeded and Germany secured the DEN center. Meanwhile, Turkey consolidated its influence by losing a unit in Bulgaria but gaining an army in Rumelia, and it captured the RUM center. There were no retreats this turn, leaving the units in place aside from these adjustments."
+    ]
+}
+
