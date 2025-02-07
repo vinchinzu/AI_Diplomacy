@@ -32,7 +32,7 @@ This repository is an extension of the original [Diplomacy](https://github.com/d
 - **Longer Conversation Phases**: Support for more than 3 message rounds, or an adaptive approach that ends negotiation early if all powers signal "ready."  
 - **Strategic Goals**: Let each power maintain high-level goals (e.g., "ally with France," "defend Munich") that the LLM takes into account for orders and conversations.  
 - **Enhanced Summaries**: Summaries could incorporate conversation logs or trending alliances, giving the LLM even richer context each turn.  
-- **Live Front-End Integration**: Display phase summaries, conversation logs, and highlights of completed orders in a real-time UI.
+- **Live Front-End Integration**: Display phase summaries, conversation logs, and highlights of completed orders in a real-time UI. (an attempt to display phase summaries currently in progress)
 
 ---
 
