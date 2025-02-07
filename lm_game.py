@@ -92,7 +92,8 @@ Example response formats:
             new_message = client.get_conversation_reply(
                 power_name=power_name,
                 conversation_so_far=conversation_so_far + "\n" + few_shot_example,
-                game_phase=game.current_short_phase
+                game_phase=game.current_short_phase,
+                phase_summaries=game.phase_summaries
             )
 
             if new_message:
@@ -163,7 +164,7 @@ def main():
     # Map each power to its chosen LLM
     game.power_model_map = assign_models_to_powers()
 
-    max_year = 1901
+    max_year = 1902
 
     while not game.is_game_done:
         phase_start = time.time()
@@ -185,6 +186,12 @@ def main():
             logger.info("Starting negotiation phase block...")
             conversation_messages = conduct_negotiations(game, max_rounds=3)
 
+        # Convert conversation_messages to single string for orders
+        conversation_text_for_orders = "\n".join([
+            f"{msg['sender']} to {msg['recipient']}: {msg['content']}"
+            for msg in conversation_messages
+        ])
+
         # Gather orders from each power concurrently
         active_powers = [
             (p_name, p_obj) for p_name, p_obj in game.powers.items()
@@ -203,7 +210,12 @@ def main():
                     continue
                 board_state = game.get_state()
                 future = executor.submit(
-                    client.get_orders, board_state, power_name, possible_orders, conversation_messages
+                    client.get_orders, 
+                    board_state, 
+                    power_name, 
+                    possible_orders, 
+                    conversation_text_for_orders,
+                    game.phase_summaries
                 )
                 futures[future] = power_name
                 logger.debug(f"Submitted get_orders task for power {power_name}.")

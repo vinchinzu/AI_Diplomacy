@@ -112,6 +112,7 @@ class BaseModelClient:
         power_name: str, 
         possible_orders: Dict[str, List[str]], 
         conversation_text: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
@@ -155,7 +156,7 @@ Possible Orders:
 
 Chain-of-thought:
 [Be consistent with your secret chain-of-thought here, but do not reveal it. 
-Think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, any public and private goals you have or others might have based on conversation and reality of positions.
+Think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions.
 Aim for best strategic moves based on the possible orders, 
 and produce an output in PARSABLE JSON format as shown below.]
 
@@ -167,7 +168,7 @@ PARSABLE OUTPUT:{
 
         instructions = (
             "IMPORTANT:\n"
-            "For your chain of thought, think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, any public and private goals you have or others might have based on conversation and reality of positions.\n"
+            "For your chain of thought, think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions.\n"
             "Return your chain-of-thought and end with EXACTLY one JSON block:\n"
             "PARSABLE OUTPUT:{\n"
             '  "orders": [ ... ]\n'
@@ -177,11 +178,20 @@ PARSABLE OUTPUT:{
 
         )
 
+        # 1) Prepare a block of text for the phase_summaries
+        if phase_summaries:
+            historical_summaries = "\nPAST PHASE SUMMARIES:\n"
+            for phase_key, summary_txt in phase_summaries.items():
+                # You can format the summary however you prefer
+                logger.info(f"[DEBUG] phase_key: {phase_key}, summary_txt: {summary_txt}")
+                historical_summaries += f"\nPHASE {phase_key}:\n{summary_txt}\n"
+        else:
+            historical_summaries = "\n(No historical summaries provided)\n"
+
         prompt = (
-            f"Relevant Conversation:\n{conversation_text}\n\n"
-            + summary
-            + few_shot_example
-            + "\nNow think carefully and produce final orders.\n"
+            "Relevant Conversation:\n" + conversation_text + "\n\n"
+            + "Historical Summaries:\n" + historical_summaries + "\n\n"
+            + summary + few_shot_example + "\n"
             + instructions
         )
         return prompt
@@ -192,13 +202,14 @@ PARSABLE OUTPUT:{
         power_name: str, 
         possible_orders: Dict[str, List[str]], 
         conversation_text: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> List[str]:
         """
         1) Builds the prompt with conversation context if available
         2) Calls LLM
         3) Parses JSON block
         """
-        prompt = self.build_prompt(board_state, power_name, possible_orders, conversation_text)
+        prompt = self.build_prompt(board_state, power_name, possible_orders, conversation_text, phase_summaries)
 
         raw_response = ""
 
@@ -330,12 +341,21 @@ PARSABLE OUTPUT:{
                 fallback.append(holds[0] if holds else orders_list[0])
         return fallback
 
-    def build_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
+    def build_conversation_reply(
+        self, 
+        power_name: str, 
+        conversation_so_far: str, 
+        game_phase: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
+    ) -> str:
         """
         Produce a single message in valid JSON with 'message_type' etc.
         """
         prompt = f"""
 You are playing a power named {power_name} in a Diplomacy game during the {game_phase} phase.
+
+Here are the past phase summaries:
+{phase_summaries}
 
 Here is the conversation so far:
 {conversation_so_far}
@@ -356,7 +376,7 @@ Example response formats:
     "content": "Let's form a secret alliance against Germany."
 }}
 
-Think strategically about your diplomatic position and respond with your message in the correct JSON format:"""
+Think strategically about your diplomatic position the past phase summaries and respond with your message in the correct JSON format:"""
         return prompt
     
     def generate_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
@@ -400,7 +420,13 @@ class OpenAIClient(BaseModelClient):
             logger.error(f"[{self.model_name}] Unexpected error in generate_response: {e}")
             return ""
 
-    def get_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
+    def get_conversation_reply(
+        self, 
+        power_name: str, 
+        conversation_so_far: str, 
+        game_phase: str, 
+        phase_summaries: Optional[Dict[str, str]] = None,
+    ) -> str:
         """
         Produces a single message with the appropriate JSON format.
         """
@@ -408,7 +434,7 @@ class OpenAIClient(BaseModelClient):
         from json.decoder import JSONDecodeError
         # load the system prompt but formatted with the power name and game phase
         system_prompt = self.system_prompt_conversation.format(power_name=power_name, game_phase=game_phase)
-        conversation_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase)
+        conversation_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase, phase_summaries)
 
         try:
             # Perform the request
@@ -469,9 +495,15 @@ class ClaudeClient(BaseModelClient):
             logger.error(f"[{self.model_name}] Unexpected error in generate_response: {e}")
             return ""
 
-    def get_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
+    def get_conversation_reply(
+        self, 
+        power_name: str, 
+        conversation_so_far: str, 
+        game_phase: str, 
+        phase_summaries: Optional[Dict[str, str]] = None,
+    ) -> str:
         system_prompt = f"You are playing as {power_name} in this Diplomacy negotiation phase {game_phase}."
-        user_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase)
+        user_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase, phase_summaries)
         try:
             response = self.client.messages.create(
                 model=self.model_name,
@@ -520,14 +552,20 @@ class GeminiClient(BaseModelClient):
             logger.error(f"[{self.model_name}] Error in Gemini generate_response: {e}")
             return ""
 
-    def get_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
+    def get_conversation_reply(
+        self, 
+        power_name: str, 
+        conversation_so_far: str, 
+        game_phase: str, 
+        phase_summaries: Optional[Dict[str, str]] = None,
+    ) -> str:
         """
         Produce a single short conversation message from the Gemini model, 
         given existing conversation context.
         """
         # Similar approach: create a system plus user prompt, then call model.generate_content
         system_prompt = f"You are playing as {power_name} in this Diplomacy negotiation phase {game_phase}.\n"
-        user_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase)
+        user_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase, phase_summaries)
         full_prompt = system_prompt + user_prompt
 
         try:
@@ -605,9 +643,15 @@ class DeepSeekClient(BaseModelClient):
             logger.error(f"[{self.model_name}] Unexpected error in generate_response: {e}")
             return ""
     
-    def get_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
+    def get_conversation_reply(
+        self, 
+        power_name: str, 
+        conversation_so_far: str, 
+        game_phase: str, 
+        phase_summaries: Optional[Dict[str, str]] = None,
+    ) -> str:
         system_prompt = self.system_prompt_conversation.format(power_name=power_name, game_phase=game_phase)
-        user_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase)
+        user_prompt = self.build_conversation_reply(power_name, conversation_so_far, game_phase, phase_summaries)
         user_prompt += "\n\nPlease provide ONLY a single JSON object as per the examples above."
 
         try:
