@@ -1,0 +1,8 @@
+IMPORTANT:
+For your chain of thought, think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions.
+Return your chain-of-thought and end with EXACTLY one JSON block:
+PARSABLE OUTPUT:{
+  "orders": [ ... ]
+}
+No extra braces outside that block.
+The most important thing is to make SURE to include your orders in the JSON block. 

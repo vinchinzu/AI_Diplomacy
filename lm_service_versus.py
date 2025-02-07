@@ -39,65 +39,8 @@ class BaseModelClient:
 
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self.system_prompt_response = """
-        You are a Diplomacy expert.
-        You are given a board state and a list of possible orders for a power.
-        You need to produce the final orders for that power.
-        You have a lot of information to work with:
-            Power
-            Current Phase
-            Enemy Units
-            Enemy Centers
-            Your Units
-            Your Centers
-            Possible Orders
-
-        After thinking about the information, you must produce a list of orders.
-        You must respond with a JSON object in the format:
-        PARSABLE OUTPUT:
-        {
-            "orders": ["Your move 1","Your move 2"]
-        }
-        it's paramount that you include the parsable output block.
-        """
-        self.system_prompt_conversation = """
-            You are playing as {power_name} in a Diplomacy negotiation during phase {game_phase}.
-            You have read all messages so far. Now produce a single new message with your strategy or statement.
-            REQUIRED FORMAT:
-            For any message, you must respond with one of these exact JSON structures:
-
-            1. For global messages:
-            {{
-                "message_type": "global",
-                "content": "Your message here"
-            }}
-
-            2. For private messages:
-            {{
-                "message_type": "private",
-                "recipient": "POWER_NAME",
-                "content": "Your message here"
-            }}
-
-            IMPORTANT RULES:
-            - Your response must be ONLY the JSON object, nothing else
-            - Do not include any explanation or additional text
-            - Ensure the JSON is properly formatted and escaped
-            - The content field should contain your diplomatic message
-            - For private messages, recipient must be one of: AUSTRIA, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY, ENGLAND
-
-            Example valid responses:
-            {{
-                "message_type": "global",
-                "content": "I propose we all work together against Turkey."
-            }}
-
-            {{
-                "message_type": "private",
-                "recipient": "FRANCE",
-                "content": "Let's form a secret alliance against Germany."
-            }}
-        """
+        self.system_prompt_response = load_prompt("system_prompt_response.txt")
+        self.system_prompt_conversation = load_prompt("system_prompt_conversation.txt")
     def generate_response(self, prompt: str) -> str:
         """
         Returns a raw string from the LLM.
@@ -145,38 +88,9 @@ class BaseModelClient:
         for loc, orders in possible_orders.items():
             summary += f"  {loc}: {orders}\n"
 
-        few_shot_example = """
---- EXAMPLE ---
-Power: FRANCE
-Phase: S1901M
-Your Units: ['A PAR','F BRE']
-Possible Orders:
-  PAR: ['A PAR H','A PAR - BUR','A PAR - GAS']
-  BRE: ['F BRE H','F BRE - MAO']
-
-Chain-of-thought:
-[Be consistent with your secret chain-of-thought here, but do not reveal it. 
-Think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions.
-Aim for best strategic moves based on the possible orders, 
-and produce an output in PARSABLE JSON format as shown below.]
-
-PARSABLE OUTPUT:{
-  "orders": ["A PAR - BUR","F BRE - MAO"]
-}
---- END EXAMPLE ---
-"""
-
-        instructions = (
-            "IMPORTANT:\n"
-            "For your chain of thought, think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions.\n"
-            "Return your chain-of-thought and end with EXACTLY one JSON block:\n"
-            "PARSABLE OUTPUT:{\n"
-            '  "orders": [ ... ]\n'
-            "}\n"
-            "No extra braces outside that block.\n"
-            "The most important thing is to make SURE to include your orders in the JSON block.\n"
-
-        )
+        # Load prompts
+        few_shot_example = load_prompt("few_shot_example.txt")
+        instructions = load_prompt("instructions.txt")
 
         # 1) Prepare a block of text for the phase_summaries
         if phase_summaries:
@@ -351,33 +265,12 @@ PARSABLE OUTPUT:{
         """
         Produce a single message in valid JSON with 'message_type' etc.
         """
-        prompt = f"""
-You are playing a power named {power_name} in a Diplomacy game during the {game_phase} phase.
-
-Here are the past phase summaries:
-{phase_summaries}
-
-Here is the conversation so far:
-{conversation_so_far}
-
-You must now respond with exactly ONE JSON object. 
-
-Example response formats:
-1. For a global message:
-{{
-    "message_type": "global",
-    "content": "I propose we all work together against Turkey."
-}}
-
-2. For a private message:
-{{
-    "message_type": "private",
-    "recipient": "FRANCE",
-    "content": "Let's form a secret alliance against Germany."
-}}
-
-Think strategically about your diplomatic position the past phase summaries and respond with your message in the correct JSON format:"""
-        return prompt
+        return load_prompt("build_conversation_reply.txt").format(
+            power_name=power_name,
+            game_phase=game_phase,
+            phase_summaries=phase_summaries,
+            conversation_so_far=conversation_so_far
+        )
     
     def generate_conversation_reply(self, power_name: str, conversation_so_far: str, game_phase: str) -> str:
         """
@@ -773,3 +666,8 @@ def get_visible_messages_for_power(conversation_messages, power_name):
         ):
             visible.append(msg)
     return visible  # already in chronological order if appended that way 
+
+def load_prompt(filename: str) -> str:
+    """Helper to load prompt text from file"""
+    with open(f"AI_Diplomacy/prompts/{filename}", "r") as f:
+        return f.read().strip() 

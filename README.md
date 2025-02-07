@@ -1,5 +1,41 @@
 # Diplomacy: DATC-Compliant Game Engine [![Build Status](https://travis-ci.org/diplomacy/diplomacy.svg?branch=master)](https://travis-ci.org/diplomacy/diplomacy) [![Documentation Status](https://readthedocs.org/projects/diplomacy/badge/?version=latest)](https://diplomacy.readthedocs.io/en/latest/?badge=latest)
 
+## Extended AI Features (Experimental)
+
+This repository has been **extended** to integrate multiple Large Language Models (LLMs) into Diplomacy gameplay. **These extensions are experimental, subject to change**, and actively in development. The main additions are as follows:
+
+- **Conversation & Negotiation**: Powers can have multi-turn negotiations with each other via `lm_game.py`. They can exchange private or global messages, allowing for more interactive diplomacy.  
+- **Order Generation**: Each power can choose its orders (moves, holds, supports, etc.) using LLMs via `lm_service_versus.py`. Currently supports OpenAI, Claude, Gemini, DeepSeek
+- **Phase Summaries**: Modifications in the `game.py` engine allow the generation of "phase summaries," providing a succinct recap of each turn's events. This could help both human spectators and the LLMs themselves to understand the game state more easily.  
+- **Prompt Templates**: Prompts used by the LLMs are stored in `/prompts/`. You can edit these to customize how models are instructed for both orders and conversations.  
+- **Experimental & WIP**: Ongoing development includes adding strategic goals for each power, more flexible conversation lengths, and a readiness check to advance the phase if all powers are done negotiating.
+
+### How it Works
+
+1. **`lm_game.py`**  
+   - Orchestrates a Diplomacy game where each power's moves are decided by an LLM.  
+   - Manages conversation rounds (currently up to 3 by default) and calls `get_conversation_reply()` for each power.  
+   - After negotiations, each power's orders are gathered concurrently (via threads), using `get_orders()` from the respective LLM client.  
+   - Calls `game.process()` to move to the next phase, optionally collecting phase summaries along the way.
+
+2. **`lm_service_versus.py`**  
+   - Defines a base class (`BaseModelClient`) for hitting any LLM endpoint.  
+   - Subclasses (`OpenAIClient`, `ClaudeClient`, etc.) implement `generate_response()` and `get_conversation_reply()` with the specifics of each LLM's API.  
+   - Handles prompt construction for orders and conversation, JSON extraction to parse moves or messages, and fallback logic for invalid LLM responses.  
+
+3. **Modifications in `game.py` (Engine)**  
+   - Added a `_generate_phase_summary()` method and `phase_summaries` dict to store short textual recaps of each phase.  
+   - Summaries can be viewed or repurposed for real-time commentary or as additional context fed back into the LLM.  
+
+### Future Explorations
+
+- **Longer Conversation Phases**: Support for more than 3 message rounds, or an adaptive approach that ends negotiation early if all powers signal "ready."  
+- **Strategic Goals**: Let each power maintain high-level goals (e.g., "ally with France," "defend Munich") that the LLM takes into account for orders and conversations.  
+- **Enhanced Summaries**: Summaries could incorporate conversation logs or trending alliances, giving the LLM even richer context each turn.  
+- **Live Front-End Integration**: Display phase summaries, conversation logs, and highlights of completed orders in a real-time UI.
+
+---
+
 ## Experimental AI for Diplomacy
 Currently experimenting with AI Diplomacy as a benchmark For this purpose:
 - **lm_game.py** for orchestrating AI-driven gameplay loops
@@ -170,7 +206,6 @@ async def launch(game_id):
 if __name__ == '__main__':
     asyncio.run(launch(game_id=str(random.randint(1, 1000))))
 
-```
 ## License
 
 This project is licensed under the APGLv3 License - see the [LICENSE](LICENSE) file for details
