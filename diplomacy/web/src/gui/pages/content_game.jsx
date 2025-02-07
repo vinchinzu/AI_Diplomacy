@@ -49,6 +49,7 @@ import {SvgModern} from "../maps/modern/SvgModern";
 import {SvgPure} from "../maps/pure/SvgPure";
 import {MapData} from "../utils/map_data";
 import {Queue} from "../../diplomacy/utils/queue";
+import {PhaseSummaryView} from "../components/phase_summary_view";
 
 const HotKey = require('react-shortcut');
 
@@ -891,8 +892,14 @@ export class ContentGame extends React.Component {
         const titles = tabNames.map(tabName => (tabName === 'GLOBAL' ? tabName : tabName.substr(0, 3)));
         const currentTabId = this.state.tabPastMessages || tabNames[0];
 
+        let summaryText = "";
+        if (engine.phase_summaries && engine.phase_summaries.hasOwnProperty(engine.phasePrior)) {
+            summaryText = engine.phase_summaries[engine.phasePrior];
+        }
+
         return (
             <div className={'panel-messages'} key={'panel-messages'}>
+                <PhaseSummaryView phase={engine.phasePrior} summaryText={summaryText} />
                 {/* Messages. */}
                 <Tabs menu={tabNames} titles={titles} onChange={this.onChangeTabPastMessages} active={currentTabId}>
                     {tabNames.map(protagonist => (

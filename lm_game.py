@@ -164,7 +164,7 @@ def main():
     # Map each power to its chosen LLM
     game.power_model_map = assign_models_to_powers()
 
-    max_year = 1902
+    max_year = 2000
 
     while not game.is_game_done:
         phase_start = time.time()

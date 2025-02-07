@@ -22,3 +22,79 @@ PARSABLE OUTPUT:
   ]
 }
 
+=== S1901M ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "In the S1901M phase, all powers issued orders with strategic intent but no unit left its starting position. Austria tried to support moves between BUD, VIE, and TRI, yet one of its support orders (from A VIE) went void, leaving its forces in place. England aimed at moving fleets from EDI and LON toward the North Sea and an army from LVP toward WAL, but despite these maneuvers, its units remained at F EDI, F LON, and A LVP. France attempted to shift its forces with F BRE moving toward MAO and both armies from MAR and PAR supporting moves into BUR, yet these orders did not alter the board configuration. Similarly, Germany’s orders to reposition its fleet, armies, and hold in BER resulted in no change, as did Italy’s orders which envisioned moves from NAP, ROM, and VEN to distant locations like ION, APU, and TYR. Russia’s maneuver orders, including the support and attempted move of A WAR (and accompanying fleet moves from SEV and STP/SC), left its units unmoved. Finally, Turkey maintained a fully defensive posture with its three units holding. Overall, while many orders were designed to support advances or reposition forces, none resulted in captures, retreats, or any changes in unit location from the existing board state."
+    ]
+}
+
+=== F1901M ===
+PARSABLE OUTPUT:
+{
+  "orders": [
+    "Austria attempted two offensives this turn: its army from BUD to VIE and its fleet from TRI to VEN both bounced, and its supporting move from VIE to back the BUD move ended up void. As a result, Austrian units remain at BUD, VIE, and TRI.",
+    "England’s orders were much smoother. The army from WAL moved to YOR with support from the fleet at EDI, while the fleet stationed at NTH held. England now features its new A WAL unit (after losing F LON and A LVP previously) along with F EDI and F NTH.",
+    "France achieved a shift in its positioning by sending the fleet from MAO to BRE successfully, with both the armies at BUR and MAR holding. This corresponds with France’s net gain of a BUR and F MAO and the loss of F BRE and A PAR.",
+    "Germany coordinated a push: the army from RUH moved to MUN with crucial support from A BER, and the fleet at HOL held its ground. Consequently, Germany has now added A RUH and F HOL while losing F KIE and A MUN from before.",
+    "Italy executed a supported offensive as its army from APU advanced to VEN with help from A TYR, while the fleet in ION moved to TUN. With these orders, Italy sees the introduction of A TYR, F ION, and A APU, even as it lost A ROM, A VEN, and F NAP in the previous turn.",
+    "Russia’s orders were entirely defensive: all units—including F BLA, F BOT, A MOS, and A LVN—held their positions. This steady stance follows the recent changes where Russia built new units (A LVN, F BOT, F BLA) and lost others (F STP/SC, F SEV, A WAR).",
+    "Turkey’s moves also met with success. The fleet at ANK provided support for F BLA (as indicated through its support order) while the army from CON moved to BUL, and the army at SMY held. Turkey’s forces retain their positions in ANK, CON, and SMY on the board."
+  ]
+}
+
+=== W1901A ===
+PARSABLE OUTPUT:
+{
+  "orders": [
+    "During phase W1901A, most powers mostly stood pat while a few minor moves reshaped the board. Germany issued an order involving its unit from KIE, and Italy attempted two orders—one with its fleet from NAP that appears to have resolved (though details aren’t fully explicit) and a second order from ROM that was declared void. There were no retreats this phase. In the overall board state, several adjustments were noted: England replaced its unit at WAL with a new unit at YOR; France lost its unit at MAO but added a fleet in BRE; Germany saw its unit from RUH removed and replaced by a unit in MUN while also expanding its territory to include HOL; Italy shed its units in ION and APU, replaced them with a fleet at TUN and an army at VEN, and secured the TUN center; and Turkey shifted from a unit in CON to gain one in BUL while taking the BUL center. These changes set the stage for future moves while preserving the overall stability of most powers."
+  ]
+}
+
+=== S1902M ===
+PARSABLE OUTPUT:
+{
+  "orders": [
+    "In phase S1902M, Austria kept its position by holding in VIE and TRI while also giving support orders from BUD; overall, its forces remained steady.",
+    "England tried to push F NTH toward HEL and moved A YOR to LON, but the attempted support from F EDI went void, so only the direct movement of A YOR appears effective.",
+    "France focused on a defensive posture with holds by A BUR and A MAR, while its fleet in BRE advanced toward ENG to assert pressure.",
+    "Germany successfully held its positions with orders such as A BER supporting A MUN. Notably, Germany also gained a new unit, A KIE, which strengthens its overall presence.",
+    "Italy attempted to break into TRI with moves from A TYR and A VEN; however, both orders bounced, leaving those units in place. Meanwhile, F TUN moved toward WES and F NAP shifted to ION, preserving Italy’s southern influence.",
+    "Russia’s efforts to support moves between MOS and BLA (with both F BLA and A MOS orders) ended void, so the units at MOS, F BLA, along with A LVN and F BOT, held their current positions.",
+    "Turkey continued its forward actions with A SMY advancing into ARM, F ANK providing support near F BLA, and A BUL holding its territory, maintaining its balance on the board."
+  ]
+}
+
+=== F1902M ===
+PARSABLE OUTPUT:
+{
+  "orders": [
+    "This turn saw several notable shifts. Austria’s orders were mixed: while A BUD’s support for moving A VIE and the convoy attempt with F TRI were attempted, the fleet in TRI was dislodged, creating a setback in their operations. England emerged stronger by adding A LON and F HEL to their forces even as they lost F NTH and A YOR, indicating a successful rebalancing of their positions. France replaced its lost F BRE with a newly built F ENG, while holding its armies in BUR and MAR. Germany’s orders maintained the status quo, as their support moves around A MUN did not yield any substantial changes in position. Italy made a significant pivot by moving A VEN toward TRI and reinforcing with new naval units F ION and F WES, compensating for the loss of F TUN and F NAP. Russia held its positions steadily with all units on defense and support. Meanwhile, Turkey repositioned its forces by moving A ARM – now established on the board – and holding F ANK and A BUL, after losing A SMY. Overall, the turn was characterized by strategic repositioning and selective gains by several powers, notably England, France, Italy, and Turkey, while Austria faced challenges with the dislodgement of its fleet."
+  ]
+}
+
+=== F1902R ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "Austria’s fleet in Trieste was forced to retreat to Adr, confirming the order F TRI R ADR and resulting in the replacement of the dislodged F TRI with the newly positioned *F TRI.",
+        "In the process, Austria added an army in Bohemia while losing the unit in Vienna, shifting its control portfolio.",
+        "England reconfigured its forces by gaining a fleet in the North Sea and an army in Yorkshire, in exchange for losing units previously stationed in London and the Hel Peninsula.",
+        "France successfully secured a new fleet in Brest even as it lost its unit in the English Channel.",
+        "Italy adjusted its presence by acquiring a fleet in Tunis and an army in Trieste, while surrendering positions in the Ionian Sea and Venice.",
+        "Turkey also repositioned by adding an army in Sevastopol, offset by the loss of its unit in Armenia."
+    ]
+}
+
+=== W1902A ===
+{
+  "orders": [
+    "Austria’s moves resulted in a mixed outcome. Their order involving F ADR produced a new fleet on the Adriatic, while attempts regarding A BOH and A BUD were void. Notably, they lost their fleet in Trieste (F TRI), which coincided with losing the TRI supply center.",
+    "England, France, and Germany remained static this turn, issuing no orders.",
+    "Italy’s orders, which called for bombardments from Venice and Rome, had mixed success. Although the F ROM bombard was void, Italy ended up capturing Trieste (TRI) from Austria – a gain that adds TRI to Italy’s list of centers.",
+    "Russia’s orders were inconsistent. The F BLA order was effective (dislodging an enemy unit), but orders for F BOT, A LVN, and A MOS were void; as a consequence, Russia lost the SEV center this turn.",
+    "Turkey succeeded with both its orders. The actions from A CON and A SMY were successful, allowing Turkey to secure the SEV center, which they now control."
+  ]
+}
+

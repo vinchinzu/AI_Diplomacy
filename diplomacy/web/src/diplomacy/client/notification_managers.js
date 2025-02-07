@@ -53,6 +53,18 @@ export const NOTIFICATION_MANAGERS = {
     game_processed: function (game, notification) {
         game.local.extendPhaseHistory(notification.previous_phase_data);
         game.local.setPhaseData(notification.current_phase_data);
+
+        // If the server attached a summary to previous_phase_data
+        if (notification.previous_phase_data && notification.previous_phase_data.summary) {
+            const phaseName = notification.previous_phase_data.name;
+            const summaryText = notification.previous_phase_data.summary;
+            // Store it in game.local so that the React components can render it
+            if (!game.local.phase_summaries) {
+                game.local.phase_summaries = {};
+            }
+            game.local.phase_summaries[phaseName] = summaryText;
+        }
+
         game.local.clearVote();
     },
     game_phase_update: function (game, notification) {
