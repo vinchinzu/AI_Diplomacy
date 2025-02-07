@@ -36,13 +36,6 @@ This repository is an extension of the original [Diplomacy](https://github.com/d
 
 ---
 
-## Experimental AI for Diplomacy
-Currently experimenting with AI Diplomacy as a benchmark For this purpose:
-- **lm_game.py** for orchestrating AI-driven gameplay loops
-- **lm_service_versus.py** for bridging multiple language model services (e.g. GPT, Claude, etc.)
-- Simple AI tests to verify functionality
-
-The new files plug into the existing Diplomacy game engine, calling AI inference to decide orders for each power.
 
 <p align="center">
   <img width="500" src="docs/images/map_overview.png" alt="Diplomacy Map Overview">
