@@ -1,8 +1,8 @@
-# Diplomacy: DATC-Compliant Game Engine [![Build Status](https://travis-ci.org/diplomacy/diplomacy.svg?branch=master)](https://travis-ci.org/diplomacy/diplomacy) [![Documentation Status](https://readthedocs.org/projects/diplomacy/badge/?version=latest)](https://diplomacy.readthedocs.io/en/latest/?badge=latest)
+# AI Diplomacy: 
 
 ## Extended AI Features (Experimental)
 
-This repository has been **extended** to integrate multiple Large Language Models (LLMs) into Diplomacy gameplay. **These extensions are experimental, subject to change**, and actively in development. The main additions are as follows:
+This repository is an extension of the original [Diplomacy](https://github.com/diplomacy/diplomacy) project. This repository has been extended to integrate multiple Large Language Models (LLMs) into Diplomacy gameplay. **These extensions are experimental, subject to change**, and actively in development. The main additions are as follows:
 
 - **Conversation & Negotiation**: Powers can have multi-turn negotiations with each other via `lm_game.py`. They can exchange private or global messages, allowing for more interactive diplomacy.  
 - **Order Generation**: Each power can choose its orders (moves, holds, supports, etc.) using LLMs via `lm_service_versus.py`. Currently supports OpenAI, Claude, Gemini, DeepSeek
