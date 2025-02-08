@@ -164,7 +164,7 @@ def main():
     # Map each power to its chosen LLM
     game.power_model_map = assign_models_to_powers()
 
-    max_year = 2000
+    max_year = 1901
 
     while not game.is_game_done:
         phase_start = time.time()
@@ -245,7 +245,7 @@ def main():
         logger.info(f"{border}\nPHASE SUMMARY for {phase_data.name}:\n{summary_text}\n{border}")
 
         # Optionally append it to the same text file, so we keep a log
-        with open("/results/game_manifesto.txt", "a") as f:
+        with open("./results/game_manifesto.txt", "a") as f:
             f.write(f"=== {phase_data.name} ===\n{summary_text}\n\n")
 
         # End-of-loop checks
@@ -259,7 +259,7 @@ def main():
     duration = time.time() - start_whole
     logger.info(f"Game ended after {duration:.2f}s. Saving to 'lmvsgame.json'.")
     # Save the game to a JSON file
-    output_path = '/results/lmvsgame.json'
+    output_path = './results/lmvsgame.json'
     if not os.path.exists(output_path):
         to_saved_game_format(game, output_path=output_path)
     else:

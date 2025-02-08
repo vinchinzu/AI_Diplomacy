@@ -49,7 +49,7 @@ import {SvgModern} from "../maps/modern/SvgModern";
 import {SvgPure} from "../maps/pure/SvgPure";
 import {MapData} from "../utils/map_data";
 import {Queue} from "../../diplomacy/utils/queue";
-import {PhaseSummaryView} from "../components/phase_summary_view";
+import {PhaseSummaryBottomSheet} from "../components/PhaseSummaryBottomSheet";
 
 const HotKey = require('react-shortcut');
 
@@ -140,7 +140,10 @@ export class ContentGame extends React.Component {
             power: null,
             orderBuildingType: null,
             orderBuildingPath: [],
-            showAbbreviations: true
+            showAbbreviations: true,
+            showPhaseSummarySheet: false,
+            bottomSheetVisible: true,
+            summaryVisible: true
         };
 
         // Bind some class methods to this instance.
@@ -807,15 +810,15 @@ export class ContentGame extends React.Component {
     onChangePastPhaseIndex(increment) {
         const selectObject = document.getElementById('select-past-phase');
         if (selectObject) {
-            // Let's simply increase or decrease index of showed past phase.
-            const index = selectObject.selectedIndex;
-            const newIndex = index + (increment ? 1 : -1);
-            if (newIndex >= 0 && newIndex < selectObject.length) {
-                selectObject.selectedIndex = newIndex;
-                this.__change_past_phase(parseInt(selectObject.options[newIndex].value, 10), (increment ? 0 : 1));
-            }
+          const index = selectObject.selectedIndex;
+          const newIndex = index + (increment ? 1 : -1);
+          if (newIndex >= 0 && newIndex < selectObject.length) {
+            selectObject.selectedIndex = newIndex;
+            // Ensure we do parseInt with a base of 10
+            this.__change_past_phase(parseInt(selectObject.options[newIndex].value, 10));
+          }
         }
-    }
+      }
 
     onIncrementPastPhase(event) {
         this.onChangePastPhaseIndex(true);
@@ -885,21 +888,18 @@ export class ContentGame extends React.Component {
     renderPastMessages(engine, role) {
         const messageChannels = engine.getMessageChannels(role, true);
         const tabNames = [];
-        for (let powerName of Object.keys(engine.powers)) if (powerName !== role)
-            tabNames.push(powerName);
+        for (let powerName of Object.keys(engine.powers)) {
+          if (powerName !== role) tabNames.push(powerName);
+        }
         tabNames.sort();
         tabNames.push('GLOBAL');
         const titles = tabNames.map(tabName => (tabName === 'GLOBAL' ? tabName : tabName.substr(0, 3)));
         const currentTabId = this.state.tabPastMessages || tabNames[0];
-
-        let summaryText = "";
-        if (engine.phase_summaries && engine.phase_summaries.hasOwnProperty(engine.phasePrior)) {
-            summaryText = engine.phase_summaries[engine.phasePrior];
-        }
-
+            
+       
+      
         return (
-            <div className={'panel-messages'} key={'panel-messages'}>
-                <PhaseSummaryView phase={engine.phasePrior} summaryText={summaryText} />
+          <div className={'panel-messages'} key={'panel-messages'}>
                 {/* Messages. */}
                 <Tabs menu={tabNames} titles={titles} onChange={this.onChangeTabPastMessages} active={currentTabId}>
                     {tabNames.map(protagonist => (
@@ -1157,6 +1157,25 @@ export class ContentGame extends React.Component {
     renderTabMessages(toDisplay, initialEngine, currentPowerName) {
         const {engine, pastPhases, phaseIndex} = this.__get_engine_to_display(initialEngine);
 
+        let allMessages = [];
+        const history = engine.message_history || {};
+
+        for (const [key, val] of Object.entries(history)) {
+            if (val && typeof val === 'object') {
+                if (typeof val.values === 'function') {
+                    const arr = Array.from(val.values());
+                    allMessages.push(...arr);
+                } else {
+                    allMessages.push(...Object.values(val));
+                }
+            } else {
+                console.log(`[renderTabMessages] Skipping key="${key}" =>`, val);
+            }
+        }
+
+        console.log("DEBUG: combined allMessages =>", allMessages);
+
+        if (!toDisplay) return null;
         return (
             <Tab id={'tab-phase-history'} display={toDisplay}>
                 <Row>
@@ -1168,11 +1187,11 @@ export class ContentGame extends React.Component {
                     </div>
                     <div className={'col-xl'}>
                         {this.__form_phases(pastPhases, phaseIndex)}
-                        {pastPhases[phaseIndex] === initialEngine.phase ? (
-                            this.renderCurrentMessages(initialEngine, currentPowerName)
-                        ) : (
-                            this.renderPastMessages(engine, currentPowerName)
-                        )}
+                            {pastPhases[phaseIndex] === initialEngine.phase ? (
+                                this.renderCurrentMessages(initialEngine, currentPowerName)
+                            ) : (
+                                this.renderPastMessages(engine, currentPowerName)
+                            )}
                     </div>
                 </Row>
                 {toDisplay && <HotKey keys={['arrowleft']} onKeysCoincide={this.onDecrementPastPhase}/>}
@@ -1224,9 +1243,18 @@ export class ContentGame extends React.Component {
     // [ React.Component overridden methods.
 
     render() {
-        this.props.data.displayed = true;
         const page = this.context;
         const engine = this.props.data;
+
+        // 1) Quick log to confirm engine is not null/undefined
+        console.log("Render content_game with engine:", engine);
+
+        if (!engine) {
+            console.warn("Engine is null or undefined. Rendering fallback or forcing a logout?");
+            return <main><div>Error: No engine found.</div></main>;
+        }
+
+        this.props.data.displayed = true;
         const title = ContentGame.gameTitle(engine);
         const navigation = [
             ['Help', () => page.dialog(onClose => <Help onClose={onClose}/>)],
@@ -1343,6 +1371,39 @@ export class ContentGame extends React.Component {
             </div>
         );
 
+        // Guard referencing engine.phase_summaries
+        const phaseSummaries = engine.phase_summaries || {};
+        const currentPhase = engine.phase || "(unknown phase)";
+        let summaryText = "";
+         // Attempt to get a prior phase or fallback to current if prior is not available
+         const priorPhase = engine.phasePrior;
+         if (engine.phase_summaries) {
+           if (priorPhase && engine.phase_summaries.hasOwnProperty(priorPhase)) {
+             summaryText = engine.phase_summaries[priorPhase];
+           } else if (engine.phase && engine.phase_summaries.hasOwnProperty(engine.phase)) {
+             summaryText = engine.phase_summaries[engine.phase];
+           }
+         }
+        const summaryForCurrentPhase =
+            phaseSummaries.hasOwnProperty(currentPhase) ? phaseSummaries[currentPhase] : "";
+
+        // Example: Flatten messages from all known phases
+        let allMessages = [];
+        if (engine.message_history) {
+            for (const phaseName of Object.keys(engine.message_history)) {
+                const phaseMsgsDict = engine.message_history[phaseName];
+                // Convert { time_sent: messageObj, ... } to an array
+                const phaseMsgsArray = Object.values(phaseMsgsDict);
+                allMessages = allMessages.concat(phaseMsgsArray);
+            }
+            console.log('engine.message_history =>', engine.message_history);
+            for (const [key, value] of Object.entries(engine.message_history)) {
+                console.log('key =>', key, 'value =>', value);
+            }
+        }
+
+        console.log("DEBUG: content_game messages =>", allMessages, "length:", allMessages.length);
+
         return (
             <main>
                 <Helmet>
@@ -1367,14 +1428,29 @@ export class ContentGame extends React.Component {
                         currentTabOrderCreation
                     )) || ''}
                 </Tabs>
+                {/* Debug log before rendering the bottom sheet */}
+                {console.log("Rendering PhaseSummaryBottomSheet with phase:", currentPhase, "summary length:", summaryForCurrentPhase.length)}
+
+                <PhaseSummaryBottomSheet
+                    visible={this.state.summaryVisible}
+                    phase={currentPhase}
+                    summaryText={summaryText}
+                    onClose={() => this.setState({ summaryVisible: false })}
+                />
             </main>
         );
     }
 
     componentDidMount() {
+        this._isMounted = true;
         window.scrollTo(0, 0);
-        if (this.props.data.client)
-            this.reloadDeadlineTimer(this.props.data.client);
+        if (this.props.data.client) {
+            this.reloadDeadlineTimer(this.props.data.client).then(() => {
+                if (this._isMounted) {
+                    this.setState({ doneLoading: true });
+                }
+            });
+        }
         this.props.data.displayed = true;
         // Try to prevent scrolling when pressing keys Home and End.
         document.onkeydown = (event) => {
@@ -1395,6 +1471,7 @@ export class ContentGame extends React.Component {
     }
 
     componentWillUnmount() {
+        this._isMounted = false;
         this.clearScheduleTimeout();
         this.props.data.displayed = false;
         document.onkeydown = null;

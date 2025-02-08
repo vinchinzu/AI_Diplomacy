@@ -12,7 +12,8 @@ Think about the enemy units and centers and how they might move, think about you
 Aim for best strategic moves based on the possible orders, 
 and produce an output in PARSABLE JSON format as shown below.]
 
-PARSABLE OUTPUT:{
+PARSABLE OUTPUT:
+{{
   "orders": ["A PAR - BUR","F BRE - MAO"]
-}
+}}
 --- END EXAMPLE ---

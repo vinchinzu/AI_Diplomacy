@@ -706,12 +706,18 @@ class Game(Jsonable):
             messages = [self.filter_messages(msg_dict, game_role) for msg_dict in messages]
         assert len(phases) == len(states) == len(orders) == len(messages) == len(results), (
             len(phases), len(states), len(orders), len(messages), len(results))
-        return [GamePhaseData(name=str(phases[i]),
-                              state=states[i],
-                              orders=orders[i],
-                              messages=messages[i],
-                              results=results[i])
-                for i in range(len(phases))]
+        return [
+            GamePhaseData(
+                name=str(phases[i]),
+                state=states[i],
+                orders=orders[i],
+                messages=messages[i],
+                results=results[i],
+                # NEW: fetch summary from self.phase_summaries:
+                summary=self.phase_summaries.get(str(phases[i]), "")
+            )
+            for i in range(len(phases))
+        ]
 
     def get_phase_from_history(self, short_phase_name, game_role=None):
         """ Return a game phase data corresponding to given phase from phase history. """
@@ -1573,11 +1579,15 @@ class Game(Jsonable):
         current_orders = {power.name: (self.get_orders(power.name) if power.order_is_set else None)
                           for power in self.powers.values()}
         # Game does not have results for current orders (until orders are processed and game phase is updated).
-        return GamePhaseData(name=self.current_short_phase,
-                             state=self.get_state(),
-                             orders=current_orders,
-                             messages=self.messages.copy(),
-                             results={})
+        return GamePhaseData(
+            name=self.current_short_phase,
+            state=self.get_state(),
+            orders=current_orders,
+            messages=self.messages.copy(),
+            results={},
+            # NEW: include summary from self.phase_summaries:
+            summary=self.phase_summaries.get(self.current_short_phase, "")
+        )
 
     def set_phase_data(self, phase_data, clear_history=True):
         """ Set game from phase data.

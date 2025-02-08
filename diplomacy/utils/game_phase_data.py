@@ -43,13 +43,23 @@ class GamePhaseData(Jsonable):
         'summary': parsing.DefaultValueType(str, '')
     }
 
-    def __init__(self, name, state, orders, results, messages, summary=None):
+    def __init__(self, name, state, orders, results, messages, summary=""):
         """ Constructor. """
-        self.name = ''
-        self.state = {}
-        self.orders = {}
-        self.results = {}
-        self.messages = {}
-        self.summary = '' if summary is None else summary
+        self.name = name
+        self.state = state
+        self.orders = orders
+        self.results = results
+        self.messages = messages
+        self.summary = summary
         super(GamePhaseData, self).__init__(name=name, state=state, orders=orders, results=results,
                                           messages=messages, summary=self.summary)
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "state": self.state,
+            "orders": self.orders,
+            "results": self.results,
+            "messages": list(self.messages.values()) if isinstance(self.messages, dict) else self.messages,
+            "summary": self.summary,
+        }

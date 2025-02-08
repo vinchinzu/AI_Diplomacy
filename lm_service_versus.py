@@ -669,5 +669,5 @@ def get_visible_messages_for_power(conversation_messages, power_name):
 
 def load_prompt(filename: str) -> str:
     """Helper to load prompt text from file"""
-    with open(f"AI_Diplomacy/prompts/{filename}", "r") as f:
+    with open(f"./prompts/{filename}", "r") as f:
         return f.read().strip() 

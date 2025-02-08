@@ -31,52 +31,107 @@ export function loadGameFromDisk() {
             }
             const reader = new FileReader();
             reader.onload = () => {
-                const savedData = JSON.parse(reader.result);
-                const gameObject = {};
-                gameObject.game_id = `(local) ${savedData.id}`;
-                gameObject.map_name = savedData.map;
-                gameObject.rules = savedData.rules;
-                gameObject.state_history = {};
-                gameObject.message_history = {};
-                gameObject.order_history = {};
-                gameObject.result_history = {};
+                console.log('[loadGameFromDisk] Reading JSON file...');
+                let savedData;
+                try {
+                    savedData = JSON.parse(reader.result);
+                } catch (e) {
+                    onError('Could not parse JSON file: ' + e);
+                    return;
+                }
 
-                // Load all saved phases (expect the latest one) to history fields.
+                const gameObject = {
+                    game_id: `(local) ${savedData.id}`,
+                    map_name: savedData.map,
+                    rules: savedData.rules,
+                    state_history: {},
+                    message_history: {},
+                    order_history: {},
+                    result_history: {},
+                    phase_summaries: {}
+                };
+
+                // Load older phases into history
                 for (let i = 0; i < savedData.phases.length - 1; ++i) {
                     const savedPhase = savedData.phases[i];
                     const gameState = savedPhase.state;
                     const phaseOrders = savedPhase.orders || {};
                     const phaseResults = savedPhase.results || {};
-                    const phaseMessages = {};
-                    if (savedPhase.messages) {
-                        for (let message of savedPhase.messages) {
-                            phaseMessages[message.time_sent] = message;
+
+                    // 1) Fix or parse messages if they're a string
+                    let phaseMessages = savedPhase.messages;
+                    if (typeof phaseMessages === 'string') {
+                        console.warn('[loadGameFromDisk] Phase', savedPhase.name,
+                                     'has messages as string. Attempting fallback parse...');
+                        // If it starts with "SortedDict", we can't trivially parse. 
+                        // Minimal fallback: set to empty object or parse if you have a custom parser.
+                        if (phaseMessages.startsWith('SortedDict{')) {
+                            phaseMessages = {};
                         }
+                    } else if (!phaseMessages) {
+                        phaseMessages = {};
+                    } else {
+                        // Convert array -> object keyed by time_sent
+                        const obj = {};
+                        for (const msg of phaseMessages) {
+                            if (msg && msg.time_sent !== undefined) {
+                                obj[msg.time_sent] = msg;
+                            }
+                        }
+                        phaseMessages = obj;
                     }
-                    if (!gameState.name)
-                        gameState.name = savedPhase.name;
+
+                    if (!gameState.name) gameState.name = savedPhase.name;
+
                     gameObject.state_history[gameState.name] = gameState;
                     gameObject.message_history[gameState.name] = phaseMessages;
                     gameObject.order_history[gameState.name] = phaseOrders;
                     gameObject.result_history[gameState.name] = phaseResults;
+
+                    // Summaries
+                    if (savedPhase.summary) {
+                        console.log(`[loadGameFromDisk] Loading summaries for phase`, gameState.name);
+                        gameObject.phase_summaries[gameState.name] = savedPhase.summary;
+                    } else {
+                        console.log(`[loadGameFromDisk] No summary for phase ${savedPhase.name}`);
+                    }
                 }
 
-                // Load latest phase separately and use it later to define the current game phase.
+                // Load latest phase
                 const latestPhase = savedData.phases[savedData.phases.length - 1];
                 const latestGameState = latestPhase.state;
                 const latestPhaseOrders = latestPhase.orders || {};
                 const latestPhaseResults = latestPhase.results || {};
-                const latestPhaseMessages = {};
-                if (latestPhase.messages) {
-                    for (let message of latestPhase.messages) {
-                        latestPhaseMessages[message.time_sent] = message;
+                let latestPhaseMessages = latestPhase.messages;
+                if (typeof latestPhaseMessages === 'string') {
+                    console.warn('[loadGameFromDisk] Latest phase has messages as string. Fallback parse...');
+                    if (latestPhaseMessages.startsWith('SortedDict{')) {
+                        latestPhaseMessages = {};
                     }
+                } else if (!latestPhaseMessages) {
+                    latestPhaseMessages = {};
+                } else {
+                    const obj = {};
+                    for (const msg of latestPhaseMessages) {
+                        if (msg && msg.time_sent !== undefined) {
+                            obj[msg.time_sent] = msg;
+                        }
+                    }
+                    latestPhaseMessages = obj;
                 }
+
                 if (!latestGameState.name)
                     latestGameState.name = latestPhase.name;
-                // TODO: NB: What if latest phase in loaded JSON contains order results? Not sure if it is well handled.
                 gameObject.result_history[latestGameState.name] = latestPhaseResults;
 
+                if (latestPhase.summary) {
+                    console.log(`[loadGameFromDisk] Loading summary for latest phase ${latestGameState.name}:`, latestPhase.summary);
+                    gameObject.phase_summaries[latestGameState.name] = latestPhase.summary;
+                } else {
+                    console.log(`[loadGameFromDisk] No summary for latest phase ${latestGameState.name}`);
+                }
+
+                // Final game metadata
                 gameObject.messages = [];
                 gameObject.role = STRINGS.OBSERVER_TYPE;
                 gameObject.status = STRINGS.COMPLETED;
@@ -84,15 +139,17 @@ export function loadGameFromDisk() {
                 gameObject.deadline = 0;
                 gameObject.n_controls = 0;
                 gameObject.registration_password = '';
+
                 const game = new Game(gameObject);
 
-                // Set game current phase and state using latest phase found in JSON file.
+                // Set the current phase to the latest
                 game.setPhaseData({
                     name: latestGameState.name,
                     state: latestGameState,
                     orders: latestPhaseOrders,
                     messages: latestPhaseMessages
                 });
+
                 onLoad(game);
             };
             reader.readAsText(file);

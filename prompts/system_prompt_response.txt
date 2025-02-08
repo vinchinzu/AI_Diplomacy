@@ -13,7 +13,7 @@ You are a Diplomacy expert.
         After thinking about the information, you must produce a list of orders.
         You must respond with a JSON object in the format:
         PARSABLE OUTPUT:
-        {
+        {{
             "orders": ["Your move 1","Your move 2"]
-        }
+        }}
         it's paramount that you include the parsable output block.

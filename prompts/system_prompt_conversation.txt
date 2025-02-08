@@ -4,17 +4,17 @@ REQUIRED FORMAT:
 For any message, you must respond with one of these exact JSON structures:
 
 1. For global messages:
-{
+{{
     "message_type": "global",
     "content": "Your message here"
-}
+}}
 
 2. For private messages:
-{
+{{
     "message_type": "private",
     "recipient": "POWER_NAME",
     "content": "Your message here"
-}
+}}
 
 IMPORTANT RULES:
 - Your response must be ONLY the JSON object, nothing else
@@ -24,13 +24,13 @@ IMPORTANT RULES:
 - For private messages, recipient must be one of: AUSTRIA, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY, ENGLAND
 
 Example valid responses:
-{
+{{
     "message_type": "global",
     "content": "I propose we all work together against Turkey."
-}
+}}
 
-{
+{{
     "message_type": "private",
     "recipient": "FRANCE",
     "content": "Let's form a secret alliance against Germany."
-} 
+}}

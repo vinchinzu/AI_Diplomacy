@@ -61,7 +61,7 @@ def to_saved_game_format(game, output_path=None, output_mode='a'):
     # Writing to disk
     if output_path:
         with open(output_path, output_mode) as output_file:
-            output_file.write(json.dumps(saved_game) + '\n')
+            output_file.write(json.dumps(saved_game, default=str) + '\n')
 
     # Returning
     return saved_game

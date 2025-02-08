@@ -2645,3 +2645,71 @@ PARSABLE OUTPUT:
   ]
 }
 
+=== S1901M ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "Austria’s turn saw mixed results: the army from Bud successfully advanced toward Serbia while the army from Vienna attempting to move into Bohemia was bounced, leaving Vienna in place. The fleet in Trieste held its position.",
+        "England executed an aggressive push with its fleets and army: the fleet from London moved into the English Channel, the fleet from Edinburgh moved toward the North Sea, and the army from Liverpool advanced into Wales.",
+        "France kept a defensive posture as all its units (the fleet in Brest and the armies in Marseilles and Paris) held.",
+        "Germany’s orders were partially frustrated: the army from Munich trying to enter Bohemia was bounced (so Munich remained unchanged) while the army from Berlin and the fleet in Kiel held.",
+        "Italy achieved its maneuvers; the fleet from Naples successfully moved to the Tyrrhenian Sea, the army from Rome advanced into Apulia, and the army in Venice held.",
+        "Russia advanced on two fronts: the army from Moscow moved toward Ukraine and the army from Warsaw pushed into Galicia, while the fleet from Sevastopol’s move was bounced and the fleet in the St. Petersburg South Coast held.",
+        "Turkey experienced mixed outcomes: the fleet from Ankara attempting to move was bounced, but the army from Constantinople moved into Bulgaria and the army in Smyrna held."
+    ]
+}
+
+=== F1901M ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "In phase F1901M, Austria’s aggressive attempts to capture Albania via moves from Serbia and Trieste both failed (bounced), and their support from Vienna went void. Despite these setbacks, the build phase changes are evident as Austria now fields a unit in Serbia in place of the lost unit in Budapest.",
+        "England enjoyed successful moves with its fleet from the North Sea advancing to Belgium and its army from Wales moving to York, while its fleet in the English Channel held. These changes accompany a complete turnover of units from the previous phase.",
+        "France largely held the line with all orders involving the Brest fleet and armies in Marseilles and Paris holding, maintaining their existing positions.",
+        "Germany saw its fleet from Kiel successfully move into Denmark while its armies in Berlin and Munich held, preserving its defensive setup.",
+        "Italy’s orders included a support from the Venice army for the fleet build in Apulia, while the Tyrrhenian Sea fleet advanced to Tunis. The build phase is reflected by Italy now controlling new units in Tyrrhenia and Apulia instead of the previous units lost in Rome and Naples.",
+        "Russia attempted to secure Rumania through a support order from the Galician army and moves by other units, but with the fleet from Sevastopol and the Ukrainian army’s orders bouncing, only the fleet in the St. Petersburg convoy held. Meanwhile, the build changes are visible with new units now in Galicia and Ukraine replacing the former holdings in Warsaw and Moscow.",
+        "Turkey managed to push its Ankle fleet forward into the Black Sea (BLA) and held orders with its armies in Smyrna and newly built Bulgaria, reflecting a shift from losing the unit in Constantinople to gaining influence along the Bulgarian coast."
+    ]
+}
+
+=== W1901A ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "In the winter phase W1901A, several significant changes occurred. Austria, without issuing orders, secured the center SER, reinforcing its influence. England's order to move its army to Edinburgh succeeded, whereas its fleet move from London was void, contributing to the loss of A WAL and F NTH but allowing England to add new units—F BEL and A YOR—and capture the BEL center. In Germany, the fleet from Kiel successfully moved, leading to the loss of F KIE and the construction of F DEN alongside the gain of the DEN center. Italy achieved success with its Naples army move while its fleet move from Rome was void, resulting in the replacement of F TYS with a new F TUN and acquisition of the TUN center. Turkey saw its order from Ankara succeed, but the move from Constantinople went void—this produced the loss of F ANK but allowed Turkey to bring in a new fleet F BLA and secure the BUL center. France and Russia remained inactive this phase, and all unit adjustments are now reflected in the current board state."
+    ]
+}
+
+=== S1901M ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "In the Spring 1901 movement phase, many powers attempted aggressive moves and supports, but ultimately the board remained unchanged.",
+        "Austria tried to support a move into Trieste with both its army in Budapest and in Vienna, yet the Vienna support was nullified while the fleet in Trieste held its position.",
+        "England ordered movements from Edinburgh toward NWG, from London toward the North Sea, and an army from Liverpool to Yorkshire, but none of these moves altered unit locations.",
+        "France pushed from Brest to ENG and from Paris toward BUR while ordering its Marseilles unit to hold, but all French units stayed in place.",
+        "Germany kept all its units on hold in Berlin, Kiel, and Munich, maintaining their positions without engagement.",
+        "Italy attempted to move its fleet from Naples to Tyrrhenian Sea and its army from Rome toward Apulia, but these moves did not succeed; the fleet and armies remained at their original centers.",
+        "Russia's fleet from Sevastopol tried to move to the Black Sea but bounced, and its attempt to push its unit from Warsaw to Ukraine failed; meanwhile, its other units held.",
+        "Turkey’s fleet in Ankara similarly experienced a bounce when trying to move to the Black Sea, and its other units held undisturbed.",
+        "Overall, despite several attempted advances and support maneuvers, no unit relocated or captured a new center, leaving the board state exactly as it was before this phase."
+    ]
+}
+
+=== F1901M ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "In the Fall 1901 movement phase, several key maneuvers and adjustments defined the board. Austria’s orders were partially frustrated: its fleet in Trieste attempted to move to Venice but bounced, and its support attempts from Bud and Vienna ended up void, leaving its three units (A BUD, A VIE, F TRI) in place. England’s reorganization was evident as it replaced its old units (F EDI, F LON, A LVP) with new forces; the fleet from the North Sea successfully advanced toward Belgium, while its other fleet in the English Channel (NWG) and the army in York held firm. France maintained a defensive posture with holds in Marseille and its other positions, even as it added a new fleet (F ENG) and army (A BUR) replacing lost units, adjusting its influence on ENG and BUR. Germany saw its fleet from Kiel successfully move to Holland (HOL) while its armies in Munich and Berlin supported each other and held their positions. Italy managed a similar update by introducing both a new fleet (F TYS) moving toward Tunis and an additional army (A APU) while holding its unit in Venice—the losses in Naples and Rome reflecting changes from previous supply center adjustments. Russia’s orders were mixed; although its fleet in Sevastopol moved toward Black Sea territory and it held firm with its fleet in St. Petersburg and army in Moscow, the support order from its new army in Ukraine for an advance from Budapest to Rumania went void. This change coincided with the replacement of its unit in Warsaw by the newly added A UKR. Finally, Turkey held all its positions with its fleet in Ankara and armies in Constantinople and Smyrna remaining unmoved. Overall, while several orders (notably Austria’s and Russia’s support actions) failed to have the intended effect, the phase was marked by significant unit turnover for England, France, Italy, and Russia as they adjusted their forces based on captured centers and supply changes."
+    ]
+}
+
+=== W1901A ===
+PARSABLE OUTPUT:
+{
+    "orders": [
+        "In phase W1901A, several build orders led to notable shifts in unit positions and supply center control. England’s build orders from EDI, LON, and LVP only produced one new fleet – with the successful build now located at BEL – while an existing unit at NTH was removed. Germany’s single build order from KIE resulted in a repositioned fleet showing up at HOL, thereby marking a shift in their naval placement. Italy’s orders saw the build order from ROM succeed and the order from NAP fail, which is reflected by their replacement of the fleet originally at TYS with a new fleet at TUN as they secured the TUN center. Russia similarly replaced its fleet at SEV with a new fleet now at BLA. Meanwhile, Austria, France, and Turkey did not issue orders this turn – though France’s unit composition was adjusted as they lost a fleet at ENG and gained one at PIC. Overall, these changes illustrate a series of successful and voided build orders that have subtly reconfigured the board, with several powers adjusting their naval positions and control over key centers."
+    ]
+}
+

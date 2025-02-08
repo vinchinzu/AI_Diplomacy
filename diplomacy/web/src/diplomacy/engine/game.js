@@ -137,6 +137,8 @@ export class Game {
         // {loc => order type}
         this.orderableLocToTypes = null;
         this.client = null; // Used as pointer to a NetworkGame.
+
+        this.phase_summaries = gameData.phase_summaries || {};
     }
 
     get n_players() {
@@ -538,5 +540,11 @@ export class Game {
             buildCount = Math.min(buildSites.length, buildCount);
         }
         return buildCount;
+    }
+
+    get phasePrior() {
+        // If state_history has fewer than 2 entries, no prior phase is available.
+        if (this.state_history.size() < 2) return null;
+        return this.state_history.keyFromIndex(this.state_history.size() - 2);
     }
 }

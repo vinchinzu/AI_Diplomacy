@@ -21,6 +21,7 @@ export class MessageView extends React.Component {
     // message
     render() {
         const message = this.props.message;
+        console.log("DEBUG: In <MessageView>, message prop =>", message);
         const owner = this.props.owner;
         const id = this.props.id ? {id: this.props.id} : {};
         const messagesLines = message.message.replace('\r\n', '\n')
