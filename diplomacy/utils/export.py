@@ -22,8 +22,9 @@ import os
 import ujson as json
 from diplomacy.engine.game import Game
 from diplomacy.engine.map import Map
-from diplomacy.utils import strings
+from diplomacy.utils import strings, parsing
 from diplomacy.utils.game_phase_data import GamePhaseData
+from diplomacy.utils.sorted_dict import SortedDict
 
 # Constants
 LOGGER = logging.getLogger(__name__)
@@ -41,11 +42,11 @@ def to_saved_game_format(game, output_path=None, output_mode='a'):
         :type output_mode: str, optional
         :rtype: Dict
     """
-    phases = Game.get_phase_history(game)                                       # Get phase history.
-    phases.append(Game.get_phase_data(game))                                    # Add current game phase.
-    rules = [rule for rule in game.rules if rule not in RULES_TO_SKIP]          # Filter rules.
+    phases = Game.get_phase_history(game)
+    phases.append(Game.get_phase_data(game))
+    rules = [rule for rule in game.rules if rule not in RULES_TO_SKIP]
 
-    # Extend states fields.
+    # Extend states fields
     phases_to_dict = [phase.to_dict() for phase in phases]
     for phase_dct in phases_to_dict:
         phase_dct['state']['game_id'] = game.game_id
@@ -53,17 +54,18 @@ def to_saved_game_format(game, output_path=None, output_mode='a'):
         phase_dct['state']['rules'] = rules
 
     # Building saved game
-    saved_game = {'id': game.game_id,
-                  'map': game.map_name,
-                  'rules': rules,
-                  'phases': phases_to_dict}
+    saved_game = {
+        'id': game.game_id,
+        'map': game.map_name,
+        'rules': rules,
+        'phases': phases_to_dict
+    }
 
     # Writing to disk
     if output_path:
         with open(output_path, output_mode) as output_file:
-            output_file.write(json.dumps(saved_game, default=str) + '\n')
+            output_file.write(json.dumps(saved_game) + '\n')
 
-    # Returning
     return saved_game
 
 def from_saved_game_format(saved_game):

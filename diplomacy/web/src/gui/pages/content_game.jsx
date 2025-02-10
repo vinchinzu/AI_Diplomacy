@@ -921,6 +921,7 @@ export class ContentGame extends React.Component {
 
     renderCurrentMessages(engine, role) {
         const messageChannels = engine.getMessageChannels(role, true);
+        console.log('messageChannels =>', messageChannels);
         const tabNames = [];
         for (let powerName of Object.keys(engine.powers)) if (powerName !== role)
             tabNames.push(powerName);
@@ -1081,13 +1082,17 @@ export class ContentGame extends React.Component {
     }
 
     renderTabResults(toDisplay, initialEngine) {
-        const {engine, pastPhases, phaseIndex} = this.__get_engine_to_display(initialEngine);
+        const {
+            engine: displayedEngine,
+            pastPhases,
+            phaseIndex
+        } = this.__get_engine_to_display(initialEngine);
         let orders = {};
         let orderResult = null;
-        if (engine.order_history.contains(engine.phase))
-            orders = engine.order_history.get(engine.phase);
-        if (engine.result_history.contains(engine.phase))
-            orderResult = engine.result_history.get(engine.phase);
+        if (displayedEngine.order_history.contains(displayedEngine.phase))
+            orders = displayedEngine.order_history.get(displayedEngine.phase);
+        if (displayedEngine.result_history.contains(displayedEngine.phase))
+            orderResult = displayedEngine.result_history.get(displayedEngine.phase);
         let countOrders = 0;
         for (let powerOrders of Object.values(orders)) {
             if (powerOrders)
@@ -1142,7 +1147,7 @@ export class ContentGame extends React.Component {
                         {this.state.historyCurrentOrders && (
                             <div className={'history-current-orders'}>{this.state.historyCurrentOrders.join(', ')}</div>
                         )}
-                        {this.renderMapForResults(engine, this.state.historyShowOrders)}
+                        {this.renderMapForResults(displayedEngine, this.state.historyShowOrders)}
                     </div>
                     <div className={'col-xl'}>{orderView}</div>
                 </Row>
@@ -1155,27 +1160,21 @@ export class ContentGame extends React.Component {
     }
 
     renderTabMessages(toDisplay, initialEngine, currentPowerName) {
-        const {engine, pastPhases, phaseIndex} = this.__get_engine_to_display(initialEngine);
-
-        let allMessages = [];
-        const history = engine.message_history || {};
-
-        for (const [key, val] of Object.entries(history)) {
-            if (val && typeof val === 'object') {
-                if (typeof val.values === 'function') {
-                    const arr = Array.from(val.values());
-                    allMessages.push(...arr);
-                } else {
-                    allMessages.push(...Object.values(val));
-                }
-            } else {
-                console.log(`[renderTabMessages] Skipping key="${key}" =>`, val);
-            }
+        const {
+            engine: displayedEngine,
+            pastPhases,
+            phaseIndex
+        } = this.__get_engine_to_display(initialEngine);
+        const messageChannels = displayedEngine.getMessageChannels(currentPowerName, true);
+        const tabNames = [];
+        for (let powerName of Object.keys(displayedEngine.powers)) {
+            if (powerName !== currentPowerName) tabNames.push(powerName);
         }
-
-        console.log("DEBUG: combined allMessages =>", allMessages);
-
-        if (!toDisplay) return null;
+        tabNames.sort();
+        tabNames.push('GLOBAL');
+        const titles = tabNames.map(tabName => (tabName === 'GLOBAL' ? tabName : tabName.substr(0, 3)));
+        const currentTabId = this.state.tabPastMessages || tabNames[0];
+            
         return (
             <Tab id={'tab-phase-history'} display={toDisplay}>
                 <Row>
@@ -1183,15 +1182,15 @@ export class ContentGame extends React.Component {
                         {this.state.historyCurrentOrders && (
                             <div className={'history-current-orders'}>{this.state.historyCurrentOrders.join(', ')}</div>
                         )}
-                        {this.renderMapForMessages(engine, this.state.historyShowOrders)}
+                        {this.renderMapForMessages(displayedEngine, this.state.historyShowOrders)}
                     </div>
                     <div className={'col-xl'}>
                         {this.__form_phases(pastPhases, phaseIndex)}
-                            {pastPhases[phaseIndex] === initialEngine.phase ? (
-                                this.renderCurrentMessages(initialEngine, currentPowerName)
-                            ) : (
-                                this.renderPastMessages(engine, currentPowerName)
-                            )}
+                        {pastPhases[phaseIndex] === initialEngine.phase ? (
+                            this.renderCurrentMessages(displayedEngine, currentPowerName)
+                        ) : (
+                            this.renderPastMessages(displayedEngine, currentPowerName)
+                        )}
                     </div>
                 </Row>
                 {toDisplay && <HotKey keys={['arrowleft']} onKeysCoincide={this.onDecrementPastPhase}/>}
@@ -1371,21 +1370,22 @@ export class ContentGame extends React.Component {
             </div>
         );
 
-        // Guard referencing engine.phase_summaries
-        const phaseSummaries = engine.phase_summaries || {};
-        const currentPhase = engine.phase || "(unknown phase)";
-        let summaryText = "";
-         // Attempt to get a prior phase or fallback to current if prior is not available
-         const priorPhase = engine.phasePrior;
-         if (engine.phase_summaries) {
-           if (priorPhase && engine.phase_summaries.hasOwnProperty(priorPhase)) {
-             summaryText = engine.phase_summaries[priorPhase];
-           } else if (engine.phase && engine.phase_summaries.hasOwnProperty(engine.phase)) {
-             summaryText = engine.phase_summaries[engine.phase];
-           }
-         }
-        const summaryForCurrentPhase =
-            phaseSummaries.hasOwnProperty(currentPhase) ? phaseSummaries[currentPhase] : "";
+        // 1) Compute which engine & phase to display
+        const {
+            engine: displayedEngine,
+            pastPhases,
+            phaseIndex
+        } = this.__get_engine_to_display(engine);
+
+        // 2) Identify the actual current phase in the user's selection
+        const currentPhase = pastPhases[phaseIndex];
+        const summaryText =
+            (engine.phase_summaries && engine.phase_summaries[currentPhase])
+            ? engine.phase_summaries[currentPhase]
+            : "";  // fallback if no summary
+
+        console.log("[DEBUG content_game] Chosen phase:", currentPhase, 
+                    "Summary length:", summaryText.length);
 
         // Example: Flatten messages from all known phases
         let allMessages = [];
@@ -1429,7 +1429,7 @@ export class ContentGame extends React.Component {
                     )) || ''}
                 </Tabs>
                 {/* Debug log before rendering the bottom sheet */}
-                {console.log("Rendering PhaseSummaryBottomSheet with phase:", currentPhase, "summary length:", summaryForCurrentPhase.length)}
+                {console.log("Rendering PhaseSummaryBottomSheet with phase:", currentPhase, "summary length:", summaryText.length)}
 
                 <PhaseSummaryBottomSheet
                     visible={this.state.summaryVisible}

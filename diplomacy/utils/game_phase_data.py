@@ -25,12 +25,7 @@ MESSAGES_TYPE = parsing.IndexedSequenceType(
 
 class GamePhaseData(Jsonable):
     """ Small class to represent data for a game phase:
-        - phase name
-        - state
-        - orders
-        - results
-        - messages
-        - summary (string summarizing what happened this phase)
+        phase name, state, orders, orders results and messages for this phase.
     """
     __slots__ = ['name', 'state', 'orders', 'results', 'messages', 'summary']
 
@@ -40,26 +35,20 @@ class GamePhaseData(Jsonable):
         strings.ORDERS: parsing.DictType(str, parsing.OptionalValueType(parsing.SequenceType(str))),
         strings.RESULTS: parsing.DictType(str, parsing.SequenceType(parsing.StringableType(common.StringableCode))),
         strings.MESSAGES: MESSAGES_TYPE,
-        'summary': parsing.DefaultValueType(str, '')
+        'summary': parsing.OptionalValueType(str)
     }
 
-    def __init__(self, name, state, orders, results, messages, summary=""):
+    def __init__(self, name=None, state=None, orders=None, messages=None, results=None, summary=None, **kwargs):
         """ Constructor. """
-        self.name = name
-        self.state = state
-        self.orders = orders
-        self.results = results
-        self.messages = messages
-        self.summary = summary
-        super(GamePhaseData, self).__init__(name=name, state=state, orders=orders, results=results,
-                                          messages=messages, summary=self.summary)
+        self.name = ''
 
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "state": self.state,
-            "orders": self.orders,
-            "results": self.results,
-            "messages": list(self.messages.values()) if isinstance(self.messages, dict) else self.messages,
-            "summary": self.summary,
-        }
+        self.state = {}
+
+        self.orders = {}
+
+        self.results = {}
+
+        self.messages = {} 
+        self.summary = None
+        super(GamePhaseData, self).__init__(name=name, state=state, orders=orders, results=results, messages=messages, summary=summary, **kwargs)
+

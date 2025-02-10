@@ -16,7 +16,9 @@
 // ==============================================================================
 import $ from "jquery";
 import {STRINGS} from "../../diplomacy/utils/strings";
-import {Game} from "../../diplomacy/engine/game";
+import {Game, comparablePhase} from "../../diplomacy/engine/game";
+import {SortedDict} from "../../diplomacy/utils/sorted_dict";
+import { Message } from "../../diplomacy/engine/message";
 
 export function loadGameFromDisk() {
     return new Promise((onLoad, onError) => {
@@ -40,12 +42,14 @@ export function loadGameFromDisk() {
                     return;
                 }
 
+                console.log("[loadGameFromDisk] Parsed savedData:", savedData);
+
                 const gameObject = {
                     game_id: `(local) ${savedData.id}`,
                     map_name: savedData.map,
                     rules: savedData.rules,
                     state_history: {},
-                    message_history: {},
+                    message_history: {},  // Initialize as empty
                     order_history: {},
                     result_history: {},
                     phase_summaries: {}
@@ -57,36 +61,21 @@ export function loadGameFromDisk() {
                     const gameState = savedPhase.state;
                     const phaseOrders = savedPhase.orders || {};
                     const phaseResults = savedPhase.results || {};
-
-                    // 1) Fix or parse messages if they're a string
-                    let phaseMessages = savedPhase.messages;
-                    if (typeof phaseMessages === 'string') {
-                        console.warn('[loadGameFromDisk] Phase', savedPhase.name,
-                                     'has messages as string. Attempting fallback parse...');
-                        // If it starts with "SortedDict", we can't trivially parse. 
-                        // Minimal fallback: set to empty object or parse if you have a custom parser.
-                        if (phaseMessages.startsWith('SortedDict{')) {
-                            phaseMessages = {};
+                    const phaseMessages = {};
+                    
+                    // Convert messages array to time_sent-indexed object
+                    if (savedPhase.messages) {
+                        for (let message of savedPhase.messages) {
+                            phaseMessages[message.time_sent] = message;
                         }
-                    } else if (!phaseMessages) {
-                        phaseMessages = {};
-                    } else {
-                        // Convert array -> object keyed by time_sent
-                        const obj = {};
-                        for (const msg of phaseMessages) {
-                            if (msg && msg.time_sent !== undefined) {
-                                obj[msg.time_sent] = msg;
-                            }
-                        }
-                        phaseMessages = obj;
                     }
 
                     if (!gameState.name) gameState.name = savedPhase.name;
 
                     gameObject.state_history[gameState.name] = gameState;
-                    gameObject.message_history[gameState.name] = phaseMessages;
                     gameObject.order_history[gameState.name] = phaseOrders;
                     gameObject.result_history[gameState.name] = phaseResults;
+                    gameObject.message_history[gameState.name] = phaseMessages;
 
                     // Summaries
                     if (savedPhase.summary) {
@@ -102,22 +91,13 @@ export function loadGameFromDisk() {
                 const latestGameState = latestPhase.state;
                 const latestPhaseOrders = latestPhase.orders || {};
                 const latestPhaseResults = latestPhase.results || {};
-                let latestPhaseMessages = latestPhase.messages;
-                if (typeof latestPhaseMessages === 'string') {
-                    console.warn('[loadGameFromDisk] Latest phase has messages as string. Fallback parse...');
-                    if (latestPhaseMessages.startsWith('SortedDict{')) {
-                        latestPhaseMessages = {};
+                const latestPhaseMessages = {};
+                
+                // Convert latest phase messages array to time_sent-indexed object
+                if (latestPhase.messages) {
+                    for (let message of latestPhase.messages) {
+                        latestPhaseMessages[message.time_sent] = message;
                     }
-                } else if (!latestPhaseMessages) {
-                    latestPhaseMessages = {};
-                } else {
-                    const obj = {};
-                    for (const msg of latestPhaseMessages) {
-                        if (msg && msg.time_sent !== undefined) {
-                            obj[msg.time_sent] = msg;
-                        }
-                    }
-                    latestPhaseMessages = obj;
                 }
 
                 if (!latestGameState.name)
@@ -132,7 +112,7 @@ export function loadGameFromDisk() {
                 }
 
                 // Final game metadata
-                gameObject.messages = [];
+                gameObject.messages = [];  // Initialize as an empty array
                 gameObject.role = STRINGS.OBSERVER_TYPE;
                 gameObject.status = STRINGS.COMPLETED;
                 gameObject.timestamp_created = 0;
@@ -142,13 +122,17 @@ export function loadGameFromDisk() {
 
                 const game = new Game(gameObject);
 
-                // Set the current phase to the latest
+                // Set the current phase to the latest. MUST be done AFTER creating the Game object.
                 game.setPhaseData({
                     name: latestGameState.name,
                     state: latestGameState,
                     orders: latestPhaseOrders,
                     messages: latestPhaseMessages
                 });
+
+                // ADDED FOR DEBUGGING
+                console.log("DEBUG game.messages (after loading):", game.messages);
+                console.log("DEBUG game.message_history (after loading):", game.message_history);
 
                 onLoad(game);
             };

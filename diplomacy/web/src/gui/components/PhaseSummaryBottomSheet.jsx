@@ -1,49 +1,70 @@
 import React from "react";
 import PropTypes from "prop-types";
+import { PhaseSummaryView } from "./phase_summary_view"; // Import named export
 
-/**
- * A simple bottom sheet that slides up from the bottom of the screen,
- * showing the current phase summary.
- */
-export function PhaseSummaryBottomSheet({ phase, summaryText, onClose }) {
+export class PhaseSummaryBottomSheet extends React.Component {
+    componentDidUpdate(prevProps) {
+        if (prevProps.phase !== this.props.phase) {
+            console.log(
+                "[PhaseSummaryBottomSheet Debug] Phase prop changed from",
+                prevProps.phase,
+                "to",
+                this.props.phase
+            );
+        }
+    }
 
-  return (
-    <div style={{
-      position: 'fixed',
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      maxHeight: '40%',
-      backgroundColor: '#fff',
-      boxShadow: '0 -2px 8px rgba(0,0,0,0.25)',
-      zIndex: 9999,
-      overflowY: 'auto',
-      transition: 'transform 0.3s ease-in-out',
-      transform: 'translateY(0%)'
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '0.5rem',
-        background: '#f2f2f2',
-        borderBottom: '1px solid #ccc'
-      }}>
-        <h5 className="mb-0">Summary for {phase}:</h5>
-        <button className="btn btn-sm btn-danger" onClick={onClose}>Close</button>
-      </div>
-      <div style={{
-        padding: '1rem',
-        overflowY: 'auto'
-      }}>
-        {summaryText || "No phase summary available."}
-      </div>
-    </div>
-  );
+    render() {
+        const { phase, summaryText, visible, onClose } = this.props;
+
+        if (!visible) {
+            return null;
+        }
+
+        const bottomSheetStyle = {
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            backgroundColor: 'white',
+            borderTop: '1px solid #ccc',
+            padding: '20px',
+            boxShadow: '0px -2px 5px rgba(0, 0, 0, 0.1)',
+            zIndex: 1000,
+            maxHeight: '40vh',
+            overflowY: 'auto'
+        };
+
+        return (
+            <div style={bottomSheetStyle}>
+                {/* <div style={{ fontStyle: 'italic', color: 'gray' }}>
+                  Debug: Currently showing summary for phase: {phase}
+                </div> */}
+                <PhaseSummaryView phase={phase} summaryText={summaryText} />
+                <button
+                    onClick={onClose}
+                    style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        padding: '5px 10px'
+                    }}
+                >
+                    Close
+                </button>
+            </div>
+        );
+    }
 }
 
 PhaseSummaryBottomSheet.propTypes = {
-  phase: PropTypes.string,
-  summaryText: PropTypes.string,
-  onClose: PropTypes.func.isRequired
+    phase: PropTypes.string.isRequired,
+    summaryText: PropTypes.string,
+    visible: PropTypes.bool,
+    onClose: PropTypes.func.isRequired
+};
+
+PhaseSummaryBottomSheet.defaultProps = {
+    visible: false,
+    summaryText: ""
 };
