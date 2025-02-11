@@ -96,8 +96,6 @@ class BaseModelClient:
         if phase_summaries:
             historical_summaries = "\nPAST PHASE SUMMARIES:\n"
             for phase_key, summary_txt in phase_summaries.items():
-                # You can format the summary however you prefer
-                logger.info(f"[DEBUG] phase_key: {phase_key}, summary_txt: {summary_txt}")
                 historical_summaries += f"\nPHASE {phase_key}:\n{summary_txt}\n"
         else:
             historical_summaries = "\n(No historical summaries provided)\n"
@@ -117,6 +115,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]], 
         conversation_text: str,
         phase_summaries: Optional[Dict[str, str]] = None,
+        model_error_stats=None  # New optional param
     ) -> List[str]:
         """
         1) Builds the prompt with conversation context if available
@@ -135,6 +134,8 @@ class BaseModelClient:
             move_list = self._extract_moves(raw_response, power_name)
             if not move_list:
                 logger.warning(f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback.")
+                if model_error_stats is not None:
+                    model_error_stats[self.model_name]["order_decoding_errors"] += 1
                 return self.fallback_orders(possible_orders)
 
             # Validate or fallback
@@ -143,6 +144,8 @@ class BaseModelClient:
 
         except Exception as e:
             logger.error(f"[{self.model_name}] LLM error for {power_name}: {e}")
+            if model_error_stats is not None:
+                model_error_stats[self.model_name]["order_decoding_errors"] += 1
             return self.fallback_orders(possible_orders)
 
     def _extract_moves(self, raw_response: str, power_name: str) -> Optional[List[str]]:

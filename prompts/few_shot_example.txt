@@ -11,6 +11,11 @@ Chain-of-thought:
 Think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions.
 Aim for best strategic moves based on the possible orders, 
 and produce an output in PARSABLE JSON format as shown below.]
+[Consider typical Diplomacy logic:
+ - If Germany might move to BUR with support, we could bounce or defend.
+ - Decide to move A PAR -> BUR. Possibly also want to expand toward MAO with the fleet from BRE to secure the Atlantic.
+ - Avoid contradictory or random supports. 
+Therefore, let's finalize moves that maximize chances of success.]
 
 PARSABLE OUTPUT:
 {{

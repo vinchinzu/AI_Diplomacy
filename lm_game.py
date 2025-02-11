@@ -5,6 +5,9 @@ import os
 import re
 import json
 
+# Additional import for error stats
+from collections import defaultdict
+
 # Suppress Gemini/PaLM gRPC warnings
 os.environ['GRPC_PYTHON_LOG_LEVEL'] = '40'  # ERROR level only
 import google.generativeai as genai  # Import after setting log level
@@ -41,7 +44,7 @@ def gather_possible_orders(game, power_name):
         result[loc] = all_possible.get(loc, [])
     return result
 
-def conduct_negotiations(game, max_rounds=3):
+def conduct_negotiations(game, model_error_stats, max_rounds=10):
     """
     Conducts a round-robin conversation among all non-eliminated powers.
     Each power can send up to 'max_rounds' messages, choosing between private
@@ -85,6 +88,9 @@ Example response formats:
     "recipient": "FRANCE",
     "content": "Let's form a secret alliance against Germany."
 }
+
+Note: There are a total of 10 messages in this negotiation phase. This is message #{} out of 10. By the end, you should have coordinated moves effectively to avoid being blocked or bounced with others.
+If you have your plan already figured out, you can just send a public '.' to indicate you're ready to move on.
 """
 
             # Ask the LLM for a single reply
@@ -140,6 +146,9 @@ Example response formats:
 
                 except (json.JSONDecodeError, AttributeError) as e:
                     logger.error(f"Failed to parse message from {power_name}: {e}")
+                    # Increment conversation parse error
+                    model_id = game.power_model_map.get(power_name, "unknown")
+                    model_error_stats[model_id]["conversation_errors"] += 1
                     continue
     logger.info("Negotiation phase complete.")
     return conversation_messages
@@ -155,15 +164,27 @@ def main():
     logger.info("Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!")
     start_whole = time.time()
 
+    from collections import defaultdict
+    model_error_stats = defaultdict(lambda: {"conversation_errors": 0, "order_decoding_errors": 0})
+
     # Create a fresh Diplomacy game
     game = Game()
     # Ensure game has phase_summaries = {}
     if not hasattr(game, 'phase_summaries'):
         game.phase_summaries = {}
 
-    # Map each power to its chosen LLM
-    game.power_model_map = assign_models_to_powers()
+    # For storing results in a unique subfolder
+    timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+    result_folder = f"./results/{timestamp_str}"
+    if not os.path.exists(result_folder):
+        os.makedirs(result_folder)
 
+    # Manifesto and game file paths
+    manifesto_path = f"{result_folder}/game_manifesto.txt"
+    game_file_path = f"{result_folder}/lmvsgame.json"
+    stats_file_path = f"{result_folder}/error_stats.json"
+
+    game.power_model_map = assign_models_to_powers()
     max_year = 1901
 
     while not game.is_game_done:
@@ -184,9 +205,11 @@ def main():
         # Use endswith("M") for movement phases (like F1901M, S1902M)
         if game.current_short_phase.endswith("M"):
             logger.info("Starting negotiation phase block...")
-            conversation_messages = conduct_negotiations(game, max_rounds=3)
+            conversation_messages = conduct_negotiations(game, model_error_stats, max_rounds=10)
+        else:
+            # If we have no conversation_messages in phases that are not Movement (e.g. Retreat/Build)
+            conversation_messages = []
 
-        # Convert conversation_messages to single string for orders
         conversation_text_for_orders = "\n".join([
             f"{msg['sender']} to {msg['recipient']}: {msg['content']}"
             for msg in conversation_messages
@@ -215,7 +238,8 @@ def main():
                     power_name, 
                     possible_orders, 
                     conversation_text_for_orders,
-                    game.phase_summaries
+                    game.phase_summaries,
+                    model_error_stats  # pass our stats
                 )
                 futures[future] = power_name
                 logger.debug(f"Submitted get_orders task for power {power_name}.")
@@ -244,8 +268,8 @@ def main():
         border = "=" * 80
         logger.info(f"{border}\nPHASE SUMMARY for {phase_data.name}:\n{summary_text}\n{border}")
 
-        # Optionally append it to the same text file, so we keep a log
-        with open("./results/game_manifesto.txt", "a") as f:
+        # Write to unique game_manifesto in the timestamped folder
+        with open(manifesto_path, "a") as f:
             f.write(f"=== {phase_data.name} ===\n{summary_text}\n\n")
 
         # End-of-loop checks
@@ -257,15 +281,24 @@ def main():
 
     # Save final result
     duration = time.time() - start_whole
-    logger.info(f"Game ended after {duration:.2f}s. Saving to 'lmvsgame.json'.")
-    # Save the game to a JSON file
-    output_path = './results/lmvsgame.json'
+    logger.info(f"Game ended after {duration:.2f}s. Saving to final JSON...")
+
+    # Save final result to the unique subfolder
+    output_path = game_file_path
     if not os.path.exists(output_path):
         to_saved_game_format(game, output_path=output_path)
     else:
         logger.info("Game file already exists, saving with unique filename.")
         output_path = f'{output_path}_{time.strftime("%Y%m%d_%H%M%S")}.json'
         to_saved_game_format(game, output_path=output_path)
+
+    # Dump our error stats to JSON
+    import json
+    with open(stats_file_path, "w") as stats_f:
+        json.dump(model_error_stats, stats_f, indent=2)
+
+    logger.info(f"Saved game data, manifesto, and error stats in: {result_folder}")
+    logger.info("Done.")
 
 if __name__ == "__main__":
     main()
