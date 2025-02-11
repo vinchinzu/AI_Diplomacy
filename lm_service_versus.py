@@ -144,8 +144,6 @@ class BaseModelClient:
 
         except Exception as e:
             logger.error(f"[{self.model_name}] LLM error for {power_name}: {e}")
-            if model_error_stats is not None:
-                model_error_stats[self.model_name]["order_decoding_errors"] += 1
             return self.fallback_orders(possible_orders)
 
     def _extract_moves(self, raw_response: str, power_name: str) -> Optional[List[str]]:

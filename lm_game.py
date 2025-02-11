@@ -160,6 +160,76 @@ def my_summary_callback(system_prompt, user_prompt):
     # Pseudo-code for generating a response:
     return client.generate_response(combined_prompt)
 
+def get_valid_orders_with_retry(game,
+                                client,
+                                board_state,
+                                power_name,
+                                possible_orders,
+                                conversation_text_for_orders,
+                                phase_summaries,
+                                model_error_stats,
+                                max_retries=3):
+    """
+    Tries up to 'max_retries' to generate and validate orders.
+    If invalid, we append the error feedback to the conversation
+    context for the next retry. If still invalid, return fallback.
+    """
+    error_feedback = ""
+    for attempt in range(max_retries):
+        # Incorporate any error feedback into the conversation text
+        augmented_conversation_text = conversation_text_for_orders
+        if error_feedback:
+            augmented_conversation_text += (
+                "\n\n[ORDER VALIDATION FEEDBACK]\n" + error_feedback
+            )
+
+        # Ask the LLM for orders
+        orders = client.get_orders(
+            board_state=board_state,
+            power_name=power_name,
+            possible_orders=possible_orders,
+            conversation_text=augmented_conversation_text,
+            phase_summaries=phase_summaries,
+            model_error_stats=model_error_stats
+        )
+
+        # Validate each order
+        invalid_info = []
+        for move in orders:
+            # Example move: "A PAR H" -> unit="A PAR", order_part="H"
+            tokens = move.split(" ", 2)
+            if len(tokens) < 3:
+                invalid_info.append(
+                    f"Order '{move}' is malformed; expected 'A PAR H' style."
+                )
+                continue
+            unit = " ".join(tokens[:2])  # e.g. "A PAR"
+            order_part = tokens[2]       # e.g. "H" or "S A MAR"
+
+            # Use the internal game validation method
+            validity = game._valid_order(power_name, unit, order_part, report=1)
+            if validity != 1:
+                invalid_info.append(
+                    f"Order '{move}' returned validity={validity}. (None/-1=invalid, 0=partial, 1=valid)"
+                )
+
+        if not invalid_info:
+            # All orders are fully valid
+            return orders
+        else:
+            # Build feedback for the next retry
+            error_feedback = (
+                f"Attempt {attempt+1}/{max_retries} had invalid orders:\n"
+                + "\n".join(invalid_info)
+            )
+
+    # If we finish the loop without returning, fallback
+    logger.warning(
+        f"[{power_name}] Exhausted {max_retries} attempts for valid orders, using fallback."
+    )
+    fallback = client.fallback_orders(possible_orders)
+    return fallback
+
 def main():
     logger.info("Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!")
     start_whole = time.time()
@@ -232,28 +302,33 @@ def main():
                     logger.info(f"No orderable locations for {power_name}; skipping.")
                     continue
                 board_state = game.get_state()
+
+                # Submit a task that includes up to 3 attempts at valid orders
                 future = executor.submit(
-                    client.get_orders, 
-                    board_state, 
-                    power_name, 
-                    possible_orders, 
-                    conversation_text_for_orders,
+                    get_valid_orders_with_retry,
+                    game,
+                    client,
+                    board_state,
+                    power_name,
+                    possible_orders,
+                    conversation_text_for_orders,  # existing conversation text
                     game.phase_summaries,
-                    model_error_stats  # pass our stats
+                    model_error_stats,
+                    3  # max_retries
                 )
                 futures[future] = power_name
-                logger.debug(f"Submitted get_orders task for power {power_name}.")
+                logger.debug(f"Submitted get_valid_orders_with_retry task for {power_name}.")
 
             for future in concurrent.futures.as_completed(futures):
                 p_name = futures[future]
                 try:
                     orders = future.result()
-                    logger.debug(f"Orders for {p_name}: {orders}")
+                    logger.debug(f"Validated orders for {p_name}: {orders}")
                     if orders:
                         game.set_orders(p_name, orders)
                         logger.debug(f"Set orders for {p_name} in {game.current_short_phase}: {orders}")
                     else:
-                        logger.debug(f"No orders returned for {p_name}.")
+                        logger.debug(f"No valid orders returned for {p_name}.")
                 except Exception as exc:
                     logger.error(f"LLM request failed for {p_name}: {exc}")
 

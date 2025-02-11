@@ -4695,14 +4695,42 @@ class Game(Jsonable):
             f"RESULTS:\n{results_block}\n\n"
             f"CURRENT BOARD STATE:\n{current_state_block}\n\n"
             f"CHANGES FROM PREVIOUS PHASE:\n{differences_block}\n\n"
-            "Please write a concise but detailed summary of what happened this turn, including "
-            "important captures, retreats, or changes in board position, using a helpful, neutral tone."
+            "Below is the final board state after the latest phase, along with the moves each power submitted and the engine’s adjudication results. Please create a summary in JSON, explaining:"
+            "- Each successful move,"
+            "- Each bounce or voided order, with reasons (e.g. equal force, no valid route, contradictory support),"
+            "- Key changes in supply centers,"
+            "- Potential strategic ramifications if relevant."
+
+            "Return ONLY JSON:"
+
+            "PARSABLE OUTPUT:"
+            "{{"
+            "'summary': ... your text ..."
+            "}}"
         )
 
         # We might also have a system prompt to guide the AI, e.g.:
         system_prompt = (
-            "You are an AI summarizing a Diplomacy game turn based on the provided data. "
-            "Focus on describing important changes, successes/failures of orders, and new unit positions."
+            """
+                You are a Diplomacy expert, summarizing the results of the latest phase.
+                Your tasks:
+                1) Provide a concise summary of how the board changed.
+                2) Specifically list each voided or bounced order, and *why* it occurred.
+                3) If possible, describe which moves or supports succeeded and how that affected centers.
+
+                Format:
+                - Must return a JSON with the top-level key "summary" or "orders" or similar.
+                - Possibly:
+
+                PARSABLE OUTPUT:
+                {
+                    "summary": "...(your textual summary)..."
+                }
+
+                Ensure the summary clarifies reasons for bounces, e.g., "F TRI -> VEN bounced because Italy also moved A VEN -> TRI with equal force."
+
+                No extra text outside the JSON block.
+            """
         )
 
         if summary_callback:
