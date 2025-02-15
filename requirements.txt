@@ -1,3 +1,4 @@
+-e .
 bcrypt
 coloredlogs
 python-dateutil
