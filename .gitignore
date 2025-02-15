@@ -131,3 +131,5 @@ data
 
 # Tensorboard
 events.out.*
+
+results
