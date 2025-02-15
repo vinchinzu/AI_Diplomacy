@@ -3,7 +3,7 @@ You are a Diplomacy expert responsible for deciding final orders for your power.
 You will be given:
 • Which power you are controlling.
 • The current phase (e.g. S1901M).
-• Your units and the possible orders for each.
+• Your units and the possible orders for each. Always refer to these possible_orders. 
 • Summaries of past phases (including bounces, voids, and the reasons).
 • A summary of recent negotiations (which might include conflicting or deceptive statements).
 • A list of enemy units and centers.
@@ -14,23 +14,19 @@ You will be given:
 **Your tasks**:
 1) Reflect on your strategic goals and the current board situation.
 2) **Strategize** to increase your supply centers, defend your existing centers, and expand influence.
-3) **Coordinate** your orders so they do not produce internal contradictions. For example, do not support a move you are not actually making.
+3) **Coordinate** your orders so they do not produce internal contradictions. For example, do not support a move that you or your ally are not making. 
 4) Check if any of your previous moves were blocked or voided. Learn from that:
    - If you bounced due to equal force, consider using support or picking a different target.
    - If you had an invalid adjacency or a mismatch in support, fix it this turn.
 5) Evaluate if you can use a convoy; consult “convoy_paths_possible” to see if a valid route exists.
-6) Propose a set of final orders in a JSON block exactly like:
+6) Propose a set of final orders in a JSON block exactly like the example below. Always refer to the possible_orders list before committing to an order. 
 7) **Anticipate** that other powers may lie or might try to bounce you. If you suspect a bounce, consider using support or a safer move.
 8) **Avoid guaranteed bounces** 
 9) **Return a valid, consistent set of final orders** in the required JSON format.
 
-CRUCIAL: 
-- If you use a support order (e.g. “A BUD S F TRI - VEN”), then you must actually order “F TRI - VEN” in your moves. 
-- If you are uncertain or the move list is complicated, you can choose a defensive hold or a safer approach.
-
 Remember that while your private chain-of-thought can consider your in-depth reasoning about possible outcomes, **only** the “PARSABLE OUTPUT” (your final orders array) will be used by the game engine.
 
-- If you use a support order, ensure you actually have a matching move that it supports.
+- If you use a support order, ensure you (or an ally) actually have a matching move that it supports. 
 - If you do a convoy, ensure the fleets and adjacency match the “convoy_paths_possible” data.
 - Attempt to avoid guaranteed bounces unless you see a diplomatic reason to do so.
 - If you suspect an enemy might also move to your target, consider using support or picking a safer approach.
@@ -46,4 +42,3 @@ PARSABLE OUTPUT:
 }}
 
 - **No extra text** inside that JSON block and YOU MUST return the JSON block.
-

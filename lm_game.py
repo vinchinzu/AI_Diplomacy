@@ -27,7 +27,7 @@ dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     datefmt="%H:%M:%S"
 )
@@ -193,6 +193,8 @@ def get_valid_orders_with_retry(game,
             model_error_stats=model_error_stats
         )
         
+        print(f'orders: {orders}')
+        
         # Validate each order
         invalid_info = []
         for move in orders:
@@ -207,7 +209,10 @@ def get_valid_orders_with_retry(game,
             order_part = tokens[2]       # e.g. "H" or "S A MAR"
 
             # Use the internal game validation method
-            validity = game._valid_order(game.powers[power_name], unit, order_part, report=1)
+            if order_part == 'B': 
+                validity = 1 # hack because game._valid_order doesn't support 'B'
+            else: 
+                validity = game._valid_order(game.powers[power_name], unit, order_part, report=1)
             if validity != 1:
                 invalid_info.append(
                     f"Order '{move}' returned validity={validity}. (None/-1=invalid, 0=partial, 1=valid)"
@@ -292,7 +297,7 @@ def main():
         ]
 
         # Then proceed with concurrent order generation
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_powers)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             futures = {}
             for power_name, _ in active_powers:
                 model_id = game.power_model_map.get(power_name, "o3-mini")

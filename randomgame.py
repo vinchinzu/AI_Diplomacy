@@ -16,6 +16,8 @@ while not game.is_game_done:
                         if possible_orders[loc]]
         game.set_orders(power_name, power_orders)
 
+        print(f'{power_name} orders: {power_orders}')
+
     # Messages can be sent locally with game.add_message
     # e.g. game.add_message(Message(sender='FRANCE',
     #                               recipient='ENGLAND',

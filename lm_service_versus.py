@@ -128,11 +128,12 @@ class BaseModelClient:
 
         try:
             raw_response = self.generate_response(prompt)
+            logger.info(f"[{self.model_name}] prompted for {power_name}:\n{prompt}")
             logger.info(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}")
 
             # Attempt to parse the final "orders" from the LLM
             move_list = self._extract_moves(raw_response, power_name)
-
+            print(move_list)
             if not move_list:
                 import pdb; pdb.set_trace()
                 
@@ -615,13 +616,13 @@ def assign_models_to_powers():
     """
     # "RUSSIA": "deepseek-reasoner", deepseek api having issues
     return {
-        "FRANCE": "claude-3-5-haiku-20241022",
-        "GERMANY": "claude-3-5-haiku-20241022",
-        "ENGLAND": "claude-3-5-haiku-20241022",
-        "RUSSIA": "claude-3-5-haiku-20241022",
-        "ITALY": "claude-3-5-haiku-20241022",
-        "AUSTRIA": "claude-3-5-haiku-20241022",
-        "TURKEY": "claude-3-5-haiku-20241022",
+        "FRANCE": "gemini-2.0-flash",
+        "GERMANY": "gemini-2.0-flash",
+        "ENGLAND": "gemini-2.0-flash",
+        "RUSSIA": "gemini-2.0-flash",
+        "ITALY": "gemini-2.0-flash",
+        "AUSTRIA": "gemini-2.0-flash",
+        "TURKEY": "gemini-2.0-flash",
     }
     
     # return {
