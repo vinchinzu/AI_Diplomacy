@@ -132,12 +132,14 @@ class BaseModelClient:
 
             # Attempt to parse the final "orders" from the LLM
             move_list = self._extract_moves(raw_response, power_name)
+
             if not move_list:
+                import pdb; pdb.set_trace()
+                
                 logger.warning(f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback.")
                 if model_error_stats is not None:
                     model_error_stats[self.model_name]["order_decoding_errors"] += 1
                 return self.fallback_orders(possible_orders)
-
             # Validate or fallback
             validated_moves = self._validate_orders(move_list, possible_orders)
             return validated_moves
@@ -157,8 +159,9 @@ class BaseModelClient:
         Returns a list of move strings or None if everything fails.
         """
         # 1) Regex for "PARSABLE OUTPUT:{...}"
-        pattern = r"PARSABLE OUTPUT\s*:\s*\{(.*?)\}\s*$"
+        pattern = r"PARSABLE OUTPUT:\s*(\{[\s\S]*\})"
         matches = re.search(pattern, raw_response, re.DOTALL)
+        
         if not matches:
             # Some LLMs might not put the colon or might have triple backtick fences.
             logger.debug(f"[{self.model_name}] Regex parse #1 failed for {power_name}. Trying alternative patterns.")
@@ -166,6 +169,9 @@ class BaseModelClient:
             # 1b) Check for inline JSON after "PARSABLE OUTPUT"
             pattern_alt = r"PARSABLE OUTPUT\s*\{(.*?)\}\s*$"
             matches = re.search(pattern_alt, raw_response, re.DOTALL)
+            
+        if not matches: 
+            logger.debug(f"[{self.model_name}] Regex parse #2 failed for {power_name}. Trying triple-backtick code fences.")
 
         # 2) If still no match, check for triple-backtick code fences containing JSON
         if not matches:
@@ -178,7 +184,13 @@ class BaseModelClient:
         json_text = None
         if matches:
             # Add braces back around the captured group
-            json_text = "{%s}" % matches.group(1).strip()
+            if matches.group(1).strip().startswith(r"{{"): 
+                json_text = matches.group(1).strip()[1:-1]
+            elif matches.group(1).strip().startswith(r"{"):
+                json_text = matches.group(1).strip()
+            else: 
+                json_text = "{%s}" % matches.group(1).strip                
+            
             json_text = json_text.strip()
 
         if not json_text:
@@ -603,14 +615,24 @@ def assign_models_to_powers():
     """
     # "RUSSIA": "deepseek-reasoner", deepseek api having issues
     return {
-        "FRANCE": "o3-mini",
-        "GERMANY": "claude-3-5-sonnet-20241022",
-        "ENGLAND": "gemini-2.0-flash",
-        "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
-        "ITALY": "gpt-4o",
-        "AUSTRIA": "gpt-4o-mini",
+        "FRANCE": "claude-3-5-haiku-20241022",
+        "GERMANY": "claude-3-5-haiku-20241022",
+        "ENGLAND": "claude-3-5-haiku-20241022",
+        "RUSSIA": "claude-3-5-haiku-20241022",
+        "ITALY": "claude-3-5-haiku-20241022",
+        "AUSTRIA": "claude-3-5-haiku-20241022",
         "TURKEY": "claude-3-5-haiku-20241022",
     }
+    
+    # return {
+    #     "FRANCE": "o3-mini",
+    #     "GERMANY": "claude-3-5-sonnet-20241022",
+    #     "ENGLAND": "gemini-2.0-flash",
+    #     "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
+    #     "ITALY": "gpt-4o",
+    #     "AUSTRIA": "gpt-4o-mini",
+    #     "TURKEY": "claude-3-5-haiku-20241022",
+    # }
 
 def example_game_loop(game):
     """
