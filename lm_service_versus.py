@@ -175,7 +175,7 @@ class BaseModelClient:
 
         # 2) If still no match, check for triple-backtick code fences containing JSON
         if not matches:
-            code_fence_pattern = r"```json\s*\{(.*?)\}\s*```"
+            code_fence_pattern = r"```json\s*(\{.*?\})\s*```"
             matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
             if matches:
                 logger.debug(f"[{self.model_name}] Found triple-backtick JSON block for {power_name}.")
