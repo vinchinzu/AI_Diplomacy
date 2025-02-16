@@ -44,6 +44,7 @@ def conduct_negotiations(game, model_error_stats, max_rounds=10):
 
     # Conversation messages are kept in a local list ONLY to build conversation_so_far text.
     conversation_messages = []
+    return conversation_messages
 
     active_powers = [
         p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
@@ -128,8 +129,7 @@ def conduct_negotiations(game, model_error_stats, max_rounds=10):
                 except (json.JSONDecodeError, AttributeError) as e:
                     logger.error(f"Failed to parse message from {power_name}: {e}")
                     # Increment conversation parse error
-                    model_id = game.power_model_map.get(power_name, "unknown")
-                    model_error_stats[model_id]["conversation_errors"] += 1
+                    model_error_stats[power_name]["conversation_errors"] += 1
                     continue
 
     logger.info("Negotiation phase complete.")

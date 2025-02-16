@@ -1,11 +1,11 @@
+import argparse
 import logging
 import time
 import dotenv
 import os
 import json
-
-# Additional import for error stats
 from collections import defaultdict
+import concurrent.futures
 
 # Suppress Gemini/PaLM gRPC warnings
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"  # ERROR level only
@@ -13,12 +13,12 @@ os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"  # ERROR level only
 from diplomacy import Game
 from diplomacy.utils.export import to_saved_game_format
 
-# Added import: we'll create and add standard Diplomacy messages
-
-import concurrent.futures
-
-from ai_diplomacy.clients import load_model_client, assign_models_to_powers
-from ai_diplomacy.utils import get_valid_orders_with_retry, gather_possible_orders
+from ai_diplomacy.clients import load_model_client
+from ai_diplomacy.utils import (
+    get_valid_orders_with_retry,
+    gather_possible_orders,
+    assign_models_to_powers,
+)
 from ai_diplomacy.negotiations import conduct_negotiations
 
 dotenv.load_dotenv()
@@ -31,15 +31,53 @@ logging.basicConfig(
 )
 
 
-def my_summary_callback(system_prompt, user_prompt):
-    # e.g., route to your desired model:
-    client = load_model_client("o3-mini")
+def my_summary_callback(system_prompt, user_prompt, model_name):
+    # Route to the desired model specified by the command-line argument
+    client = load_model_client(model_name)
     combined_prompt = f"{system_prompt}\n\n{user_prompt}"
     # Pseudo-code for generating a response:
     return client.generate_response(combined_prompt)
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Run a Diplomacy game simulation with configurable parameters."
+    )
+    parser.add_argument(
+        "--max-year",
+        type=int,
+        default=1901,
+        help="Maximum year to simulate. The game will stop once this year is reached.",
+    )
+    parser.add_argument(
+        "--summary-model",
+        type=str,
+        default="o3-mini",
+        help="Model name to use for generating phase summaries.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="",
+        help="Output filename for the final JSON result. If not provided, a timestamped name will be generated.",
+    )
+    parser.add_argument(
+        "--models",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated list of model names to assign to powers in order. "
+            "The order is: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY."
+        ),
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
+    max_year = args.max_year
+    summary_model = args.summary_model
+
     logger.info(
         "Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!"
     )
@@ -51,23 +89,44 @@ def main():
 
     # Create a fresh Diplomacy game
     game = Game()
-    # Ensure game has phase_summaries = {}
+    # Ensure game has phase_summaries attribute
     if not hasattr(game, "phase_summaries"):
         game.phase_summaries = {}
 
-    # For storing results in a unique subfolder
+    # Determine the result folder based on a timestamp
     timestamp_str = time.strftime("%Y%m%d_%H%M%S")
     result_folder = f"./results/{timestamp_str}"
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
+    os.makedirs(result_folder, exist_ok=True)
 
-    # Manifesto and game file paths
+    # File paths
     manifesto_path = f"{result_folder}/game_manifesto.txt"
-    game_file_path = f"{result_folder}/lmvsgame.json"
-    stats_file_path = f"{result_folder}/error_stats.json"
+    # Use provided output filename or generate one based on the timestamp
+    game_file_path = (
+        args.output if args.output else f"{result_folder}/lmvsgame.json"
+    )
+    overview_file_path = f"{result_folder}/overview.jsonl"
 
-    game.power_model_map = assign_models_to_powers()
-    max_year = 1910
+    # Handle power model mapping
+    if args.models:
+        # Expected order: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY
+        powers_order = [
+            "AUSTRIA",
+            "ENGLAND",
+            "FRANCE",
+            "GERMANY",
+            "ITALY",
+            "RUSSIA",
+            "TURKEY",
+        ]
+        provided_models = [name.strip() for name in args.models.split(",")]
+        if len(provided_models) != len(powers_order):
+            logger.error(
+                f"Expected {len(powers_order)} models for --power-models but got {len(provided_models)}. Exiting."
+            )
+            return
+        game.power_model_map = dict(zip(powers_order, provided_models))
+    else:
+        game.power_model_map = assign_models_to_powers()
 
     while not game.is_game_done:
         phase_start = time.time()
@@ -79,21 +138,20 @@ def main():
         # DEBUG: Print the short phase to confirm
         logger.info(f"DEBUG: current_short_phase is '{game.current_short_phase}'")
 
-        # Prevent unbounded sim
+        # Prevent unbounded simulation based on year
         year_str = current_phase[1:5]
         year_int = int(year_str)
         if year_int > max_year:
             logger.info(f"Reached year {year_int}, stopping the test game early.")
             break
 
-        # Use endswith("M") for movement phases (like F1901M, S1902M)
+        # If it's a movement phase (e.g. ends with "M"), conduct negotiations
         if game.current_short_phase.endswith("M"):
             logger.info("Starting negotiation phase block...")
             conversation_messages = conduct_negotiations(
                 game, model_error_stats, max_rounds=10
             )
         else:
-            # If we have no conversation_messages in phases that are not Movement (e.g. Retreat/Build)
             conversation_messages = []
 
         conversation_text_for_orders = "\n".join(
@@ -110,7 +168,6 @@ def main():
             if not p_obj.is_eliminated()
         ]
 
-        # Then proceed with concurrent order generation
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=len(active_powers)
         ) as executor:
@@ -124,7 +181,7 @@ def main():
                     continue
                 board_state = game.get_state()
 
-                # Submit a task that includes up to 3 attempts at valid orders
+                # Submit task with up to 3 retries for valid orders
                 future = executor.submit(
                     get_valid_orders_with_retry,
                     game,
@@ -132,7 +189,7 @@ def main():
                     board_state,
                     power_name,
                     possible_orders,
-                    conversation_text_for_orders,  # existing conversation text
+                    conversation_text_for_orders,  # conversation text
                     game.phase_summaries,
                     model_error_stats,
                     3,  # max_retries
@@ -158,23 +215,26 @@ def main():
                     logger.error(f"LLM request failed for {p_name}: {exc}")
 
         logger.info("Processing orders...\n")
-        phase_data = game.process(phase_summary_callback=my_summary_callback)
+        # Pass the summary model to the callback via a lambda function
+        phase_data = game.process(
+            phase_summary_callback=lambda sys, usr: my_summary_callback(
+                sys, usr, summary_model
+            )
+        )
         logger.info("Phase complete.\n")
 
-        # Retrieve the last-processed phase data from the game's history
+        # Retrieve and log the summary of the phase
         summary_text = phase_data.summary or "(No summary found.)"
-
-        # Print in pretty ASCII format
         border = "=" * 80
         logger.info(
             f"{border}\nPHASE SUMMARY for {phase_data.name}:\n{summary_text}\n{border}"
         )
 
-        # Write to unique game_manifesto in the timestamped folder
+        # Append the summary to the manifesto file
         with open(manifesto_path, "a") as f:
             f.write(f"=== {phase_data.name} ===\n{summary_text}\n\n")
 
-        # End-of-loop checks
+        # Check if we've exceeded the max year
         year_str = current_phase[1:5]
         year_int = int(year_str)
         if year_int > max_year:
@@ -185,19 +245,18 @@ def main():
     duration = time.time() - start_whole
     logger.info(f"Game ended after {duration:.2f}s. Saving to final JSON...")
 
-    # Save final result to the unique subfolder
     output_path = game_file_path
-    if not os.path.exists(output_path):
-        to_saved_game_format(game, output_path=output_path)
-    else:
+    # If the file already exists, append a timestamp to the filename
+    if os.path.exists(output_path):
         logger.info("Game file already exists, saving with unique filename.")
         output_path = f"{output_path}_{time.strftime('%Y%m%d_%H%M%S')}.json"
-        to_saved_game_format(game, output_path=output_path)
+    to_saved_game_format(game, output_path=output_path)
 
-    # Dump our error stats to JSON
-
-    with open(stats_file_path, "w") as stats_f:
-        json.dump(model_error_stats, stats_f, indent=2)
+    # Dump error stats and power model mapping to the overview file
+    with open(overview_file_path, "w") as overview_file:
+        overview_file.write(json.dumps(model_error_stats) + "\n")
+        overview_file.write(json.dumps(game.power_model_map) + "\n")
+        overview_file.write(json.dumps(vars(args)) + "\n")
 
     logger.info(f"Saved game data, manifesto, and error stats in: {result_folder}")
     logger.info("Done.")

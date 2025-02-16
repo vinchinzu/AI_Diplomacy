@@ -8,6 +8,33 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 
+def assign_models_to_powers():
+    """
+    Example usage: define which model each power uses.
+    Return a dict: { power_name: model_id, ... }
+    POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
+    """
+    return {
+        "FRANCE": "gemini-2.0-flash",
+        "GERMANY": "gemini-2.0-flash",
+        "ENGLAND": "gemini-2.0-flash",
+        "RUSSIA": "gemini-2.0-flash",
+        "ITALY": "gemini-2.0-flash",
+        "AUSTRIA": "gemini-2.0-flash",
+        "TURKEY": "gemini-2.0-flash",
+    }
+
+    # return {
+    #     "FRANCE": "o3-mini",
+    #     "GERMANY": "claude-3-5-sonnet-20241022",
+    #     "ENGLAND": "gemini-2.0-flash",
+    #     "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
+    #     "ITALY": "gpt-4o",
+    #     "AUSTRIA": "gpt-4o-mini",
+    #     "TURKEY": "claude-3-5-haiku-20241022",
+    # }
+
+
 def gather_possible_orders(game, power_name):
     """
     Returns a dictionary mapping each orderable location to the list of valid orders.
@@ -97,5 +124,6 @@ def get_valid_orders_with_retry(
     logger.warning(
         f"[{power_name}] Exhausted {max_retries} attempts for valid orders, using fallback."
     )
+    model_error_stats[power_name]['order_decoding_errors'] += 1
     fallback = client.fallback_orders(possible_orders)
     return fallback
