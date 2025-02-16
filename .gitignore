@@ -134,3 +134,4 @@ events.out.*
 
 results
 game.json
+.ruff_cache

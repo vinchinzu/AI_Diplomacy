@@ -2,7 +2,6 @@ import logging
 import time
 import dotenv
 import os
-import re
 import json
 
 # Additional import for error stats
@@ -15,156 +14,21 @@ from diplomacy import Game
 from diplomacy.utils.export import to_saved_game_format
 
 # Added import: we'll create and add standard Diplomacy messages
-from diplomacy.engine.message import Message, GLOBAL
 
-# For concurrency:
 import concurrent.futures
 
 from ai_diplomacy.clients import load_model_client, assign_models_to_powers
+from ai_diplomacy.utils import get_valid_orders_with_retry, gather_possible_orders
+from ai_diplomacy.negotiations import conduct_negotiations
 
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     datefmt="%H:%M:%S",
 )
-
-
-def gather_possible_orders(game, power_name):
-    """
-    Returns a dictionary mapping each orderable location to the list of valid orders.
-    """
-    orderable_locs = game.get_orderable_locations(power_name)
-    all_possible = game.get_all_possible_orders()
-
-    result = {}
-    for loc in orderable_locs:
-        result[loc] = all_possible.get(loc, [])
-    return result
-
-
-def conduct_negotiations(game, model_error_stats, max_rounds=10):
-    """
-    Conducts a round-robin conversation among all non-eliminated powers.
-    Each power can send up to 'max_rounds' messages, choosing between private
-    and global messages each turn.
-    """
-    logger.info("Starting negotiation phase.")
-
-    # Conversation messages are kept in a local list ONLY to build conversation_so_far text.
-    conversation_messages = []
-
-    active_powers = [
-        p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
-    ]
-
-    # We do up to 'max_rounds' single-message turns for each power
-    for round_index in range(max_rounds):
-        for power_name in active_powers:
-            # Build the conversation context from all messages the power can see
-            visible_messages = []
-            for msg in conversation_messages:
-                # Include if message is global or if power is sender/recipient
-                if (
-                    msg["recipient"] == GLOBAL
-                    or msg["sender"] == power_name
-                    or msg["recipient"] == power_name
-                ):
-                    visible_messages.append(
-                        f"{msg['sender']} to {msg['recipient']}: {msg['content']}"
-                    )
-
-            conversation_so_far = "\n".join(visible_messages)
-
-            # Add few-shot example for message format
-            few_shot_example = """
-Example response formats:
-1. For a global message:
-{
-    "message_type": "global",
-    "content": "I propose we all work together against Turkey."
-}
-
-2. For a private message:
-{
-    "message_type": "private",
-    "recipient": "FRANCE",
-    "content": "Let's form a secret alliance against Germany."
-}
-
-Note: There are a total of 10 messages in this negotiation phase. This is message #{} out of 10. By the end, you should have coordinated moves effectively to avoid being blocked or bounced with others.
-If you have your plan already figured out, you can just send a public '.' to indicate you're ready to move on.
-"""
-
-            # Ask the LLM for a single reply
-            client = load_model_client(game.power_model_map.get(power_name, "o3-mini"))
-            new_message = client.get_conversation_reply(
-                power_name=power_name,
-                conversation_so_far=conversation_so_far + "\n" + few_shot_example,
-                game_phase=game.current_short_phase,
-                phase_summaries=game.phase_summaries,
-            )
-
-            if new_message:
-                try:
-                    # Parse the JSON response
-                    # Find the JSON block between curly braces
-                    json_match = re.search(r"\{[^}]+\}", new_message)
-                    if json_match:
-                        message_data = json.loads(json_match.group(0))
-
-                        # Extract message details
-                        message_type = message_data.get("message_type", "global")
-                        content = message_data.get("content", "").strip()
-                        recipient = message_data.get("recipient", GLOBAL)
-
-                        # Validate recipient if private message
-                        if message_type == "private" and recipient not in active_powers:
-                            logger.warning(
-                                f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
-                            )
-                            recipient = GLOBAL
-
-                        # For private messages, ensure recipient is specified
-                        if message_type == "private" and recipient == GLOBAL:
-                            logger.warning(
-                                "Private message without recipient specified, defaulting to GLOBAL"
-                            )
-
-                        # Log for debugging
-                        logger.info(
-                            f"Power {power_name} sends {message_type} message to {recipient}"
-                        )
-
-                        # Keep local record for building future conversation context
-                        conversation_messages.append(
-                            {
-                                "sender": power_name,
-                                "recipient": recipient,
-                                "content": content,
-                            }
-                        )
-
-                        # Create an official message in the Diplomacy engine
-                        diplo_message = Message(
-                            phase=game.current_short_phase,
-                            sender=power_name,
-                            recipient=recipient,
-                            message=content,
-                        )
-                        game.add_message(diplo_message)
-
-                except (json.JSONDecodeError, AttributeError) as e:
-                    logger.error(f"Failed to parse message from {power_name}: {e}")
-                    # Increment conversation parse error
-                    model_id = game.power_model_map.get(power_name, "unknown")
-                    model_error_stats[model_id]["conversation_errors"] += 1
-                    continue
-                
-    logger.info("Negotiation phase complete.")
-    return conversation_messages
 
 
 def my_summary_callback(system_prompt, user_prompt):
@@ -173,86 +37,6 @@ def my_summary_callback(system_prompt, user_prompt):
     combined_prompt = f"{system_prompt}\n\n{user_prompt}"
     # Pseudo-code for generating a response:
     return client.generate_response(combined_prompt)
-
-
-def get_valid_orders_with_retry(
-    game,
-    client,
-    board_state,
-    power_name,
-    possible_orders,
-    conversation_text_for_orders,
-    phase_summaries,
-    model_error_stats,
-    max_retries=3,
-):
-    """
-    Tries up to 'max_retries' to generate and validate orders.
-    If invalid, we append the error feedback to the conversation
-    context for the next retry. If still invalid, return fallback.
-    """
-    error_feedback = ""
-    for attempt in range(max_retries):
-        # Incorporate any error feedback into the conversation text
-        augmented_conversation_text = conversation_text_for_orders
-        if error_feedback:
-            augmented_conversation_text += (
-                "\n\n[ORDER VALIDATION FEEDBACK]\n" + error_feedback
-            )
-
-        # Ask the LLM for orders
-        orders = client.get_orders(
-            board_state=board_state,
-            power_name=power_name,
-            possible_orders=possible_orders,
-            conversation_text=augmented_conversation_text,
-            phase_summaries=phase_summaries,
-            model_error_stats=model_error_stats,
-        )
-
-        print(f"orders: {orders}")
-
-        # Validate each order
-        invalid_info = []
-        for move in orders:
-            # Example move: "A PAR H" -> unit="A PAR", order_part="H"
-            tokens = move.split(" ", 2)
-            if len(tokens) < 3:
-                invalid_info.append(
-                    f"Order '{move}' is malformed; expected 'A PAR H' style."
-                )
-                continue
-            unit = " ".join(tokens[:2])  # e.g. "A PAR"
-            order_part = tokens[2]  # e.g. "H" or "S A MAR"
-
-            # Use the internal game validation method
-            if order_part == "B":
-                validity = 1  # hack because game._valid_order doesn't support 'B'
-            else:
-                validity = game._valid_order(
-                    game.powers[power_name], unit, order_part, report=1
-                )
-            if validity != 1:
-                invalid_info.append(
-                    f"Order '{move}' returned validity={validity}. (None/-1=invalid, 0=partial, 1=valid)"
-                )
-
-        if not invalid_info:
-            # All orders are fully valid
-            return orders
-        else:
-            # Build feedback for the next retry
-            error_feedback = (
-                f"Attempt {attempt + 1}/{max_retries} had invalid orders:\n"
-                + "\n".join(invalid_info)
-            )
-
-    # If we finish the loop without returning, fallback
-    logger.warning(
-        f"[{power_name}] Exhausted {max_retries} attempts for valid orders, using fallback."
-    )
-    fallback = client.fallback_orders(possible_orders)
-    return fallback
 
 
 def main():
@@ -411,7 +195,6 @@ def main():
         to_saved_game_format(game, output_path=output_path)
 
     # Dump our error stats to JSON
-    import json
 
     with open(stats_file_path, "w") as stats_f:
         json.dump(model_error_stats, stats_f, indent=2)
