@@ -39,86 +39,57 @@ def gather_possible_orders(game, power_name):
     return result
 
 
-def get_valid_orders_with_retry(
+def get_valid_orders(
     game,
     client,
     board_state,
     power_name,
     possible_orders,
-    conversation_text_for_orders,
+    conversation_history,
     phase_summaries,
     model_error_stats,
-    max_retries=3,
 ):
     """
     Tries up to 'max_retries' to generate and validate orders.
     If invalid, we append the error feedback to the conversation
     context for the next retry. If still invalid, return fallback.
     """
-    error_feedback = ""
-    for attempt in range(max_retries):
-        # Incorporate any error feedback into the conversation text
-        augmented_conversation_text = conversation_text_for_orders
-        if error_feedback:
-            augmented_conversation_text += (
-                "\n\n[ORDER VALIDATION FEEDBACK]\n" + error_feedback
+
+    # Ask the LLM for orders
+    orders = client.get_orders(
+        game=game,
+        board_state=board_state,
+        power_name=power_name,
+        possible_orders=possible_orders,
+        conversation_text=conversation_history,
+        phase_summaries=phase_summaries,
+        model_error_stats=model_error_stats,
+    )
+
+    print(f"orders: {orders}")
+
+    # Validate each order
+    for move in orders:
+        # Example move: "A PAR H" -> unit="A PAR", order_part="H"
+        tokens = move.split(" ", 2)
+        unit = " ".join(tokens[:2])  # e.g. "A PAR"
+        order_part = tokens[2]  # e.g. "H" or "S A MAR"
+
+        # Use the internal game validation method
+        if order_part == "B":
+            validity = 1  # hack because game._valid_order doesn't support 'B'
+        else:
+            validity = game._valid_order(
+                game.powers[power_name], unit, order_part, report=1
             )
-
-        # Ask the LLM for orders
-        orders = client.get_orders(
-            game=game,
-            board_state=board_state,
-            power_name=power_name,
-            possible_orders=possible_orders,
-            conversation_text=augmented_conversation_text,
-            phase_summaries=phase_summaries,
-            model_error_stats=model_error_stats,
-        )
-
-        print(f"orders: {orders}")
-
-        # Validate each order
-        invalid_info = []
-        for move in orders:
-            # Example move: "A PAR H" -> unit="A PAR", order_part="H"
-            tokens = move.split(" ", 2)
-            if len(tokens) < 3:
-                invalid_info.append(
-                    f"Order '{move}' is malformed; expected 'A PAR H' style."
-                )
-                continue
-            unit = " ".join(tokens[:2])  # e.g. "A PAR"
-            order_part = tokens[2]  # e.g. "H" or "S A MAR"
-
-            # Use the internal game validation method
-            if order_part == "B":
-                validity = 1  # hack because game._valid_order doesn't support 'B'
-            else:
-                validity = game._valid_order(
-                    game.powers[power_name], unit, order_part, report=1
-                )
-            if validity != 1:
-                import pdb
-
-                pdb.set_trace()
-                invalid_info.append(
-                    f"Order '{move}' returned validity={validity}. (None/-1=invalid, 0=partial, 1=valid)"
-                )
-
-        if not invalid_info:
+        
+        if validity == 1: 
             # All orders are fully valid
             return orders
         else:
-            # Build feedback for the next retry
-            error_feedback = (
-                f"Attempt {attempt + 1}/{max_retries} had invalid orders:\n"
-                + "\n".join(invalid_info)
+            logger.warning(
+                f"[{power_name}] failed to produce a valid order, using fallback."
             )
-
-    # If we finish the loop without returning, fallback
-    logger.warning(
-        f"[{power_name}] Exhausted {max_retries} attempts for valid orders, using fallback."
-    )
-    model_error_stats[power_name]["order_decoding_errors"] += 1
-    fallback = client.fallback_orders(possible_orders)
-    return fallback
+            model_error_stats[power_name]["order_decoding_errors"] += 1
+            fallback = client.fallback_orders(possible_orders)
+            return fallback

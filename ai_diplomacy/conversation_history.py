@@ -18,6 +18,9 @@ class ConversationHistory:
         self.global_history = defaultdict(lambda: defaultdict(str))
 
     def add_message(self, year_phase, power_name, message):
+        if year_phase not in self.phases:
+            self.phases.append(year_phase)
+        
         if message["recipient"] == "GLOBAL":
             self.global_history["GLOBAL"][year_phase] += (
                 f"    {power_name}: {message['content']}\n"
@@ -35,22 +38,26 @@ class ConversationHistory:
         else:
             self.phases.append(year_phase)
 
-    def get_conversation_history(self, power_name):
+    def get_conversation_history(self, power_name, num_prev_phases=5): 
+        
+        phases_to_report = self.phases[-num_prev_phases:]
         conversation_history_str = ""
         if self.global_history["GLOBAL"]:
             conversation_history_str += "GLOBAL:\n"
-            for year in self.global_history["GLOBAL"].keys():
-                conversation_history_str += f"\n{year}:\n\n"
-                conversation_history_str += self.global_history["GLOBAL"][year]
+            for phase in phases_to_report:
+                if phase in self.global_history["GLOBAL"]:
+                    conversation_history_str += f"\n{phase}:\n\n"
+                    conversation_history_str += self.global_history["GLOBAL"][phase]
             conversation_history_str += "\n"
         if self.history_by_power[power_name]:
             conversation_history_str += "PRIVATE:\n"
-            for year in self.history_by_power[power_name].keys():
-                conversation_history_str += f"\n{year}:\n"
-                for power in self.history_by_power[power_name][year].keys():
-                    conversation_history_str += f"\n  {power}:\n\n"
-                    conversation_history_str += self.history_by_power[power_name][year][
-                        power
-                    ]
+            for phase in phases_to_report:
+                if phase in self.history_by_power[power_name]:
+                    conversation_history_str += f"\n{phase}:\n"
+                    for power in self.history_by_power[power_name][phase].keys():
+                        conversation_history_str += f"\n  {power}:\n\n"
+                        conversation_history_str += self.history_by_power[power_name][phase][
+                            power
+                        ]
 
         return conversation_history_str

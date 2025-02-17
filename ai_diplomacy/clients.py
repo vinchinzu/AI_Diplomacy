@@ -20,8 +20,8 @@ from .conversation_history import ConversationHistory
 
 # set logger back to just info
 logger = logging.getLogger("client")
-logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
+logger.setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 load_dotenv()
 
@@ -178,7 +178,6 @@ class BaseModelClient:
 
         try:
             raw_response = self.generate_response(prompt)
-            logger.info(f"[{self.model_name}] prompted for {power_name}:\n{prompt}")
             logger.info(
                 f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
             )
@@ -381,55 +380,56 @@ class BaseModelClient:
         )
 
         raw_response = self.generate_response(prompt)
-        print("---------------")
-        print(prompt)
-        print("---------------")
-        print(raw_response)
-        import pdb
 
-        pdb.set_trace()
+        messages = []
+        if raw_response:
+            try:
+                # Parse the JSON response
+                # Find the JSON block between curly braces
+                json_matches = re.findall(r"\{[^}]+\}", raw_response)
+                for match in json_matches:
+                    try: 
+                        message_data = json.loads(match)
 
-        try:
-            # Parse the JSON response
-            # Find the JSON block between curly braces
-            json_match = re.search(r"\{[^}]+\}", raw_response)
-            if json_match:
-                message_data = json.loads(json_match.group(0))
+                        # Extract message details
+                        message_type = message_data.get("message_type", "global")
+                        content = message_data.get("content", "").strip()
+                        recipient = message_data.get("recipient", GLOBAL)
 
-                # Extract message details
-                message_type = message_data.get("message_type", "global")
-                content = message_data.get("content", "").strip()
-                recipient = message_data.get("recipient", GLOBAL)
+                        # Validate recipient if private message
+                        if message_type == "private" and recipient not in active_powers:
+                            logger.warning(
+                                f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
+                            )
+                            recipient = GLOBAL
 
-                # Validate recipient if private message
-                if message_type == "private" and recipient not in active_powers:
-                    logger.warning(
-                        f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
-                    )
-                    recipient = GLOBAL
+                        # For private messages, ensure recipient is specified
+                        if message_type == "private" and recipient == GLOBAL:
+                            logger.warning(
+                                "Private message without recipient specified, defaulting to GLOBAL"
+                            )
 
-                # For private messages, ensure recipient is specified
-                if message_type == "private" and recipient == GLOBAL:
-                    logger.warning(
-                        "Private message without recipient specified, defaulting to GLOBAL"
-                    )
+                        # Log for debugging
+                        logger.info(
+                            f"Power {power_name} sends {message_type} message to {recipient}"
+                        )
 
-                # Log for debugging
-                logger.info(
-                    f"Power {power_name} sends {message_type} message to {recipient}"
-                )
+                        # Keep local record for building future conversation context
+                        message = {
+                            "sender": power_name,
+                            "recipient": recipient,
+                            "content": content,
+                        }
+                        
+                        messages.append(message)
 
-                # Keep local record for building future conversation context
-                message = {
-                    "sender": power_name,
-                    "recipient": recipient,
-                    "content": content,
-                }
+                    except (json.JSONDecodeError, AttributeError) as e:
+                        message = None
+            
+            except AttributeError:
+                logger.error("Error parsing raw response")
 
-        except (json.JSONDecodeError, AttributeError) as e:
-            message = None
-
-        return message
+        return messages
 
 
 ##############################################################################

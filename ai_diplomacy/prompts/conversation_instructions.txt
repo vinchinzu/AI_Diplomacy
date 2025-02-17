@@ -1,8 +1,8 @@
 **CURRENT INSTRUCTIONS**
 
-You can now send a message to other powers. Messages that have been sent before are listed above in the 'CONVERSATION HISTORY' section. Produce exactly one new message in JSON (as explained in the system prompt):
-• You have up to 10 messages in total, so plan your moves carefully to avoid being blocked. 
-• By the end of these 10 messages, ensure your final moves are well coordinated to avoid unnecessary bounces or blocked moves.
+You can now send a message to other powers. Messages that have been sent before are listed above in the 'CONVERSATION HISTORY' section.
+• You will have a total of 3 rounds of sending messages. 
+• By the end of these 3 rounds, ensure your final moves are well coordinated to avoid unnecessary bounces or blocked moves.
 • Even non-optimal moves are better than blocked or voided move so don't worry about being perfect.
 • Possibly reference the summaries or the conversation.
 • Decide whether to send a private or global message.
@@ -16,11 +16,11 @@ You can now send a message to other powers. Messages that have been sent before 
 Remember:
 1. "message_type" can be "global" or "private".
 2. If "private", specify "recipient" (one of the powers).
-3. The "content" is your diplomatic message (one or two sentences). 
-4. Return only the JSON object, no additional text.
+3. The "content" is the message you wish to send. 
+4. Return the JSON object at the end. 
 
 Please respond now.
-You must now respond with any amount of reasoning and then exactly ONE JSON object. 
+You must now respond with any amount of reasoning and then valid JSON objects for each message you'd like to send. 
 
 Example response formats:
 1. For a global message:
@@ -38,4 +38,16 @@ PARSABLE OUTPUT:
     "content": "Let's form a secret alliance against Germany."
 }}
 
-Reason step-by-step through your diplomatic position, the past phase summaries, and the limited 10-message negotiation. Make sure you give thorough and clear reasoning. Be concrete in your messages. You will likely want to make concrete requests, statements, or updates with clear reasoning. Note that you may lie to deceive your opponents. Your goal is to win the game and acquire territory. Make sure to include a message at the end in correct JSON format at the end. 
+3. To send two messages. 
+PARSABLE OUTPUT: 
+{{
+    "message_type": "global",
+    "content": "I propose we all work together against Turkey."
+}}
+{{
+    "message_type": "private",
+    "recipient": "FRANCE",
+    "content": "Let's form a secret alliance against Germany."
+}}
+
+Reason step-by-step through your diplomatic position and the past phase summaries. Make sure you give thorough and clear reasoning. Be concrete in your messages. You will likely want to make concrete requests, statements, or updates with clear reasoning. Note that you may lie to deceive your opponents. Your goal is to win the game and acquire territory. Make sure to include messages at the end in correct JSON format at the end. Remember you are in messaging mode right now. Do not give any orders. Each message you send must be in a separate bracketed JSON section. Do not send them all as one JSON object. Do not repeat any JSON object in your output twice. 

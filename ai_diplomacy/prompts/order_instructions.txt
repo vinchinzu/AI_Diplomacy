@@ -1,21 +1,23 @@
 **CURRENT INSTRUCTIONS**
 
 IMPORTANT:
-1. You are a Diplomacy expert. You aim to grow your power’s supply centers and prevent others from capturing yours.
-2. Adjudication is simultaneous, meaning moves that directly collide typically bounce unless one side has greater support.
-3. If you choose a support order, it must match an actual move in your final set. For instance, "A VIE S F TRI - VEN" requires "A VIE - VEN". "F TRI - VEN" must also occur for the move to be successful, but this can be ordered by either yourself or an ally.
-4. If multiple moves will definitely bounce, consider alternative strategies or defensive holds.
-5. Remember that in the winter phase you are only able to build units. You are not able to move units or command them to support other units. Refer to the possible_orders to be sure. 
-6. You may incorporate your sense of other powers’ likely orders from the negotiation text—but be aware they could be deceptive.
-7. Reason step-by-step. Think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions. Then produce EXACTLY the following in your response at the end: 
+1. Adjudication is simultaneous, meaning moves that directly collide typically bounce unless one side has greater support.
+2. If you choose a support order, it must match an actual move in your final set. For instance, "A VIE S F TRI - VEN" requires "A VIE - VEN". "F TRI - VEN" must also occur for the move to be successful, but this can be ordered by either yourself or an ally.
+3. If multiple moves will definitely bounce, consider alternative strategies or defensive holds.
+4. Remember that in the winter phase you are only able to build units. You are not able to move units or command them to support other units. Refer to the possible_orders to be sure. 
+5. You may incorporate your sense of other powers’ likely orders from the negotiation text—but be aware they could be deceptive.
+6. Reason step-by-step. Think about the enemy units and centers and how they might move, think about your units and centers, the conversation that's happened, the game phase summaries so far, any public and private goals you have or others might have based on conversation and reality of positions. Then produce EXACTLY the following in your response at the end: 
 
 
+EXAMPLE:
 'PARSABLE OUTPUT:
 {{
-  "orders": [ ... ]
+  "orders": ["A PAR - BUR","F BRE - MAO"]
 }}'
+
+
 No extra braces outside that block.
-The most important thing is to make SURE to include your orders in the JSON block and to preface it with 'PARSABLE OUTPUT:'.
+The most important thing is to make SURE to include your orders in the JSON block and to preface it with 'PARSABLE OUTPUT:'. Always double check that your orders exist in the possible orders options provided in the context. 
 
 Aim to be consistent, strategic, and coherent with any negotiations or alliances you have formed, while also anticipating betrayals or possible bounces.
-You may need to be deceptive to win. Reason step-by-step first, then produce the JSON block. 
+You may need to be deceptive to win. Reason step-by-step first, then produce the JSON block. Remember you are to give orders now. Do not send any messages. Ensure your orders exist in possible orders options provided in the context. 

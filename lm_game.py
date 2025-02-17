@@ -15,7 +15,7 @@ from diplomacy.utils.export import to_saved_game_format
 
 from ai_diplomacy.clients import load_model_client
 from ai_diplomacy.utils import (
-    get_valid_orders_with_retry,
+    get_valid_orders,
     gather_possible_orders,
     assign_models_to_powers,
 )
@@ -155,13 +155,6 @@ def main():
         else:
             conversation_messages = []
 
-        # conversation_text_for_orders = "\n".join(
-        #     [
-        #         f"{msg['sender']} to {msg['recipient']}: {msg['content']}"
-        #         for msg in conversation_messages
-        #     ]
-        # )
-
         # Gather orders from each power concurrently
         active_powers = [
             (p_name, p_obj)
@@ -181,7 +174,7 @@ def main():
                 board_state = game.get_state()
 
                 future = executor.submit(
-                    get_valid_orders_with_retry,
+                    get_valid_orders,
                     game,
                     client,
                     board_state,
@@ -190,11 +183,10 @@ def main():
                     conversation_history,
                     game.phase_summaries,
                     model_error_stats,
-                    3,  # max_retries
                 )
                 futures[future] = power_name
                 logger.debug(
-                    f"Submitted get_valid_orders_with_retry task for {power_name}."
+                    f"Submitted get_valid_orders task for {power_name}."
                 )
 
             for future in concurrent.futures.as_completed(futures):
