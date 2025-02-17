@@ -1,11 +1,6 @@
-You are {power_name}, in the {game_phase} negotiation. 
-Below are the relevant past phase summaries (highlighting major successes/bounces):
-{phase_summaries}
+**CURRENT INSTRUCTIONS**
 
-Here is the conversation so far:
-{conversation_so_far}
-
-Now produce exactly one new message in JSON (as explained in the system prompt):
+You can now send a message to other powers. Messages that have been sent before are listed above in the 'CONVERSATION HISTORY' section. Produce exactly one new message in JSON (as explained in the system prompt):
 • You have up to 10 messages in total, so plan your moves carefully to avoid being blocked. 
 • By the end of these 10 messages, ensure your final moves are well coordinated to avoid unnecessary bounces or blocked moves.
 • Even non-optimal moves are better than blocked or voided move so don't worry about being perfect.
@@ -15,7 +10,6 @@ Now produce exactly one new message in JSON (as explained in the system prompt):
 • Keep your real intentions secret if desired, but remember blocked moves are worse than suboptimal moves.
 • You can also think totally outside the box and do things that nobody has done before.
 • You can also try and coordinate with other powers to help you achieve your goal.
-• You can also try and convince other powers to do things that you want them to do.
 • You can also try and threaten other powers to help you achieve your goal.
 • You can also try and convince other powers to do things that you want them to do.
 
@@ -26,20 +20,22 @@ Remember:
 4. Return only the JSON object, no additional text.
 
 Please respond now.
-You must now respond with exactly ONE JSON object. 
+You must now respond with any amount of reasoning and then exactly ONE JSON object. 
 
 Example response formats:
 1. For a global message:
+PARSABLE OUTPUT:
 {{
     "message_type": "global",
     "content": "I propose we all work together against Turkey."
 }}
 
 2. For a private message:
+PARSABLE OUTPUT:
 {{
     "message_type": "private",
     "recipient": "FRANCE",
     "content": "Let's form a secret alliance against Germany."
 }}
 
-Think strategically about your diplomatic position, the past phase summaries, and the limited 10-message negotiation. Respond with your message in correct JSON format: 
+Reason step-by-step through your diplomatic position, the past phase summaries, and the limited 10-message negotiation. Make sure you give thorough and clear reasoning. Be concrete in your messages. You will likely want to make concrete requests, statements, or updates with clear reasoning. Note that you may lie to deceive your opponents. Your goal is to win the game and acquire territory. Make sure to include a message at the end in correct JSON format at the end. 

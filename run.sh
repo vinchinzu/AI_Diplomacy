@@ -1,6 +1,6 @@
 #!/bin/bash
 
 python lm_game.py \
-    --max-year 1900 \
+    --max-year 1910 \
     --summary-model "o3-mini" \
-    --models "gemini-2.0-flash, gemini-2.0-flash, gemini-2.0-flash, gemini-2.0-flash, gemini-2.0-flash, gemini-2.0-flash, gemini-2.0-flash"
+    --models "gpt-4o-mini, gpt-4o-mini, gpt-4o-mini, gpt-4o-mini, gpt-4o-mini, gpt-4o-mini, gpt-4o-mini"

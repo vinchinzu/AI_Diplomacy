@@ -20,6 +20,7 @@ from ai_diplomacy.utils import (
     assign_models_to_powers,
 )
 from ai_diplomacy.negotiations import conduct_negotiations
+from ai_diplomacy.conversation_history import ConversationHistory
 
 dotenv.load_dotenv()
 
@@ -89,6 +90,8 @@ def main():
 
     # Create a fresh Diplomacy game
     game = Game()
+    conversation_history = ConversationHistory()
+
     # Ensure game has phase_summaries attribute
     if not hasattr(game, "phase_summaries"):
         game.phase_summaries = {}
@@ -101,9 +104,7 @@ def main():
     # File paths
     manifesto_path = f"{result_folder}/game_manifesto.txt"
     # Use provided output filename or generate one based on the timestamp
-    game_file_path = (
-        args.output if args.output else f"{result_folder}/lmvsgame.json"
-    )
+    game_file_path = args.output if args.output else f"{result_folder}/lmvsgame.json"
     overview_file_path = f"{result_folder}/overview.jsonl"
 
     # Handle power model mapping
@@ -149,17 +150,17 @@ def main():
         if game.current_short_phase.endswith("M"):
             logger.info("Starting negotiation phase block...")
             conversation_messages = conduct_negotiations(
-                game, model_error_stats, max_rounds=10
+                game, conversation_history, model_error_stats, max_rounds=10
             )
         else:
             conversation_messages = []
 
-        conversation_text_for_orders = "\n".join(
-            [
-                f"{msg['sender']} to {msg['recipient']}: {msg['content']}"
-                for msg in conversation_messages
-            ]
-        )
+        # conversation_text_for_orders = "\n".join(
+        #     [
+        #         f"{msg['sender']} to {msg['recipient']}: {msg['content']}"
+        #         for msg in conversation_messages
+        #     ]
+        # )
 
         # Gather orders from each power concurrently
         active_powers = [
@@ -168,9 +169,7 @@ def main():
             if not p_obj.is_eliminated()
         ]
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(active_powers)
-        ) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             futures = {}
             for power_name, _ in active_powers:
                 model_id = game.power_model_map.get(power_name, "o3-mini")
@@ -181,7 +180,6 @@ def main():
                     continue
                 board_state = game.get_state()
 
-                # Submit task with up to 3 retries for valid orders
                 future = executor.submit(
                     get_valid_orders_with_retry,
                     game,
@@ -189,7 +187,7 @@ def main():
                     board_state,
                     power_name,
                     possible_orders,
-                    conversation_text_for_orders,  # conversation text
+                    conversation_history,
                     game.phase_summaries,
                     model_error_stats,
                     3,  # max_retries

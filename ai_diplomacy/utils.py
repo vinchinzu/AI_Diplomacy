@@ -14,25 +14,16 @@ def assign_models_to_powers():
     Return a dict: { power_name: model_id, ... }
     POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
     """
-    return {
-        "FRANCE": "gemini-2.0-flash",
-        "GERMANY": "gemini-2.0-flash",
-        "ENGLAND": "gemini-2.0-flash",
-        "RUSSIA": "gemini-2.0-flash",
-        "ITALY": "gemini-2.0-flash",
-        "AUSTRIA": "gemini-2.0-flash",
-        "TURKEY": "gemini-2.0-flash",
-    }
 
-    # return {
-    #     "FRANCE": "o3-mini",
-    #     "GERMANY": "claude-3-5-sonnet-20241022",
-    #     "ENGLAND": "gemini-2.0-flash",
-    #     "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
-    #     "ITALY": "gpt-4o",
-    #     "AUSTRIA": "gpt-4o-mini",
-    #     "TURKEY": "claude-3-5-haiku-20241022",
-    # }
+    return {
+        "FRANCE": "o3-mini",
+        "GERMANY": "claude-3-5-sonnet-20241022",
+        "ENGLAND": "gemini-2.0-flash",
+        "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
+        "ITALY": "gpt-4o",
+        "AUSTRIA": "gpt-4o-mini",
+        "TURKEY": "claude-3-5-haiku-20241022",
+    }
 
 
 def gather_possible_orders(game, power_name):
@@ -75,6 +66,7 @@ def get_valid_orders_with_retry(
 
         # Ask the LLM for orders
         orders = client.get_orders(
+            game=game,
             board_state=board_state,
             power_name=power_name,
             possible_orders=possible_orders,
@@ -106,6 +98,9 @@ def get_valid_orders_with_retry(
                     game.powers[power_name], unit, order_part, report=1
                 )
             if validity != 1:
+                import pdb
+
+                pdb.set_trace()
                 invalid_info.append(
                     f"Order '{move}' returned validity={validity}. (None/-1=invalid, 0=partial, 1=valid)"
                 )
@@ -124,6 +119,6 @@ def get_valid_orders_with_retry(
     logger.warning(
         f"[{power_name}] Exhausted {max_retries} attempts for valid orders, using fallback."
     )
-    model_error_stats[power_name]['order_decoding_errors'] += 1
+    model_error_stats[power_name]["order_decoding_errors"] += 1
     fallback = client.fallback_orders(possible_orders)
     return fallback

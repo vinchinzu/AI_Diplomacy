@@ -14,6 +14,10 @@ os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
 import google.generativeai as genai  # Import after setting log level
 from openai import OpenAI as DeepSeekOpenAI
 
+from diplomacy.engine.message import GLOBAL
+
+from .conversation_history import ConversationHistory
+
 # set logger back to just info
 logger = logging.getLogger("client")
 logger.setLevel(logging.INFO)
@@ -36,8 +40,7 @@ class BaseModelClient:
 
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self.system_prompt_response = load_prompt("system_prompt_response.txt")
-        self.system_prompt_conversation = load_prompt("system_prompt_conversation.txt")
+        self.system_prompt = load_prompt("system_prompt.txt")
 
     def generate_response(self, prompt: str) -> str:
         """
@@ -46,19 +49,20 @@ class BaseModelClient:
         """
         raise NotImplementedError("Subclasses must implement generate_response().")
 
-    def build_prompt(
+    def build_context_prompt(
         self,
+        game,
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        conversation_text: str,
+        conversation_history: ConversationHistory,
         phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
-        """
-        Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
-        """
+        context = load_prompt("context_prompt.txt")
+
         # Get our units and centers
         units_info = board_state["units"].get(power_name, [])
+        units_info_set = set(units_info)
         centers_info = board_state["centers"].get(power_name, [])
 
         # Get the current phase
@@ -72,21 +76,18 @@ class BaseModelClient:
                 enemy_units[power] = info
                 enemy_centers[power] = board_state["centers"].get(power, [])
 
-        summary = (
-            f"Power: {power_name}\n"
-            f"Current Phase: {year_phase}\n"
-            f"Enemy Units: {enemy_units}\n"
-            f"Enemy Centers: {enemy_centers}\n"
-            f"Your Units: {units_info}\n"
-            f"Your Centers: {centers_info}\n"
-            f"Possible Orders:\n"
-        )
+        # Get possible orders
+        possible_orders_str = ""
         for loc, orders in possible_orders.items():
-            summary += f"  {loc}: {orders}\n"
+            possible_orders_str += f"  {loc}: {orders}\n"
 
-        # Load prompts
-        few_shot_example = load_prompt("few_shot_example.txt")
-        instructions = load_prompt("instructions.txt")
+        # Convoy paths
+        all_convoy_paths_possible = game.convoy_paths_possible
+        convoy_paths_possible = {}
+        for start_loc, fleets_req, end_loc in all_convoy_paths_possible:
+            for fleet in fleets_req:
+                if fleet in units_info_set:
+                    convoy_paths_possible.append((start_loc, fleets_req, end_loc))
 
         # 1) Prepare a block of text for the phase_summaries
         if phase_summaries:
@@ -94,24 +95,64 @@ class BaseModelClient:
             for phase_key, summary_txt in phase_summaries.items():
                 historical_summaries += f"\nPHASE {phase_key}:\n{summary_txt}\n"
         else:
-            historical_summaries = "\n(No historical summaries provided)\n"
+            historical_summaries = "\n(No historical summaries yet)\n"
 
-        prompt = (
-            "Relevant Conversation:\n"
-            + conversation_text
-            + "\n\n"
-            + "Historical Summaries:\n"
-            + historical_summaries
-            + "\n\n"
-            + summary
-            + few_shot_example
-            + "\n"
-            + instructions
+        conversation_text = conversation_history.get_conversation_history(power_name)
+        if not conversation_text:
+            conversation_text = "\n(No conversation history yet)\n"
+
+        # Load in current context values
+        context = context.format(
+            power_name=power_name,
+            current_phase=year_phase,
+            game_map_loc_name=game.map.loc_name,
+            game_map_loc_type=game.map.loc_type,
+            map_as_adjacency_list=game.map.loc_abut,
+            possible_coasts=game.map.loc_coasts,
+            game_map_scs=game.map.scs,
+            historical_summaries=historical_summaries,
+            conversation_history=conversation_text,
+            enemy_units=enemy_units,
+            enemy_centers=enemy_centers,
+            units_info=units_info,
+            centers_info=centers_info,
+            possible_orders=possible_orders_str,
+            convoy_paths_possible=convoy_paths_possible,
         )
-        return prompt
+
+        return context
+
+    def build_prompt(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        conversation_history: ConversationHistory,
+        phase_summaries: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """
+        Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
+        """
+        # Load prompts
+        few_shot_example = load_prompt("few_shot_example.txt")
+        instructions = load_prompt("order_instructions.txt")
+
+        # Build the context prompt
+        context = self.build_context_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            conversation_history,
+            phase_summaries,
+        )
+
+        return context + "\n\n" + instructions
 
     def get_orders(
         self,
+        game,
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
@@ -125,7 +166,12 @@ class BaseModelClient:
         3) Parses JSON block
         """
         prompt = self.build_prompt(
-            board_state, power_name, possible_orders, conversation_text, phase_summaries
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            conversation_text,
+            phase_summaries,
         )
 
         raw_response = ""
@@ -290,32 +336,100 @@ class BaseModelClient:
                 fallback.append(holds[0] if holds else orders_list[0])
         return fallback
 
-    def build_conversation_reply(
+    def build_conversation_prompt(
         self,
+        game,
+        board_state,
         power_name: str,
-        conversation_so_far: str,
+        possible_orders: Dict[str, List[str]],
+        conversation_history: ConversationHistory,
         game_phase: str,
         phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
-        """
-        Produce a single message in valid JSON with 'message_type' etc.
-        """
-        return load_prompt("build_conversation_reply.txt").format(
-            power_name=power_name,
-            game_phase=game_phase,
-            phase_summaries=phase_summaries,
-            conversation_so_far=conversation_so_far,
+        instructions = load_prompt("conversation_instructions.txt")
+
+        context = self.build_context_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            conversation_history,
+            phase_summaries,
         )
 
-    def generate_conversation_reply(
-        self, power_name: str, conversation_so_far: str, game_phase: str
+        return context + "\n\n" + instructions
+
+    def get_conversation_reply(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        conversation_history: ConversationHistory,
+        game_phase: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
+        active_powers: Optional[List[str]] = None,
     ) -> str:
-        """
-        Overwritten by subclasses.
-        """
-        raise NotImplementedError(
-            "Subclasses must implement generate_conversation_reply()."
+        prompt = self.build_conversation_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            conversation_history,
+            game_phase,
+            phase_summaries,
         )
+
+        raw_response = self.generate_response(prompt)
+        print("---------------")
+        print(prompt)
+        print("---------------")
+        print(raw_response)
+        import pdb
+
+        pdb.set_trace()
+
+        try:
+            # Parse the JSON response
+            # Find the JSON block between curly braces
+            json_match = re.search(r"\{[^}]+\}", raw_response)
+            if json_match:
+                message_data = json.loads(json_match.group(0))
+
+                # Extract message details
+                message_type = message_data.get("message_type", "global")
+                content = message_data.get("content", "").strip()
+                recipient = message_data.get("recipient", GLOBAL)
+
+                # Validate recipient if private message
+                if message_type == "private" and recipient not in active_powers:
+                    logger.warning(
+                        f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
+                    )
+                    recipient = GLOBAL
+
+                # For private messages, ensure recipient is specified
+                if message_type == "private" and recipient == GLOBAL:
+                    logger.warning(
+                        "Private message without recipient specified, defaulting to GLOBAL"
+                    )
+
+                # Log for debugging
+                logger.info(
+                    f"Power {power_name} sends {message_type} message to {recipient}"
+                )
+
+                # Keep local record for building future conversation context
+                message = {
+                    "sender": power_name,
+                    "recipient": recipient,
+                    "content": content,
+                }
+
+        except (json.JSONDecodeError, AttributeError) as e:
+            message = None
+
+        return message
 
 
 ##############################################################################
@@ -336,12 +450,11 @@ class OpenAIClient(BaseModelClient):
 
     def generate_response(self, prompt: str) -> str:
         # Updated to new API format
-        system_prompt = self.system_prompt_response
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": prompt},
                 ],
             )
@@ -362,56 +475,6 @@ class OpenAIClient(BaseModelClient):
             )
             return ""
 
-    def get_conversation_reply(
-        self,
-        power_name: str,
-        conversation_so_far: str,
-        game_phase: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
-    ) -> str:
-        """
-        Produces a single message with the appropriate JSON format.
-        """
-        from json.decoder import JSONDecodeError
-
-        # load the system prompt but formatted with the power name and game phase
-        system_prompt = self.system_prompt_conversation.format(
-            power_name=power_name, game_phase=game_phase
-        )
-        conversation_prompt = self.build_conversation_reply(
-            power_name, conversation_so_far, game_phase, phase_summaries
-        )
-
-        try:
-            # Perform the request
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": conversation_prompt},
-                ],
-                max_completion_tokens=2000,
-            )
-
-            # If there's no valid response or choices, return empty
-            if not response or not hasattr(response, "choices") or not response.choices:
-                logger.warning(
-                    f"[{self.model_name}] Empty or invalid response for {power_name}. Returning empty."
-                )
-                return ""
-
-            # Attempt to parse the content (OpenAI library usually does this, but we add a safety net)
-            return response.choices[0].message.content.strip()
-
-        except JSONDecodeError as json_err:
-            logger.error(
-                f"[{self.model_name}] JSON decoding failed for {power_name}: {json_err}"
-            )
-            return ""  # Fallback
-        except Exception as e:
-            logger.error(f"[{self.model_name}] Unexpected error for {power_name}: {e}")
-            return ""
-
 
 class ClaudeClient(BaseModelClient):
     """
@@ -423,13 +486,12 @@ class ClaudeClient(BaseModelClient):
         self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
-        system_prompt = self.system_prompt_response
         # Updated Claude messages format
         try:
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=2000,
-                system=system_prompt,  # system is now a top-level parameter
+                system=self.system_prompt,  # system is now a top-level parameter
                 messages=[{"role": "user", "content": prompt}],
             )
             if not response.content:
@@ -449,39 +511,6 @@ class ClaudeClient(BaseModelClient):
             )
             return ""
 
-    def get_conversation_reply(
-        self,
-        power_name: str,
-        conversation_so_far: str,
-        game_phase: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
-    ) -> str:
-        system_prompt = f"You are playing as {power_name} in this Diplomacy negotiation phase {game_phase}."
-        user_prompt = self.build_conversation_reply(
-            power_name, conversation_so_far, game_phase, phase_summaries
-        )
-        try:
-            response = self.client.messages.create(
-                model=self.model_name,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-                max_tokens=2000,
-            )
-            if not response.content:
-                logger.warning(
-                    f"[{self.model_name}] No content in Claude conversation. Returning empty."
-                )
-                return ""
-            return response.content[0].text.strip()
-        except json.JSONDecodeError as json_err:
-            logger.error(
-                f"[{self.model_name}] JSON decoding failed in conversation: {json_err}"
-            )
-            return ""
-        except Exception as e:
-            logger.error(f"[{self.model_name}] Unexpected error in conversation: {e}")
-            return ""
-
 
 class GeminiClient(BaseModelClient):
     """
@@ -497,8 +526,7 @@ class GeminiClient(BaseModelClient):
         }
 
     def generate_response(self, prompt: str) -> str:
-        system_prompt = self.system_prompt_response
-        full_prompt = system_prompt + prompt
+        full_prompt = self.system_prompt + prompt
 
         try:
             model = genai.GenerativeModel(
@@ -515,50 +543,6 @@ class GeminiClient(BaseModelClient):
             logger.error(f"[{self.model_name}] Error in Gemini generate_response: {e}")
             return ""
 
-    def get_conversation_reply(
-        self,
-        power_name: str,
-        conversation_so_far: str,
-        game_phase: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
-    ) -> str:
-        """
-        Produce a single short conversation message from the Gemini model,
-        given existing conversation context.
-        """
-        # Similar approach: create a system plus user prompt, then call model.generate_content
-        system_prompt = f"You are playing as {power_name} in this Diplomacy negotiation phase {game_phase}.\n"
-        user_prompt = self.build_conversation_reply(
-            power_name, conversation_so_far, game_phase, phase_summaries
-        )
-        full_prompt = system_prompt + user_prompt
-
-        try:
-            model = genai.GenerativeModel(
-                self.model_name, generation_config=self.generation_config
-            )
-            response = model.generate_content(full_prompt)
-            if not response or not response.text:
-                logger.warning(
-                    f"[{self.model_name}] Empty Gemini conversation response. Returning empty."
-                )
-                return ""
-            else:
-                logger.info(
-                    f"[{self.model_name}] Gemini message succesfully generated."
-                )
-            return response.text.strip()
-        except json.JSONDecodeError as json_err:
-            logger.error(
-                f"[{self.model_name}] JSON decode error in conversation: {json_err}"
-            )
-            return ""
-        except Exception as e:
-            logger.error(
-                f"[{self.model_name}] Error in Gemini get_conversation_reply: {e}"
-            )
-            return ""
-
 
 class DeepSeekClient(BaseModelClient):
     """
@@ -573,12 +557,11 @@ class DeepSeekClient(BaseModelClient):
         )
 
     def generate_response(self, prompt: str) -> str:
-        system_prompt = self.system_prompt_response
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": prompt},
                 ],
                 stream=False,
@@ -622,51 +605,6 @@ class DeepSeekClient(BaseModelClient):
             logger.error(
                 f"[{self.model_name}] Unexpected error in generate_response: {e}"
             )
-            return ""
-
-    def get_conversation_reply(
-        self,
-        power_name: str,
-        conversation_so_far: str,
-        game_phase: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
-    ) -> str:
-        system_prompt = self.system_prompt_conversation.format(
-            power_name=power_name, game_phase=game_phase
-        )
-        user_prompt = self.build_conversation_reply(
-            power_name, conversation_so_far, game_phase, phase_summaries
-        )
-        user_prompt += (
-            "\n\nPlease provide ONLY a single JSON object as per the examples above."
-        )
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_completion_tokens=2000,
-            )
-            logger.debug(
-                f"[{self.model_name}] Raw DeepSeek conversation response:\n{response}"
-            )
-
-            if not response or not response.choices:
-                logger.warning(
-                    f"[{self.model_name}] No valid choices in conversation reply."
-                )
-                return ""
-            return response.choices[0].message.content.strip()
-        except json.JSONDecodeError as json_err:
-            logger.error(
-                f"[{self.model_name}] JSON decode error in conversation: {json_err}"
-            )
-            return ""
-        except Exception as e:
-            logger.error(f"[{self.model_name}] Unexpected error in conversation: {e}")
             return ""
 
 
@@ -766,5 +704,5 @@ def get_visible_messages_for_power(conversation_messages, power_name):
 
 def load_prompt(filename: str) -> str:
     """Helper to load prompt text from file"""
-    with open(f"./prompts/{filename}", "r") as f:
+    with open(f"./ai_diplomacy/prompts/{filename}", "r") as f:
         return f.read().strip()
