@@ -1,3 +1,4 @@
+-e .
 bcrypt
 coloredlogs
 python-dateutil
@@ -11,3 +12,6 @@ pytest-xdist
 sphinx
 sphinx_copybutton
 sphinx_rtd_theme
+openai
+anthropic
+google-genai

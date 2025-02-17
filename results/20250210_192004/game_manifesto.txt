@@ -1,6 +1,0 @@
-=== S1901M ===
-PARSABLE OUTPUT:
-{
-    "summary": "In phase S1901M all powers largely held their positions. Austria, France, Italy, Russia, and Turkey successfully executed hold orders, resulting in no changes to their unit placements or centers. England attempted to move its fleet from Edinburgh to the North Sea (with support from its fleet in London), but the move bounced, likely due to an equal contest of force or a miscalculation in strength, so F EDI remained in Edinburgh. Similarly, Germany’s attempt to move its unit from Munich to Ruhr (A MUN - RUH) failed after bouncing, probably due to insufficient support or issues with valid adjacencies, leaving the unit in Munich. There were no changes to supply centers, and the status quo persists, setting up the stage for any future strategic adjustments."
-}
-

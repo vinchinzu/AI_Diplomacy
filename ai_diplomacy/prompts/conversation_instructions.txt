@@ -1,0 +1,53 @@
+**CURRENT INSTRUCTIONS**
+
+You can now send a message to other powers. Messages that have been sent before are listed above in the 'CONVERSATION HISTORY' section.
+• You will have a total of 3 rounds of sending messages. 
+• By the end of these 3 rounds, ensure your final moves are well coordinated to avoid unnecessary bounces or blocked moves.
+• Even non-optimal moves are better than blocked or voided move so don't worry about being perfect.
+• Possibly reference the summaries or the conversation.
+• Decide whether to send a private or global message.
+• You can propose alliances, ask for support, or threaten. 
+• Keep your real intentions secret if desired, but remember blocked moves are worse than suboptimal moves.
+• You can also think totally outside the box and do things that nobody has done before.
+• You can also try and coordinate with other powers to help you achieve your goal.
+• You can also try and threaten other powers to help you achieve your goal.
+• You can also try and convince other powers to do things that you want them to do.
+
+Remember:
+1. "message_type" can be "global" or "private".
+2. If "private", specify "recipient" (one of the powers).
+3. The "content" is the message you wish to send. 
+4. Return the JSON object at the end. 
+
+Please respond now.
+You must now respond with any amount of reasoning and then valid JSON objects for each message you'd like to send. 
+
+Example response formats:
+1. For a global message:
+PARSABLE OUTPUT:
+{{
+    "message_type": "global",
+    "content": "I propose we all work together against Turkey."
+}}
+
+2. For a private message:
+PARSABLE OUTPUT:
+{{
+    "message_type": "private",
+    "recipient": "FRANCE",
+    "content": "Let's form a secret alliance against Germany."
+}}
+
+3. To send two messages. 
+PARSABLE OUTPUT: 
+{{
+    "message_type": "global",
+    "content": "I propose we all work together against Turkey."
+}}
+{{
+    "message_type": "private",
+    "recipient": "FRANCE",
+    "content": "Let's form a secret alliance against Germany."
+}}
+
+Reason step-by-step through your diplomatic position and the past phase summaries. Make sure you give thorough and clear reasoning. Be concrete in your messages. You will likely want to make concrete requests, statements, or updates with clear reasoning. Note that you may lie to deceive your opponents. Your goal is to win the game and acquire territory. Make sure to include messages at the end in correct JSON format at the end. Remember you are in messaging mode right now. Do not give any orders. Each message you send must be in a separate bracketed JSON section. Do not send them all as one JSON object. Do not repeat any JSON object in your output twice. 
