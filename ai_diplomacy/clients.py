@@ -384,12 +384,33 @@ class BaseModelClient:
         messages = []
         if raw_response:
             try:
-                # Parse the JSON response
-                # Find the JSON block between curly braces
-                json_matches = re.findall(r"\{[^}]+\}", raw_response)
+                # Find the JSON block between double curly braces
+                json_matches = re.findall(r"\{\{(.*?)\}\}", raw_response, re.DOTALL)
+
+                if not json_matches:
+                    # try normal
+                    logger.debug(
+                        f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying double braces."
+                    )
+                    json_matches = re.findall(
+                        r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
+                    )
+
+                if not json_matches:
+                    # try backtick fences
+                    logger.debug(
+                        f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying backtick fences."
+                    )
+                    json_matches = re.findall(
+                        r"```json\n(.*?)\n```", raw_response, re.DOTALL
+                    )
+
                 for match in json_matches:
                     try:
-                        message_data = json.loads(match)
+                        if match.strip().startswith(r"{"):
+                            message_data = json.loads(match.strip())
+                        else:
+                            message_data = json.loads(f"{{{match}}}")
 
                         # Extract message details
                         message_type = message_data.get("message_type", "global")

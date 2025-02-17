@@ -66,12 +66,15 @@ def get_valid_orders(
         model_error_stats=model_error_stats,
     )
 
-    print(f"orders: {orders}")
-
     # Validate each order
     for move in orders:
         # Example move: "A PAR H" -> unit="A PAR", order_part="H"
         tokens = move.split(" ", 2)
+        if len(tokens) < 3:
+            invalid_info.append(
+                f"Order '{move}' is malformed; expected 'A PAR H' style."
+            )
+            continue
         unit = " ".join(tokens[:2])  # e.g. "A PAR"
         order_part = tokens[2]  # e.g. "H" or "S A MAR"
 
