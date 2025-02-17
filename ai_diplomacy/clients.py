@@ -388,7 +388,7 @@ class BaseModelClient:
                 # Find the JSON block between curly braces
                 json_matches = re.findall(r"\{[^}]+\}", raw_response)
                 for match in json_matches:
-                    try: 
+                    try:
                         message_data = json.loads(match)
 
                         # Extract message details
@@ -420,12 +420,12 @@ class BaseModelClient:
                             "recipient": recipient,
                             "content": content,
                         }
-                        
+
                         messages.append(message)
 
                     except (json.JSONDecodeError, AttributeError) as e:
                         message = None
-            
+
             except AttributeError:
                 logger.error("Error parsing raw response")
 

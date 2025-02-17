@@ -31,7 +31,6 @@ def conduct_negotiations(game, conversation_history, model_error_stats, max_roun
     # We do up to 'max_rounds' single-message turns for each power
     for round_index in range(3):
         for power_name in active_powers:
-
             model_id = game.power_model_map.get(power_name, "o3-mini")
             client = load_model_client(model_id)
             possible_orders = gather_possible_orders(game, power_name)
@@ -53,9 +52,8 @@ def conduct_negotiations(game, conversation_history, model_error_stats, max_roun
                 active_powers=active_powers,
             )
 
-            if messages: 
-                
-                for message in messages: 
+            if messages:
+                for message in messages:
                     # Create an official message in the Diplomacy engine
                     diplo_message = Message(
                         phase=game.current_short_phase,
@@ -68,7 +66,7 @@ def conduct_negotiations(game, conversation_history, model_error_stats, max_roun
                         game.current_short_phase, power_name, message
                     )
                     conversation_messages.append(message)
-                    
+
             else:
                 logger.info(f"{power_name} did not send a message.")
                 model_error_stats[power_name]["conversation_errors"] += 1

@@ -82,8 +82,8 @@ def get_valid_orders(
             validity = game._valid_order(
                 game.powers[power_name], unit, order_part, report=1
             )
-        
-        if validity == 1: 
+
+        if validity == 1:
             # All orders are fully valid
             return orders
         else:

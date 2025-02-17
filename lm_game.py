@@ -185,9 +185,7 @@ def main():
                     model_error_stats,
                 )
                 futures[future] = power_name
-                logger.debug(
-                    f"Submitted get_valid_orders task for {power_name}."
-                )
+                logger.debug(f"Submitted get_valid_orders task for {power_name}.")
 
             for future in concurrent.futures.as_completed(futures):
                 p_name = futures[future]

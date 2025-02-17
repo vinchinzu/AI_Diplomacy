@@ -20,7 +20,7 @@ class ConversationHistory:
     def add_message(self, year_phase, power_name, message):
         if year_phase not in self.phases:
             self.phases.append(year_phase)
-        
+
         if message["recipient"] == "GLOBAL":
             self.global_history["GLOBAL"][year_phase] += (
                 f"    {power_name}: {message['content']}\n"
@@ -38,8 +38,7 @@ class ConversationHistory:
         else:
             self.phases.append(year_phase)
 
-    def get_conversation_history(self, power_name, num_prev_phases=5): 
-        
+    def get_conversation_history(self, power_name, num_prev_phases=5):
         phases_to_report = self.phases[-num_prev_phases:]
         conversation_history_str = ""
         if self.global_history["GLOBAL"]:
@@ -56,8 +55,8 @@ class ConversationHistory:
                     conversation_history_str += f"\n{phase}:\n"
                     for power in self.history_by_power[power_name][phase].keys():
                         conversation_history_str += f"\n  {power}:\n\n"
-                        conversation_history_str += self.history_by_power[power_name][phase][
-                            power
-                        ]
+                        conversation_history_str += self.history_by_power[power_name][
+                            phase
+                        ][power]
 
         return conversation_history_str
