@@ -13,6 +13,9 @@ import anthropic
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
 import google.generativeai as genai  # Import after setting log level
 from openai import OpenAI as DeepSeekOpenAI
+from openai import OpenAI
+from anthropic import Anthropic
+from google import genai
 
 from diplomacy.engine.message import GLOBAL
 
@@ -170,8 +173,7 @@ class BaseModelClient:
 
             # Attempt to parse the final "orders" from the LLM
             move_list = self._extract_moves(raw_response, power_name)
-            print(f"prompt {prompt}")
-            print(f"response {raw_response}")
+
             if not move_list:
                 logger.warning(
                     f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback."
@@ -434,6 +436,10 @@ class BaseModelClient:
             except AttributeError:
                 logger.error("Error parsing raw response")
 
+        # Deduplicate messages
+        messages = list(set([json.dumps(m) for m in messages]))
+        messages = [json.loads(m) for m in messages]
+
         return messages
 
 
@@ -449,8 +455,6 @@ class OpenAIClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        from openai import OpenAI  # Import the new client
-
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -488,7 +492,7 @@ class ClaudeClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
         # Updated Claude messages format
@@ -524,20 +528,16 @@ class GeminiClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-        self.generation_config = {
-            "temperature": 0.7,
-            "max_output_tokens": 2000,
-        }
+        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
         full_prompt = self.system_prompt + prompt
 
         try:
-            model = genai.GenerativeModel(
-                self.model_name, generation_config=self.generation_config
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_prompt,
             )
-            response = model.generate_content(full_prompt)
             if not response or not response.text:
                 logger.warning(
                     f"[{self.model_name}] Empty Gemini generate_response. Returning empty."

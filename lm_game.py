@@ -45,16 +45,22 @@ def parse_arguments():
         description="Run a Diplomacy game simulation with configurable parameters."
     )
     parser.add_argument(
-        "--max-year",
+        "--max_year",
         type=int,
         default=1901,
         help="Maximum year to simulate. The game will stop once this year is reached.",
     )
     parser.add_argument(
-        "--summary-model",
+        "--summary_model",
         type=str,
         default="o3-mini",
         help="Model name to use for generating phase summaries.",
+    )
+    parser.add_argument(
+        "--num_negotiation_rounds",
+        type=int,
+        default=0,
+        help="Number of negotiation rounds per phase.",
     )
     parser.add_argument(
         "--output",
@@ -150,7 +156,10 @@ def main():
         if game.current_short_phase.endswith("M"):
             logger.info("Starting negotiation phase block...")
             conversation_messages = conduct_negotiations(
-                game, game_history, model_error_stats, max_rounds=10
+                game,
+                game_history,
+                model_error_stats,
+                max_rounds=args.num_negotiation_rounds,
             )
         else:
             conversation_messages = []
@@ -162,7 +171,9 @@ def main():
             if not p_obj.is_eliminated()
         ]
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(active_powers)
+        ) as executor:
             futures = {}
             for power_name, _ in active_powers:
                 model_id = game.power_model_map.get(power_name, "o3-mini")

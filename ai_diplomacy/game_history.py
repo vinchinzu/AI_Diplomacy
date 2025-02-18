@@ -51,9 +51,9 @@ class Phase:
         conversations = defaultdict(str)
         for msg in self.messages:
             if msg.sender == power and msg.recipient != "GLOBAL":
-                conversations[msg.recipient] += f" {power}: {msg.content}\n"
+                conversations[msg.recipient] += f"  {power}: {msg.content}\n"
             elif msg.recipient == power:
-                conversations[msg.sender] += f" {msg.sender}: {msg.content}\n"
+                conversations[msg.sender] += f"  {msg.sender}: {msg.content}\n"
         return conversations
 
     def get_all_orders_formatted(self) -> str:
@@ -107,51 +107,43 @@ class GameHistory:
         phases_to_report = self.phases[-num_prev_phases:]
         game_history_str = ""
 
-        # Add GLOBAL section
-        has_global = any(phase.get_global_messages() for phase in phases_to_report)
-        if has_global:
-            game_history_str += "GLOBAL:\n"
-            for phase in phases_to_report:
-                global_msgs = phase.get_global_messages()
-                if global_msgs:
-                    game_history_str += f"\n{phase.name}:\n\n"
-                    game_history_str += global_msgs
+        # Iterate through phases
+        for phase in phases_to_report:
+            game_history_str += f"\n{phase.name}:\n"
+
+            # Add GLOBAL section for this phase
+            global_msgs = phase.get_global_messages()
+            if global_msgs:
+                game_history_str += "\nGLOBAL:\n"
+                game_history_str += global_msgs
+
+            # Add PRIVATE section for this phase
+            private_msgs = phase.get_private_messages(power_name)
+            if private_msgs:
+                game_history_str += "\nPRIVATE:\n"
+                for other_power, messages in private_msgs.items():
+                    game_history_str += f" {other_power}:\n\n"
+                    game_history_str += messages + "\n"
+
+            # Add ORDERS section for this phase
+            if phase.orders_by_power:
+                game_history_str += "\nORDERS:\n"
+                for power, orders in phase.orders_by_power.items():
+                    game_history_str += f"{power}:\n"
+                    results = phase.results_by_power.get(power, [])
+                    for i, order in enumerate(orders):
+                        if (
+                            i < len(results)
+                            and results[i]
+                            and not all(r == "" for r in results[i])
+                        ):
+                            # Join multiple results with commas
+                            result_str = f" ({', '.join(results[i])})"
+                        else:
+                            result_str = " (successful)"
+                        game_history_str += f"  {order}{result_str}\n"
                     game_history_str += "\n"
 
-        # Add PRIVATE section
-        has_private = any(
-            phase.get_private_messages(power_name) for phase in phases_to_report
-        )
-        if has_private:
-            game_history_str += "PRIVATE:\n"
-            for phase in phases_to_report:
-                private_msgs = phase.get_private_messages(power_name)
-                if private_msgs:
-                    game_history_str += f"\n{phase.name}:\n"
-                    for other_power, messages in private_msgs.items():
-                        game_history_str += f"\n {other_power}:\n\n"
-                        game_history_str += messages
-
-        # Add ORDERS section - including all powers' orders with results
-        if any(phase.orders_by_power for phase in phases_to_report):
-            game_history_str += "\nORDERS:\n"
-            for phase in phases_to_report:
-                if phase.orders_by_power:
-                    game_history_str += f"\n{phase.name}:\n"
-                    for power, orders in phase.orders_by_power.items():
-                        game_history_str += f"{power}:\n"
-                        results = phase.results_by_power.get(power, [])
-                        for i, order in enumerate(orders):
-                            if (
-                                i < len(results)
-                                and results[i]
-                                and not all(r == "" for r in results[i])
-                            ):
-                                # Join multiple results with commas
-                                result_str = f" ({', '.join(results[i])})"
-                            else:
-                                result_str = " (successful)"
-                            game_history_str += f"  {order}{result_str}\n"
-                        game_history_str += "\n"
+            game_history_str += "-" * 50 + "\n"  # Add separator between phases
 
         return game_history_str
