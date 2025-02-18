@@ -20,13 +20,9 @@ Possible coasts at each location:
 All supply centers on the map: 
 {game_map_scs}
 
-**HISTORICAL SUMMARIES**
+**GAME HISTORY**
 
-{historical_summaries}
-
-**CONVERSATION HISTORY**
-
-{conversation_history}
+{game_history}
 
 **CURRENT CONTEXT**
 

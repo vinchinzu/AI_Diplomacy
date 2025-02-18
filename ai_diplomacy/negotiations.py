@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 
-def conduct_negotiations(game, conversation_history, model_error_stats, max_rounds=3):
+def conduct_negotiations(game, game_history, model_error_stats, max_rounds=3):
     """
     Conducts a round-robin conversation among all non-eliminated powers.
     Each power can send up to 'max_rounds' messages, choosing between private
@@ -23,6 +23,7 @@ def conduct_negotiations(game, conversation_history, model_error_stats, max_roun
 
     # Conversation messages are kept in a local list ONLY to build conversation_so_far text.
     conversation_messages = []
+    return conversation_messages
 
     active_powers = [
         p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
@@ -46,9 +47,8 @@ def conduct_negotiations(game, conversation_history, model_error_stats, max_roun
                 board_state=board_state,
                 power_name=power_name,
                 possible_orders=possible_orders,
-                conversation_history=conversation_history,
+                game_history=game_history,
                 game_phase=game.current_short_phase,
-                phase_summaries=game.phase_summaries,
                 active_powers=active_powers,
             )
 
@@ -62,7 +62,7 @@ def conduct_negotiations(game, conversation_history, model_error_stats, max_roun
                         message=message["content"],
                     )
                     game.add_message(diplo_message)
-                    conversation_history.add_message(
+                    game_history.add_message(
                         game.current_short_phase, power_name, message
                     )
                     conversation_messages.append(message)

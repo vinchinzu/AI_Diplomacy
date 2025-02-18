@@ -20,7 +20,7 @@ from ai_diplomacy.utils import (
     assign_models_to_powers,
 )
 from ai_diplomacy.negotiations import conduct_negotiations
-from ai_diplomacy.conversation_history import ConversationHistory
+from ai_diplomacy.game_history import GameHistory
 
 dotenv.load_dotenv()
 
@@ -90,7 +90,7 @@ def main():
 
     # Create a fresh Diplomacy game
     game = Game()
-    conversation_history = ConversationHistory()
+    game_history = GameHistory()
 
     # Ensure game has phase_summaries attribute
     if not hasattr(game, "phase_summaries"):
@@ -150,7 +150,7 @@ def main():
         if game.current_short_phase.endswith("M"):
             logger.info("Starting negotiation phase block...")
             conversation_messages = conduct_negotiations(
-                game, conversation_history, model_error_stats, max_rounds=10
+                game, game_history, model_error_stats, max_rounds=10
             )
         else:
             conversation_messages = []
@@ -180,8 +180,7 @@ def main():
                     board_state,
                     power_name,
                     possible_orders,
-                    conversation_history,
-                    game.phase_summaries,
+                    game_history,
                     model_error_stats,
                 )
                 futures[future] = power_name
@@ -209,6 +208,26 @@ def main():
                 sys, usr, summary_model
             )
         )
+        # Add orders to game history
+        for power_name in game.order_history[current_phase]:
+            orders = game.order_history[current_phase][power_name]
+            results = []
+            for order in orders:
+                # Example move: "A PAR H" -> unit="A PAR", order_part="H"
+                tokens = order.split(" ", 2)
+                if len(tokens) < 3:
+                    continue
+                unit = " ".join(tokens[:2])  # e.g. "A PAR"
+                order_part = tokens[2]  # e.g. "H" or "S A MAR"
+                results.append(
+                    [str(x) for x in game.result_history[current_phase][unit]]
+                )
+            game_history.add_orders(
+                current_phase,
+                power_name,
+                game.order_history[current_phase][power_name],
+                results,
+            )
         logger.info("Phase complete.\n")
 
         # Retrieve and log the summary of the phase

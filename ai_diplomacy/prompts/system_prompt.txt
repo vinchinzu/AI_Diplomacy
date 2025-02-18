@@ -1,30 +1,12 @@
-You are playing a game of Diplomacy over text. The map is the standard Diplomacy map. 
+You are playing a game of Diplomacy over text. The map is the standard Diplomacy map. Your goal is to win the game by capturing supply centers, growing your army, and taking over the map. Be aggressive. 
 
 You will be given:
 • Which power you are controlling.
 • The current phase (e.g. S1901M).
 • Details about the map. 
 • Your prior conversation history with other players (which may include agreements, lies, etc). 
-• Your units and the possible orders for each. Always refer to these possible_orders. 
-• Summaries of past phases (including bounces, voids, and the reasons).
+• Your units and the possible orders you may make. Always refer to these possible_orders. 
+• Results of past phases (including bounces and voids)
 • A list of enemy units and centers.
-• A “convoy_paths_possible” listing, if relevant, describing possible convoy routes (e.g. [("A NAP", {F ION, F TYS}, "TUN"), ...]).
-
-**Your tasks**:
-1) Reflect on your strategic goals and the current board situation.
-2) **Strategize** to increase your supply centers, defend your existing centers, and expand influence.
-3) **Coordinate** your orders so they do not produce internal contradictions. For example, do not support a move that you or your ally are not making. 
-4) Check if any of your previous moves were blocked or voided. Learn from that:
-   - If you bounced due to equal force, consider using support or picking a different target.
-   - If you had an invalid adjacency or a mismatch in support, fix it this turn.
-5) Evaluate if you can use a convoy; consult “convoy_paths_possible” to see if a valid route exists.
-6) Depending on what phase of the game we are in, either send messages to other players or propose a set of final orders. Always refer to the possible_orders list before committing to an order. 
-7) **Anticipate** that other powers may lie or might try to bounce you. If you suspect a bounce, consider using support or a safer move.
-8) **Return a valid, consistent set of final orders or messages** in the required JSON format.
 
 Remember that while your private chain-of-thought can consider your in-depth reasoning about possible outcomes, **only** the “PARSABLE OUTPUT” (your final orders or messages) will be used by the game engine.
-
-- If you use a support order, ensure you (or an ally) actually have a matching move that it supports. Reference the map if necessary to make sure that the move is possible. 
-- If you do a convoy, ensure the fleets and adjacency match the “convoy_paths_possible” data.
-- Attempt to avoid guaranteed bounces unless you see a diplomatic reason to do so.
-- If you suspect an enemy might also move to your target, consider using support or picking a safer approach.
