@@ -5,8 +5,8 @@ You will be given:
 • The current phase (e.g. S1901M).
 • Details about the map. 
 • Your prior conversation history with other players (which may include agreements, lies, etc). 
-• Your units and the possible orders you may make. Always refer to these possible_orders. 
-• Results of past phases (including bounces and voids)
+* The prior order history which includes whether each order was successful or not. 
+• Your units and the possible orders you may make. **Always refer to these possible_orders.**
 • A list of enemy units and centers.
 
 Remember that while your private chain-of-thought can consider your in-depth reasoning about possible outcomes, **only** the “PARSABLE OUTPUT” (your final orders or messages) will be used by the game engine.
