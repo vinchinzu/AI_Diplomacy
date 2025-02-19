@@ -13,10 +13,13 @@ import anthropic
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
 import google.generativeai as genai  # Import after setting log level
 from openai import OpenAI as DeepSeekOpenAI
+from openai import OpenAI
+from anthropic import Anthropic
+from google import genai
 
 from diplomacy.engine.message import GLOBAL
 
-from .conversation_history import ConversationHistory
+from .game_history import GameHistory
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -55,8 +58,7 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        conversation_history: ConversationHistory,
-        phase_summaries: Optional[Dict[str, str]] = None,
+        game_history: GameHistory,
     ) -> str:
         context = load_prompt("context_prompt.txt")
 
@@ -89,17 +91,9 @@ class BaseModelClient:
                 if fleet in units_info_set:
                     convoy_paths_possible.append((start_loc, fleets_req, end_loc))
 
-        # 1) Prepare a block of text for the phase_summaries
-        if phase_summaries:
-            historical_summaries = "\nPAST PHASE SUMMARIES:\n"
-            for phase_key, summary_txt in phase_summaries.items():
-                historical_summaries += f"\nPHASE {phase_key}:\n{summary_txt}\n"
-        else:
-            historical_summaries = "\n(No historical summaries yet)\n"
-
-        conversation_text = conversation_history.get_conversation_history(power_name)
+        conversation_text = game_history.get_game_history(power_name)
         if not conversation_text:
-            conversation_text = "\n(No conversation history yet)\n"
+            conversation_text = "\n(No game history yet)\n"
 
         # Load in current context values
         context = context.format(
@@ -110,8 +104,7 @@ class BaseModelClient:
             map_as_adjacency_list=game.map.loc_abut,
             possible_coasts=game.map.loc_coasts,
             game_map_scs=game.map.scs,
-            historical_summaries=historical_summaries,
-            conversation_history=conversation_text,
+            game_history=conversation_text,
             enemy_units=enemy_units,
             enemy_centers=enemy_centers,
             units_info=units_info,
@@ -128,8 +121,7 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        conversation_history: ConversationHistory,
-        phase_summaries: Optional[Dict[str, str]] = None,
+        game_history: GameHistory,
     ) -> str:
         """
         Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
@@ -144,8 +136,7 @@ class BaseModelClient:
             board_state,
             power_name,
             possible_orders,
-            conversation_history,
-            phase_summaries,
+            game_history,
         )
 
         return context + "\n\n" + instructions
@@ -157,7 +148,6 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         conversation_text: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
         model_error_stats=None,  # New optional param
     ) -> List[str]:
         """
@@ -171,7 +161,6 @@ class BaseModelClient:
             power_name,
             possible_orders,
             conversation_text,
-            phase_summaries,
         )
 
         raw_response = ""
@@ -184,6 +173,7 @@ class BaseModelClient:
 
             # Attempt to parse the final "orders" from the LLM
             move_list = self._extract_moves(raw_response, power_name)
+
             if not move_list:
                 logger.warning(
                     f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback."
@@ -341,9 +331,8 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        conversation_history: ConversationHistory,
+        game_history: GameHistory,
         game_phase: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         instructions = load_prompt("conversation_instructions.txt")
 
@@ -352,8 +341,7 @@ class BaseModelClient:
             board_state,
             power_name,
             possible_orders,
-            conversation_history,
-            phase_summaries,
+            game_history,
         )
 
         return context + "\n\n" + instructions
@@ -364,9 +352,8 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        conversation_history: ConversationHistory,
+        game_history: GameHistory,
         game_phase: str,
-        phase_summaries: Optional[Dict[str, str]] = None,
         active_powers: Optional[List[str]] = None,
     ) -> str:
         prompt = self.build_conversation_prompt(
@@ -374,9 +361,8 @@ class BaseModelClient:
             board_state,
             power_name,
             possible_orders,
-            conversation_history,
+            game_history,
             game_phase,
-            phase_summaries,
         )
 
         raw_response = self.generate_response(prompt)
@@ -450,6 +436,10 @@ class BaseModelClient:
             except AttributeError:
                 logger.error("Error parsing raw response")
 
+        # Deduplicate messages
+        messages = list(set([json.dumps(m) for m in messages]))
+        messages = [json.loads(m) for m in messages]
+
         return messages
 
 
@@ -465,8 +455,6 @@ class OpenAIClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        from openai import OpenAI  # Import the new client
-
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -504,7 +492,7 @@ class ClaudeClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
         # Updated Claude messages format
@@ -540,20 +528,16 @@ class GeminiClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-        self.generation_config = {
-            "temperature": 0.7,
-            "max_output_tokens": 2000,
-        }
+        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
         full_prompt = self.system_prompt + prompt
 
         try:
-            model = genai.GenerativeModel(
-                self.model_name, generation_config=self.generation_config
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_prompt,
             )
-            response = model.generate_content(full_prompt)
             if not response or not response.text:
                 logger.warning(
                     f"[{self.model_name}] Empty Gemini generate_response. Returning empty."
