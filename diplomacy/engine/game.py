@@ -4573,6 +4573,12 @@ class Game(Jsonable):
         except (IndexError, KeyError):
             return f"[_generate_phase_summary] No GamePhaseData found for {phase_key}"
 
+        # Log the current phase key and results for debugging
+        logging.debug(
+            "DEBUG _generate_phase_summary: phase_key=%s, results=%s",
+            phase_key, current_phase_data.results
+        )
+
         # 2) Attempt to retrieve the PREVIOUS phase data to highlight differences
         #    We'll do this by checking the index of `phase_key` in `self.state_history`.
         #    If there's a previous index, we'll fetch that phase_data for comparison.

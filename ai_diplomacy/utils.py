@@ -46,6 +46,7 @@ def get_valid_orders(
     power_name,
     possible_orders,
     game_history,
+    phase_summaries,
     model_error_stats,
 ):
     """
@@ -61,6 +62,7 @@ def get_valid_orders(
         power_name=power_name,
         possible_orders=possible_orders,
         conversation_text=game_history,
+        phase_summaries=phase_summaries,
         model_error_stats=model_error_stats,
     )
 
