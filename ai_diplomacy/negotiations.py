@@ -53,6 +53,7 @@ def conduct_negotiations(game, game_history, model_error_stats, max_rounds=3):
                     game_history,
                     game.current_short_phase,
                     active_powers,
+                    phase_summaries=game.phase_summaries,
                 )
 
                 futures[future] = power_name

@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 import anthropic
 
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
-import google.generativeai as genai  # Import after setting log level
 from openai import OpenAI as DeepSeekOpenAI
 from openai import OpenAI
 from anthropic import Anthropic
@@ -37,13 +36,22 @@ class BaseModelClient:
     Base interface for any LLM client we want to plug in.
     Each must provide:
       - generate_response(prompt: str) -> str
-      - get_orders(board_state, power_name, possible_orders) -> List[str]
+      - get_orders(board_state, power_name, possible_orders, game_history, phase_summaries) -> List[str]
       - get_conversation_reply(power_name, conversation_so_far, game_phase) -> str
     """
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, power_name: Optional[str] = None):
         self.model_name = model_name
-        self.system_prompt = load_prompt("system_prompt.txt")
+        self.power_name = power_name
+        # Load a power-specific system prompt if present, else default
+        if self.power_name:
+            try:
+                self.system_prompt = load_prompt(f"{self.power_name.lower()}_system_prompt.txt")
+            except FileNotFoundError:
+                logger.warning(f"No specific system prompt found for {self.power_name}; using default.")
+                self.system_prompt = load_prompt("system_prompt.txt")
+        else:
+            self.system_prompt = load_prompt("system_prompt.txt")
 
     def generate_response(self, prompt: str) -> str:
         """
@@ -59,6 +67,7 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         context = load_prompt("context_prompt.txt")
 
@@ -91,6 +100,15 @@ class BaseModelClient:
                 if fleet in units_info_set:
                     convoy_paths_possible.append((start_loc, fleets_req, end_loc))
 
+        # 1) Prepare a block of text for the phase_summaries
+        if phase_summaries:
+            historical_summaries = "\nPAST PHASE SUMMARIES:\n"
+            for phase_key, summary_txt in phase_summaries.items():
+                historical_summaries += f"\nPHASE {phase_key}:\n{summary_txt}\n"
+        else:
+            historical_summaries = "\n(No historical summaries yet)\n"
+
+
         conversation_text = game_history.get_game_history(power_name)
         if not conversation_text:
             conversation_text = "\n(No game history yet)\n"
@@ -122,6 +140,7 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
@@ -137,6 +156,7 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
+            phase_summaries,
         )
 
         return context + "\n\n" + instructions
@@ -148,6 +168,7 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         conversation_text: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
         model_error_stats=None,  # New optional param
     ) -> List[str]:
         """
@@ -161,6 +182,7 @@ class BaseModelClient:
             power_name,
             possible_orders,
             conversation_text,
+            phase_summaries,
         )
 
         raw_response = ""
@@ -230,13 +252,20 @@ class BaseModelClient:
         # 3) Attempt to parse JSON if we found anything
         json_text = None
         if matches:
-            # Add braces back around the captured group
-            if matches.group(1).strip().startswith(r"{{"):
-                json_text = matches.group(1).strip()[1:-1]
-            elif matches.group(1).strip().startswith(r"{"):
-                json_text = matches.group(1).strip()
+            # Add braces back around the captured group as needed
+            captured = matches.group(1).strip()
+
+            if captured.startswith("{{") and captured.endswith("}}"):
+                # remove ONE leading '{' and ONE trailing '}'
+                # so {{ "orders": [...] }} becomes { "orders": [...] }
+                logger.debug(f"[{self.model_name}] Detected double braces for {power_name}, trimming extra braces.")
+                # strip exactly one brace pair
+                trimmed = captured[1:-1].strip()
+                json_text = trimmed
+            elif captured.startswith("{"):
+                json_text = captured
             else:
-                json_text = "{%s}" % matches.group(1).strip
+                json_text = "{" + captured + "}"
 
             json_text = json_text.strip()
 
@@ -333,6 +362,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         instructions = load_prompt("conversation_instructions.txt")
 
@@ -342,6 +372,7 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
+            phase_summaries,
         )
 
         return context + "\n\n" + instructions
@@ -355,6 +386,7 @@ class BaseModelClient:
         game_history: GameHistory,
         game_phase: str,
         active_powers: Optional[List[str]] = None,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         prompt = self.build_conversation_prompt(
             game,
@@ -363,6 +395,7 @@ class BaseModelClient:
             possible_orders,
             game_history,
             game_phase,
+            phase_summaries,
         )
 
         raw_response = self.generate_response(prompt)
@@ -453,8 +486,8 @@ class OpenAIClient(BaseModelClient):
     For 'o3-mini', 'gpt-4o', or other OpenAI model calls.
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None):
+        super().__init__(model_name, power_name)
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -490,8 +523,8 @@ class ClaudeClient(BaseModelClient):
     For 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', etc.
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None):
+        super().__init__(model_name, power_name)
         self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -526,8 +559,8 @@ class GeminiClient(BaseModelClient):
     For 'gemini-1.5-flash' or other Google Generative AI models.
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None):
+        super().__init__(model_name, power_name)
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -554,8 +587,8 @@ class DeepSeekClient(BaseModelClient):
     For DeepSeek R1 'deepseek-reasoner'
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None):
+        super().__init__(model_name, power_name)
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         self.client = DeepSeekOpenAI(
             api_key=self.api_key, base_url="https://api.deepseek.com/"
@@ -618,23 +651,22 @@ class DeepSeekClient(BaseModelClient):
 ##############################################################################
 
 
-def load_model_client(model_id: str) -> BaseModelClient:
+def load_model_client(model_id: str, power_name: Optional[str] = None) -> BaseModelClient:
     """
-    Returns the appropriate LLM client for a given model_id string.
+    Returns the appropriate LLM client for a given model_id string, optionally keyed by power_name.
     Example usage:
-       client = load_model_client("claude-3-5-sonnet-20241022")
+       client = load_model_client("claude-3-5-sonnet-20241022", power_name="FRANCE")
     """
-    # Basic pattern matching or direct mapping
     lower_id = model_id.lower()
     if "claude" in lower_id:
-        return ClaudeClient(model_id)
+        return ClaudeClient(model_id, power_name)
     elif "gemini" in lower_id:
-        return GeminiClient(model_id)
+        return GeminiClient(model_id, power_name)
     elif "deepseek" in lower_id:
-        return DeepSeekClient(model_id)
+        return DeepSeekClient(model_id, power_name)
     else:
         # Default to OpenAI
-        return OpenAIClient(model_id)
+        return OpenAIClient(model_id, power_name)
 
 
 ##############################################################################
@@ -656,7 +688,7 @@ def example_game_loop(game):
 
     for power_name, power_obj in active_powers:
         model_id = power_model_mapping.get(power_name, "o3-mini")
-        client = load_model_client(model_id)
+        client = load_model_client(model_id, power_name=power_name)
 
         # Get possible orders from the game
         possible_orders = game.get_all_possible_orders()
@@ -681,7 +713,7 @@ class LMServiceVersus:
 
     def get_orders_for_power(self, game, power_name):
         model_id = self.power_model_map.get(power_name, "o3-mini")
-        client = load_model_client(model_id)
+        client = load_model_client(model_id, power_name=power_name)
         possible_orders = gather_possible_orders(game, power_name)
         board_state = game.get_state()
         return client.get_orders(board_state, power_name, possible_orders)

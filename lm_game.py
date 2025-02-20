@@ -47,7 +47,7 @@ def parse_arguments():
     parser.add_argument(
         "--max_year",
         type=int,
-        default=1901,
+        default=1910,
         help="Maximum year to simulate. The game will stop once this year is reached.",
     )
     parser.add_argument(
@@ -59,7 +59,7 @@ def parse_arguments():
     parser.add_argument(
         "--num_negotiation_rounds",
         type=int,
-        default=0,
+        default=5,
         help="Number of negotiation rounds per phase.",
     )
     parser.add_argument(
@@ -177,7 +177,7 @@ def main():
             futures = {}
             for power_name, _ in active_powers:
                 model_id = game.power_model_map.get(power_name, "o3-mini")
-                client = load_model_client(model_id)
+                client = load_model_client(model_id, power_name=power_name)
                 possible_orders = gather_possible_orders(game, power_name)
                 if not possible_orders:
                     logger.info(f"No orderable locations for {power_name}; skipping.")
@@ -192,6 +192,7 @@ def main():
                     power_name,
                     possible_orders,
                     game_history,
+                    game.phase_summaries,
                     model_error_stats,
                 )
                 futures[future] = power_name
