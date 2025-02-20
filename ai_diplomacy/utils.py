@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import logging
+import random
 
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
@@ -8,22 +9,30 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 
-def assign_models_to_powers():
+def assign_models_to_powers(randomize=True):
     """
     Example usage: define which model each power uses.
     Return a dict: { power_name: model_id, ... }
-    POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
     """
-
-    return {
-        "FRANCE": "o3-mini",
-        "GERMANY": "claude-3-5-sonnet-20241022",
-        "ENGLAND": "gemini-2.0-flash",
-        "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
-        "ITALY": "gpt-4o",
-        "AUSTRIA": "gpt-4o-mini",
-        "TURKEY": "claude-3-5-haiku-20241022",
-    }
+    # If True, we'll randomize the model assignment.
+    model_list = [
+        "o3-mini",
+        "claude-3-5-sonnet-20241022",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "claude-3-5-haiku-20241022",
+    ]
+    POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
+    if randomize:
+        return {
+            power: random.choice(model_list) for power in POWERS
+        }
+    else:
+        return {
+            power: model_list[i] for i, power in enumerate(POWERS)
+        }
 
 
 def gather_possible_orders(game, power_name):

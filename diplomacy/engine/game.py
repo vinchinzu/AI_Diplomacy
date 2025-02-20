@@ -1732,6 +1732,8 @@ class Game(Jsonable):
             :return: A dictionary with locations as keys, and their respective list of possible orders as values
         """
         # pylint: disable=too-many-branches,too-many-nested-blocks
+        # Initialize dictionary mapping each location to an empty set of possible orders
+        # Keys are uppercase location names, values are empty sets that will store valid orders
         possible_orders = {loc.upper(): set() for loc in self.map.locs}
 
         # Game is completed

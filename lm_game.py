@@ -133,7 +133,7 @@ def main():
             return
         game.power_model_map = dict(zip(powers_order, provided_models))
     else:
-        game.power_model_map = assign_models_to_powers()
+        game.power_model_map = assign_models_to_powers(randomize=True)
 
     while not game.is_game_done:
         phase_start = time.time()

@@ -709,7 +709,7 @@ class LMServiceVersus:
     """
 
     def __init__(self):
-        self.power_model_map = assign_models_to_powers()
+        self.power_model_map = assign_models_to_powers(randomize=True)
 
     def get_orders_for_power(self, game, power_name):
         model_id = self.power_model_map.get(power_name, "o3-mini")
