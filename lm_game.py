@@ -47,7 +47,7 @@ def parse_arguments():
     parser.add_argument(
         "--max_year",
         type=int,
-        default=1905,
+        default=1925,
         help="Maximum year to simulate. The game will stop once this year is reached.",
     )
     parser.add_argument(
@@ -59,7 +59,7 @@ def parse_arguments():
     parser.add_argument(
         "--num_negotiation_rounds",
         type=int,
-        default=1,
+        default=5,
         help="Number of negotiation rounds per phase.",
     )
     parser.add_argument(

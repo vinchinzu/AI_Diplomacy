@@ -26,9 +26,18 @@ def assign_models_to_powers(randomize=True):
     ]
     POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
     if randomize:
-        return {
-            power: random.choice(model_list) for power in POWERS
-        }
+        # Create a copy of model_list to draw from
+        available_models = model_list.copy()
+        result = {}
+        for power in POWERS:
+            # If we've used all models, replenish the available models
+            if not available_models:
+                available_models = model_list.copy()
+            # Select and remove a random model from available ones
+            model = random.choice(available_models)
+            available_models.remove(model)
+            result[power] = model
+        return result
     else:
         return {
             power: model_list[i] for i, power in enumerate(POWERS)
