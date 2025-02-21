@@ -40,18 +40,24 @@ class BaseModelClient:
       - get_conversation_reply(power_name, conversation_so_far, game_phase) -> str
     """
 
-    def __init__(self, model_name: str, power_name: Optional[str] = None):
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
         self.model_name = model_name
         self.power_name = power_name
-        # Load a power-specific system prompt if present, else default
-        if self.power_name:
-            try:
-                self.system_prompt = load_prompt(f"{self.power_name.lower()}_system_prompt.txt")
-            except FileNotFoundError:
-                logger.warning(f"No specific system prompt found for {self.power_name}; using default.")
+        self.emptysystem = emptysystem
+
+        # Conditionally load system prompt
+        if not self.emptysystem:
+            if self.power_name:
+                try:
+                    self.system_prompt = load_prompt(f"{self.power_name.lower()}_system_prompt.txt")
+                except FileNotFoundError:
+                    logger.warning(f"No specific system prompt found for {self.power_name}; using default.")
+                    self.system_prompt = load_prompt("system_prompt.txt")
+            else:
                 self.system_prompt = load_prompt("system_prompt.txt")
         else:
-            self.system_prompt = load_prompt("system_prompt.txt")
+            # If emptysystem is True, skip loading any system prompt
+            self.system_prompt = ""
 
     def generate_response(self, prompt: str) -> str:
         """
@@ -486,8 +492,8 @@ class OpenAIClient(BaseModelClient):
     For 'o3-mini', 'gpt-4o', or other OpenAI model calls.
     """
 
-    def __init__(self, model_name: str, power_name: Optional[str] = None):
-        super().__init__(model_name, power_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -523,8 +529,8 @@ class ClaudeClient(BaseModelClient):
     For 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', etc.
     """
 
-    def __init__(self, model_name: str, power_name: Optional[str] = None):
-        super().__init__(model_name, power_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -559,8 +565,8 @@ class GeminiClient(BaseModelClient):
     For 'gemini-1.5-flash' or other Google Generative AI models.
     """
 
-    def __init__(self, model_name: str, power_name: Optional[str] = None):
-        super().__init__(model_name, power_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     def generate_response(self, prompt: str) -> str:
@@ -587,8 +593,8 @@ class DeepSeekClient(BaseModelClient):
     For DeepSeek R1 'deepseek-reasoner'
     """
 
-    def __init__(self, model_name: str, power_name: Optional[str] = None):
-        super().__init__(model_name, power_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         self.client = DeepSeekOpenAI(
             api_key=self.api_key, base_url="https://api.deepseek.com/"
@@ -651,22 +657,22 @@ class DeepSeekClient(BaseModelClient):
 ##############################################################################
 
 
-def load_model_client(model_id: str, power_name: Optional[str] = None) -> BaseModelClient:
+def load_model_client(model_id: str, power_name: Optional[str] = None, emptysystem: bool = False) -> BaseModelClient:
     """
     Returns the appropriate LLM client for a given model_id string, optionally keyed by power_name.
     Example usage:
-       client = load_model_client("claude-3-5-sonnet-20241022", power_name="FRANCE")
+       client = load_model_client("claude-3-5-sonnet-20241022", power_name="FRANCE", emptysystem=True)
     """
     lower_id = model_id.lower()
     if "claude" in lower_id:
-        return ClaudeClient(model_id, power_name)
+        return ClaudeClient(model_id, power_name, emptysystem=emptysystem)
     elif "gemini" in lower_id:
-        return GeminiClient(model_id, power_name)
+        return GeminiClient(model_id, power_name, emptysystem=emptysystem)
     elif "deepseek" in lower_id:
-        return DeepSeekClient(model_id, power_name)
+        return DeepSeekClient(model_id, power_name, emptysystem=emptysystem)
     else:
         # Default to OpenAI
-        return OpenAIClient(model_id, power_name)
+        return OpenAIClient(model_id, power_name, emptysystem=emptysystem)
 
 
 ##############################################################################

@@ -45,6 +45,11 @@ from diplomacy.utils.game_phase_data import GamePhaseData, MESSAGES_TYPE
 UNDETERMINED, POWER, UNIT, LOCATION, COAST, ORDER, MOVE_SEP, OTHER = 0, 1, 2, 3, 4, 5, 6, 7
 LOGGER = logging.getLogger(__name__)
 
+# set logging level to INFO
+logging.basicConfig(level=logging.INFO)
+# set logging level to DEBUG
+#logging.basicConfig(level=logging.DEBUG)
+
 class Game(Jsonable):
     """ Game class.
 
@@ -1467,6 +1472,9 @@ class Game(Jsonable):
         self.order_history.put(previous_phase, previous_orders)
         self.message_history.put(previous_phase, previous_messages)
         self.state_history.put(previous_phase, previous_state)
+
+        # Now build a key for the *current* (post-process) phase
+        current_phase_key = self._phase_wrapper_type(self.current_short_phase)
 
         # Generate a text summary (if a callback is provided)
         phase_summary_text = self._generate_phase_summary(
@@ -4575,30 +4583,54 @@ class Game(Jsonable):
         except (IndexError, KeyError):
             return f"[_generate_phase_summary] No GamePhaseData found for {phase_key}"
 
-        # Log the current phase key and results for debugging
+        # Log the current phase key, results, and possibly the orders for debugging
         logging.debug(
-            "DEBUG _generate_phase_summary: phase_key=%s, results=%s",
-            phase_key, current_phase_data.results
+            "DEBUG _generate_phase_summary: current phase_key=%s, results=%s, orders=%s",
+            phase_key,
+            current_phase_data.results,
+            current_phase_data.orders
         )
 
-        # 2) Attempt to retrieve the PREVIOUS phase data to highlight differences
-        #    We'll do this by checking the index of `phase_key` in `self.state_history`.
-        #    If there's a previous index, we'll fetch that phase_data for comparison.
-        prev_phase_data = None
+        # Retrieve the list of all recorded phase keys
         all_phases = list(self.state_history.keys())
+        logging.debug("DEBUG _generate_phase_summary: all_phases=%s", all_phases)
+
+        prev_phase_data = None
         if str(phase_key) in all_phases:
             idx = all_phases.index(str(phase_key))
+            logging.debug("DEBUG _generate_phase_summary: current phase index=%d", idx)
+
+            # Here we log the logic behind picking the previous phase
             if idx > 0:
-                prev_phase_key = all_phases[idx - 1]
+                prev_phase_key = all_phases[idx - 1]  
+                logging.debug(
+                    "DEBUG _generate_phase_summary: Using prev_phase_key=%s (idx-2). If skipping a sub-phase is undesired, consider (idx-1).",
+                    prev_phase_key
+                )
                 try:
                     prev_phase_data = self.get_phase_from_history(prev_phase_key)
-                except:
-                    pass
+                except Exception as e:
+                    logging.debug("DEBUG _generate_phase_summary: Could not get prev_phase_data for key=%s, error=%s", prev_phase_key, e)
+            else:
+                logging.debug("DEBUG _generate_phase_summary: Not enough phases to set prev_phase_key.")
+        else:
+            logging.debug("DEBUG _generate_phase_summary: phase_key=%s not in all_phases!", phase_key)
 
-        # 3) Gather the big data from current_phase_data
-        #    (We assume you have stored them in current_phase_data.state the usual way.)
+        # ... [No change in the rest of your existing logic, except we might add extra logs below] ...
+
+        # (After retrieving prev_phase_data, we log a quick summary:)
+        if prev_phase_data:
+            logging.debug(
+                "DEBUG _generate_phase_summary: Found prev_phase_data for key=%s, results=%s, orders=%s",
+                prev_phase_key,
+                prev_phase_data.results,
+                prev_phase_data.orders
+            )
+
+        # The rest of the function remains the same, but you can keep adding targeted logs as needed:
         cur_state = current_phase_data.state
-        # Typically these keys exist if your get_state() populates them:
+        logging.debug("DEBUG _generate_phase_summary: cur_state keys=%s", list(cur_state.keys()))
+
         cur_units   = cur_state.get('units', {})
         cur_centers = cur_state.get('centers', {})
         cur_retreats = cur_state.get('retreats', {})
@@ -4703,7 +4735,7 @@ class Game(Jsonable):
             f"RESULTS:\n{results_block}\n\n"
             f"CURRENT BOARD STATE:\n{current_state_block}\n\n"
             f"CHANGES FROM PREVIOUS PHASE:\n{differences_block}\n\n"
-            "Below is the final board state after the latest phase, along with the moves each power submitted and the engine’s adjudication results. Please create a summary in JSON, explaining:"
+            "Below is the final board state after the latest phase, along with the moves each power submitted and the engine's adjudication results. Please create a summary in JSON, explaining:"
             "- Each successful move,"
             "- Each bounce or voided order, with reasons (e.g. equal force, no valid route, contradictory support),"
             "- Key changes in supply centers,"
