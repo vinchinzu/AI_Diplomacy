@@ -37,7 +37,7 @@ def my_summary_callback(system_prompt, user_prompt, model_name):
     client = load_model_client(model_name, emptysystem=True)
     combined_prompt = f"{system_prompt}\n\n{user_prompt}"
     # Pseudo-code for generating a response:
-    return client.generate_response(combined_prompt)
+    return client.generate_response(combined_prompt, empty_system=True)
 
 
 def parse_arguments():
@@ -47,7 +47,7 @@ def parse_arguments():
     parser.add_argument(
         "--max_year",
         type=int,
-        default=1925,
+        default=1910,
         help="Maximum year to simulate. The game will stop once this year is reached.",
     )
     parser.add_argument(
@@ -121,9 +121,7 @@ def main():
     max_year = args.max_year
     summary_model = args.summary_model
 
-    logger.info(
-        "Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!"
-    )
+    logger.info("Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!")
     start_whole = time.time()
 
     model_error_stats = defaultdict(
@@ -142,6 +140,18 @@ def main():
     timestamp_str = time.strftime("%Y%m%d_%H%M%S")
     result_folder = f"./results/{timestamp_str}"
     os.makedirs(result_folder, exist_ok=True)
+
+    # ---------------------------
+    # ADD FILE HANDLER FOR LOGS
+    # ---------------------------
+    log_file_path = os.path.join(result_folder, "game.log")
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s", datefmt="%H:%M:%S")
+    )
+    logger.addHandler(file_handler)
+    logger.info(f"File handler added. Writing logs to {log_file_path}.")
 
     # File paths
     manifesto_path = f"{result_folder}/game_manifesto.txt"
@@ -170,6 +180,18 @@ def main():
         game.power_model_map = dict(zip(powers_order, provided_models))
     else:
         game.power_model_map = assign_models_to_powers(randomize=True)
+
+    logger.debug("Power model assignments:")
+    for power, model_id in game.power_model_map.items():
+        logger.debug(f"{power} => type={type(model_id)}, value={model_id}")
+
+    # Also, if you prefer to fix the negotiation function:
+    # We could do a one-liner ensuring all model_id are strings:
+    for p in game.power_model_map:
+        if not isinstance(game.power_model_map[p], str):
+            game.power_model_map[p] = str(game.power_model_map[p])
+
+    logger.info("Post-cleanup: Verified all power model IDs are strings.")
 
     round_counter = 0  # Track number of rounds
 

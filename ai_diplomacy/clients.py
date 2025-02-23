@@ -35,7 +35,7 @@ class BaseModelClient:
     """
     Base interface for any LLM client we want to plug in.
     Each must provide:
-      - generate_response(prompt: str) -> str
+      - generate_response(prompt: str) -> str (with empty_system=True if needed)
       - get_orders(board_state, power_name, possible_orders, game_history, phase_summaries) -> List[str]
       - get_conversation_reply(power_name, conversation_so_far, game_phase) -> str
     """
@@ -58,8 +58,8 @@ class BaseModelClient:
         else:
             # If emptysystem is True, skip loading any system prompt
             self.system_prompt = ""
-
-    def generate_response(self, prompt: str) -> str:
+    # emptysystem defaults to false but if true will tell the LLM to not add a system prompt
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         """
         Returns a raw string from the LLM.
         Subclasses override this.
@@ -72,72 +72,92 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        game_history: GameHistory,
+        game_history,  # Or GameHistory instance
         phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
-        context = load_prompt("context_prompt.txt")
+        """
+        Overhauled to delegate the final formatting to context_prompt.txt, inserting
+        placeholders for expansions (phase info, supply centers, units, blah blah).
 
-        # Get our units and centers
-        units_info = board_state["units"].get(power_name, [])
-        units_info_set = set(units_info)
-        centers_info = board_state["centers"].get(power_name, [])
+        This version is 'surgical' and uses placeholders from @context_prompt.txt 
+        rather than building large strings in code.
+        """
+        from ai_diplomacy.utils import (
+            expand_phase_info,
+            format_power_units_and_centers,  # Now includes neutral centers info
+            organize_history_by_relationship,
+            format_possible_orders,
+            format_convoy_paths,
+            generate_threat_assessment,
+            generate_sc_projection
+        )
+        # 1) Grab the template from context_prompt.txt
+        template_text = load_prompt("context_prompt.txt")
 
-        # Get the current phase
-        year_phase = board_state["phase"]  # e.g. 'S1901M'
+        # 2) Expand the current phase 
+        phase_expanded = expand_phase_info(game, board_state)
 
-        # Get enemy units and centers and label them for each power
-        enemy_units = {}
-        enemy_centers = {}
-        for power, info in board_state["units"].items():
-            if power != power_name:
-                enemy_units[power] = info
-                enemy_centers[power] = board_state["centers"].get(power, [])
+        # 3) Our forces (units + centers, including neutral centers)
+        our_forces_summary = format_power_units_and_centers(game, power_name, board_state)
 
-        # Get possible orders
-        possible_orders_str = ""
-        for loc, orders in possible_orders.items():
-            possible_orders_str += f"  {loc}: {orders}\n"
+        # 4) Summaries for enemies
+        enemies_forces_summary = ""
+        for pwr in board_state["units"]:
+            if pwr != power_name:
+                enemies_forces_summary += format_power_units_and_centers(game, pwr, board_state)
 
-        # Convoy paths
-        all_convoy_paths_possible = game.convoy_paths_possible
-        convoy_paths_possible = {}
-        for start_loc, fleets_req, end_loc in all_convoy_paths_possible:
-            for fleet in fleets_req:
-                if fleet in units_info_set:
-                    convoy_paths_possible.append((start_loc, fleets_req, end_loc))
+        # 5) Neutral Supply Centers
+        neutral_supply_centers_summary = format_power_units_and_centers(game, 'NEUTRAL', board_state)
 
-        # 1) Prepare a block of text for the phase_summaries
-        if phase_summaries:
-            historical_summaries = "\nPAST PHASE SUMMARIES:\n"
-            for phase_key, summary_txt in phase_summaries.items():
-                historical_summaries += f"\nPHASE {phase_key}:\n{summary_txt}\n"
+        # 6) Gather the conversation text
+        if hasattr(game_history, "get_game_history"):
+            conversation_text = game_history.get_game_history(power_name) or "(No history yet)"
         else:
-            historical_summaries = "\n(No historical summaries yet)\n"
+            # Might be a plain string
+            conversation_text = game_history if isinstance(game_history, str) else "(No history yet)"
 
+        history_text = organize_history_by_relationship(conversation_text)
 
-        conversation_text = game_history.get_game_history(power_name)
-        if not conversation_text:
-            conversation_text = "\n(No game history yet)\n"
+        # 7) Format possible orders
+        possible_orders_text = format_possible_orders(game, possible_orders)
 
-        # Load in current context values
-        context = context.format(
+        # 8) Convoy Paths
+        logger.debug(f"convoy_paths_possible is: {game.convoy_paths_possible}")
+        #convoy_paths_text = format_convoy_paths(game, game.convoy_paths_possible)
+        convoy_paths_text = ""
+
+        # 9) Threat Assessment
+        threat_text = generate_threat_assessment(game, board_state, power_name)
+
+        # 10) Supply Center Projection
+        sc_projection_text = generate_sc_projection(game, board_state, power_name)
+
+        # 11) Past Phase Summaries
+        if phase_summaries:
+            # Combine each phase summary for reference
+            lines = []
+            for ph, summ in phase_summaries.items():
+                lines.append(f"PHASE {ph}:\n{summ}\n")
+            historical_summaries = "\n".join(lines)
+        else:
+            historical_summaries = "(No historical summaries yet)"
+
+        # 12) Plug everything into context_prompt.txt
+        final_prompt = template_text.format(
             power_name=power_name,
-            current_phase=year_phase,
-            game_map_loc_name=game.map.loc_name,
-            game_map_loc_type=game.map.loc_type,
-            map_as_adjacency_list=game.map.loc_abut,
-            possible_coasts=game.map.loc_coasts,
-            game_map_scs=game.map.scs,
-            game_history=conversation_text,
-            enemy_units=enemy_units,
-            enemy_centers=enemy_centers,
-            units_info=units_info,
-            centers_info=centers_info,
-            possible_orders=possible_orders_str,
-            convoy_paths_possible=convoy_paths_possible,
+            phase_expanded=phase_expanded,
+            our_forces_summary=our_forces_summary,
+            neutral_supply_centers_summary=neutral_supply_centers_summary,
+            enemies_forces_summary=enemies_forces_summary,
+            history_text=history_text,
+            possible_orders_text=possible_orders_text,
+            convoy_paths_text=convoy_paths_text,
+            threat_text=threat_text,
+            sc_projection_text=sc_projection_text,
+            historical_summaries=historical_summaries,
         )
 
-        return context
+        return final_prompt
 
     def build_prompt(
         self,
@@ -175,7 +195,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         conversation_text: str,
         phase_summaries: Optional[Dict[str, str]] = None,
-        model_error_stats=None,  # New optional param
+        model_error_stats=None,
     ) -> List[str]:
         """
         1) Builds the prompt with conversation context if available
@@ -207,7 +227,10 @@ class BaseModelClient:
                     f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback."
                 )
                 if model_error_stats is not None:
-                    model_error_stats[self.model_name]["order_decoding_errors"] += 1
+                    # forcibly convert sets to string
+                    model_name_for_stats = str(self.model_name)
+                    model_error_stats[model_name_for_stats]["order_decoding_errors"] += 1
+
                 return self.fallback_orders(possible_orders)
             # Validate or fallback
             validated_moves = self._validate_orders(move_list, possible_orders)
@@ -215,6 +238,11 @@ class BaseModelClient:
 
         except Exception as e:
             logger.error(f"[{self.model_name}] LLM error for {power_name}: {e}")
+            if model_error_stats is not None:
+                # forcibly convert sets to string
+                model_name_for_stats = str(self.model_name)
+                model_error_stats[model_name_for_stats]["order_decoding_errors"] += 1
+
             return self.fallback_orders(possible_orders)
 
     def _extract_moves(self, raw_response: str, power_name: str) -> Optional[List[str]]:
@@ -496,13 +524,13 @@ class OpenAIClient(BaseModelClient):
         super().__init__(model_name, power_name, emptysystem)
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         # Updated to new API format
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
+                    {"role": "system", "content": self.system_prompt if not empty_system else ""},
                     {"role": "user", "content": prompt},
                 ],
             )
@@ -533,13 +561,13 @@ class ClaudeClient(BaseModelClient):
         super().__init__(model_name, power_name, emptysystem)
         self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         # Updated Claude messages format
         try:
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=2000,
-                system=self.system_prompt,  # system is now a top-level parameter
+                system=self.system_prompt if not empty_system else "", 
                 messages=[{"role": "user", "content": prompt}],
             )
             if not response.content:
@@ -569,8 +597,11 @@ class GeminiClient(BaseModelClient):
         super().__init__(model_name, power_name, emptysystem)
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
-        full_prompt = self.system_prompt + prompt
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
+        if empty_system:
+            full_prompt = prompt
+        else:
+            full_prompt = self.system_prompt + prompt
 
         try:
             response = self.client.models.generate_content(
@@ -600,12 +631,12 @@ class DeepSeekClient(BaseModelClient):
             api_key=self.api_key, base_url="https://api.deepseek.com/"
         )
 
-    def generate_response(self, prompt: str) -> str:
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
+                    {"role": "system", "content": self.system_prompt if not empty_system else ""},
                     {"role": "user", "content": prompt},
                 ],
                 stream=False,
@@ -672,7 +703,7 @@ def load_model_client(model_id: str, power_name: Optional[str] = None, emptysyst
         return DeepSeekClient(model_id, power_name, emptysystem=emptysystem)
     else:
         # Default to OpenAI
-        return OpenAIClient(model_id, power_name, emptysystem=emptysystem)
+        return OpenAIClient(model_id, power_name)
 
 
 ##############################################################################

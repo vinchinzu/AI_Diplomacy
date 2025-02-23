@@ -15,12 +15,21 @@ def assign_models_to_powers(randomize=True):
     Return a dict: { power_name: model_id, ... }
     """
     # If True, we'll randomize the model assignment.
-    model_list = [
+    """model_list = [
         "o3-mini",
         "claude-3-5-sonnet-20241022",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite-preview-02-05",
         "gpt-4o",
+        "gpt-4o-mini",
+        "claude-3-5-haiku-20241022",
+    ]"""
+    model_list = [
+        "o3-mini",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gpt-3.5-turbo",
         "gpt-4o-mini",
         "claude-3-5-haiku-20241022",
     ]
@@ -114,3 +123,549 @@ def get_valid_orders(
             model_error_stats[power_name]["order_decoding_errors"] += 1
             fallback = client.fallback_orders(possible_orders)
             return fallback
+
+
+def expand_phase_info(game, board_state):
+    """
+    Convert a phase like 'S1901M' into a more descriptive string:
+       'Spring 1901 Movement (early game): Units can move, support, or convoy...'
+    This function also references the current year to classify early/mid/late game.
+    """
+    phase_abbrev = board_state["phase"]  # e.g. 'S1901M'
+    # Basic mapping of abbreviations
+    season_map = {
+        'S': "Spring",
+        'F': "Fall",
+        'W': "Winter",
+    }
+    phase_type_map = {
+        'M': "Movement",
+        'R': "Retreat",
+        'A': "Adjustment",  # builds/disbands
+    }
+    
+    season_char = phase_abbrev[0]  # S / F / W
+    year = int(phase_abbrev[1:5])  # 1901
+    phase_char = phase_abbrev[-1]  # M / R / A
+    
+    season_str = season_map.get(season_char, "Unknown Season")
+    phase_str = phase_type_map.get(phase_char, "Unknown Phase")
+    
+    # Approximate game stage
+    if year <= 1902:
+        stage = "early game"
+    elif year <= 1906:
+        stage = "mid game"
+    else:
+        stage = "late game"
+    
+    # Phase-specific action text
+    if phase_char == 'M':
+        actions = "Players issue move, support, or convoy orders."
+    elif phase_char == 'R':
+        actions = "Dislodged units must retreat or disband."
+    elif phase_char == 'A':
+        actions = "Powers may build new units if they have more centers than units, otherwise disband if fewer."
+    else:
+        actions = "Unknown phase actions."
+    
+    return f"{season_str} {year} {phase_str} ({stage}): {actions}"
+
+
+def format_location_with_expansion(game, loc, include_adjacency=False):
+    """
+    Return a string like 'Paris (PAR) [LAND]',
+    optionally including a list of adjacent locations if include_adjacency=True.
+    """
+    full_name = next((name for name, abbrev in game.map.loc_name.items() if abbrev == loc), loc)
+    loc_type = game.map.loc_type.get(loc, "UNKNOWN")
+    formatted = f"{full_name} ({loc}) [{loc_type}]"
+    
+    if include_adjacency:
+        adjacent_locs = game.map.loc_abut.get(loc, [])
+        if adjacent_locs:
+            adjacent_info = []
+            for adj_loc in adjacent_locs:
+                adj_full_name = game.map.loc_name.get(adj_loc, adj_loc)
+                adj_type = game.map.loc_type.get(adj_loc, "UNKNOWN")
+                adjacent_info.append(f"{adj_full_name} ({adj_loc}) [{adj_type}]")
+            formatted += f"\n  Adjacent to: {', '.join(adjacent_info)}"
+    
+    return formatted
+
+
+def format_power_units_and_centers(game, power_name, board_state):
+    """
+    Show a summarized view of a given power's units and supply centers, 
+    with expansions of location names, plus a quick 'strength' count.
+    Also includes information about neutral centers.
+    """
+    # Add neutral centers info
+    if power_name == "NEUTRAL":
+        all_controlled = set()
+        for centers in board_state["centers"].values():
+            all_controlled.update(centers)
+        neutral_centers = [sc for sc in game.map.scs if sc not in all_controlled]
+        
+        if neutral_centers:
+            output = "  Neutral Supply Centers:\n"
+            for c in neutral_centers:
+                output += f"    {format_location_with_expansion(game, c)}\n"
+    else:
+        units_info = board_state["units"].get(power_name, [])
+        centers_info = board_state["centers"].get(power_name, [])
+        
+        output = f"{power_name} FORCES:\n"
+        
+        if units_info:
+            output += "  Units:\n"
+            for unit in units_info:
+                # Example unit: "A PAR"
+                # First char is 'A' or 'F'; substring after space is the location
+                parts = unit.split(" ", 1)
+                if len(parts) == 2:
+                    unit_type, loc = parts
+                    output += f"    {unit_type} in {format_location_with_expansion(game, loc)}\n"
+                else:
+                    output += f"    {unit}\n"
+        else:
+            output += "  Units: None\n"
+        
+        if centers_info:
+            output += "  Supply Centers:\n"
+            for c in centers_info:
+                output += f"    {format_location_with_expansion(game, c)}\n"
+        else:
+            output += "  Supply Centers: None\n"
+        
+        
+        # Summaries
+        output += f"  Current Strength: {len(centers_info)} centers, {len(units_info)} units\n\n"
+    return output
+
+
+def organize_history_by_relationship(conversation_text: str) -> str:
+    """
+    This simplified version takes the entire conversation text
+    (e.g., from game_history.get_game_history(power_name)) and returns it.
+    
+    Previously, we assumed we had a structured list of messages, but in practice,
+    game_history is just a string, so we skip relationship-based grouping.
+    
+    In the future, if 'GameHistory' becomes more structured, we can parse it here.
+    """
+    if not conversation_text.strip():
+        return "(No game history yet)\n"
+    
+    # For now, we can simply return the conversation text
+    # or do minimal formatting as we see fit.
+    output = "COMMUNICATION HISTORY:\n\n"
+    output += conversation_text.strip() + "\n"
+    return output
+
+
+def format_possible_orders(game, possible_orders):
+    """
+    Display orders with strategic context, maintaining the exact order syntax
+    while adding meaningful descriptions about their tactical purpose.
+    """
+    # First pass - analyze game state for strategic context
+    supply_centers = set(game.map.scs)
+    power_centers = {}
+    contested_regions = set()
+    
+    # Gather supply center ownership
+    for power_name, centers in game.get_centers().items():
+        for center in centers:
+            power_centers[center] = power_name
+    
+    # Identify contested regions (simplified approach)
+    # A more sophisticated implementation would analyze unit adjacencies
+    
+    # Classify orders by strategic purpose
+    strategic_orders = {
+        "OFFENSIVE": [],  # Orders that can capture centers or threaten enemy units
+        "DEFENSIVE": [],  # Orders that protect your centers or units
+        "TACTICAL": [],   # Orders that improve position without immediate captures
+        "SUPPORT": []     # Support orders
+    }
+    
+    # Process each order
+    for loc, orders in possible_orders.items():
+        for order in orders:
+            order_parts = order.split()
+            order_type = None
+            
+            # Determine order type
+            if " H" in order:
+                order_type = "DEFENSIVE"
+            elif " S " in order:
+                order_type = "SUPPORT"
+            elif " - " in order:
+                # Get destination
+                dest = order_parts[-1].split(" VIA")[0] if " VIA" in order else order_parts[-1]
+                
+                # Check if destination is a supply center
+                if dest[:3] in supply_centers:
+                    # If center is neutral or enemy-owned, it's offensive
+                    if dest[:3] not in power_centers or power_centers[dest[:3]] != game.role:
+                        order_type = "OFFENSIVE"
+                    else:
+                        order_type = "DEFENSIVE"  # Moving to own supply center
+                else:
+                    order_type = "TACTICAL"  # Non-center destination
+            elif " C " in order:
+                order_type = "SUPPORT"  # Classify convoy as support
+            
+            # Generate strategic description
+            description = generate_order_description(game, order, order_type, power_centers, supply_centers)
+            
+            # Add to appropriate category
+            if order_type:
+                strategic_orders[order_type].append((order, description))
+    
+    # Generate formatted output
+    output = "POSSIBLE ORDERS:\n\n"
+    
+    # Add offensive moves first - these are highest priority
+    if strategic_orders["OFFENSIVE"]:
+        output += "Offensive Moves (capture territory):\n"
+        for order, desc in strategic_orders["OFFENSIVE"]:
+            output += f"  {order} {desc}\n"
+        output += "\n"
+    
+    # Add defensive moves
+    if strategic_orders["DEFENSIVE"]:
+        output += "Defensive Moves (protect territory):\n"
+        for order, desc in strategic_orders["DEFENSIVE"]:
+            output += f"  {order} {desc}\n"
+        output += "\n"
+    
+    # Add tactical positioning moves
+    if strategic_orders["TACTICAL"]:
+        output += "Tactical Moves (improve position):\n"
+        for order, desc in strategic_orders["TACTICAL"]:
+            output += f"  {order} {desc}\n"
+        output += "\n"
+    
+    # Add support moves
+    if strategic_orders["SUPPORT"]:
+        output += "Support Options (strengthen attacks/defense):\n"
+        for order, desc in strategic_orders["SUPPORT"]:
+            output += f"  {order} {desc}\n"
+    
+    return output
+
+
+def generate_order_description(game, order, order_type, power_centers, supply_centers):
+    """
+    Generate a strategic description for an order based on its type and context.
+    """
+    order_parts = order.split()
+    
+    # Hold orders
+    if order_type == "DEFENSIVE" and " H" in order:
+        unit_loc = order_parts[1]
+        if unit_loc[:3] in supply_centers:
+            if unit_loc[:3] in power_centers and power_centers[unit_loc[:3]] == game.role:
+                return "(secure your supply center)"
+            else:
+                return "(maintain position at supply center)"
+        return "(maintain strategic position)"
+    
+    # Move orders
+    elif order_type in ["OFFENSIVE", "TACTICAL", "DEFENSIVE"] and " - " in order:
+        unit_type = order_parts[0]  # A or F
+        unit_loc = order_parts[1]
+        dest = order_parts[3].split(" VIA")[0] if len(order_parts) > 3 and "VIA" in order_parts[-1] else order_parts[3]
+        
+        # Moving to a supply center
+        if dest[:3] in supply_centers:
+            if dest[:3] not in power_centers:
+                return f"(capture neutral supply center)"
+            else:
+                target_power = power_centers[dest[:3]]
+                return f"(attack {target_power}'s supply center)"
+        
+        # Moving to a non-supply center
+        if unit_type == "A":
+            # Army moves to tactical positions
+            return f"(strategic positioning)"
+        else:
+            # Fleet moves often about sea control
+            return f"(secure sea route)"
+    
+    # Support orders
+    elif order_type == "SUPPORT" and " S " in order:
+        # Find the unit being supported and its action
+        supported_part = " ".join(order_parts[3:])
+        
+        if " - " in supported_part:
+            # Supporting a move
+            supported_unit = order_parts[3]
+            supported_dest = order_parts[-1]
+            
+            if supported_dest[:3] in supply_centers:
+                if supported_dest[:3] not in power_centers:
+                    return f"(support capture of neutral center)"
+                else:
+                    target_power = power_centers[supported_dest[:3]]
+                    return f"(strengthen attack on {target_power})"
+            return "(strengthen attack)"
+        else:
+            # Supporting a hold
+            return "(reinforce defense)"
+    
+    # Convoy orders
+    elif " C " in order:
+        return "(enable army transport by sea)"
+    
+    # Default
+    return ""
+
+
+def format_convoy_paths(game, convoy_paths_possible):
+    """
+    Format convoy paths in a strategically meaningful way,
+    grouping by region and highlighting strategic objectives.
+    
+    Input format: 
+    [('START', {required fleets}, {possible destinations}), ...]
+    
+    Example tuple: ('ALB', {'ION'}, {'GRE', 'APU', 'NAP', 'TUN'})
+    """
+    if not convoy_paths_possible:
+        return "CONVOY POSSIBILITIES: None currently available.\n"
+    
+    # Group convoy paths by general region
+    regional_paths = {
+        "MEDITERRANEAN": [],  # Central/Southern paths
+        "NORTH SEA": [],      # Northern European paths  
+        "BLACK SEA": [],      # Eastern paths
+        "COMPLEX": []         # Multi-fleet convoys
+    }
+    
+    # Supply centers for context
+    supply_centers = set(game.map.scs)
+    power_centers = {power_name: set(centers) for power_name, centers in game.get_centers().items()}
+    neutral_centers = supply_centers - set().union(*power_centers.values())
+    
+    # Current power for context
+    current_power = game.role if hasattr(game, 'role') else None
+    
+    # Map locations to regions
+    mediterranean_waters = {"ION", "TYS", "WES", "ADR", "AEG", "EAS", "LYO"}
+    north_sea_waters = {"NTH", "NWG", "ENG", "IRI", "SKA", "HEL", "BAL", "BOT", "BAR"}
+    black_sea_waters = {"BLA"}
+    
+    # Process each convoy path
+    for path in convoy_paths_possible:
+        start_loc, required_fleets, destinations = path
+        
+        # Skip if no destinations
+        if not destinations:
+            continue
+        
+        # Determine region
+        region = "COMPLEX"  # Default
+        if len(required_fleets) == 1:
+            fleet_loc = next(iter(required_fleets))
+            if fleet_loc in mediterranean_waters:
+                region = "MEDITERRANEAN"
+            elif fleet_loc in north_sea_waters:
+                region = "NORTH SEA"
+            elif fleet_loc in black_sea_waters:
+                region = "BLACK SEA"
+        
+        # Add strategic context for each destination
+        for dest in destinations:
+            strategic_note = _get_convoy_destination_context(
+                game, start_loc, dest, supply_centers, power_centers, 
+                neutral_centers, current_power
+            )
+            
+            # Format info about required fleets
+            if len(required_fleets) == 1:
+                fleet_info = f"via {next(iter(required_fleets))}"
+            else:
+                fleet_info = f"via {' + '.join(required_fleets)}"
+                
+            # Create entry
+            entry = (start_loc, dest, fleet_info, strategic_note)
+            regional_paths[region].append(entry)
+    
+    # Format the output
+    output = "CONVOY POSSIBILITIES:\n\n"
+    
+    # Show each region
+    for region, paths in regional_paths.items():
+        if not paths:
+            continue
+            
+        output += f"{region} CONVOYS:\n"
+        
+        # Group by start location
+        by_start = {}
+        for start, dest, fleet_info, note in paths:
+            by_start.setdefault(start, []).append((dest, fleet_info, note))
+        
+        # Format each start location's options
+        for start, destinations in by_start.items():
+            start_name = game.map.loc_name.get(start, start)
+            output += f"  From {start_name} ({start}):\n"
+            
+            for dest, fleet_info, note in destinations:
+                dest_name = game.map.loc_name.get(dest, dest)
+                output += f"    A {start} - {dest} {fleet_info} ({note})\n"
+            
+            output += "\n"
+    
+    return output
+
+
+def _get_convoy_destination_context(game, start, dest, supply_centers, power_centers, neutral_centers, current_power):
+    """Generate strategic context for convoy destinations"""
+    start_base = start[:3]  # Remove any coast specification
+    dest_base = dest[:3]  # Remove any coast specification
+    
+    # Check if destination is a supply center
+    if dest_base in supply_centers:
+        if dest_base in neutral_centers:
+            return f"capture neutral SC {game.map.loc_name.get(dest_base, dest_base)}"
+        
+        for power, centers in power_centers.items():
+            if dest_base in centers:
+                if power == current_power:
+                    return f"reinforce your SC {game.map.loc_name.get(dest_base, dest_base)}"
+                else:
+                    return f"attack {power}'s SC {game.map.loc_name.get(dest_base, dest_base)}"
+    
+    # Check for strategic positioning
+    # Major strategic locations that aren't supply centers
+    strategic_positions = {
+        "RUH": "central position threatening multiple German SCs",
+        "BUR": "central position threatening both France and Germany",
+        "UKR": "strategic buffer between Russia and Austria-Hungary",
+        "BOH": "central position for attacking Austria",
+        "TYR": "mountain pass to either Venice or Munich",
+        "PIE": "bridgehead into both France and Italy",
+        "SYR": "buffer protecting Turkey's eastern flank"
+    }
+    
+    if dest_base in strategic_positions:
+        return strategic_positions[dest_base]
+    
+    # By default, highlight the unconventional movement
+    src_type = game.map.area_type.get(start_base, "")
+    dest_type = game.map.area_type.get(dest_base, "")
+    
+    if src_type == "COAST" and dest_type == "COAST":
+        return f"bypass land barriers for surprise positioning"
+    
+    return f"strategic repositioning"
+
+
+def generate_threat_assessment(game, board_state, power_name):
+    """
+    High-level function that tries to identify immediate threats 
+    from adjacent enemy units to your units or centers.
+    """
+    our_units = set(loc.split(" ", 1)[1] for loc in board_state["units"].get(power_name, []))
+    our_centers = set(board_state["centers"].get(power_name, []))
+    
+    threats = []
+    for enemy_power, enemy_units in board_state["units"].items():
+        if enemy_power == power_name:
+            continue
+        for unit_code in enemy_units:
+            try:
+                # e.g. "A MUN"
+                parts = unit_code.split(" ", 1)
+                enemy_loc = parts[1].strip()
+            except IndexError:
+                continue
+            
+            # check adjacency to our units or centers
+            neighbors = game.map.loc_abut.get(enemy_loc, [])
+            threatened = []
+            for nbr in neighbors:
+                if nbr in our_units:
+                    threatened.append(f"our unit @ {nbr}")
+                elif nbr in our_centers:
+                    threatened.append(f"our center @ {nbr}")
+            
+            if threatened:
+                threats.append((enemy_power, unit_code, threatened))
+    
+    output = "THREAT ASSESSMENT:\n"
+    if not threats:
+        output += "  No immediate threats detected.\n\n"
+        return output
+    
+    for (enemy_pwr, code, targets) in threats:
+        output += f"  {enemy_pwr}'s {code} threatens {', '.join(targets)}\n"
+    output += "\n"
+    return output
+
+
+def generate_sc_projection(game, board_state, power_name):
+    """
+    Estimate potential gains from neutral or weakly held enemy SCs, plus 
+    highlight which of your centers are at risk (no unit present).
+    """
+    our_units = set(loc.split(" ", 1)[1] for loc in board_state["units"].get(power_name, []))
+    our_centers = set(board_state["centers"].get(power_name, []))
+    all_centers_control = board_state["centers"]  # dict of power -> list of centers
+    all_controlled = set()
+    for c_list in all_centers_control.values():
+        all_controlled.update(c_list)
+    
+    # Potential neutral SC gains
+    neutral_gains = []
+    for sc in game.map.scs:
+        if sc not in all_controlled:  # neutral
+            # see if we have a unit adjacent
+            neighbors = game.map.loc_abut.get(sc, [])
+            if any(nbr in our_units for nbr in neighbors):
+                neutral_gains.append(sc)
+    
+    # Weakly held enemy SC
+    contestable = []
+    for e_pwr, e_centers in board_state["centers"].items():
+        if e_pwr == power_name:
+            continue
+        enemy_units = set(loc.split(" ", 1)[1] for loc in board_state["units"].get(e_pwr, []))
+        for c in e_centers:
+            # if no enemy unit is physically there
+            if c not in enemy_units:
+                # see if we have a unit adjacent
+                neighbors = game.map.loc_abut.get(c, [])
+                if any(nbr in our_units for nbr in neighbors):
+                    contestable.append((c, e_pwr))
+    
+    # Our centers at risk (no unit present)
+    at_risk = [own_sc for own_sc in our_centers if own_sc not in our_units]
+    
+    # Format final
+    output = "SUPPLY CENTER PROJECTION:\n"
+    output += f"  Current Count: {len(our_centers)}\n"
+    
+    if neutral_gains:
+        output += "  Potential neutral gains:\n"
+        for sc in neutral_gains:
+            output += f"    {format_location_with_expansion(game, sc)}\n"
+    
+    if contestable:
+        output += "  Contestable enemy centers:\n"
+        for c, e_pwr in contestable:
+            output += f"    {format_location_with_expansion(game, c)} (currently owned by {e_pwr})\n"
+    
+    if at_risk:
+        output += "  Centers at risk (no defending unit):\n"
+        for sc in at_risk:
+            output += f"    {format_location_with_expansion(game, sc)}\n"
+    
+    best_case = len(our_centers) + len(neutral_gains) + len(contestable)
+    worst_case = len(our_centers) - len(at_risk)
+    output += f"  Next-phase range: {worst_case} to {best_case} centers\n\n"
+    return output

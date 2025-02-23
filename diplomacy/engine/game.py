@@ -46,9 +46,9 @@ UNDETERMINED, POWER, UNIT, LOCATION, COAST, ORDER, MOVE_SEP, OTHER = 0, 1, 2, 3,
 LOGGER = logging.getLogger(__name__)
 
 # set logging level to INFO
-logging.basicConfig(level=logging.INFO)
+#logging.basicConfig(level=logging.INFO)
 # set logging level to DEBUG
-#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 class Game(Jsonable):
     """ Game class.
@@ -4604,7 +4604,7 @@ class Game(Jsonable):
             if idx > 0:
                 prev_phase_key = all_phases[idx - 1]  
                 logging.debug(
-                    "DEBUG _generate_phase_summary: Using prev_phase_key=%s (idx-2). If skipping a sub-phase is undesired, consider (idx-1).",
+                    "DEBUG _generate_phase_summary: Using prev_phase_key=%s (idx-1).",
                     prev_phase_key
                 )
                 try:
