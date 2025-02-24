@@ -45,6 +45,11 @@ from diplomacy.utils.game_phase_data import GamePhaseData, MESSAGES_TYPE
 UNDETERMINED, POWER, UNIT, LOCATION, COAST, ORDER, MOVE_SEP, OTHER = 0, 1, 2, 3, 4, 5, 6, 7
 LOGGER = logging.getLogger(__name__)
 
+# set logging level to INFO
+#logging.basicConfig(level=logging.INFO)
+# set logging level to DEBUG
+logging.basicConfig(level=logging.DEBUG)
+
 class Game(Jsonable):
     """ Game class.
 
@@ -1468,6 +1473,9 @@ class Game(Jsonable):
         self.message_history.put(previous_phase, previous_messages)
         self.state_history.put(previous_phase, previous_state)
 
+        # Now build a key for the *current* (post-process) phase
+        current_phase_key = self._phase_wrapper_type(self.current_short_phase)
+
         # Generate a text summary (if a callback is provided)
         phase_summary_text = self._generate_phase_summary(
             previous_phase,
@@ -1732,6 +1740,8 @@ class Game(Jsonable):
             :return: A dictionary with locations as keys, and their respective list of possible orders as values
         """
         # pylint: disable=too-many-branches,too-many-nested-blocks
+        # Initialize dictionary mapping each location to an empty set of possible orders
+        # Keys are uppercase location names, values are empty sets that will store valid orders
         possible_orders = {loc.upper(): set() for loc in self.map.locs}
 
         # Game is completed
@@ -4573,170 +4583,157 @@ class Game(Jsonable):
         except (IndexError, KeyError):
             return f"[_generate_phase_summary] No GamePhaseData found for {phase_key}"
 
-        # Log the current phase key and results for debugging
+        # Log the current phase key, results, and possibly the orders for debugging
         logging.debug(
-            "DEBUG _generate_phase_summary: phase_key=%s, results=%s",
-            phase_key, current_phase_data.results
+            "DEBUG _generate_phase_summary: current phase_key=%s, results=%s, orders=%s",
+            phase_key,
+            current_phase_data.results,
+            current_phase_data.orders
         )
 
-        # 2) Attempt to retrieve the PREVIOUS phase data to highlight differences
-        #    We'll do this by checking the index of `phase_key` in `self.state_history`.
-        #    If there's a previous index, we'll fetch that phase_data for comparison.
-        prev_phase_data = None
+        # Retrieve the list of all recorded phase keys
         all_phases = list(self.state_history.keys())
+        logging.debug("DEBUG _generate_phase_summary: all_phases=%s", all_phases)
+
+        prev_phase_data = None
         if str(phase_key) in all_phases:
             idx = all_phases.index(str(phase_key))
+            logging.debug("DEBUG _generate_phase_summary: current phase index=%d", idx)
+
+            # Here we log the logic behind picking the previous phase
             if idx > 0:
-                prev_phase_key = all_phases[idx - 1]
+                prev_phase_key = all_phases[idx - 1]  
+                logging.debug(
+                    "DEBUG _generate_phase_summary: Using prev_phase_key=%s (idx-1).",
+                    prev_phase_key
+                )
                 try:
                     prev_phase_data = self.get_phase_from_history(prev_phase_key)
-                except:
-                    pass
-
-        # 3) Gather the big data from current_phase_data
-        #    (We assume you have stored them in current_phase_data.state the usual way.)
-        cur_state = current_phase_data.state
-        # Typically these keys exist if your get_state() populates them:
-        cur_units   = cur_state.get('units', {})
-        cur_centers = cur_state.get('centers', {})
-        cur_retreats = cur_state.get('retreats', {})
-        cur_homes   = cur_state.get('homes', {})
-        cur_influence = cur_state.get('influence', {})
-        cur_cd      = cur_state.get('civil_disorder', {})
-
-        cur_orders_dict  = current_phase_data.orders  # {power_name: list_of_orders}
-        cur_results_dict = current_phase_data.results # {unit_name: list_of_outcomes}
-
-        # 4) If we have a previous phase, gather the old state's data so we can do some diffs
-        prev_units = prev_centers = prev_retreats = prev_homes = prev_influence = prev_cd = {}
-        if prev_phase_data:
-            prev_state = prev_phase_data.state
-            prev_units   = prev_state.get('units', {})
-            prev_centers = prev_state.get('centers', {})
-            prev_retreats= prev_state.get('retreats', {})
-            prev_homes   = prev_state.get('homes', {})
-            prev_influence= prev_state.get('influence', {})
-            prev_cd      = prev_state.get('civil_disorder', {})
-
-        # 5) Build a user prompt. We can do it in sections:
-
-        # 5a) Orders:
-        orders_text = []
-        for power, orders in cur_orders_dict.items():
-            if orders:
-                orders_text.append(f"{power} => {', '.join(orders)}")
+                except Exception as e:
+                    logging.debug("DEBUG _generate_phase_summary: Could not get prev_phase_data for key=%s, error=%s", prev_phase_key, e)
             else:
-                orders_text.append(f"{power} => [No orders]")
-        orders_block = "\n".join(orders_text) if orders_text else "[No orders found]"
+                logging.debug("DEBUG _generate_phase_summary: Not enough phases to set prev_phase_key.")
+        else:
+            logging.debug("DEBUG _generate_phase_summary: phase_key=%s not in all_phases!", phase_key)
 
-        # 5b) Results:
-        results_text = []
-        for unit_name, outcomes in cur_results_dict.items():
-            # old code: results_text.append(f"{unit_name}: {', '.join(outcomes)}")
-            outcome_strs = [str(item) for item in outcomes]
-            results_text.append(f"{unit_name}: {', '.join(outcome_strs)}")
+        if prev_phase_data:
+            logging.debug(
+                "DEBUG _generate_phase_summary: Found prev_phase_data for key=%s, results=%s, orders=%s",
+                prev_phase_key,
+                prev_phase_data.results,
+                prev_phase_data.orders
+            )
 
-        results_block = "\n".join(results_text) if results_text else "[No results found]"
-        # 5c) Current state (units, centers, etc.) - all powers
-        # We'll just do a short textual listing. You can format it more carefully as you see fit.
-        def dict_of_lists_to_str(title, dct):
-            # Helper to turn e.g. {"FRANCE": ["A MAR", "F BRE"], "ENGLAND": ["A LVP"]} into lines
-            lines = []
-            for key, val in dct.items():
-                lines.append(f"  {key}: {val}")
-            return f"{title}:\n" + "\n".join(lines) if lines else f"{title}: [None]"
+        # Get current and previous state data
+        cur_state = current_phase_data.state
+        logging.debug("DEBUG _generate_phase_summary: cur_state keys=%s", list(cur_state.keys()))
+        cur_orders_dict = current_phase_data.orders
+        cur_results_dict = current_phase_data.results
 
-        current_state_text = []
-        current_state_text.append(dict_of_lists_to_str("Units",   cur_units))
-        current_state_text.append(dict_of_lists_to_str("Centers", cur_centers))
-        current_state_text.append(dict_of_lists_to_str("Retreats",cur_retreats))
-        current_state_text.append(dict_of_lists_to_str("Homes",   cur_homes))
-        current_state_text.append(dict_of_lists_to_str("Influence", cur_influence))
-        current_state_text.append(dict_of_lists_to_str("Civil Disorder", cur_cd))
-        current_state_block = "\n\n".join(current_state_text)
-
-        # 5d) Differences from previous (if any)
-        # We'll do an extremely simple approach: check if the set of items changed in each dict.
-        # This is purely an example. You can do more advanced diff logic if you want.
-
+        # Build the differences info
         differences_info = []
         if prev_phase_data:
-            # For each of units, centers, etc. do a quick set compare for each power
-            # We'll focus on e.g. newly acquired centers, newly lost centers, etc.
-            for power in cur_units.keys():
-                # (1) Units difference:
-                old_units = set(prev_units.get(power, []))
-                new_units = set(cur_units.get(power, []))
+            prev_state = prev_phase_data.state
+            
+            for power in cur_state['units'].keys():
+                # Units difference
+                old_units = set(prev_state.get('units', {}).get(power, []))
+                new_units = set(cur_state.get('units', {}).get(power, []))
                 if old_units != new_units:
                     gained = new_units - old_units
-                    lost   = old_units - new_units
+                    lost = old_units - new_units
                     if gained:
                         differences_info.append(f"{power} gained units: {list(gained)}")
                     if lost:
-                        differences_info.append(f"{power} lost units:  {list(lost)}")
+                        differences_info.append(f"{power} lost units: {list(lost)}")
 
-                # (2) Centers difference:
-                old_centers = set(prev_centers.get(power, []))
-                new_centers = set(cur_centers.get(power, []))
+                # Centers difference
+                old_centers = set(prev_state.get('centers', {}).get(power, []))
+                new_centers = set(cur_state.get('centers', {}).get(power, []))
                 if old_centers != new_centers:
                     gained = new_centers - old_centers
-                    lost   = old_centers - new_centers
+                    lost = old_centers - new_centers
                     if gained:
                         differences_info.append(f"{power} gained centers: {list(gained)}")
                     if lost:
-                        differences_info.append(f"{power} lost centers:  {list(lost)}")
-            
-            # You can do the same for retreats, homes, influence, etc. if you want,
-            # or just skip them. We'll skip for brevity here.
+                        differences_info.append(f"{power} lost centers: {list(lost)}")
         else:
-            differences_info.append("No previous phase data found, so no direct diffs to report.")
+            differences_info.append("Initial phase - no previous state to compare.")
 
-        differences_block = "\n".join(differences_info) or "[No changes detected from previous phase]"
+        differences_block = "\n".join(differences_info) or "[No significant changes detected]"
 
-        # 5e) Put it all together in the final user prompt for the LLM:
+        # Build the prompt focusing only on key changes
         user_prompt = (
             f"PHASE SUMMARY REQUEST.\n\n"
             f"PHASE: {phase_key}\n\n"
-            f"ORDERS:\n{orders_block}\n\n"
-            f"RESULTS:\n{results_block}\n\n"
-            f"CURRENT BOARD STATE:\n{current_state_block}\n\n"
-            f"CHANGES FROM PREVIOUS PHASE:\n{differences_block}\n\n"
-            "Below is the final board state after the latest phase, along with the moves each power submitted and the engine’s adjudication results. Please create a summary in JSON, explaining:"
-            "- Each successful move,"
-            "- Each bounce or voided order, with reasons (e.g. equal force, no valid route, contradictory support),"
-            "- Key changes in supply centers,"
-            "- Potential strategic ramifications if relevant."
-
-            "Return ONLY JSON:"
-
-            "PARSABLE OUTPUT:"
-            "{{"
-            "'summary': ... your text ..."
-            "}}"
+            f"ORDERS:\n{', '.join(f'{power}: {orders}' for power, orders in cur_orders_dict.items())}\n\n"
+            f"RESULTS:\n{', '.join(f'{unit}: {results}' for unit, results in cur_results_dict.items())}\n\n"
+            f"KEY CHANGES:\n{differences_block}\n\n"
+            "Please create a JSON summary explaining:\n"
+            "- Each successful move\n"
+            "- Each bounce or voided order, with reasons\n"
+            "- Key changes in supply centers\n"
+            "- Potential strategic ramifications\n\n"
+            "PARSABLE OUTPUT:\n"
+            "{\n"
+            "'summary': ... your text ...\n"
+            "}"
         )
 
-        # We might also have a system prompt to guide the AI, e.g.:
         system_prompt = (
-            """
-                You are a Diplomacy expert, summarizing the results of the latest phase.
-                Your tasks:
-                1) Provide a concise summary of how the board changed.
-                2) Specifically list each voided or bounced order, and *why* it occurred.
-                3) If possible, describe which moves or supports succeeded and how that affected centers.
+            "You are a Diplomacy expert summarizing phase results.\n"
+            "Focus on:\n"
+            "1) Key board changes\n"
+            "2) Failed orders and their reasons\n"
+            "3) Successful moves affecting centers\n\n"
+           """
+            1. Understanding the Phases & Their Orders
 
-                Format:
-                - Must return a JSON with the top-level key "summary" or "orders" or similar.
-                - Possibly:
+            1.1. Movement Phase (phase_type == 'M')
+                •	Hold: A PAR H (Army in Paris does nothing)
+                •	Move: A PAR - BUR (Army in Paris moves to Burgundy)
+                •	Support:
+                •	Support Hold: A MAR S A PAR H (Army in Marseilles supports Army in Paris to hold)
+                •	Support Move: A MAR S A PAR - BUR (Army in Marseilles supports Army in Paris moving to Burgundy)
+                •	Convoy: Fleets at sea can convoy an Army over water:
+                •	Fleet Convoy: F ION C A TUN - NAP (Fleet in Ionian Sea convoys Army from Tunis to Naples)
+                •	Army Move via Convoy: A TUN - NAP VIA (explicitly states the Army is moving from Tunis to Naples via convoy)
 
-                PARSABLE OUTPUT:
-                {
-                    "summary": "...(your textual summary)..."
-                }
+            1.2. Retreat Phase (phase_type == 'R')
+                •	If a unit is dislodged, it must Retreat or Disband:
+                •	Retreat: A BUR R PIC (Dislodged Army in Burgundy retreats to Picardy)
+                •	Disband: A BUR D (Army in Burgundy disbands, if it cannot retreat or chooses not to)
 
-                Ensure the summary clarifies reasons for bounces, e.g., "F TRI -> VEN bounced because Italy also moved A VEN -> TRI with equal force."
+            1.3. Adjustment Phase (phase_type == 'A')
+                •	Build new units if you have more centers than current units:
+                •	A PAR B (Build an Army in Paris)
+                •	F MAR B (Build a Fleet in Marseilles)
+                •	Remove units if you have fewer centers than current units:
+                •	A BUR D (Disband Army in Burgundy)
+                •	Waive a build if you have a surplus but don’t want/can’t build:
+                •	WAIVE (no unit is built in the available build location)
 
-                No extra text outside the JSON block.
-            """
+            1.4.	Order Types
+                •	H (Hold) – e.g. A PAR H
+                •	- (Move) – e.g. A PAR - BUR
+                •	S (Support) – e.g. A MAR S A PAR - BUR or A MAR S A PAR H
+                •	C (Convoy) – e.g. F ION C A TUN - NAP
+                •	R (Retreat) – e.g. A BUR R PIC
+                •	D (Disband) – e.g. A BUR D
+                •	B (Build) – e.g. A PAR B
+                •	WAIVE – skipping a possible build
+
+            1.5.	Key Phase Context
+                •	Movement (M): Units can H, -, S, C.
+                •	Retreat (R): Dislodged units can only R or D.
+                •	Adjustment (A): Build/Remove units or WAIVE.
+                •	Multi-Coast: For SPA, STP, BUL, specify nc, sc, or ec when using Fleets, e.g. F BRE - SPA(sc).
+                •	Basic Validity Rules
+                •	No self-support (A PAR S A PAR - BUR is invalid).
+                •	Fleets must be on water to convoy.
+                •	Army “- X VIA” must have one or more fleets issuing matching C A ... - X.
+            """ 
+            "Example: 'F TRI -> VEN bounced due to equal force from Italy's A VEN -> TRI'"
         )
 
         if summary_callback:
@@ -4744,7 +4741,7 @@ class Game(Jsonable):
         else:
             summary_text = "(No LLM callback provided.)"
 
-        # 7) Store the text in the current GamePhaseData and in self.phase_summaries
+        # Store the summary
         current_phase_data.summary = summary_text
         self.phase_summaries[str(phase_key)] = summary_text
 

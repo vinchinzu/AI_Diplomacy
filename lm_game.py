@@ -13,7 +13,7 @@ os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"  # ERROR level only
 from diplomacy import Game
 from diplomacy.utils.export import to_saved_game_format
 
-from ai_diplomacy.clients import load_model_client
+from ai_diplomacy.model_loader import load_model_client
 from ai_diplomacy.utils import (
     get_valid_orders,
     gather_possible_orders,
@@ -21,6 +21,7 @@ from ai_diplomacy.utils import (
 )
 from ai_diplomacy.negotiations import conduct_negotiations
 from ai_diplomacy.game_history import GameHistory
+from ai_diplomacy.long_story_short import configure_context_manager
 
 dotenv.load_dotenv()
 
@@ -34,10 +35,10 @@ logging.basicConfig(
 
 def my_summary_callback(system_prompt, user_prompt, model_name):
     # Route to the desired model specified by the command-line argument
-    client = load_model_client(model_name)
+    client = load_model_client(model_name, emptysystem=True)
     combined_prompt = f"{system_prompt}\n\n{user_prompt}"
     # Pseudo-code for generating a response:
-    return client.generate_response(combined_prompt)
+    return client.generate_response(combined_prompt, empty_system=True)
 
 
 def parse_arguments():
@@ -78,16 +79,56 @@ def parse_arguments():
         ),
     )
     return parser.parse_args()
+ 
+
+def save_game_state(game, result_folder, game_file_path, model_error_stats, args, is_final=False):
+    """
+    Save the current game state and related information
+    
+    Args:
+        game: The diplomacy game instance
+        result_folder: Path to the results folder
+        game_file_path: Base path for the game file
+        model_error_stats: Dictionary containing model error statistics
+        args: Command line arguments
+        is_final: Boolean indicating if this is the final save
+    """
+    # Generate unique filename for periodic saves
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    if not is_final:
+        output_path = f"{game_file_path}_checkpoint_{timestamp}.json"
+    else:
+        output_path = game_file_path
+        # If final file exists, append timestamp
+        if os.path.exists(output_path):
+            logger.info("Game file already exists, saving with unique filename.")
+            output_path = f"{output_path}_{timestamp}.json"
+    
+    # Save game state
+    to_saved_game_format(game, output_path=output_path)
+    
+    # Save overview data
+    overview_file_path = f"{result_folder}/overview.jsonl"
+    with open(overview_file_path, "w") as overview_file:
+        overview_file.write(json.dumps(model_error_stats) + "\n")
+        overview_file.write(json.dumps(game.power_model_map) + "\n")
+        overview_file.write(json.dumps(vars(args)) + "\n")
+    
+    logger.info(f"Saved game checkpoint to: {output_path}")
 
 
 def main():
     args = parse_arguments()
+    # Configure the context manager with the same summary model
+    configure_context_manager(
+        phase_threshold=10000,
+        message_threshold=10000,
+        summary_model=args.summary_model
+    )
     max_year = args.max_year
     summary_model = args.summary_model
 
-    logger.info(
-        "Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!"
-    )
+    logger.info("Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!")
     start_whole = time.time()
 
     model_error_stats = defaultdict(
@@ -106,6 +147,18 @@ def main():
     timestamp_str = time.strftime("%Y%m%d_%H%M%S")
     result_folder = f"./results/{timestamp_str}"
     os.makedirs(result_folder, exist_ok=True)
+
+    # ---------------------------
+    # ADD FILE HANDLER FOR LOGS
+    # ---------------------------
+    log_file_path = os.path.join(result_folder, "game.log")
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s", datefmt="%H:%M:%S")
+    )
+    logger.addHandler(file_handler)
+    logger.info(f"File handler added. Writing logs to {log_file_path}.")
 
     # File paths
     manifesto_path = f"{result_folder}/game_manifesto.txt"
@@ -133,7 +186,21 @@ def main():
             return
         game.power_model_map = dict(zip(powers_order, provided_models))
     else:
-        game.power_model_map = assign_models_to_powers()
+        game.power_model_map = assign_models_to_powers(randomize=True)
+
+    logger.debug("Power model assignments:")
+    for power, model_id in game.power_model_map.items():
+        logger.debug(f"{power} => type={type(model_id)}, value={model_id}")
+
+    # Also, if you prefer to fix the negotiation function:
+    # We could do a one-liner ensuring all model_id are strings:
+    for p in game.power_model_map:
+        if not isinstance(game.power_model_map[p], str):
+            game.power_model_map[p] = str(game.power_model_map[p])
+
+    logger.info("Post-cleanup: Verified all power model IDs are strings.")
+
+    round_counter = 0  # Track number of rounds
 
     while not game.is_game_done:
         phase_start = time.time()
@@ -143,7 +210,7 @@ def main():
         )
 
         # DEBUG: Print the short phase to confirm
-        logger.info(f"DEBUG: current_short_phase is '{game.current_short_phase}'")
+        logger.info(f"INFO: The current short phase is '{game.current_short_phase}'")
 
         # Prevent unbounded simulation based on year
         year_str = current_phase[1:5]
@@ -253,6 +320,14 @@ def main():
         with open(manifesto_path, "a") as f:
             f.write(f"=== {phase_data.name} ===\n{summary_text}\n\n")
 
+        # Increment round counter after processing each phase
+        round_counter += 1
+        
+        # Save every 5 rounds
+        if round_counter % 5 == 0:
+            logger.info(f"Saving checkpoint after round {round_counter}...")
+            save_game_state(game, result_folder, game_file_path, model_error_stats, args, is_final=False)
+
         # Check if we've exceeded the max year
         year_str = current_phase[1:5]
         year_int = int(year_str)
@@ -262,21 +337,10 @@ def main():
 
     # Save final result
     duration = time.time() - start_whole
-    logger.info(f"Game ended after {duration:.2f}s. Saving to final JSON...")
-
-    output_path = game_file_path
-    # If the file already exists, append a timestamp to the filename
-    if os.path.exists(output_path):
-        logger.info("Game file already exists, saving with unique filename.")
-        output_path = f"{output_path}_{time.strftime('%Y%m%d_%H%M%S')}.json"
-    to_saved_game_format(game, output_path=output_path)
-
-    # Dump error stats and power model mapping to the overview file
-    with open(overview_file_path, "w") as overview_file:
-        overview_file.write(json.dumps(model_error_stats) + "\n")
-        overview_file.write(json.dumps(game.power_model_map) + "\n")
-        overview_file.write(json.dumps(vars(args)) + "\n")
-
+    logger.info(f"Game ended after {duration:.2f}s. Saving final state...")
+    
+    save_game_state(game, result_folder, game_file_path, model_error_stats, args, is_final=True)
+    
     logger.info(f"Saved game data, manifesto, and error stats in: {result_folder}")
     logger.info("Done.")
 
