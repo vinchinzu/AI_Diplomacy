@@ -9,15 +9,16 @@ Create a concise summary of the conversations between powers that preserves:
 Organize by relationships (e.g., FRANCE-GERMANY, ENGLAND-RUSSIA), prioritizing the most 
 significant interactions. Include specific territory names mentioned.
 
-In your summary, maintain all of the following critical diplomatic information:
-- Specific agreements about attacking or supporting certain territories
-- Promises of non-aggression and their scope/duration
-- Discussions about supply center control and transfers
-- Stated preferences about other powers (who they want to attack/support)
-- Explicit lies or deceptions that were revealed
-- Coordination of moves between powers
+The summary must reflect the actual diplomatic landscape accurately so players can make informed decisions.
+When summarizing, preserve:
+- Any explicit commitments to support or attack specific territories
+- Agreements about dividing Supply Centers or territories
+- Offers of non-aggression or alliance
+- Signals of intent or warnings about future actions
+- Discussions of shared enemies or mutual threats
+- Any deceptions or misleading statements that could indicate future betrayal
 
-The summary must reflect the actual diplomatic landscape accurately so players can make informed decisions and remember past interactions that might influence current negotiations.
+Be precise about which powers communicated what information to whom, as this impacts trust and future decision-making.
 
 ORIGINAL MESSAGE HISTORY:
 {message_history}

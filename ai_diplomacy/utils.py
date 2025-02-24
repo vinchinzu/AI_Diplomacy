@@ -28,7 +28,7 @@ def assign_models_to_powers(randomize=True):
         "o3-mini",
         "gemini-1.5-flash",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
+        "claude-3-7-sonnet-20250219",
         "gemini-1.5-pro",
         "gpt-4o-mini",
         "claude-3-5-haiku-20241022",
@@ -46,8 +46,10 @@ def assign_models_to_powers(randomize=True):
             model = random.choice(available_models)
             available_models.remove(model)
             result[power] = model
+        logger.debug(f"CONFIG | Generated randomized power-model mapping for {len(POWERS)} powers")
         return result
     else:
+        logger.debug(f"CONFIG | Using fixed power-model mapping with {len(model_list)} models")
         return {
             power: model_list[i] for i, power in enumerate(POWERS)
         }
@@ -63,6 +65,9 @@ def gather_possible_orders(game, power_name):
     result = {}
     for loc in orderable_locs:
         result[loc] = all_possible.get(loc, [])
+    
+    order_count = sum(len(orders) for orders in result.values())
+    logger.debug(f"ORDERS | {power_name} | Found {len(result)} orderable locations with {order_count} total possible orders")
     return result
 
 
@@ -81,8 +86,11 @@ def get_valid_orders(
     If invalid, we append the error feedback to the conversation
     context for the next retry. If still invalid, return fallback.
     """
+    # Track invalid orders for feedback
+    invalid_info = []
 
     # Ask the LLM for orders
+    logger.debug(f"ORDERS | {power_name} | Requesting orders from {client.model_name}")
     orders = client.get_orders(
         game=game,
         board_state=board_state,
@@ -115,12 +123,14 @@ def get_valid_orders(
 
         if validity == 1:
             # All orders are fully valid
+            logger.debug(f"ORDERS | {power_name} | Validated {len(orders)} orders successfully")
             return orders
         else:
             logger.warning(
-                f"[{power_name}] failed to produce a valid order, using fallback."
+                f"ORDERS | {power_name} | Failed validation: '{move}' is invalid"
             )
             model_error_stats[power_name]["order_decoding_errors"] += 1
+            logger.debug(f"ORDERS | {power_name} | Using fallback orders")
             fallback = client.fallback_orders(possible_orders)
             return fallback
 
@@ -355,6 +365,13 @@ def format_possible_orders(game, possible_orders):
         for order, desc in strategic_orders["SUPPORT"]:
             output += f"  {order} {desc}\n"
     
+    # Log order counts for debugging
+    logger.debug(f"ORDERS | Strategic classification: " + 
+                 f"Offensive: {len(strategic_orders['OFFENSIVE'])}, " +
+                 f"Defensive: {len(strategic_orders['DEFENSIVE'])}, " +
+                 f"Tactical: {len(strategic_orders['TACTICAL'])}, " +
+                 f"Support: {len(strategic_orders['SUPPORT'])}")
+    
     return output
 
 
@@ -433,28 +450,42 @@ def format_convoy_paths(game, convoy_paths_possible, power_name):
     # check if convoy_paths_possible is empty dictionary or list or none
     output = ""
     if not convoy_paths_possible:
-        output = "CONVOY POSSIBILITIES: None currently available.\n"
-        return output
+        return "CONVOY POSSIBILITIES: None currently available.\n"
 
-
-    # Get unit ownership for identifying our convoys vs others
+    # Get our units and all other powers' units
     our_units = set(game.get_units(power_name))
     our_unit_locs = {unit[2:5] for unit in our_units}
+    
+    # Get all powers' units and centers for context
+    power_units = {}
+    power_centers = {}
+    for pwr in game.powers:
+        power_units[pwr] = {unit[2:5] for unit in game.get_units(pwr)}
+        power_centers[pwr] = set(game.get_centers(pwr))
 
-    # Group convoys by region and relevance
+    # Organize convoys by strategic relationship
     convoys = {
-        "YOUR ARMY CONVOYS": [],      # Convoys using your armies
-        "YOUR FLEET CONVOYS": [],     # Convoys using your fleets
-        "ENEMY CONVOYS": []           # Convoys you should watch for
+        "YOUR CONVOYS": [],           # Convoys using your armies
+        "CONVOYS YOU CAN ENABLE": [], # Using your fleets to help others
+        "ALLIED OPPORTUNITIES": [],    # Convoys that could help contain common enemies
+        "THREATS TO WATCH": []        # Convoys that could threaten your positions
     }
 
-    # Define major sea regions for better organization
+    # Make sea regions more readable
     sea_regions = {
         'NTH': "North Sea",
         'MAO': "Mid-Atlantic",
         'TYS': "Tyrrhenian Sea",
         'BLA': "Black Sea",
         'SKA': "Skagerrak",
+        'ION': "Ionian Sea",
+        'EAS': "Eastern Mediterranean",
+        'WES': "Western Mediterranean",
+        'BAL': "Baltic Sea",
+        'BOT': "Gulf of Bothnia",
+        'ADR': "Adriatic Sea",
+        'AEG': "Aegean Sea",
+        'ENG': "English Channel"
     }
 
     for start, fleets, destinations in convoy_paths_possible:
@@ -462,37 +493,76 @@ def format_convoy_paths(game, convoy_paths_possible, power_name):
         if not destinations or not fleets:
             continue
 
-        # Determine if this is our army that could be convoyed
-        is_our_army = start in our_unit_locs
+        # Identify the power that owns the army at start (if any)
+        army_owner = None
+        for pwr, locs in power_units.items():
+            if start in locs:
+                army_owner = pwr
+                break
 
-        # Determine if these are our fleets that could convoy
-        is_our_fleet = any(fleet_loc in our_unit_locs for fleet_loc in fleets)
-
+        # Determine if we own any of the required fleets
+        our_fleet_count = sum(1 for fleet_loc in fleets if fleet_loc in our_unit_locs)
+        
         # Format the fleet path nicely
-        fleet_path = " + ".join(f"{sea_regions.get(f, f)}" for f in fleets)
+        fleet_path = " + ".join(sea_regions.get(f, f) for f in fleets)
 
-        # Create a list of destinations with context
         for dest in destinations:
+            # Get destination owner if any
+            dest_owner = None
+            for pwr, centers in power_centers.items():
+                if dest in centers:
+                    dest_owner = pwr
+                    break
+
             # Determine if destination is a supply center
             is_sc = dest in game.map.scs
             sc_note = " (SC)" if is_sc else ""
             
-            # Create the basic convoy description
+            # Create base convoy description
             convoy_desc = f"A {start} -> {dest}{sc_note} via {fleet_path}"
-
-            # Add strategic notes
-            if is_our_army:
-                category = "YOUR ARMY CONVOYS"
-                convoys[category].append(f"{convoy_desc}")
-            elif is_our_fleet:
-                category = "YOUR FLEET CONVOYS"
-                convoys[category].append(f"{convoy_desc} (you provide the convoy)")
+            
+            # Add strategic context based on relationships
+            if army_owner == power_name:
+                category = "YOUR CONVOYS"
+                if dest_owner:
+                    note = f"attack {dest_owner}'s position"
+                else:
+                    note = "gain strategic position" if not is_sc else "capture neutral SC"
+                convoys[category].append(f"{convoy_desc} ({note})")
+                
+            elif our_fleet_count > 0:
+                category = "CONVOYS YOU CAN ENABLE"
+                # Add diplomatic context
+                if army_owner:
+                    if dest_owner == power_name:
+                        note = f"WARNING: {army_owner} could attack your SC"
+                    else:
+                        note = f"help {army_owner} attack {dest_owner or 'neutral'} position"
+                else:
+                    note = "potential diplomatic bargaining chip"
+                convoys[category].append(f"{convoy_desc} ({note})")
+                
             else:
-                category = "ENEMY CONVOYS"
-                convoys[category].append(f"{convoy_desc} (possible enemy convoy)")
+                # Analyze if this convoy represents opportunity or threat
+                if dest_owner == power_name:
+                    category = "THREATS TO WATCH"
+                    note = f"{army_owner or 'potential'} attack on your position"
+                elif army_owner and dest_owner:
+                    category = "ALLIED OPPORTUNITIES"
+                    note = f"{army_owner} could attack {dest_owner} - potential alliance"
+                else:
+                    category = "ALLIED OPPORTUNITIES"
+                    note = "potential diplomatic leverage"
+                
+                convoys[category].append(f"{convoy_desc} ({note})")
 
     # Format output
     output = "CONVOY POSSIBILITIES:\n\n"
+    
+    # Log convoy counts for debugging
+    convoy_counts = {category: len(convoys[category]) for category in convoys}
+    logger.debug(f"CONVOYS | {power_name} | Counts: " + 
+                 ", ".join(f"{category}: {count}" for category, count in convoy_counts.items()))
     
     for category, convoy_list in convoys.items():
         if convoy_list:
@@ -538,7 +608,11 @@ def generate_threat_assessment(game, board_state, power_name):
     output = "THREAT ASSESSMENT:\n"
     if not threats:
         output += "  No immediate threats detected.\n\n"
+        logger.debug(f"THREATS | {power_name} | No immediate threats detected")
         return output
+    
+    # Log threat counts for debugging
+    logger.debug(f"THREATS | {power_name} | Detected {len(threats)} threats from {len(set(t[0] for t in threats))} powers")
     
     for (enemy_pwr, code, targets) in threats:
         output += f"  {enemy_pwr}'s {code} threatens {', '.join(targets)}\n"
@@ -606,4 +680,13 @@ def generate_sc_projection(game, board_state, power_name):
     best_case = len(our_centers) + len(neutral_gains) + len(contestable)
     worst_case = len(our_centers) - len(at_risk)
     output += f"  Next-phase range: {worst_case} to {best_case} centers\n\n"
+    
+    # Log SC projection for debugging
+    logger.debug(f"SC_PROJ | {power_name} | " +
+                 f"Current: {len(our_centers)}, " +
+                 f"Neutral gains: {len(neutral_gains)}, " +
+                 f"Contestable: {len(contestable)}, " + 
+                 f"At risk: {len(at_risk)}, " +
+                 f"Range: {worst_case}-{best_case}")
+    
     return output

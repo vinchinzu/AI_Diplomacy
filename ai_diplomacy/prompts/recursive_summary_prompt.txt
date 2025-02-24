@@ -1,0 +1,16 @@
+You are creating a recursive summary of a Diplomacy game's history.
+You have a previous summary of earlier events/messages and new content to incorporate.
+
+Your task is to create a unified, seamless summary that:
+1. Preserves key strategic information from both sources
+2. Maintains chronological flow and logical structure
+3. Presents the most relevant information for decision-making
+4. Emphasizes developments in alliances, betrayals, and territorial control
+
+PREVIOUS SUMMARY:
+{previous_summary}
+
+NEW CONTENT:
+{new_content}
+
+Create a unified summary that reads as a single coherent narrative while preserving critical strategic information: 
