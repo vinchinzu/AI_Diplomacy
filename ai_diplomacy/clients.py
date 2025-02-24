@@ -19,6 +19,8 @@ from google import genai
 from diplomacy.engine.message import GLOBAL
 
 from .game_history import GameHistory
+from .long_story_short import get_optimized_context
+from .model_loader import load_model_client
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -110,21 +112,33 @@ class BaseModelClient:
         neutral_supply_centers_summary = format_power_units_and_centers(game, 'NEUTRAL', board_state)
 
         # 6) Gather the conversation text
+        raw_conversation_text = ""
         if hasattr(game_history, "get_game_history"):
-            conversation_text = game_history.get_game_history(power_name) or "(No history yet)"
+            raw_conversation_text = game_history.get_game_history(power_name) or "(No history yet)"
         else:
             # Might be a plain string
-            conversation_text = game_history if isinstance(game_history, str) else "(No history yet)"
+            raw_conversation_text = game_history if isinstance(game_history, str) else "(No history yet)"
 
-        history_text = organize_history_by_relationship(conversation_text)
+        # Organize history by relationship
+        organized_history = organize_history_by_relationship(raw_conversation_text)
+
+        # Get optimized context (summaries if needed)
+        optimized_phases, optimized_messages = get_optimized_context(
+            game, 
+            game_history, 
+            power_name, 
+            organized_history
+        )
+
+        # Use the optimized message history
+        history_text = optimized_messages
 
         # 7) Format possible orders
         possible_orders_text = format_possible_orders(game, possible_orders)
 
         # 8) Convoy Paths
         logger.debug(f"convoy_paths_possible is: {game.convoy_paths_possible}")
-        #convoy_paths_text = format_convoy_paths(game, game.convoy_paths_possible)
-        convoy_paths_text = ""
+        convoy_paths_text = format_convoy_paths(game, game.convoy_paths_possible, power_name)
 
         # 9) Threat Assessment
         threat_text = generate_threat_assessment(game, board_state, power_name)
@@ -133,11 +147,15 @@ class BaseModelClient:
         sc_projection_text = generate_sc_projection(game, board_state, power_name)
 
         # 11) Past Phase Summaries
-        if phase_summaries:
+        if optimized_phases:
             # Combine each phase summary for reference
             lines = []
-            for ph, summ in phase_summaries.items():
-                lines.append(f"PHASE {ph}:\n{summ}\n")
+            for ph, summ in optimized_phases.items():
+                # Check if this is a summary entry
+                if ph.startswith("SUMMARY_UNTIL_"):
+                    lines.append(f"HISTORICAL SUMMARY (until {ph[13:]}):\n{summ}\n")
+                else:
+                    lines.append(f"PHASE {ph}:\n{summ}\n")
             historical_summaries = "\n".join(lines)
         else:
             historical_summaries = "(No historical summaries yet)"
@@ -681,29 +699,6 @@ class DeepSeekClient(BaseModelClient):
                 f"[{self.model_name}] Unexpected error in generate_response: {e}"
             )
             return ""
-
-
-##############################################################################
-# 3) Factory to Load Model Client
-##############################################################################
-
-
-def load_model_client(model_id: str, power_name: Optional[str] = None, emptysystem: bool = False) -> BaseModelClient:
-    """
-    Returns the appropriate LLM client for a given model_id string, optionally keyed by power_name.
-    Example usage:
-       client = load_model_client("claude-3-5-sonnet-20241022", power_name="FRANCE", emptysystem=True)
-    """
-    lower_id = model_id.lower()
-    if "claude" in lower_id:
-        return ClaudeClient(model_id, power_name, emptysystem=emptysystem)
-    elif "gemini" in lower_id:
-        return GeminiClient(model_id, power_name, emptysystem=emptysystem)
-    elif "deepseek" in lower_id:
-        return DeepSeekClient(model_id, power_name, emptysystem=emptysystem)
-    else:
-        # Default to OpenAI
-        return OpenAIClient(model_id, power_name)
 
 
 ##############################################################################

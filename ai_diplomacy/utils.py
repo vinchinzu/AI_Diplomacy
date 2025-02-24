@@ -29,7 +29,7 @@ def assign_models_to_powers(randomize=True):
         "gemini-1.5-flash",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite-preview-02-05",
-        "gpt-3.5-turbo",
+        "gemini-1.5-pro",
         "gpt-4o-mini",
         "claude-3-5-haiku-20241022",
     ]
@@ -201,6 +201,7 @@ def format_power_units_and_centers(game, power_name, board_state):
     Also includes information about neutral centers.
     """
     # Add neutral centers info
+    output = ""
     if power_name == "NEUTRAL":
         all_controlled = set()
         for centers in board_state["centers"].values():
@@ -424,146 +425,83 @@ def generate_order_description(game, order, order_type, power_centers, supply_ce
     return ""
 
 
-def format_convoy_paths(game, convoy_paths_possible):
+def format_convoy_paths(game, convoy_paths_possible, power_name):
     """
-    Format convoy paths in a strategically meaningful way,
-    grouping by region and highlighting strategic objectives.
-    
-    Input format: 
-    [('START', {required fleets}, {possible destinations}), ...]
-    
-    Example tuple: ('ALB', {'ION'}, {'GRE', 'APU', 'NAP', 'TUN'})
+    Format convoy paths by region and ownership, focusing on strategically relevant convoys.
+    Input format: List of (start_loc, {required_fleets}, {possible_destinations})
     """
+    # check if convoy_paths_possible is empty dictionary or list or none
+    output = ""
     if not convoy_paths_possible:
-        return "CONVOY POSSIBILITIES: None currently available.\n"
-    
-    # Group convoy paths by general region
-    regional_paths = {
-        "MEDITERRANEAN": [],  # Central/Southern paths
-        "NORTH SEA": [],      # Northern European paths  
-        "BLACK SEA": [],      # Eastern paths
-        "COMPLEX": []         # Multi-fleet convoys
+        output = "CONVOY POSSIBILITIES: None currently available.\n"
+        return output
+
+
+    # Get unit ownership for identifying our convoys vs others
+    our_units = set(game.get_units(power_name))
+    our_unit_locs = {unit[2:5] for unit in our_units}
+
+    # Group convoys by region and relevance
+    convoys = {
+        "YOUR ARMY CONVOYS": [],      # Convoys using your armies
+        "YOUR FLEET CONVOYS": [],     # Convoys using your fleets
+        "ENEMY CONVOYS": []           # Convoys you should watch for
     }
-    
-    # Supply centers for context
-    supply_centers = set(game.map.scs)
-    power_centers = {power_name: set(centers) for power_name, centers in game.get_centers().items()}
-    neutral_centers = supply_centers - set().union(*power_centers.values())
-    
-    # Current power for context
-    current_power = game.role if hasattr(game, 'role') else None
-    
-    # Map locations to regions
-    mediterranean_waters = {"ION", "TYS", "WES", "ADR", "AEG", "EAS", "LYO"}
-    north_sea_waters = {"NTH", "NWG", "ENG", "IRI", "SKA", "HEL", "BAL", "BOT", "BAR"}
-    black_sea_waters = {"BLA"}
-    
-    # Process each convoy path
-    for path in convoy_paths_possible:
-        start_loc, required_fleets, destinations = path
-        
-        # Skip if no destinations
-        if not destinations:
+
+    # Define major sea regions for better organization
+    sea_regions = {
+        'NTH': "North Sea",
+        'MAO': "Mid-Atlantic",
+        'TYS': "Tyrrhenian Sea",
+        'BLA': "Black Sea",
+        'SKA': "Skagerrak",
+    }
+
+    for start, fleets, destinations in convoy_paths_possible:
+        # Skip if no destinations or fleets
+        if not destinations or not fleets:
             continue
-        
-        # Determine region
-        region = "COMPLEX"  # Default
-        if len(required_fleets) == 1:
-            fleet_loc = next(iter(required_fleets))
-            if fleet_loc in mediterranean_waters:
-                region = "MEDITERRANEAN"
-            elif fleet_loc in north_sea_waters:
-                region = "NORTH SEA"
-            elif fleet_loc in black_sea_waters:
-                region = "BLACK SEA"
-        
-        # Add strategic context for each destination
+
+        # Determine if this is our army that could be convoyed
+        is_our_army = start in our_unit_locs
+
+        # Determine if these are our fleets that could convoy
+        is_our_fleet = any(fleet_loc in our_unit_locs for fleet_loc in fleets)
+
+        # Format the fleet path nicely
+        fleet_path = " + ".join(f"{sea_regions.get(f, f)}" for f in fleets)
+
+        # Create a list of destinations with context
         for dest in destinations:
-            strategic_note = _get_convoy_destination_context(
-                game, start_loc, dest, supply_centers, power_centers, 
-                neutral_centers, current_power
-            )
+            # Determine if destination is a supply center
+            is_sc = dest in game.map.scs
+            sc_note = " (SC)" if is_sc else ""
             
-            # Format info about required fleets
-            if len(required_fleets) == 1:
-                fleet_info = f"via {next(iter(required_fleets))}"
+            # Create the basic convoy description
+            convoy_desc = f"A {start} -> {dest}{sc_note} via {fleet_path}"
+
+            # Add strategic notes
+            if is_our_army:
+                category = "YOUR ARMY CONVOYS"
+                convoys[category].append(f"{convoy_desc}")
+            elif is_our_fleet:
+                category = "YOUR FLEET CONVOYS"
+                convoys[category].append(f"{convoy_desc} (you provide the convoy)")
             else:
-                fleet_info = f"via {' + '.join(required_fleets)}"
-                
-            # Create entry
-            entry = (start_loc, dest, fleet_info, strategic_note)
-            regional_paths[region].append(entry)
-    
-    # Format the output
+                category = "ENEMY CONVOYS"
+                convoys[category].append(f"{convoy_desc} (possible enemy convoy)")
+
+    # Format output
     output = "CONVOY POSSIBILITIES:\n\n"
     
-    # Show each region
-    for region, paths in regional_paths.items():
-        if not paths:
-            continue
-            
-        output += f"{region} CONVOYS:\n"
-        
-        # Group by start location
-        by_start = {}
-        for start, dest, fleet_info, note in paths:
-            by_start.setdefault(start, []).append((dest, fleet_info, note))
-        
-        # Format each start location's options
-        for start, destinations in by_start.items():
-            start_name = game.map.loc_name.get(start, start)
-            output += f"  From {start_name} ({start}):\n"
-            
-            for dest, fleet_info, note in destinations:
-                dest_name = game.map.loc_name.get(dest, dest)
-                output += f"    A {start} - {dest} {fleet_info} ({note})\n"
-            
+    for category, convoy_list in convoys.items():
+        if convoy_list:
+            output += f"{category}:\n"
+            for convoy in sorted(convoy_list):
+                output += f"  {convoy}\n"
             output += "\n"
-    
+
     return output
-
-
-def _get_convoy_destination_context(game, start, dest, supply_centers, power_centers, neutral_centers, current_power):
-    """Generate strategic context for convoy destinations"""
-    start_base = start[:3]  # Remove any coast specification
-    dest_base = dest[:3]  # Remove any coast specification
-    
-    # Check if destination is a supply center
-    if dest_base in supply_centers:
-        if dest_base in neutral_centers:
-            return f"capture neutral SC {game.map.loc_name.get(dest_base, dest_base)}"
-        
-        for power, centers in power_centers.items():
-            if dest_base in centers:
-                if power == current_power:
-                    return f"reinforce your SC {game.map.loc_name.get(dest_base, dest_base)}"
-                else:
-                    return f"attack {power}'s SC {game.map.loc_name.get(dest_base, dest_base)}"
-    
-    # Check for strategic positioning
-    # Major strategic locations that aren't supply centers
-    strategic_positions = {
-        "RUH": "central position threatening multiple German SCs",
-        "BUR": "central position threatening both France and Germany",
-        "UKR": "strategic buffer between Russia and Austria-Hungary",
-        "BOH": "central position for attacking Austria",
-        "TYR": "mountain pass to either Venice or Munich",
-        "PIE": "bridgehead into both France and Italy",
-        "SYR": "buffer protecting Turkey's eastern flank"
-    }
-    
-    if dest_base in strategic_positions:
-        return strategic_positions[dest_base]
-    
-    # By default, highlight the unconventional movement
-    src_type = game.map.area_type.get(start_base, "")
-    dest_type = game.map.area_type.get(dest_base, "")
-    
-    if src_type == "COAST" and dest_type == "COAST":
-        return f"bypass land barriers for surprise positioning"
-    
-    return f"strategic repositioning"
-
 
 def generate_threat_assessment(game, board_state, power_name):
     """

@@ -13,7 +13,7 @@ os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"  # ERROR level only
 from diplomacy import Game
 from diplomacy.utils.export import to_saved_game_format
 
-from ai_diplomacy.clients import load_model_client
+from ai_diplomacy.model_loader import load_model_client
 from ai_diplomacy.utils import (
     get_valid_orders,
     gather_possible_orders,
@@ -21,6 +21,7 @@ from ai_diplomacy.utils import (
 )
 from ai_diplomacy.negotiations import conduct_negotiations
 from ai_diplomacy.game_history import GameHistory
+from ai_diplomacy.long_story_short import configure_context_manager
 
 dotenv.load_dotenv()
 
@@ -78,7 +79,7 @@ def parse_arguments():
         ),
     )
     return parser.parse_args()
-
+ 
 
 def save_game_state(game, result_folder, game_file_path, model_error_stats, args, is_final=False):
     """
@@ -118,6 +119,12 @@ def save_game_state(game, result_folder, game_file_path, model_error_stats, args
 
 def main():
     args = parse_arguments()
+    # Configure the context manager with the same summary model
+    configure_context_manager(
+        phase_threshold=10000,
+        message_threshold=10000,
+        summary_model=args.summary_model
+    )
     max_year = args.max_year
     summary_model = args.summary_model
 
