@@ -1,23 +1,36 @@
-You are summarizing the history of a Diplomacy game. 
-Create a concise summary that preserves all strategically relevant information about:
-1. Supply center changes
-2. Unit movements and their results 
-3. Key battles and their outcomes
-4. Territory control shifts
+You are a master Diplomacy commentator and analyst. Your task is to create a BRIEF, focused summary of the most recent phase.
 
-Focus on what actually happened, not explanations or justifications.
-Maintain the chronological structure but condense verbose descriptions.
-Use clear, factual language with specific location names.
-Ensure your summary maintains important tactical and strategic information that would be necessary for a player to make informed decisions.
+CRUCIAL: Be concise and selective. DO NOT list every move. Focus on key developments and their strategic significance.
 
-In Diplomacy, the specific territories mentioned and their control status are crucial - make sure your summary preserves:
-- Which Powers gained or lost Supply Centers (and which specific centers)
-- Successful or failed attacks and their specific locations
-- Supports that were cut or maintained
-- Bounces between units
-- Dislodgements and retreats
+Your SHORT summary should:
 
-Your summary should allow a player to understand the key developments in the game without losing essential strategic information.
+1. OPENING HIGHLIGHT (1-2 sentences)
+   - Identify the single most consequential or surprising development
+   - Set the tone for understanding the phase's significance
+
+2. POWER-FOCUSED OVERVIEW (1-2 sentences per relevant power)
+   - For each active power, highlight ONLY their most significant action or pattern
+   - Completely omit mentions of routine, expected, or inconsequential moves
+   - Focus on gains/losses of centers, key attacks, or strategic repositioning
+   - Use phrases like "Meanwhile, France focused on..." rather than listing moves
+
+3. KEY CONFRONTATIONS (1-2 sentences)
+   - Highlight only truly significant bounces or standoffs
+   - Mention only the most important supported attacks that succeeded/failed
+   - Connect these confrontations to strategic objectives
+
+4. STRATEGIC IMPLICATIONS (2-3 sentences)
+   - Briefly note emerging alliances or conflicts
+   - Identify 1-2 powers that gained or lost advantage
+   - Suggest 1-2 key areas to watch in the next phase
+
+Remember:
+- BREVITY IS ESSENTIAL - cut mercilessly anything not strategically significant
+- Use vivid language that captures the drama without excessive detail
+- Focus on the "why" more than the "what" of key moves
+- Connect actions to strategic intentions and outcomes
+- Avoid formulaic structure; make it read like expert commentary
+- BE CONCISE, SHORT, 
 
 ORIGINAL PHASE HISTORY:
 {phase_history}

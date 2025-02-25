@@ -22,10 +22,88 @@ from .game_history import GameHistory
 from .long_story_short import get_optimized_context
 from .model_loader import load_model_client
 
-# set logger back to just info
+# Configure logger with a more useful format
 logger = logging.getLogger("client")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(level=logging.DEBUG)
+
+# Function to configure logging options
+def configure_logging(
+    log_full_prompts=True, 
+    log_full_responses=True,
+    suppress_connection_logs=True,
+    log_level=logging.INFO
+):
+    """
+    Configure the logging system for AI Diplomacy
+    
+    Parameters:
+    - log_full_prompts: Whether to log the full prompts sent to models
+    - log_full_responses: Whether to log the full responses from models
+    - suppress_connection_logs: Whether to suppress HTTP connection logs
+    - log_level: The overall logging level for the application
+    """
+    # Configure root logger
+    logging.getLogger().setLevel(log_level)
+    
+    # Set client logger level
+    logger.setLevel(log_level)
+    
+    # Configure specific loggers based on parameters
+    if suppress_connection_logs:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("anthropic").setLevel(logging.WARNING)
+        logging.getLogger("openai").setLevel(logging.WARNING)
+    
+    # Set module-level configuration
+    global SHOULD_LOG_FULL_PROMPTS, SHOULD_LOG_FULL_RESPONSES
+    SHOULD_LOG_FULL_PROMPTS = log_full_prompts
+    SHOULD_LOG_FULL_RESPONSES = log_full_responses
+    
+    logger.info(f"Logging configured: full_prompts={log_full_prompts}, full_responses={log_full_responses}, level={logging.getLevelName(log_level)}")
+
+# Initialize defaults
+SHOULD_LOG_FULL_PROMPTS = True
+SHOULD_LOG_FULL_RESPONSES = True
+
+# Helper function for truncating long outputs in logs
+def _truncate_text(text, max_length=500):
+    """Truncate text for logging purposes with indicator of original length"""
+    if not text or len(text) <= max_length:
+        return text
+    return f"{text[:max_length]}... [truncated, total length: {len(text)} chars]"
+
+# Helper function to log full model responses
+def _log_full_response(model_type, model_name, power_name, response):
+    """Logs the full model response at INFO level"""
+    if not response or not SHOULD_LOG_FULL_RESPONSES:
+        return
+    
+    border = "=" * 80
+    logger.info(f"\nMODEL RESPONSE | {model_type} | {model_name} | {power_name or 'Unknown'}\n{border}")
+    logger.info(f"{response}")
+    logger.info(f"{border}\n")
+
+# Helper function to log prompt details    
+def _log_prompt_details(model_type, model_name, power_name, prompt, system_prompt=None):
+    """Logs the prompt details at INFO level"""
+    if not prompt or not SHOULD_LOG_FULL_PROMPTS:
+        return
+    
+    border = "=" * 80
+    total_tokens = len(prompt.split())
+    
+    if system_prompt:
+        system_tokens = len(system_prompt.split())
+        logger.info(f"\nPROMPT | {model_type} | {model_name} | {power_name or 'Unknown'} | ~{total_tokens} tokens (user) + ~{system_tokens} tokens (system)\n{border}")
+        logger.debug(f"System prompt: {_truncate_text(system_prompt)}")
+    else:
+        logger.info(f"\nPROMPT | {model_type} | {model_name} | {power_name or 'Unknown'} | ~{total_tokens} tokens\n{border}")
+    
+    logger.debug(f"User prompt: {_truncate_text(prompt)}")
+    logger.info(f"{border}\n")
 
 load_dotenv()
 
@@ -53,7 +131,7 @@ class BaseModelClient:
                 try:
                     self.system_prompt = load_prompt(f"{self.power_name.lower()}_system_prompt.txt")
                 except FileNotFoundError:
-                    logger.warning(f"No specific system prompt found for {self.power_name}; using default.")
+                    logger.warning(f"CONFIG | {self.model_name} | No specific system prompt for {self.power_name}, using default")
                     self.system_prompt = load_prompt("system_prompt.txt")
             else:
                 self.system_prompt = load_prompt("system_prompt.txt")
@@ -137,7 +215,7 @@ class BaseModelClient:
         possible_orders_text = format_possible_orders(game, possible_orders)
 
         # 8) Convoy Paths
-        logger.debug(f"convoy_paths_possible is: {game.convoy_paths_possible}")
+        logger.debug(f"CONTEXT | {self.model_name} | {power_name} | Convoy paths: {len(game.convoy_paths_possible) if game.convoy_paths_possible else 0} available")
         convoy_paths_text = format_convoy_paths(game, game.convoy_paths_possible, power_name)
 
         # 9) Threat Assessment
@@ -233,8 +311,8 @@ class BaseModelClient:
 
         try:
             raw_response = self.generate_response(prompt)
-            logger.info(
-                f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
+            logger.debug(
+                f"ORDERS | {self.model_name} | {power_name} | Raw response: {_truncate_text(raw_response)}"
             )
 
             # Attempt to parse the final "orders" from the LLM
@@ -242,7 +320,7 @@ class BaseModelClient:
 
             if not move_list:
                 logger.warning(
-                    f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback."
+                    f"PARSE_ERROR | {self.model_name} | {power_name} | Failed to extract moves, using fallback"
                 )
                 if model_error_stats is not None:
                     # forcibly convert sets to string
@@ -255,7 +333,7 @@ class BaseModelClient:
             return validated_moves
 
         except Exception as e:
-            logger.error(f"[{self.model_name}] LLM error for {power_name}: {e}")
+            logger.error(f"LLM_ERROR | {self.model_name} | {power_name} | {str(e)}")
             if model_error_stats is not None:
                 # forcibly convert sets to string
                 model_name_for_stats = str(self.model_name)
@@ -280,7 +358,7 @@ class BaseModelClient:
         if not matches:
             # Some LLMs might not put the colon or might have triple backtick fences.
             logger.debug(
-                f"[{self.model_name}] Regex parse #1 failed for {power_name}. Trying alternative patterns."
+                f"PARSE | {self.model_name} | {power_name} | Regex #1 failed, trying alternative patterns"
             )
 
             # 1b) Check for inline JSON after "PARSABLE OUTPUT"
@@ -289,16 +367,17 @@ class BaseModelClient:
 
         if not matches:
             logger.debug(
-                f"[{self.model_name}] Regex parse #2 failed for {power_name}. Trying triple-backtick code fences."
+                f"PARSE | {self.model_name} | {power_name} | Regex #2 failed, trying triple-backtick code fences"
             )
 
         # 2) If still no match, check for triple-backtick code fences containing JSON
         if not matches:
             code_fence_pattern = r"```json\s*(\{.*?\})\s*```"
             matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
+
             if matches:
                 logger.debug(
-                    f"[{self.model_name}] Found triple-backtick JSON block for {power_name}."
+                    f"PARSE | {self.model_name} | {power_name} | Found triple-backtick JSON block"
                 )
 
         # 3) Attempt to parse JSON if we found anything
@@ -310,7 +389,7 @@ class BaseModelClient:
             if captured.startswith("{{") and captured.endswith("}}"):
                 # remove ONE leading '{' and ONE trailing '}'
                 # so {{ "orders": [...] }} becomes { "orders": [...] }
-                logger.debug(f"[{self.model_name}] Detected double braces for {power_name}, trimming extra braces.")
+                logger.debug(f"PARSE | {self.model_name} | {power_name} | Detected double braces, trimming extra braces")
                 # strip exactly one brace pair
                 trimmed = captured[1:-1].strip()
                 json_text = trimmed
@@ -323,7 +402,7 @@ class BaseModelClient:
 
         if not json_text:
             logger.debug(
-                f"[{self.model_name}] No JSON text found in LLM response for {power_name}."
+                f"PARSE | {self.model_name} | {power_name} | No JSON text found in response"
             )
             return None
 
@@ -333,7 +412,7 @@ class BaseModelClient:
             return data.get("orders", None)
         except json.JSONDecodeError as e:
             logger.warning(
-                f"[{self.model_name}] JSON decode failed for {power_name}: {e}. Trying bracket fallback."
+                f"PARSE | {self.model_name} | {power_name} | JSON decode failed: {str(e)[:100]}. Trying bracket fallback"
             )
 
         # 3b) Attempt bracket fallback: we look for the substring after "orders"
@@ -346,10 +425,11 @@ class BaseModelClient:
                 raw_list_str = "[" + bracket_match.group(1).strip() + "]"
                 moves = ast.literal_eval(raw_list_str)
                 if isinstance(moves, list):
+                    logger.debug(f"PARSE | {self.model_name} | {power_name} | Bracket fallback successful")
                     return moves
             except Exception as e2:
                 logger.warning(
-                    f"[{self.model_name}] Bracket fallback parse also failed for {power_name}: {e2}"
+                    f"PARSE | {self.model_name} | {power_name} | Bracket fallback failed: {str(e2)[:100]}"
                 )
 
         # If all attempts failed
@@ -361,12 +441,12 @@ class BaseModelClient:
         """
         Filter out invalid moves, fill missing with HOLD, else fallback.
         """
-        logger.debug(f"[{self.model_name}] Proposed LLM moves: {moves}")
+        logger.debug(f"VALIDATE | {self.model_name} | Validating {len(moves)} proposed moves")
         validated = []
         used_locs = set()
 
         if not isinstance(moves, list):
-            logger.debug(f"[{self.model_name}] Moves not a list, fallback.")
+            logger.debug(f"VALIDATE | {self.model_name} | Moves not a list type, using fallback")
             return self.fallback_orders(possible_orders)
 
         for move in moves:
@@ -378,7 +458,7 @@ class BaseModelClient:
                 if len(parts) >= 2:
                     used_locs.add(parts[1][:3])
             else:
-                logger.debug(f"[{self.model_name}] Invalid move from LLM: {move_str}")
+                logger.debug(f"VALIDATE | {self.model_name} | Invalid move: {move_str}")
 
         # Fill missing with hold
         for loc, orders_list in possible_orders.items():
@@ -389,10 +469,10 @@ class BaseModelClient:
                 )
 
         if not validated:
-            logger.warning(f"[{self.model_name}] All moves invalid, fallback.")
+            logger.warning(f"VALIDATE | {self.model_name} | All moves invalid, using fallback")
             return self.fallback_orders(possible_orders)
 
-        logger.debug(f"[{self.model_name}] Validated moves: {validated}")
+        logger.debug(f"VALIDATE | {self.model_name} | Final valid moves: {len(validated)}")
         return validated
 
     def fallback_orders(self, possible_orders: Dict[str, List[str]]) -> List[str]:
@@ -461,7 +541,7 @@ class BaseModelClient:
                 if not json_matches:
                     # try normal
                     logger.debug(
-                        f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying double braces."
+                        f"CHAT | {self.model_name} | {power_name} | No JSON block, trying double braces"
                     )
                     json_matches = re.findall(
                         r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
@@ -470,7 +550,7 @@ class BaseModelClient:
                 if not json_matches:
                     # try backtick fences
                     logger.debug(
-                        f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying backtick fences."
+                        f"CHAT | {self.model_name} | {power_name} | Trying backtick fences"
                     )
                     json_matches = re.findall(
                         r"```json\n(.*?)\n```", raw_response, re.DOTALL
@@ -487,23 +567,24 @@ class BaseModelClient:
                         message_type = message_data.get("message_type", "global")
                         content = message_data.get("content", "").strip()
                         recipient = message_data.get("recipient", GLOBAL)
+                        recipient = recipient.upper()
 
                         # Validate recipient if private message
                         if message_type == "private" and recipient not in active_powers:
                             logger.warning(
-                                f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
+                                f"CHAT | {self.model_name} | {power_name} | Invalid recipient '{recipient}', defaulting to GLOBAL"
                             )
                             recipient = GLOBAL
 
                         # For private messages, ensure recipient is specified
                         if message_type == "private" and recipient == GLOBAL:
                             logger.warning(
-                                "Private message without recipient specified, defaulting to GLOBAL"
+                                f"CHAT | {self.model_name} | {power_name} | Private message without recipient, defaulting to GLOBAL"
                             )
 
                         # Log for debugging
                         logger.info(
-                            f"Power {power_name} sends {message_type} message to {recipient}"
+                            f"CHAT | {self.model_name} | {power_name} | Sending {message_type} message to {recipient}"
                         )
 
                         # Keep local record for building future conversation context
@@ -519,7 +600,7 @@ class BaseModelClient:
                         message = None
 
             except AttributeError:
-                logger.error("Error parsing raw response")
+                logger.error(f"CHAT | {self.model_name} | {power_name} | Error parsing raw response")
 
         # Deduplicate messages
         messages = list(set([json.dumps(m) for m in messages]))
@@ -543,29 +624,34 @@ class OpenAIClient(BaseModelClient):
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
     def generate_response(self, prompt: str, empty_system: bool = False) -> str:
-        # Updated to new API format
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            logger.debug(f"API | OpenAI | {self.model_name} | Sending request")
+            
+            _log_prompt_details("OpenAI", self.model_name, self.power_name, prompt, system_content)
+            
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": self.system_prompt if not empty_system else ""},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ],
             )
-            if not response or not hasattr(response, "choices") or not response.choices:
-                logger.warning(
-                    f"[{self.model_name}] Empty or invalid result in generate_response. Returning empty."
-                )
+            if not response or not response.choices:
+                logger.warning(f"API | OpenAI | {self.model_name} | Empty or invalid response")
                 return ""
-            return response.choices[0].message.content.strip()
+            logger.debug(f"API | OpenAI | {self.model_name} | Received response of length {len(response.choices[0].message.content)}")
+            content = response.choices[0].message.content.strip()
+            _log_full_response("OpenAI", self.model_name, self.power_name, content)
+            return content
         except json.JSONDecodeError as json_err:
             logger.error(
-                f"[{self.model_name}] JSON decoding failed in generate_response: {json_err}"
+                f"API | OpenAI | {self.model_name} | JSON decode error: {str(json_err)[:100]}"
             )
             return ""
         except Exception as e:
             logger.error(
-                f"[{self.model_name}] Unexpected error in generate_response: {e}"
+                f"API | OpenAI | {self.model_name} | Error: {str(e)[:150]}"
             )
             return ""
 
@@ -582,27 +668,38 @@ class ClaudeClient(BaseModelClient):
     def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         # Updated Claude messages format
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            
+            _log_prompt_details("Claude", self.model_name, self.power_name, prompt, system_content)
+            
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=2000,
-                system=self.system_prompt if not empty_system else "", 
+                system=system_content,
                 messages=[{"role": "user", "content": prompt}],
             )
-            if not response.content:
-                logger.warning(
-                    f"[{self.model_name}] Empty content in Claude generate_response. Returning empty."
-                )
+            if not response or not response.content:
+                logger.warning(f"API | Claude | {self.model_name} | Empty or invalid response")
                 return ""
-            return response.content[0].text.strip() if response.content else ""
-        except json.JSONDecodeError as json_err:
-            logger.error(
-                f"[{self.model_name}] JSON decoding failed in generate_response: {json_err}"
-            )
-            return ""
+            logger.debug(f"API | Claude | {self.model_name} | Received response of length {len(response.content)}")
+            
+            # Handle the new response format which might be a list of TextBlock objects
+            if isinstance(response.content, list):
+                # Extract text from each TextBlock
+                content = ""
+                for block in response.content:
+                    if hasattr(block, 'text'):
+                        content += block.text
+                    elif isinstance(block, dict) and 'text' in block:
+                        content += block['text']
+                logger.debug(f"API | Claude | {self.model_name} | Extracted text from {len(response.content)} TextBlocks")
+            else:
+                content = response.content
+                
+            _log_full_response("Claude", self.model_name, self.power_name, content)
+            return content
         except Exception as e:
-            logger.error(
-                f"[{self.model_name}] Unexpected error in generate_response: {e}"
-            )
+            logger.error(f"API | Claude | {self.model_name} | Error: {str(e)[:150]}")
             return ""
 
 
@@ -616,24 +713,24 @@ class GeminiClient(BaseModelClient):
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     def generate_response(self, prompt: str, empty_system: bool = False) -> str:
-        if empty_system:
-            full_prompt = prompt
-        else:
-            full_prompt = self.system_prompt + prompt
-
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            logger.debug(f"API | Gemini | {self.model_name} | Sending request")
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=full_prompt,
+                contents=system_content + prompt,
             )
             if not response or not response.text:
                 logger.warning(
-                    f"[{self.model_name}] Empty Gemini generate_response. Returning empty."
+                    f"API | Gemini | {self.model_name} | Empty response"
                 )
                 return ""
-            return response.text.strip()
+            logger.debug(f"API | Gemini | {self.model_name} | Received response of length {len(response.text)}")
+            content = response.text.strip()
+            _log_full_response("Gemini", self.model_name, self.power_name, content)
+            return content
         except Exception as e:
-            logger.error(f"[{self.model_name}] Error in Gemini generate_response: {e}")
+            logger.error(f"API | Gemini | {self.model_name} | Error: {str(e)[:150]}")
             return ""
 
 
@@ -651,27 +748,34 @@ class DeepSeekClient(BaseModelClient):
 
     def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            logger.debug(f"API | DeepSeek | {self.model_name} | Sending request")
+            
+            _log_prompt_details("DeepSeek", self.model_name, self.power_name, prompt, system_content)
+            
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": self.system_prompt if not empty_system else ""},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ],
                 stream=False,
             )
-            logger.debug(f"[{self.model_name}] Raw DeepSeek response:\n{response}")
+            logger.debug(f"API | DeepSeek | {self.model_name} | Received response")
 
             if not response or not response.choices:
                 logger.warning(
-                    f"[{self.model_name}] No valid response in generate_response."
+                    f"API | DeepSeek | {self.model_name} | No valid response"
                 )
                 return ""
 
             content = response.choices[0].message.content.strip()
             if not content:
-                logger.warning(f"[{self.model_name}] DeepSeek returned empty content.")
+                logger.warning(f"API | DeepSeek | {self.model_name} | Empty content")
                 return ""
-
+            
+            _log_full_response("DeepSeek", self.model_name, self.power_name, content)
+            
             try:
                 json_response = json.loads(content)
                 required_fields = ["message_type", "content"]
@@ -679,13 +783,13 @@ class DeepSeekClient(BaseModelClient):
                     required_fields.append("recipient")
                 if not all(field in json_response for field in required_fields):
                     logger.error(
-                        f"[{self.model_name}] Missing required fields in response: {content}"
+                        f"API | DeepSeek | {self.model_name} | Missing fields: {_truncate_text(content, 100)}"
                     )
                     return ""
                 return content
             except JSONDecodeError:
                 logger.error(
-                    f"[{self.model_name}] Response is not valid JSON: {content}"
+                    f"API | DeepSeek | {self.model_name} | Invalid JSON: {_truncate_text(content, 100)}"
                 )
                 content = content.replace("'", '"')
                 try:
@@ -696,7 +800,7 @@ class DeepSeekClient(BaseModelClient):
 
         except Exception as e:
             logger.error(
-                f"[{self.model_name}] Unexpected error in generate_response: {e}"
+                f"API | DeepSeek | {self.model_name} | Error: {str(e)[:150]}"
             )
             return ""
 

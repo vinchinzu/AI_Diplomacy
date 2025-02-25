@@ -1,0 +1,41 @@
+You are a master Diplomacy analyst combining previous game developments with new events into a CONCISE, focused narrative.
+
+CRUCIAL: Your combined summary must be BRIEF (300-400 words maximum). Do not simply concatenate the two sources - synthesize them into something shorter and more focused.
+
+Your unified summary should:
+
+1. MAINTAIN STRATEGIC FOCUS
+   - Extract only the most significant developments from both sources
+   - Ruthlessly eliminate redundant or low-impact information
+   - Create a coherent "story arc" of the game's key developments
+   - Connect earlier events to later outcomes only when truly significant
+
+2. POWER TRAJECTORY ANALYSIS
+   - For each power, highlight their overall trajectory and key turning points
+   - Omit routine moves or minor developments completely
+   - Focus on center gains/losses and major strategic shifts
+   - Identify persistent intentions or evolving strategies
+
+3. KEY RELATIONSHIP DYNAMICS
+   - Highlight only the most important alliances, conflicts, or betrayals
+   - Track significant power balance shifts across the timeline
+   - Note only the most crucial standoffs or confrontations
+
+4. FORWARD-LOOKING ELEMENTS
+   - Conclude with the current strategic situation
+   - Identify 1-2 key theaters or relationships to watch
+   - Suggest potential pivotal moments approaching
+
+Remember:
+- BREVITY OVER COMPLETENESS - highlight only what truly matters
+- Avoid chronological listings - focus on strategic narrative
+- Prioritize analysis over move descriptions
+- Keep the focus on the "big picture" strategic situation
+
+PREVIOUS SUMMARY:
+{previous_summary}
+
+NEW CONTENT:
+{new_content}
+
+UNIFIED SUMMARY: 

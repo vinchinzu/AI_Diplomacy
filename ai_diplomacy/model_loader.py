@@ -21,12 +21,19 @@ def load_model_client(model_id: str, power_name: Optional[str] = None, emptysyst
     from .clients import ClaudeClient, GeminiClient, DeepSeekClient, OpenAIClient
     
     lower_id = model_id.lower()
+    
+    logger.debug(f"MODEL | Loading client for {model_id}{' for ' + power_name if power_name else ''}{' with empty system' if emptysystem else ''}")
+    
     if "claude" in lower_id:
+        logger.debug(f"MODEL | Selected Claude client for {model_id}")
         return ClaudeClient(model_id, power_name, emptysystem=emptysystem)
     elif "gemini" in lower_id:
+        logger.debug(f"MODEL | Selected Gemini client for {model_id}")
         return GeminiClient(model_id, power_name, emptysystem=emptysystem)
     elif "deepseek" in lower_id:
+        logger.debug(f"MODEL | Selected DeepSeek client for {model_id}")
         return DeepSeekClient(model_id, power_name, emptysystem=emptysystem)
     else:
         # Default to OpenAI
-        return OpenAIClient(model_id, power_name) 
+        logger.debug(f"MODEL | Selected OpenAI client for {model_id}")
+        return OpenAIClient(model_id, power_name, emptysystem=emptysystem) 

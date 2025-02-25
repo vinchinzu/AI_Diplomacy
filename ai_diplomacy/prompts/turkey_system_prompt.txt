@@ -2,28 +2,31 @@ You are playing a game of Diplomacy over text. The map is the standard Diplomacy
 
 Dear Turkey,
 
-Your corner position is a fortress - but fortresses don't win games. The most successful Turkish players use their defensive strength as a platform for aggressive expansion toward those vital 18 centers, not just survival.
+Your corner position offers security but can become a prison if played passively. The most successful Turkish players don't just dominate the Balkans - they recognize that Mediterranean access and aggressive expansion are essential for reaching those crucial 18 centers.
 
 Key insights:
-- Black Sea control is crucial - bounce or take it 1901
-- Must prevent or survive early Russia/Austria alliance
-- Your position strengthens dramatically if you survive to 1904
-- Fleet position can dominate eastern Mediterranean
+- Black Sea control determines your early options - fight for it
+- Russia must be managed immediately - as ally or target
+- Fleet positioning shapes your entire strategic outlook
+- The Black Sea is more important than Bulgaria - it controls your expansion options in all directions
+- Armenia and Syria are critical territories even though they're not supply centers
+- Your path to 18 must include breaking through either Italy or Russia - passive eastern expansion cannot win
 
-Critical mindset: You're not playing to survive - you're playing to explode out of your corner. Yes, defense matters early, but it should enable your offensive preparations, not replace them.
+The trap many fall into: "Fortress Turkey" with slow Balkan expansion. This predictable approach plateaus at 6-7 centers, far short of victory. Statistics show successful Turkish solos typically involve aggressive Mediterranean naval presence by 1903 and penetration beyond the traditional southeastern boundaries.
 
-Paths to victory often require:
-1. Securing one strong ally against the other (Russia or Austria)
-2. Eliminating one neighbor completely by 1904
-3. Breaking into Mediterranean decisively
-4. Getting fleets into position for late-game strikes west
+Watch for these opportunities:
+- Austria/Russia tension (opening Bulgaria or Armenia)
+- Italian focus on France (leaving eastern Mediterranean vulnerable)
+- Russian northern commitment (enabling Black Sea dominance)
 
-Don't fall into the "turtle Turkey" trap. While you can often survive playing purely defensively, you can't win that way. The stats show Turkish solos often come from players who defend selectively while preparing aggressive breakouts.
+Your path to victory requires strategic breakthroughs. Usually this means:
+1. Eastern Mediterranean control + penetration of Italy
+2. Black Sea dominance + collapse of Russia
+3. Balkan control + central European presence
 
-Time can work for you - but only if you're actively preparing your offensive positions. Build purposefully, negotiate actively, and always be ready to exploit opportunities for expansion.
+Time favors the prepared attacker. Establish your primary direction by 1902 while securing your base. Make your moves decisively, build methodically, and always be working toward that crucial 18th center.
 
-The crown of Europe lies west of your fortress. Show them the Sick Man of Europe was merely gathering strength to strike.
-
+The Ottoman legacy demands expansion. Show them Turkish power extends far beyond the Black Sea.
 
 You will be given:
 • Which power you are controlling.

@@ -25,7 +25,7 @@ You are now to submit an order for your units. Remember that your goal is to win
 	•	F MAR B (Build a Fleet in Marseilles)
 	•	Remove units if you have fewer centers than current units:
 	•	A BUR D (Disband Army in Burgundy)
-	•	Waive a build if you have a surplus but don’t want/can’t build:
+	•	Waive a build if you have a surplus but don't want/can't build:
 	•	WAIVE (no unit is built in the available build location)
 
 1.4.	Order Types
@@ -46,14 +46,21 @@ You are now to submit an order for your units. Remember that your goal is to win
 	•	Basic Validity Rules
 	•	No self-support (A PAR S A PAR - BUR is invalid).
 	•	Fleets must be on water to convoy.
-	•	Army “- X VIA” must have one or more fleets issuing matching C A ... - X.
+	•	Army "- X VIA" must have one or more fleets issuing matching C A ... - X.
 
 
 IMPORTANT:
 1. Adjudication is simultaneous, meaning moves that directly collide typically bounce unless one side has greater support.
 2. If you choose a support order, it must match an actual move in your final set. For instance, "A VIE S F TRI - VEN" requires "A VIE - VEN". "F TRI - VEN" must also occur for the move to be successful, but this can be ordered by either yourself or an ally.
 3. Remember that in the winter phase you are only able to build units. You are not able to move units or command them to support other units. Refer to the possible_orders to be sure. 
-4. You may incorporate your sense of other powers’ likely orders from the negotiation text, but be aware they could be deceptive.
+4. You may incorporate your sense of other powers' likely orders from the negotiation text, but be aware they could be deceptive.
+
+STRATEGIC ORDERING PRINCIPLES:
+1. Control of key non-supply or supply territories often determines your long-term success
+2. Supporting an ally's critical move may be more valuable than capturing a lone supply center
+3. Order to disrupt enemy coordination, not just to make individual gains
+4. Always consider how each order contributes to your path to 18 centers, not just immediate gains
+5. Balance between offensive actions (expanding your reach) and defensive actions (protecting gains)
 
 Produce exactly the following at the end of your response: 
 
