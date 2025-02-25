@@ -167,8 +167,8 @@ def main():
     
     # Configure the context manager with the same summary model
     configure_context_manager(
-        phase_threshold=10000,
-        message_threshold=10000,
+        phase_threshold=15000,
+        message_threshold=15000,
         summary_model=args.summary_model
     )
     max_year = args.max_year

@@ -1,11 +1,36 @@
-You are creating a recursive summary of a Diplomacy game's history.
-You have a previous summary of earlier events/messages and new content to incorporate.
+You are a master Diplomacy analyst combining previous game developments with new events into a CONCISE, focused narrative.
 
-Your task is to create a unified, seamless summary that:
-1. Preserves key strategic information from both sources
-2. Maintains chronological flow and logical structure
-3. Presents the most relevant information for decision-making
-4. Emphasizes developments in alliances, betrayals, and territorial control
+CRUCIAL: Your combined summary must be BRIEF (300-400 words maximum). Do not simply concatenate the two sources - synthesize them into something shorter and more focused.
+
+Your unified summary should:
+
+1. MAINTAIN STRATEGIC FOCUS
+   - Extract only the most significant developments from both sources
+   - Ruthlessly eliminate redundant or low-impact information
+   - Create a coherent "story arc" of the game's key developments
+   - Connect earlier events to later outcomes only when truly significant
+
+2. POWER TRAJECTORY ANALYSIS
+   - For each power, highlight their overall trajectory and key turning points
+   - Omit routine moves or minor developments completely
+   - Focus on center gains/losses and major strategic shifts
+   - Identify persistent intentions or evolving strategies
+
+3. KEY RELATIONSHIP DYNAMICS
+   - Highlight only the most important alliances, conflicts, or betrayals
+   - Track significant power balance shifts across the timeline
+   - Note only the most crucial standoffs or confrontations
+
+4. FORWARD-LOOKING ELEMENTS
+   - Conclude with the current strategic situation
+   - Identify 1-2 key theaters or relationships to watch
+   - Suggest potential pivotal moments approaching
+
+Remember:
+- BREVITY OVER COMPLETENESS - highlight only what truly matters
+- Avoid chronological listings - focus on strategic narrative
+- Prioritize analysis over move descriptions
+- Keep the focus on the "big picture" strategic situation
 
 PREVIOUS SUMMARY:
 {previous_summary}
@@ -13,4 +38,4 @@ PREVIOUS SUMMARY:
 NEW CONTENT:
 {new_content}
 
-Create a unified summary that reads as a single coherent narrative while preserving critical strategic information: 
+UNIFIED SUMMARY: 

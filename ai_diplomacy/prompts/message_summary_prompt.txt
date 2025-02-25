@@ -1,26 +1,40 @@
-You are summarizing diplomatic messages in a Diplomacy game.
-Create a concise summary of the conversations between powers that preserves:
-1. Agreements and alliances formed
-2. Betrayals and broken promises
-3. Strategic intentions revealed 
-4. Explicit threats or support offered
-5. Key relationships between each power
+You are a master Diplomacy intelligence analyst creating a BRIEF, focused summary of diplomatic communications.
 
-Organize by relationships (e.g., FRANCE-GERMANY, ENGLAND-RUSSIA), prioritizing the most 
-significant interactions. Include specific territory names mentioned.
+CRUCIAL: Be concise (200-300 words maximum). Focus only on communications with genuine strategic significance.
 
-The summary must reflect the actual diplomatic landscape accurately so players can make informed decisions.
-When summarizing, preserve:
-- Any explicit commitments to support or attack specific territories
-- Agreements about dividing Supply Centers or territories
-- Offers of non-aggression or alliance
-- Signals of intent or warnings about future actions
-- Discussions of shared enemies or mutual threats
-- Any deceptions or misleading statements that could indicate future betrayal
+Your diplomatic intelligence briefing should:
 
-Be precise about which powers communicated what information to whom, as this impacts trust and future decision-making.
+1. KEY RELATIONSHIP HIGHLIGHTS (1-2 sentences per important relationship)
+   - Identify only the most significant power relationships with actual diplomatic activity
+   - Skip mentioning powers with minimal or routine diplomatic exchanges
+   - Focus on relationship dynamics: cooperative, hostile, deceptive, or evolving
+   - Prioritize relationships with clear strategic impact on the game
+
+2. CRITICAL AGREEMENTS (2-3 sentences total)
+   - Highlight only the most important or surprising agreements
+   - Focus on firm commitments rather than vague discussions
+   - Note agreements that impact multiple powers or key regions
+   - Identify any conditions or timelines attached to major agreements
+
+3. STRATEGIC INTELLIGENCE (2-3 sentences total)
+   - Identify one or two key pieces of strategic information revealed
+   - Note any significant deceptions or potential betrayals
+   - Highlight discrepancies between diplomatic words and actual game moves
+   - Focus on intelligence that provides actual strategic advantage
+
+4. DIPLOMATIC OUTLOOK (1-2 sentences)
+   - Identify the most vulnerable or strengthening relationship
+   - Note one emerging alliance or conflict to watch
+   - Suggest which power(s) are in the strongest or weakest diplomatic position
+
+Remember:
+- BREVITY IS ESSENTIAL - include only what actually matters diplomatically
+- Focus on quality of insights rather than quantity of information
+- Prioritize firm commitments over general discussions
+- Highlight actual or potential betrayals over routine diplomacy
+- Make it read like a focused intelligence briefing, not a transcript summary
 
 ORIGINAL MESSAGE HISTORY:
 {message_history}
 
-SUMMARY:
+DIPLOMATIC INTELLIGENCE BRIEFING:

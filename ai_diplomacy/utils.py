@@ -23,12 +23,14 @@ def assign_models_to_powers(randomize=True):
         "gpt-4o",
         "gpt-4o-mini",
         "claude-3-5-haiku-20241022",
+        "claude-3-7-sonnet-20250219",
+
     ]"""
     model_list = [
         "o3-mini",
         "gemini-1.5-flash",
         "gemini-2.0-flash",
-        "claude-3-7-sonnet-20250219",
+        "gemini-2.0-flash-lite-preview-02-05",
         "gemini-1.5-pro",
         "gpt-4o-mini",
         "claude-3-5-haiku-20241022",

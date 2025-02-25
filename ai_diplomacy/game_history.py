@@ -102,48 +102,106 @@ class GameHistory:
 
     def get_game_history(self, power_name: str, num_prev_phases: int = 5) -> str:
         if not self.phases:
-            return ""
+            logger.debug(f"HISTORY | {power_name} | No phases recorded yet")
+            return "COMMUNICATION HISTORY:\n\n(No game phases recorded yet)"
 
         phases_to_report = self.phases[-num_prev_phases:]
-        game_history_str = ""
+        game_history_str = "COMMUNICATION HISTORY:\n"
+
+        # Count messages for this power across all available phases, not just recent
+        # This helps ensure we're not misreporting "no communication" when there is historical context
+        all_phases_message_count = 0
+        for phase in self.phases:
+            global_msgs = phase.get_global_messages()
+            private_msgs = phase.get_private_messages(power_name)
+            if global_msgs or private_msgs:
+                all_phases_message_count += 1
+                
+        # Count messages just in recent phases for display decisions
+        recent_phases_message_count = 0
+        for phase in phases_to_report:
+            global_msgs = phase.get_global_messages()
+            private_msgs = phase.get_private_messages(power_name)
+            if global_msgs or private_msgs:
+                recent_phases_message_count += 1
+        
+        logger.debug(f"HISTORY | {power_name} | Found {all_phases_message_count} phases with messages (total), {recent_phases_message_count} in recent phases")
+
+        # If there are no messages at all in any phase, provide a clear indicator
+        if all_phases_message_count == 0:
+            game_history_str += f"\n{power_name} has not engaged in any diplomatic exchanges yet.\n"
+            logger.debug(f"HISTORY | {power_name} | No diplomatic exchanges found in any phase")
+            return game_history_str
+        
+        # If there are messages in history but none in recent phases, note this
+        if all_phases_message_count > 0 and recent_phases_message_count == 0:
+            game_history_str += f"\n{power_name} has messages in earlier phases, but none in the last {len(phases_to_report)} phases.\n"
+            logger.debug(f"HISTORY | {power_name} | Has historical messages but none in recent phases")
+        
+        # Track if we have content for debugging
+        has_content = False
 
         # Iterate through phases
         for phase in phases_to_report:
-            game_history_str += f"\n{phase.name}:\n"
+            phase_has_content = False
+            phase_str = f"\n{phase.name}:\n"
 
             # Add GLOBAL section for this phase
             global_msgs = phase.get_global_messages()
             if global_msgs:
-                game_history_str += "\nGLOBAL:\n"
-                game_history_str += global_msgs
+                phase_str += "\nGLOBAL:\n"
+                phase_str += global_msgs
+                phase_has_content = True
+                has_content = True
 
             # Add PRIVATE section for this phase
             private_msgs = phase.get_private_messages(power_name)
             if private_msgs:
-                game_history_str += "\nPRIVATE:\n"
+                phase_str += "\nPRIVATE:\n"
                 for other_power, messages in private_msgs.items():
-                    game_history_str += f" {other_power}:\n\n"
-                    game_history_str += messages + "\n"
+                    phase_str += f" {other_power}:\n\n"
+                    phase_str += messages + "\n"
+                phase_has_content = True
+                has_content = True
+            
+            # Only add ORDERS section if we have any content in this phase
+            # or if it's the most recent phase (always include latest orders)
+            is_latest_phase = phase == phases_to_report[-1]
+            
+            if phase_has_content or is_latest_phase:
+                # Add ORDERS section for this phase
+                if phase.orders_by_power:
+                    phase_str += "\nORDERS:\n"
+                    for power, orders in phase.orders_by_power.items():
+                        phase_str += f"{power}:\n"
+                        if not orders:
+                            phase_str += "  (No orders)\n\n"
+                            continue
+                        
+                        results = phase.results_by_power.get(power, [])
+                        for i, order in enumerate(orders):
+                            if (
+                                i < len(results)
+                                and results[i]
+                                and not all(r == "" for r in results[i])
+                            ):
+                                # Join multiple results with commas
+                                result_str = f" ({', '.join(results[i])})"
+                            else:
+                                result_str = " (successful)"
+                            phase_str += f"  {order}{result_str}\n"
+                        phase_str += "\n"
+                
+                # Only add this phase to the history if it has content or is the latest phase
+                game_history_str += phase_str
+                game_history_str += "-" * 50 + "\n"  # Add separator between phases
 
-            # Add ORDERS section for this phase
-            if phase.orders_by_power:
-                game_history_str += "\nORDERS:\n"
-                for power, orders in phase.orders_by_power.items():
-                    game_history_str += f"{power}:\n"
-                    results = phase.results_by_power.get(power, [])
-                    for i, order in enumerate(orders):
-                        if (
-                            i < len(results)
-                            and results[i]
-                            and not all(r == "" for r in results[i])
-                        ):
-                            # Join multiple results with commas
-                            result_str = f" ({', '.join(results[i])})"
-                        else:
-                            result_str = " (successful)"
-                        game_history_str += f"  {order}{result_str}\n"
-                    game_history_str += "\n"
-
-            game_history_str += "-" * 50 + "\n"  # Add separator between phases
-
+        # If we have no content at all, provide a meaningful message
+        if not has_content:
+            logger.warning(f"HISTORY | {power_name} | No message content found for display, providing fallback message")
+            # Don't overwrite previous content - append this explanation
+            game_history_str += f"\nNote: No diplomatic communications to display for {power_name} in recent phases.\n"
+        else:
+            logger.debug(f"HISTORY | {power_name} | Generated history with content from {recent_phases_message_count} phases")
+        
         return game_history_str

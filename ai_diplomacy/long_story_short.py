@@ -10,13 +10,32 @@ logger = logging.getLogger(__name__)
 # Import model client for summarization
 from ai_diplomacy.model_loader import load_model_client
 
-# Token counting approximation
-def count_tokens(text: str) -> int:
-    """
-    Approximates token count for text. This is a rough estimate.
-    OpenAI tokens are ~4 chars per token on average.
-    """
-    return len(text) // 4  # Simple approximation
+# Token counting 
+try:
+    import tiktoken
+    ENCODER = tiktoken.get_encoding("cl100k_base")  # OpenAI's encoding for models like GPT-4/3.5
+    
+    def count_tokens(text: str) -> int:
+        """
+        Accurately counts tokens for text using tiktoken.
+        Falls back to approximation if tiktoken fails.
+        """
+        try:
+            return len(ENCODER.encode(text))
+        except Exception as e:
+            # Fallback to approximation
+            logger.warning(f"CONTEXT | TOKEN COUNT | Error using tiktoken ({str(e)}), falling back to approximation")
+            return len(text) // 4  # Simple approximation
+except ImportError:
+    # Fallback for environments without tiktoken
+    logger.warning("CONTEXT | TOKEN COUNT | tiktoken not available, using approximate token counting")
+    
+    def count_tokens(text: str) -> int:
+        """
+        Approximates token count for text. This is a rough estimate.
+        OpenAI tokens are ~4 chars per token on average.
+        """
+        return len(text) // 4  # Simple approximation
 
 
 class ContextManager:
@@ -27,8 +46,8 @@ class ContextManager:
     """
     def __init__(
         self, 
-        phase_token_threshold: int = 5000,
-        message_token_threshold: int = 5000,
+        phase_token_threshold: int = 15000,
+        message_token_threshold: int = 15000,
         summary_model: str = "o3-mini"
     ):
         self.phase_token_threshold = phase_token_threshold
@@ -46,9 +65,11 @@ class ContextManager:
         }
         
         # Cooldown period (seconds) - don't summarize more frequently than this
-        self.summary_cooldown = 300  # 5 minutes
+        # For a game, 30 seconds is more appropriate than 5 minutes
+        self.summary_cooldown = 30  # 30 seconds
         
-        logger.debug(f"CONTEXT | Initialized manager with thresholds: phase={phase_token_threshold}, message={message_token_threshold}")
+        logger.debug(f"CONTEXT | Initialized manager with thresholds: phase={phase_token_threshold}, message={message_token_threshold} tokens")
+        logger.debug(f"CONTEXT | Summary cooldown set to {self.summary_cooldown} seconds")
     
     def get_power_state(self, power_name):
         """
@@ -153,27 +174,47 @@ Create a unified summary that reads as a single coherent narrative while preserv
         # Load appropriate prompt
         phase_prompt, message_prompt, recursive_prompt = self.load_summarization_prompts()
         
+        # Calculate token counts for logging
+        new_content_tokens = count_tokens(new_content)
+        prev_summary_tokens = count_tokens(previous_summary or "")
+        
         if prompt_type == "phase" and not previous_summary:
             # Initial phase summary
             prompt = phase_prompt.replace("{phase_history}", new_content)
-            logger.debug(f"CONTEXT | SUMMARY | Creating initial phase summary with {len(new_content)} characters")
+            logger.debug(f"CONTEXT | SUMMARY | Creating initial phase summary with {new_content_tokens} tokens")
+            logger.info(f"CONTEXT | SUMMARY | Initializing phase summary for {len(new_content.split())} words / {new_content_tokens} tokens of game history")
         elif prompt_type == "message" and not previous_summary:
             # Initial message summary
             prompt = message_prompt.replace("{message_history}", new_content)
-            logger.debug(f"CONTEXT | SUMMARY | Creating initial message summary for {power_name} with {len(new_content)} characters")
+            logger.debug(f"CONTEXT | SUMMARY | Creating initial message summary for {power_name} with {new_content_tokens} tokens")
+            logger.info(f"CONTEXT | SUMMARY | Initializing message summary for {power_name} ({new_content_tokens} tokens)")
         else:
             # Recursive summary (or phase/message with previous summary)
             prompt = recursive_prompt
             prompt = prompt.replace("{previous_summary}", previous_summary or "(No previous summary)")
             prompt = prompt.replace("{new_content}", new_content)
+            
             logger.debug(f"CONTEXT | SUMMARY | Creating recursive {prompt_type} summary for {power_name or 'game'}")
-            logger.debug(f"CONTEXT | SUMMARY | Previous summary: {len(previous_summary or '')} chars, New content: {len(new_content)} chars")
+            logger.debug(f"CONTEXT | SUMMARY | Previous summary: {prev_summary_tokens} tokens, New content: {new_content_tokens} tokens")
+            logger.info(f"CONTEXT | SUMMARY | Recursive summarization: combining {prev_summary_tokens} tokens of previous summary with {new_content_tokens} tokens of new content")
         
         # Get the summary using the LLM
         summarization_client = load_model_client(self.summary_model, power_name=power_name, emptysystem=True)
         summary = summarization_client.generate_response(prompt)
         
-        logger.debug(f"CONTEXT | Generated {prompt_type} recursive summary ({len(summary)} chars)")
+        summary_tokens = count_tokens(summary)
+        logger.debug(f"CONTEXT | Generated {prompt_type} recursive summary ({summary_tokens} tokens)")
+        
+        # Log the compression ratio
+        if new_content_tokens > 0:
+            if previous_summary:
+                total_input_tokens = prev_summary_tokens + new_content_tokens
+                compression_ratio = summary_tokens / total_input_tokens
+                logger.info(f"CONTEXT | SUMMARY | Compression: {total_input_tokens} → {summary_tokens} tokens ({compression_ratio:.2f}x)")
+            else:
+                compression_ratio = summary_tokens / new_content_tokens
+                logger.info(f"CONTEXT | SUMMARY | Compression: {new_content_tokens} → {summary_tokens} tokens ({compression_ratio:.2f}x)")
+        
         return summary
     
     def should_summarize_phases(self, phase_summaries: Dict[str, str]) -> bool:
@@ -183,14 +224,20 @@ Create a unified summary that reads as a single coherent narrative while preserv
         """
         # Check if we're in cooldown period
         current_time = time.time()
-        if current_time - self.phase_summary_state['last_summary_time'] < self.summary_cooldown:
-            logger.debug("CONTEXT | Phase summarization skipped (in cooldown period)")
+        time_since_last = current_time - self.phase_summary_state['last_summary_time']
+        
+        if time_since_last < self.summary_cooldown:
+            logger.debug(f"CONTEXT | Phase summarization skipped (in cooldown period, {time_since_last:.0f}s < {self.summary_cooldown}s)")
             return False
             
-        # Get unsummarized phase content
+        # Get unsummarized phase content - exclude existing summary entries
         unsummarized_phase_names = [p for p in phase_summaries.keys() 
                                   if p not in self.phase_summary_state['summarized_phases']
                                   and not p.startswith("SUMMARY_UNTIL_")]
+        
+        if not unsummarized_phase_names:
+            logger.debug("CONTEXT | No new phases to summarize")
+            return False
         
         # If we have a previous summary, count its tokens
         base_token_count = 0
@@ -205,9 +252,13 @@ Create a unified summary that reads as a single coherent narrative while preserv
         total_token_count = base_token_count + unsummarized_token_count
         should_summarize = total_token_count > self.phase_token_threshold
         
+        # Log decision details
         if should_summarize:
-            logger.debug(f"CONTEXT | Phase token count ({total_token_count}) exceeds threshold ({self.phase_token_threshold}), will summarize")
+            logger.debug(f"CONTEXT | Phase token count ({total_token_count} tokens) exceeds threshold ({self.phase_token_threshold} tokens), will summarize")
             logger.debug(f"CONTEXT | Phase breakdown: {base_token_count} tokens from previous summary + {unsummarized_token_count} tokens from {len(unsummarized_phase_names)} new phases")
+            logger.info(f"CONTEXT | THRESHOLD EXCEEDED | Phase summaries need summarization ({total_token_count} > {self.phase_token_threshold} tokens)")
+        else:
+            logger.debug(f"CONTEXT | Phase token count ({total_token_count} tokens) below threshold ({self.phase_token_threshold} tokens), no summarization needed")
         
         return should_summarize
     
@@ -221,8 +272,15 @@ Create a unified summary that reads as a single coherent narrative while preserv
         
         # Check if we're in cooldown period
         current_time = time.time()
-        if current_time - power_state['last_summary_time'] < self.summary_cooldown:
-            logger.debug(f"CONTEXT | Message summarization for {power_name} skipped (in cooldown period)")
+        time_since_last = current_time - power_state['last_summary_time']
+        
+        if time_since_last < self.summary_cooldown:
+            logger.debug(f"CONTEXT | Message summarization for {power_name} skipped (in cooldown period, {time_since_last:.0f}s < {self.summary_cooldown}s)")
+            return False
+            
+        # Don't summarize empty history
+        if not message_history or message_history == "(No history yet)" or message_history.strip() == "":
+            logger.debug(f"CONTEXT | Message summarization for {power_name} skipped (empty history)")
             return False
             
         # If we have a previous summary, count its tokens
@@ -233,13 +291,27 @@ Create a unified summary that reads as a single coherent narrative while preserv
         # Count tokens in the new content
         new_token_count = count_tokens(message_history)
         
-        # Check if total exceeds threshold
+        # Skip if this is just a template with no actual content
+        if "COMMUNICATION HISTORY:" in message_history and new_token_count < 200:
+            # Check if it's just headers with no actual content
+            content_lines = [line for line in message_history.split("\n") 
+                            if line.strip() and not line.strip().endswith(":") 
+                            and "has not engaged" not in line]
+            if len(content_lines) <= 2:
+                logger.debug(f"CONTEXT | Message summarization for {power_name} skipped (template with no significant content)")
+                return False
+        
+        # Check if total exceeds threshold 
         total_token_count = base_token_count + new_token_count
         should_summarize = total_token_count > self.message_token_threshold
         
+        # Log decision details
         if should_summarize:
-            logger.debug(f"CONTEXT | Message token count for {power_name} ({total_token_count}) exceeds threshold ({self.message_token_threshold}), will summarize")
+            logger.debug(f"CONTEXT | Message token count for {power_name} ({total_token_count} tokens) exceeds threshold ({self.message_token_threshold} tokens), will summarize")
             logger.debug(f"CONTEXT | Message breakdown for {power_name}: {base_token_count} tokens from previous summary + {new_token_count} tokens from new messages")
+            logger.info(f"CONTEXT | THRESHOLD EXCEEDED | Messages for {power_name} need summarization ({total_token_count} > {self.message_token_threshold} tokens)")
+        else:
+            logger.debug(f"CONTEXT | Message token count for {power_name} ({total_token_count} tokens) below threshold ({self.message_token_threshold} tokens), no summarization needed")
             
         return should_summarize
     
@@ -259,7 +331,7 @@ Create a unified summary that reads as a single coherent narrative while preserv
         # Sort phases chronologically 
         sorted_phases = sorted(phase_summaries.keys())
         
-        # Get unsummarized phase names
+        # Get unsummarized phase names, excluding existing summary entries
         unsummarized_phase_names = [p for p in sorted_phases 
                                   if p not in self.phase_summary_state['summarized_phases']
                                   and not p.startswith("SUMMARY_UNTIL_")]
@@ -269,24 +341,33 @@ Create a unified summary that reads as a single coherent narrative while preserv
         phases_to_summarize = [p for p in unsummarized_phase_names if p not in recent_phases]
         
         if not phases_to_summarize:
-            logger.debug("CONTEXT | No new phases to summarize")
+            logger.debug("CONTEXT | PHASE SUMMARIZATION | No new phases to summarize")
             return phase_summaries  # Nothing to summarize
+        
+        # Log which phases we're summarizing vs keeping intact
+        logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Phases to summarize: {phases_to_summarize}")
+        logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Recent phases to keep intact: {recent_phases}")
         
         # Text to summarize: previous summary + new phases to summarize
         previous_summary = self.phase_summary_state['last_summary'] or ""
         
+        # Generate content only from phases being summarized (not already in a summary)
         new_content = ""
         for phase in phases_to_summarize:
             new_content += f"PHASE {phase}:\n{phase_summaries[phase]}\n\n"
         
-        # Log before summarization
+        # Log before summarization - include token counts for clarity
+        new_content_tokens = count_tokens(new_content)
+        prev_summary_tokens = count_tokens(previous_summary) if previous_summary else 0
+        
         logger.info(f"CONTEXT | PHASE SUMMARIZATION | Starting recursive summarization for {len(phases_to_summarize)} phases")
         logger.info(f"CONTEXT | PHASE SUMMARIZATION | Phases being summarized: {', '.join(phases_to_summarize)}")
+        logger.info(f"CONTEXT | PHASE SUMMARIZATION | Content size: {new_content_tokens} tokens from new phases + {prev_summary_tokens} tokens from previous summary")
         
         # Generate recursive summary
         if previous_summary:
             # We have a previous summary, do recursive summarization
-            logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Performing recursive summarization with previous summary ({len(previous_summary)} chars)")
+            logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Performing recursive summarization with previous summary ({prev_summary_tokens} tokens)")
             summary = self.generate_recursive_summary(
                 previous_summary, 
                 new_content,
@@ -295,7 +376,7 @@ Create a unified summary that reads as a single coherent narrative while preserv
             )
         else:
             # No previous summary, do initial summarization
-            logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Performing initial phase summarization ({len(new_content)} chars)")
+            logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Performing initial phase summarization ({new_content_tokens} tokens)")
             summary = self.generate_recursive_summary(
                 None,
                 new_content,
@@ -305,24 +386,63 @@ Create a unified summary that reads as a single coherent narrative while preserv
         
         # Update phase summary state
         self.phase_summary_state['last_summary'] = summary
-        self.phase_summary_state['summarized_phases'].extend(phases_to_summarize)
+        # Track which phases have been summarized
+        for phase in phases_to_summarize:
+            if phase not in self.phase_summary_state['summarized_phases']:
+                self.phase_summary_state['summarized_phases'].append(phase)
+        
+        # Log the current summarization state
+        logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Updated summarized_phases list: now contains {len(self.phase_summary_state['summarized_phases'])} phases")
         
         # Create new dictionary with summarized older phases and intact recent phases
         result = {}
         
-        # Add the summary as a special entry
+        # Include any existing summaries that were in the input but aren't being updated
+        for key in phase_summaries:
+            if key.startswith("SUMMARY_UNTIL_") and key not in result:
+                # Only keep summaries that don't overlap with our new summary
+                if not any(phase in key for phase in phases_to_summarize):
+                    result[key] = phase_summaries[key]
+                    logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Preserved existing summary: {key}")
+        
+        # Add the new summary as a special entry
         if phases_to_summarize:
             last_summarized = max(phases_to_summarize)
             summary_key = f"SUMMARY_UNTIL_{last_summarized}"
             result[summary_key] = summary
-            logger.info(f"CONTEXT | PHASE SUMMARIZATION | Created summary key '{summary_key}' ({len(summary)} chars)")
+            summary_tokens = count_tokens(summary)
+            logger.info(f"CONTEXT | PHASE SUMMARIZATION | Created summary key '{summary_key}' ({summary_tokens} tokens)")
         
         # Add the recent phases as-is
         for phase in recent_phases:
             result[phase] = phase_summaries[phase]
+            logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Preserved recent phase: {phase}")
         
-        logger.info(f"CONTEXT | PHASE SUMMARIZATION | Recursively condensed {len(phase_summaries)} phase entries to {len(result)}")
-        logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Result contains summary + {len(recent_phases)} intact recent phases")
+        # Add any regular phases that weren't summarized and weren't in recent_phases
+        for phase in phase_summaries:
+            if (not phase.startswith("SUMMARY_UNTIL_") and 
+                phase not in phases_to_summarize and 
+                phase not in recent_phases and
+                phase not in result):
+                result[phase] = phase_summaries[phase]
+                logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Preserved other phase: {phase}")
+        
+        # Log summarization metrics
+        orig_phases = len([p for p in phase_summaries if not p.startswith("SUMMARY_UNTIL_")])
+        new_phases = len([p for p in result if not p.startswith("SUMMARY_UNTIL_")])
+        orig_summaries = len([p for p in phase_summaries if p.startswith("SUMMARY_UNTIL_")])
+        new_summaries = len([p for p in result if p.startswith("SUMMARY_UNTIL_")])
+        
+        logger.info(f"CONTEXT | PHASE SUMMARIZATION | Original: {orig_phases} phases + {orig_summaries} summaries → New: {new_phases} phases + {new_summaries} summaries")
+        logger.debug(f"CONTEXT | PHASE SUMMARIZATION | Result contains {new_summaries} summaries + {len(recent_phases)} intact recent phases + {new_phases - len(recent_phases)} other preserved phases")
+        
+        # Log token sizes for before and after
+        orig_tokens = sum(count_tokens(v) for v in phase_summaries.values())
+        new_tokens = sum(count_tokens(v) for v in result.values())
+        token_reduction = (orig_tokens - new_tokens) / orig_tokens * 100 if orig_tokens > 0 else 0
+        
+        logger.info(f"CONTEXT | PHASE SUMMARIZATION | Token reduction: {orig_tokens} → {new_tokens} tokens ({token_reduction:.1f}% reduction)")
+        
         return result
     
     def summarize_message_history(
@@ -342,26 +462,53 @@ Create a unified summary that reads as a single coherent narrative while preserv
         Returns:
             Updated message history with recursive summarization applied
         """
-        if not self.should_summarize_messages(message_history, power_name):
-            return message_history
-            
         # Get power-specific state
         power_state = self.get_power_state(power_name)
         
+        # Check if we need to summarize
+        if not self.should_summarize_messages(message_history, power_name):
+            # If we have a previous summary but are below threshold, we can still use the previous summary
+            if power_state['last_message_summary'] and message_history:
+                prev_summary = power_state['last_message_summary']
+                prev_summary_tokens = count_tokens(prev_summary)
+                message_tokens = count_tokens(message_history)
+                
+                # Only use previous summary if it's significantly smaller than the raw history
+                if prev_summary_tokens < (message_tokens * 0.7):  # 30% reduction threshold
+                    logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | {power_name} | Using existing summary ({prev_summary_tokens} tokens) instead of raw history ({message_tokens} tokens)")
+                    return prev_summary
+            
+            logger.debug(f"CONTEXT | MESSAGE SUMMARIZATION | No summarization needed for {power_name}, using original history")
+            return message_history
+        
+        # Defensive check for empty content
+        if not message_history or message_history.strip() == "":
+            logger.warning(f"CONTEXT | MESSAGE SUMMARIZATION | Empty message history for {power_name}")
+            return "(No message history available)"
+            
         # Mark summarization time
         power_state['last_summary_time'] = time.time()
         
-        # Log before summarization
+        # Log before summarization with token counts
+        message_tokens = count_tokens(message_history)
         logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | Starting message summarization for {power_name}")
-        logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | Current message history size: {len(message_history)} chars")
+        logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | Current message history size: {message_tokens} tokens")
         
         # Generate recursive summary
         previous_summary = power_state['last_message_summary']
+        has_previous_summary = previous_summary is not None
         
-        if previous_summary:
-            # We have a previous summary, do recursive summarization
+        # Create a meaningful ID for this message batch for tracking
+        current_time = int(time.time())
+        message_batch_id = f"{power_name}_msg_{current_time}"
+        if message_batch_id not in power_state['summarized_messages']:
+            power_state['summarized_messages'].add(message_batch_id)
+        
+        # Log summarization approach
+        if has_previous_summary:
+            prev_summary_tokens = count_tokens(previous_summary)
+            logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | {power_name} | Recursive approach: combining {prev_summary_tokens} token summary with {message_tokens} tokens of new messages")
             logger.debug(f"CONTEXT | MESSAGE SUMMARIZATION | Performing recursive message summarization for {power_name}")
-            logger.debug(f"CONTEXT | MESSAGE SUMMARIZATION | Previous summary: {len(previous_summary)} chars, New messages: {len(message_history)} chars")
             
             summary = self.generate_recursive_summary(
                 previous_summary,
@@ -371,7 +518,8 @@ Create a unified summary that reads as a single coherent narrative while preserv
             )
         else:
             # No previous summary, do initial summarization
-            logger.debug(f"CONTEXT | MESSAGE SUMMARIZATION | Performing initial message summarization for {power_name} ({len(message_history)} chars)")
+            logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | {power_name} | Initial summarization: {message_tokens} tokens of messages")
+            logger.debug(f"CONTEXT | MESSAGE SUMMARIZATION | Performing initial message summarization for {power_name} ({message_tokens} tokens)")
             
             summary = self.generate_recursive_summary(
                 None,
@@ -383,15 +531,26 @@ Create a unified summary that reads as a single coherent narrative while preserv
         # Update power state
         power_state['last_message_summary'] = summary
         
+        # Protect against empty summaries
+        if not summary or summary.strip() == "":
+            logger.warning(f"CONTEXT | MESSAGE SUMMARIZATION | Empty summary generated for {power_name}, using fallback")
+            summary = f"(Summary for {power_name}: No significant diplomatic interactions)"
+            power_state['last_message_summary'] = summary
+        
         # Track metrics for logging
-        message_tokens = count_tokens(message_history)
         summary_tokens = count_tokens(summary)
         reduction = 100 - (summary_tokens * 100 / message_tokens) if message_tokens > 0 else 0
         
         logger.info(f"CONTEXT | MESSAGE SUMMARIZATION | Completed for {power_name}: {message_tokens} → {summary_tokens} tokens ({reduction:.1f}% reduction)")
-        logger.debug(f"CONTEXT | MESSAGE SUMMARIZATION | Original size: {len(message_history)} chars, Summary size: {len(summary)} chars")
         
-        return summary
+        # Add header to make it clear this is a summary
+        header = f"--- SUMMARIZED DIPLOMATIC HISTORY FOR {power_name} ---\n"
+        if has_previous_summary:
+            header += f"(Includes recursive summary of previous communications)\n\n"
+        else:
+            header += f"(Initial summary of communications)\n\n"
+            
+        return header + summary
     
     def get_optimized_phase_summaries(
         self, 
@@ -407,12 +566,27 @@ Create a unified summary that reads as a single coherent narrative while preserv
             logger.debug("CONTEXT | No phase summaries available")
             return {}
             
-        logger.debug(f"CONTEXT | Checking phase optimization for {power_name or 'game'} with {len(game.phase_summaries)} phases")
+        # Count original phases for logging
+        original_phase_count = len(game.phase_summaries)
+        logger.debug(f"CONTEXT | Checking phase optimization for {power_name or 'game'} with {original_phase_count} phases")
         
-        if self.should_summarize_phases(game.phase_summaries):
+        # Start with a working copy of the original phase summaries
+        working_phase_summaries = dict(game.phase_summaries)
+        
+        # Add any existing summaries from previous runs
+        if self.phase_summary_state['last_summary']:
+            # Find the last phase we summarized
+            if self.phase_summary_state['summarized_phases']:
+                last_summarized = max(self.phase_summary_state['summarized_phases'])
+                summary_key = f"SUMMARY_UNTIL_{last_summarized}"
+                working_phase_summaries[summary_key] = self.phase_summary_state['last_summary']
+                logger.debug(f"CONTEXT | Added existing phase summary '{summary_key}' from previous run")
+        
+        # Check if we need to create a new summary
+        if self.should_summarize_phases(working_phase_summaries):
             # Create condensed version using recursive summarization
             logger.debug(f"CONTEXT | Creating optimized phase summaries for {power_name or 'game'}")
-            result = self.summarize_phase_history(game.phase_summaries, power_name)
+            result = self.summarize_phase_history(working_phase_summaries, power_name)
             
             # Add a log showing which phases are included in the optimized version
             phase_keys = list(result.keys())
@@ -427,9 +601,10 @@ Create a unified summary that reads as a single coherent narrative while preserv
                 
             return result
         else:
-            # Return original
-            logger.debug("CONTEXT | Using original phase summaries (below threshold)")
-            return game.phase_summaries
+            # Return the working copy which includes any previous summaries
+            summary_keys = [k for k in working_phase_summaries.keys() if k.startswith("SUMMARY_UNTIL_")]
+            logger.debug(f"CONTEXT | Using original phase summaries plus {len(summary_keys)} previous summaries (below threshold)")
+            return working_phase_summaries
     
     def get_optimized_message_history(
         self, 
@@ -460,27 +635,105 @@ Create a unified summary that reads as a single coherent narrative while preserv
         else:
             message_history = str(game_history) if game_history else "(No history yet)"
         
-        if message_history == "(No history yet)":
-            return message_history
+        # Log what we received from the game history object
+        message_chars = len(message_history)
+        message_tokens = count_tokens(message_history)
         
-        logger.debug(f"CONTEXT | Checking message optimization for {power_name} with {len(message_history)} chars")
+        logger.debug(f"CONTEXT | RAW MESSAGE HISTORY | {power_name} | Length: {message_chars} chars ({message_tokens} tokens)")
+        if message_chars < 100:  # If it's very short, log the entire content
+            logger.debug(f"CONTEXT | RAW MESSAGE HISTORY | {power_name} | Content: {message_history}")
+        
+        # Enhanced check for empty or minimal history
+        if message_history in ["(No history yet)", "", None] or message_history.strip() == "":
+            fallback_message = f"(No communication history available for {power_name})"
+            logger.warning(f"CONTEXT | Empty message history for {power_name}, using fallback: '{fallback_message}'")
+            return fallback_message
+        
+        # Check for very sparse history (just headings)
+        if "COMMUNICATION HISTORY:" in message_history and message_chars < 200:
+            if all(line.strip() == "" or line.strip().endswith(":") or "has not engaged" in line 
+                  for line in message_history.split("\n") if line.strip()):
+                logger.warning(f"CONTEXT | Found sparse message history template for {power_name}, using fallback")
+                return f"COMMUNICATION HISTORY:\n\n{power_name} has no significant diplomatic exchanges recorded in this phase."
+        
+        # Get power-specific state 
+        power_state = self.get_power_state(power_name)
+        
+        logger.debug(f"CONTEXT | Checking message optimization for {power_name} with {message_tokens} tokens")
         
         # Check if we need to create a recursive summary
         if self.should_summarize_messages(message_history, power_name):
             # Create recursively condensed version
             logger.debug(f"CONTEXT | Creating optimized message history for {power_name}")
-            result = self.summarize_message_history(message_history, power_name)
             
-            # Log the optimization stats
-            power_state = self.get_power_state(power_name)
+            # Determine if this is an initial summarization or recursive summarization
             has_previous_summary = power_state['last_message_summary'] is not None
             
-            logger.info(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Original size: {len(message_history)} chars, Optimized size: {len(result)} chars")
+            # If this appears to be a message history that already contains our summary header,
+            # we should extract the actual messages and combine with the previous summary
+            if has_previous_summary and "--- SUMMARIZED DIPLOMATIC HISTORY FOR" in message_history:
+                logger.info(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Detected summarized content in message history")
+                
+                # Split the history to extract only the new content
+                parts = message_history.split("--- SUMMARIZED DIPLOMATIC HISTORY FOR")
+                if len(parts) > 1:
+                    # Extract only the new content (the part before the summary header)
+                    new_content = parts[0].strip()
+                    if new_content:
+                        logger.debug(f"CONTEXT | Extracted {count_tokens(new_content)} tokens of new content from message history")
+                        
+                        # Use the previous summary plus the extracted new content
+                        result = self.summarize_message_history(new_content, power_name)
+                    else:
+                        # If no new content, just use the previous summary
+                        logger.warning(f"CONTEXT | No new content found before summary marker for {power_name}")
+                        result = power_state['last_message_summary']
+                else:
+                    # Fallback to normal summarization if parsing fails
+                    logger.warning(f"CONTEXT | Failed to parse summary structure for {power_name}, using normal summarization")
+                    result = self.summarize_message_history(message_history, power_name)
+            else:
+                # Normal summarization path
+                result = self.summarize_message_history(message_history, power_name)
+            
+            # Log the optimization stats
+            result_tokens = count_tokens(result)
+            logger.info(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Original size: {message_tokens} tokens, Optimized size: {result_tokens} tokens")
             logger.info(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Using {'recursive' if has_previous_summary else 'initial'} message summary")
             
+            # Safety check for empty result
+            if not result or result.strip() == "":
+                logger.error(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Empty result after summarization, using original history")
+                return message_history
+                
             return result
         else:
-            # Return original
+            # If we have a previous summary, use it instead of raw history when appropriate
+            if power_state['last_message_summary'] and message_tokens > (self.message_token_threshold // 2):
+                # We're approaching the threshold, but not over it yet
+                # Use the existing summary instead of raw history if it's significantly smaller
+                summary = power_state['last_message_summary']
+                summary_tokens = count_tokens(summary)
+                
+                # Only use previous summary if it's significantly smaller
+                if summary_tokens < (message_tokens * 0.7):  # At least 30% reduction
+                    logger.info(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Using existing summary ({summary_tokens} tokens) instead of raw history ({message_tokens} tokens)")
+                    
+                    # Safety check for empty summary
+                    if not summary or summary.strip() == "":
+                        logger.error(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Empty summary found, using original history")
+                        return message_history
+                        
+                    return summary
+                else:
+                    logger.debug(f"CONTEXT | MESSAGE OPTIMIZATION | {power_name} | Summary not significantly smaller ({summary_tokens} vs {message_tokens} tokens), using original")
+            
+            # Final safety check before returning original
+            if message_history.strip() == "":
+                logger.warning(f"CONTEXT | Empty original message history for {power_name}, using minimal fallback")
+                return f"COMMUNICATION HISTORY:\n\n{power_name} has no diplomatic history yet."
+            
+            # Return original when well below threshold
             logger.debug(f"CONTEXT | Using original message history for {power_name} (below threshold)")
             return message_history
 
@@ -490,16 +743,21 @@ Create a unified summary that reads as a single coherent narrative while preserv
 context_manager = ContextManager()
 
 def configure_context_manager(
-    phase_threshold: int = 5000,
-    message_threshold: int = 5000,
+    phase_threshold: int = 15000,
+    message_threshold: int = 15000,
     summary_model: str = "o3-mini"
 ) -> None:
     """
     Configure the global context manager.
     Should be called early in the application lifecycle.
+    
+    Args:
+        phase_threshold: Token threshold for phase summarization
+        message_threshold: Token threshold for message summarization
+        summary_model: Model to use for summarization
     """
     global context_manager
-    logger.info(f"CONTEXT | Configuring manager with thresholds: phase={phase_threshold}, message={message_threshold}, model={summary_model}")
+    logger.info(f"CONTEXT | Configuring manager with thresholds: phase={phase_threshold}, message={message_threshold} tokens, model={summary_model}")
     context_manager = ContextManager(
         phase_token_threshold=phase_threshold,
         message_token_threshold=message_threshold,
@@ -515,21 +773,55 @@ def get_optimized_context(
     """
     Convenience function to get both optimized phase summaries and message history.
     
+    Args:
+        game: The Diplomacy game object
+        game_history: The GameHistory object
+        power_name: The power requesting the history (optional)
+        organized_history: Optional pre-organized history text
+    
     Returns:
         Tuple of (optimized_phase_summaries, optimized_message_history)
     """
     logger.debug(f"CONTEXT | Getting optimized context for {power_name or 'game'}")
     
+    # Track original sizes for comparison
+    orig_phase_count = len(game.phase_summaries) if hasattr(game, "phase_summaries") and game.phase_summaries else 0
+    orig_phase_tokens = sum(count_tokens(content) for content in game.phase_summaries.values()) if hasattr(game, "phase_summaries") and game.phase_summaries else 0
+    
+    raw_message_history = ""
+    if organized_history is not None:
+        raw_message_history = organized_history
+    elif hasattr(game_history, "get_game_history") and power_name:
+        raw_message_history = game_history.get_game_history(power_name) or "(No history yet)"
+    
+    orig_message_tokens = count_tokens(raw_message_history) if raw_message_history else 0
+    
+    # Get optimized context - phases first as they impact game state
+    start_time = time.time()
     optimized_phases = context_manager.get_optimized_phase_summaries(game, power_name)
+    phase_opt_time = time.time() - start_time
+    
+    # Then get optimized messages
+    start_time = time.time()
     optimized_messages = context_manager.get_optimized_message_history(
         game_history, power_name, organized_history
     )
+    message_opt_time = time.time() - start_time
     
-    # Add a log entry showing what we're returning for tracking
+    # Track token counts for the optimized content
     phase_count = len(optimized_phases) if optimized_phases else 0
-    message_length = len(optimized_messages) if optimized_messages else 0
     summary_count = len([k for k in optimized_phases.keys() if k.startswith("SUMMARY_UNTIL_")]) if optimized_phases else 0
+    message_tokens = count_tokens(optimized_messages) if optimized_messages else 0
+    phase_tokens = sum(count_tokens(content) for content in optimized_phases.values()) if optimized_phases else 0
     
-    logger.info(f"CONTEXT | OPTIMIZATION RESULT | {power_name or 'game'} | Returning {phase_count} phases ({summary_count} summaries) and {message_length} chars of messages")
+    # Calculate optimization metrics
+    phase_reduction = (orig_phase_tokens - phase_tokens) / orig_phase_tokens * 100 if orig_phase_tokens > 0 else 0
+    message_reduction = (orig_message_tokens - message_tokens) / orig_message_tokens * 100 if orig_message_tokens > 0 else 0
+    
+    # Enhanced logging
+    logger.info(f"CONTEXT | OPTIMIZATION RESULT | {power_name or 'game'} | Phases: {orig_phase_count} → {phase_count} ({phase_reduction:.1f}% token reduction)")
+    logger.info(f"CONTEXT | OPTIMIZATION RESULT | {power_name or 'game'} | Messages: {orig_message_tokens} → {message_tokens} tokens ({message_reduction:.1f}% reduction)")
+    logger.debug(f"CONTEXT | OPTIMIZATION RESULT | {power_name or 'game'} | Performance: {phase_opt_time:.2f}s for phases, {message_opt_time:.2f}s for messages")
+    logger.debug(f"CONTEXT | OPTIMIZATION RESULT | {power_name or 'game'} | Returning {phase_count} phases ({summary_count} summaries, {phase_tokens} tokens) and {message_tokens} tokens of messages")
     
     return optimized_phases, optimized_messages
