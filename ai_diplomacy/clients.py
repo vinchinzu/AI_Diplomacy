@@ -59,6 +59,7 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
+        include_plans: bool = True
     ) -> str:
         context = load_prompt("context_prompt.txt")
 
@@ -91,7 +92,7 @@ class BaseModelClient:
                 if fleet in units_info_set:
                     convoy_paths_possible.append((start_loc, fleets_req, end_loc))
 
-        conversation_text = game_history.get_game_history(power_name)
+        conversation_text = game_history.get_game_history(power_name, include_plans=include_plans)
         if not conversation_text:
             conversation_text = "\n(No game history yet)\n"
 
@@ -325,6 +326,29 @@ class BaseModelClient:
                 fallback.append(holds[0] if holds else orders_list[0])
         return fallback
 
+    def build_planning_prompt(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        game_history: GameHistory,
+        game_phase: str,
+    ) -> str:
+        
+        instructions = load_prompt("planning_instructions.txt")
+
+        context = self.build_context_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            game_history,
+            include_plans=False
+        )
+
+        return context + "\n\n" + instructions
+
     def build_conversation_prompt(
         self,
         game,
@@ -346,6 +370,29 @@ class BaseModelClient:
 
         return context + "\n\n" + instructions
 
+    def get_planning_reply(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        game_history: GameHistory,
+        game_phase: str,
+        active_powers: Optional[List[str]] = None,
+    ) -> str:
+        
+        prompt = self.build_planning_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            game_history,
+            game_phase,
+        )
+
+        raw_response = self.generate_response(prompt)
+        return raw_response
+    
     def get_conversation_reply(
         self,
         game,
@@ -356,6 +403,7 @@ class BaseModelClient:
         game_phase: str,
         active_powers: Optional[List[str]] = None,
     ) -> str:
+        
         prompt = self.build_conversation_prompt(
             game,
             board_state,
@@ -368,6 +416,7 @@ class BaseModelClient:
         raw_response = self.generate_response(prompt)
 
         messages = []
+        import pdb; pdb.set_trace()
         if raw_response:
             try:
                 # Find the JSON block between double curly braces

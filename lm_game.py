@@ -20,6 +20,7 @@ from ai_diplomacy.utils import (
     assign_models_to_powers,
 )
 from ai_diplomacy.negotiations import conduct_negotiations
+from ai_diplomacy.planning import planning_phase
 from ai_diplomacy.game_history import GameHistory
 
 dotenv.load_dotenv()
@@ -32,14 +33,6 @@ logging.basicConfig(
 )
 
 
-def my_summary_callback(system_prompt, user_prompt, model_name):
-    # Route to the desired model specified by the command-line argument
-    client = load_model_client(model_name)
-    combined_prompt = f"{system_prompt}\n\n{user_prompt}"
-    # Pseudo-code for generating a response:
-    return client.generate_response(combined_prompt)
-
-
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Run a Diplomacy game simulation with configurable parameters."
@@ -49,12 +42,6 @@ def parse_arguments():
         type=int,
         default=1901,
         help="Maximum year to simulate. The game will stop once this year is reached.",
-    )
-    parser.add_argument(
-        "--summary_model",
-        type=str,
-        default="o3-mini",
-        help="Model name to use for generating phase summaries.",
     )
     parser.add_argument(
         "--num_negotiation_rounds",
@@ -77,13 +64,17 @@ def parse_arguments():
             "The order is: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY."
         ),
     )
+    parser.add_argument(
+        "--planning_phase", 
+        action="store_true",
+        help="Enable the planning phase for each power to set strategic directives.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
     max_year = args.max_year
-    summary_model = args.summary_model
 
     logger.info(
         "Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!"
@@ -154,15 +145,21 @@ def main():
 
         # If it's a movement phase (e.g. ends with "M"), conduct negotiations
         if game.current_short_phase.endswith("M"):
+            
+            if args.planning_phase:
+                logger.info("Starting planning phase block...")
+                game_history = planning_phase(
+                    game,
+                    game_history,
+                    model_error_stats,
+                )
             logger.info("Starting negotiation phase block...")
-            conversation_messages = conduct_negotiations(
+            game_history = conduct_negotiations(
                 game,
                 game_history,
                 model_error_stats,
                 max_rounds=args.num_negotiation_rounds,
             )
-        else:
-            conversation_messages = []
 
         # Gather orders from each power concurrently
         active_powers = [
@@ -213,12 +210,7 @@ def main():
                     logger.error(f"LLM request failed for {p_name}: {exc}")
 
         logger.info("Processing orders...\n")
-        # Pass the summary model to the callback via a lambda function
-        phase_data = game.process(
-            phase_summary_callback=lambda sys, usr: my_summary_callback(
-                sys, usr, summary_model
-            )
-        )
+        game.process()
         # Add orders to game history
         for power_name in game.order_history[current_phase]:
             orders = game.order_history[current_phase][power_name]
@@ -241,16 +233,15 @@ def main():
             )
         logger.info("Phase complete.\n")
 
-        # Retrieve and log the summary of the phase
-        summary_text = phase_data.summary or "(No summary found.)"
-        border = "=" * 80
-        logger.info(
-            f"{border}\nPHASE SUMMARY for {phase_data.name}:\n{summary_text}\n{border}"
-        )
-
-        # Append the summary to the manifesto file
-        with open(manifesto_path, "a") as f:
-            f.write(f"=== {phase_data.name} ===\n{summary_text}\n\n")
+        # Append the strategic directives to the manifesto file
+        strategic_directives = game_history.get_strategic_directives()
+        if strategic_directives:
+            out_str = f"Strategic directives for {current_phase}:\n"
+            for power, directive in strategic_directives.items():
+                out_str += f"{power}: {directive}\n\n"
+            out_str += f"------------------------------------------\n"
+            with open(manifesto_path, "a") as f:
+                f.write(out_str)
 
         # Check if we've exceeded the max year
         year_str = current_phase[1:5]

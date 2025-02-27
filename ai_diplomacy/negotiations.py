@@ -22,9 +22,6 @@ def conduct_negotiations(game, game_history, model_error_stats, max_rounds=3):
     """
     logger.info("Starting negotiation phase.")
 
-    # Conversation messages are kept in a local list ONLY to build conversation_so_far text.
-    conversation_messages = []
-
     active_powers = [
         p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
     ]
@@ -32,7 +29,7 @@ def conduct_negotiations(game, game_history, model_error_stats, max_rounds=3):
     # We do up to 'max_rounds' single-message turns for each power
     for round_index in range(max_rounds):
         with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(active_powers)
+            max_workers=1
         ) as executor:
             futures = {}
             for power_name in active_powers:
@@ -60,30 +57,28 @@ def conduct_negotiations(game, game_history, model_error_stats, max_rounds=3):
 
             for future in concurrent.futures.as_completed(futures):
                 power_name = futures[future]
-                try:
-                    messages = future.result()
-                    if messages:
-                        for message in messages:
-                            # Create an official message in the Diplomacy engine
-                            diplo_message = Message(
-                                phase=game.current_short_phase,
-                                sender=power_name,
-                                recipient=message["recipient"],
-                                message=message["content"],
-                            )
-                            game.add_message(diplo_message)
-                            game_history.add_message(
-                                game.current_short_phase,
-                                power_name,
-                                message["recipient"],
-                                message["content"],
-                            )
-                            conversation_messages.append(message)
-                    else:
-                        logger.debug(f"No valid messages returned for {power_name}.")
-                        model_error_stats[power_name]["conversation_errors"] += 1
-                except Exception as exc:
-                    logger.error(f"LLM request failed for {power_name}: {exc}")
+                messages = future.result()
+                if messages:
+                    for message in messages:
+                        # Create an official message in the Diplomacy engine
+                        diplo_message = Message(
+                            phase=game.current_short_phase,
+                            sender=power_name,
+                            recipient=message["recipient"],
+                            message=message["content"],
+                        )
+                        game.add_message(diplo_message)
+                        game_history.add_message(
+                            game.current_short_phase,
+                            power_name,
+                            message["recipient"],
+                            message["content"],
+                        )
+                else:
+                    logger.debug(f"No valid messages returned for {power_name}.")
+                    model_error_stats[power_name]["conversation_errors"] += 1
+                # except Exception as exc:
+                #     logger.error(f"LLM request failed for {power_name}: {exc}")
 
     logger.info("Negotiation phase complete.")
-    return conversation_messages
+    return game_history

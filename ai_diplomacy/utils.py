@@ -17,9 +17,9 @@ def assign_models_to_powers():
 
     return {
         "FRANCE": "o3-mini",
-        "GERMANY": "claude-3-5-sonnet-20241022",
+        "GERMANY": "claude-3-5-sonnet-latest",
         "ENGLAND": "gemini-2.0-flash",
-        "RUSSIA": "gemini-2.0-flash-lite-preview-02-05",
+        "RUSSIA": "claude-3.7-sonnet-latest",
         "ITALY": "gpt-4o",
         "AUSTRIA": "gpt-4o-mini",
         "TURKEY": "claude-3-5-haiku-20241022",

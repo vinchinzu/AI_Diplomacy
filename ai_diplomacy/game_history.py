@@ -20,6 +20,7 @@ class Message:
 @dataclass
 class Phase:
     name: str  # e.g. "SPRING 1901"
+    plans: Dict[str, str] = field(default_factory=dict)
     messages: List[Message] = field(default_factory=list)
     orders_by_power: Dict[str, List[str]] = field(
         default_factory=lambda: defaultdict(list)
@@ -28,6 +29,9 @@ class Phase:
         default_factory=lambda: defaultdict(list)
     )
 
+    def add_plan(self, power_name: str, plan: str):
+        self.plans[power_name] = plan
+    
     def add_message(self, sender: str, recipient: str, content: str):
         self.messages.append(
             Message(sender=sender, recipient=recipient, content=content)
@@ -90,6 +94,11 @@ class GameHistory:
         self.phases.append(new_phase)
         return new_phase
 
+    def add_plan(self, phase_name: str, power_name: str, plan: str):
+        # get current phase
+        phase = self.add_phase(phase_name)
+        phase.add_plan(power_name, plan)
+    
     def add_message(self, phase_name: str, sender: str, recipient: str, content: str):
         phase = self.add_phase(phase_name)
         phase.add_message(sender, recipient, content)
@@ -100,7 +109,13 @@ class GameHistory:
         phase = self.add_phase(phase_name)
         phase.add_orders(power, orders, results)
 
-    def get_game_history(self, power_name: str, num_prev_phases: int = 5) -> str:
+    def get_strategic_directives(self): 
+        # returns for last phase only if exists
+        if not self.phases: 
+            return {}
+        return self.phases[-1].plans
+
+    def get_game_history(self, power_name: str, include_plans: bool = True, num_prev_phases: int = 5) -> str:
         if not self.phases:
             return ""
 
@@ -145,5 +160,11 @@ class GameHistory:
                     game_history_str += "\n"
 
             game_history_str += "-" * 50 + "\n"  # Add separator between phases
+            
+        # NOTE: only reports plan for the last phase (otherwise too much clutter)
+        if include_plans and phases_to_report and (power_name in phases_to_report[-1].plans):
+            game_history_str += f"\n{power_name} STRATEGIC DIRECTIVE:\n"
+            game_history_str += "Here is a high-level directive you have planned out previously for this phase.\n"
+            game_history_str += phases_to_report[-1].plans[power_name] + "\n"
 
         return game_history_str
