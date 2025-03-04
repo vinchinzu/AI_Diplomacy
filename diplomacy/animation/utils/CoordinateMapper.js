@@ -67,8 +67,8 @@ export class CoordinateMapper {
    * @private
    */
   _loadCoordinatesFromJson() {
-    // Fix the path to relative path instead of absolute
-    const jsonPath = `./assets/maps/${this.mapName}_coords.json`;
+    // Use relative paths for browser environment
+    const jsonPath = `./diplomacy/animation/assets/maps/${this.mapName}_coords.json`;
     console.log(`[CoordinateMapper] Attempting to load coordinates from ${jsonPath}`);
     
     // In a browser environment, we need to use fetch to load the JSON
@@ -76,7 +76,16 @@ export class CoordinateMapper {
       fetch(jsonPath)
         .then(response => {
           if (!response.ok) {
-            throw new Error(`Could not load ${jsonPath}: ${response.status}`);
+            // Try alternate path format
+            const altPath = `./assets/maps/${this.mapName}_coords.json`;
+            console.log(`[CoordinateMapper] First attempt failed, trying ${altPath}`);
+            return fetch(altPath);
+          }
+          return response;
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Could not load coordinates: ${response.status}`);
           }
           return response.json();
         })
@@ -85,6 +94,7 @@ export class CoordinateMapper {
         })
         .catch(error => {
           console.warn(`[CoordinateMapper] JSON fetch error: ${error.message}`);
+          console.log('[CoordinateMapper] Falling back to built-in coordinates');
           this._useBuiltinCoordinates();
         });
     } else {
@@ -102,30 +112,41 @@ export class CoordinateMapper {
 
   /**
    * Process coordinate data from JSON
-   * @param {Object} data - The coordinate data object
+   * @param {Object} data - Coordinate data
    * @private
    */
   _processCoordinateData(data) {
-    if (!data || !data.provinces) {
-      throw new Error('Invalid coordinate data format');
+    if (!data) {
+      console.warn('[CoordinateMapper] Empty coordinate data, using built-in fallback');
+      this._useBuiltinCoordinates();
+      return;
     }
     
-    console.log(`[CoordinateMapper] Loaded coordinates for ${Object.keys(data.provinces).length} provinces`);
-    
-    // Set map dimensions
-    if (data.dimensions) {
-      this.mapWidth = data.dimensions.width || 1000;
-      this.mapHeight = data.dimensions.height || 1000;
-    }
-    
-    // Process provinces
-    this.provinceData = data.provinces;
-    
-    // Extract position data for quick access
-    for (const [province, info] of Object.entries(data.provinces)) {
-      if (info.position) {
-        this.coordinates[province] = info.position;
+    try {
+      console.log('[CoordinateMapper] Processing coordinate data');
+      
+      // Set map dimensions if provided
+      if (data.mapWidth && data.mapHeight) {
+        this.mapWidth = data.mapWidth;
+        this.mapHeight = data.mapHeight;
       }
+      
+      // Process provinces
+      if (data.provinces) {
+        this.provinceData = data.provinces;
+      }
+      
+      // Process coordinates
+      if (data.coordinates) {
+        this.coordinates = data.coordinates;
+        console.log(`[CoordinateMapper] Loaded ${Object.keys(this.coordinates).length} locations`);
+      } else {
+        console.warn('[CoordinateMapper] No coordinates found in data, using built-in');
+        this._useBuiltinCoordinates();
+      }
+    } catch (error) {
+      console.error(`[CoordinateMapper] Error processing coordinate data: ${error.message}`);
+      this._useBuiltinCoordinates();
     }
   }
 
@@ -344,30 +365,59 @@ export class CoordinateMapper {
    * @returns {Object|null} The position as {x, y, z} or null if not found
    */
   getPositionForLocation(location) {
-    // Trim and uppercase the location to standardize
-    const normalizedLocation = location.trim().toUpperCase();
+    if (!location) {
+      console.warn(`[CoordinateMapper] Invalid location provided: ${location}`);
+      return null;
+    }
     
+    // Trim and uppercase the location to standardize
+    let normalizedLocation = location.trim().toUpperCase();
+    
+    // Handle both slash and underscore formats for coast locations
+    // Convert slash format to underscore format for lookup
+    if (normalizedLocation.includes('/')) {
+      normalizedLocation = normalizedLocation.replace('/', '_');
+    }
+    
+    // Direct lookup first
     if (this.coordinates[normalizedLocation]) {
       return { ...this.coordinates[normalizedLocation] };
     }
     
-    // For locations with coasts (e.g. "STP/SC"), check if we have a specific coast position
-    if (normalizedLocation.includes('/')) {
-      const [baseLocation, coast] = normalizedLocation.split('/');
+    // Try without coast designation
+    const baseLocation = normalizedLocation.split('_')[0];
+    if (baseLocation !== normalizedLocation && this.coordinates[baseLocation]) {
+      console.log(`[CoordinateMapper] Using base location ${baseLocation} for ${normalizedLocation}`);
+      return { ...this.coordinates[baseLocation] };
+    }
+    
+    // For locations with coasts (e.g. "STP_SC"), check if we have a specific coast position
+    if (normalizedLocation.includes('_')) {
+      const parts = normalizedLocation.split('_');
+      const baseLocationPart = parts[0];
+      const coast = parts.slice(1).join('_'); // In case there are multiple underscores
+      
+      // Try different coast separator formats
+      // Try slash format (STP/SC)
+      const slashFormat = `${baseLocationPart}/${coast}`;
+      if (this.coordinates[slashFormat]) {
+        return { ...this.coordinates[slashFormat] };
+      }
       
       // Check if we have province data with coast positions
-      const provinceInfo = this.getProvinceInfo(baseLocation);
+      const provinceInfo = this.getProvinceInfo(baseLocationPart);
       if (provinceInfo && provinceInfo.coastPositions && provinceInfo.coastPositions[coast]) {
         return { ...provinceInfo.coastPositions[coast] };
       }
       
       // If we don't have a specific coast position, use the base province
-      if (this.coordinates[baseLocation]) {
-        return { ...this.coordinates[baseLocation] };
+      if (this.coordinates[baseLocationPart]) {
+        console.log(`[CoordinateMapper] Falling back to base position for ${normalizedLocation}`);
+        return { ...this.coordinates[baseLocationPart] };
       }
     }
     
-    console.warn(`[CoordinateMapper] Location not found: ${location}`);
+    console.warn(`[CoordinateMapper] Location not found: ${location} (normalized: ${normalizedLocation})`);
     return null;
   }
 
@@ -377,13 +427,37 @@ export class CoordinateMapper {
    * @returns {Object|null} The province data or null if not found
    */
   getProvinceInfo(location) {
-    const normalizedLocation = location.trim().toUpperCase();
-    const baseLocation = normalizedLocation.split('/')[0];
+    if (!location) return null;
     
+    let normalizedLocation = location.trim().toUpperCase();
+    
+    // Handle both slash and underscore formats
+    if (normalizedLocation.includes('/')) {
+      normalizedLocation = normalizedLocation.replace('/', '_');
+    }
+    
+    // Get the base location (without coast designation)
+    const baseLocation = normalizedLocation.split('_')[0];
+    
+    // First try with the full normalized location
+    if (this.provinceData[normalizedLocation]) {
+      return { ...this.provinceData[normalizedLocation] };
+    }
+    
+    // Then try with the base location (no coast)
     if (this.provinceData[baseLocation]) {
       return { ...this.provinceData[baseLocation] };
     }
     
+    // Try with slash format instead of underscore
+    if (normalizedLocation.includes('_')) {
+      const slashFormat = normalizedLocation.replace('_', '/');
+      if (this.provinceData[slashFormat]) {
+        return { ...this.provinceData[slashFormat] };
+      }
+    }
+    
+    console.log(`[CoordinateMapper] Province info not found for: ${location}`);
     return null;
   }
 
@@ -610,7 +684,7 @@ export class CoordinateMapper {
    * @param {string} toLocation - The destination location
    * @param {number} steps - The number of points to generate
    * @param {number} arcHeight - The height of the arc in the y-direction
-   * @returns {Object[]|null} Array of {x, y, z} positions or null if either location not found
+   * @returns {THREE.Vector3[]|null} Array of THREE.Vector3 positions or null if either location not found
    */
   getPathBetween(fromLocation, toLocation, steps = 10, arcHeight = 30) {
     const startPos = this.getPositionForLocation(fromLocation);
@@ -628,6 +702,13 @@ export class CoordinateMapper {
     const actualArcHeight = (fromType === 'sea' && toType === 'sea') ? 
       arcHeight / 3 : arcHeight;
     
+    // Import THREE if needed
+    const THREE = window.THREE || (typeof global !== 'undefined' ? global.THREE : null);
+    if (!THREE) {
+      console.error('[CoordinateMapper] THREE.js not available');
+      return null;
+    }
+    
     // Add intermediate points for better path
     if (this.areAdjacent(fromLocation, toLocation)) {
       // Direct path for adjacent provinces
@@ -642,7 +723,8 @@ export class CoordinateMapper {
         // sin(π * t) gives a nice arc that starts and ends at 0
         const y = startPos.y + (endPos.y - startPos.y) * t + Math.sin(Math.PI * t) * actualArcHeight;
         
-        path.push({ x, y, z });
+        // Create a THREE.Vector3 object
+        path.push(new THREE.Vector3(x, y, z));
       }
     } else {
       // For non-adjacent provinces, try to find a path through adjacent provinces
@@ -659,7 +741,8 @@ export class CoordinateMapper {
         // Add a higher arc for longer paths
         const y = startPos.y + (endPos.y - startPos.y) * t + Math.sin(Math.PI * t) * (actualArcHeight * 2);
         
-        path.push({ x, y, z });
+        // Create a THREE.Vector3 object
+        path.push(new THREE.Vector3(x, y, z));
       }
     }
     

@@ -94,6 +94,29 @@ export class AnimationEffects {
    * @returns {THREE.Object3D} The path object
    */
   createMovementPath(path, orderType = 'move', success = true) {
+    // Validate path input
+    if (!path || !Array.isArray(path) || path.length < 2) {
+      console.error('[AnimationEffects] Invalid path provided to createMovementPath:', path);
+      return null;
+    }
+    
+    // Ensure all path points are Vector3 objects
+    const vector3Path = path.map(point => {
+      if (point instanceof THREE.Vector3) {
+        return point;
+      } else if (point && typeof point === 'object' && 'x' in point && 'y' in point && 'z' in point) {
+        return new THREE.Vector3(point.x, point.y, point.z);
+      } else {
+        console.error('[AnimationEffects] Invalid point in path:', point);
+        return null;
+      }
+    }).filter(p => p !== null);
+    
+    if (vector3Path.length < 2) {
+      console.error('[AnimationEffects] Not enough valid points in path after filtering');
+      return null;
+    }
+    
     // Use appropriate material based on order type and success
     let material;
     if (!success) {
@@ -103,21 +126,27 @@ export class AnimationEffects {
     }
     
     // Create a smooth curve from the path points
-    const curve = new THREE.CatmullRomCurve3(path);
-    const points = curve.getPoints(50); // Higher number = smoother curve
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const curve = new THREE.CatmullRomCurve3(vector3Path);
     
-    // Create the path line
-    const line = new THREE.Line(geometry, material);
-    line.userData.type = 'movementPath';
-    line.userData.createdAt = Date.now();
-    line.userData.duration = 3000; // 3 seconds default lifetime
-    
-    // Add to scene
-    this.scene.add(line);
-    this.activeEffects.push(line);
-    
-    return line;
+    try {
+      const points = curve.getPoints(50); // Higher number = smoother curve
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      
+      // Create the path line
+      const line = new THREE.Line(geometry, material);
+      line.userData.type = 'movementPath';
+      line.userData.createdAt = Date.now();
+      line.userData.duration = 3000; // 3 seconds default lifetime
+      
+      // Add to scene
+      this.scene.add(line);
+      this.activeEffects.push(line);
+      
+      return line;
+    } catch (error) {
+      console.error('[AnimationEffects] Error creating movement path:', error);
+      return null;
+    }
   }
   
   /**

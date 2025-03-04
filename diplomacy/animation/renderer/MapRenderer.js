@@ -161,22 +161,75 @@ export class MapRenderer {
   _loadMapAssets() {
     // Load the map texture
     const textureLoader = new THREE.TextureLoader();
-    const mapPath = `/diplomacy/animation/assets/maps/${this.mapVariant}_map.jpg`;
+    
+    // First try to load from SVG path (which is used by the web version)
+    const svgPath = `./diplomacy/animation/assets/maps/${this.mapVariant}.svg`;
+    
+    console.log(`[MapRenderer] Attempting to load map from: ${svgPath}`);
     
     textureLoader.load(
-      mapPath,
+      svgPath,
       (texture) => {
-        console.log(`[MapRenderer] Successfully loaded map texture: ${mapPath}`);
+        console.log(`[MapRenderer] Successfully loaded map texture: ${svgPath}`);
         this.mapTexture = texture;
         this._createMapMesh();
       },
       undefined, // Progress callback
       (error) => {
-        console.warn(`[MapRenderer] Failed to load map texture: ${error.message}`);
-        // If we failed to load the actual texture, create a placeholder
-        this._createPlaceholderMap();
-      }
-    );
+        console.warn(`[MapRenderer] Failed to load SVG map: ${error.message}`);
+        
+        // Try alternate path
+        const altPath = `./assets/maps/${this.mapVariant}.svg`;
+        console.log(`[MapRenderer] Trying alternate path: ${altPath}`);
+        
+        textureLoader.load(
+          altPath,
+          (texture) => {
+            console.log(`[MapRenderer] Successfully loaded map texture from alternate path`);
+            this.mapTexture = texture;
+            this._createMapMesh();
+          },
+          undefined,
+          (altError) => {
+            console.warn(`[MapRenderer] Failed to load SVG map from alternate path: ${altError.message}`);
+            
+            // Try fallback to animation assets path
+            const fallbackPath = `./assets/maps/${this.mapVariant}_map.jpg`;
+            console.log(`[MapRenderer] Attempting fallback map load from: ${fallbackPath}`);
+            
+            textureLoader.load(
+              fallbackPath,
+              (texture) => {
+                console.log(`[MapRenderer] Successfully loaded fallback map texture`);
+                this.mapTexture = texture;
+                this._createMapMesh();
+              },
+              undefined,
+              (fallbackError) => {
+                console.warn(`[MapRenderer] Failed to load fallback map: ${fallbackError.message}`);
+                
+                // Try one more fallback with original path format
+                const lastFallbackPath = `/diplomacy/animation/assets/maps/${this.mapVariant}_map.jpg`;
+                console.log(`[MapRenderer] Attempting last fallback path: ${lastFallbackPath}`);
+                
+                textureLoader.load(
+                  lastFallbackPath,
+                  (texture) => {
+                    console.log(`[MapRenderer] Successfully loaded from last fallback path`);
+                    this.mapTexture = texture;
+                    this._createMapMesh();
+                  },
+                  undefined,
+                  (lastError) => {
+                    console.warn(`[MapRenderer] All loading attempts failed, creating placeholder map`);
+                    // Create a placeholder if all attempts fail
+                    this._createPlaceholderMap();
+                  }
+                );
+              }
+            );
+          }
+        );
     
     // TODO: Load unit models in Phase 2
     // For now, we'll use simple shapes for units

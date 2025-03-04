@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diplomacy Map Test</title>
+  <!-- Import map for Three.js and dependencies -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js",
+        "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"
+      }
+    }
+  </script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    .container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .top-controls {
+      padding: 10px;
+      background-color: #333;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .map-view {
+      flex-grow: 1;
+      background-color: #87CEEB;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    #phase-display {
+      font-weight: bold;
+    }
+    #file-input {
+      display: none;
+    }
+    #info-panel {
+      position: absolute;
+      top: 60px;
+      right: 10px;
+      width: 300px;
+      background-color: rgba(255, 255, 255, 0.8);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-controls">
+      <div>
+        <button id="load-btn">Load Game</button>
+        <button id="prev-btn" disabled>← Prev</button>
+        <button id="next-btn" disabled>Next →</button>
+        <span id="phase-display">No game loaded</span>
+      </div>
+    </div>
+    <div id="map-view" class="map-view"></div>
+    <input type="file" id="file-input" accept=".json">
+    <div id="info-panel"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+    // Basic variables
+    let scene, camera, renderer, controls;
+    let gameData = null;
+    let currentPhaseIndex = 0;
+    let coordinateData = null; // Will hold map coordinates
+    let unitMeshes = []; // Track unit meshes for cleanup
+    
+    // DOM elements
+    const loadBtn = document.getElementById('load-btn');
+    const fileInput = document.getElementById('file-input');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const phaseDisplay = document.getElementById('phase-display');
+    const infoPanel = document.getElementById('info-panel');
+    const mapView = document.getElementById('map-view');
+    
+    // Initialize Three.js scene
+    function initScene() {
+      // Create scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87CEEB);
+      
+      // Setup camera
+      camera = new THREE.PerspectiveCamera(
+        60,
+        mapView.clientWidth / mapView.clientHeight,
+        1,
+        5000
+      );
+      camera.position.set(0, 500, 500);
+      camera.lookAt(0, 0, 0);
+      
+      // Setup renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(mapView.clientWidth, mapView.clientHeight);
+      mapView.appendChild(renderer.domElement);
+      
+      // Add controls
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      
+      // Add a grid for reference
+      const gridHelper = new THREE.GridHelper(1000, 20);
+      scene.add(gridHelper);
+      
+      // Add some lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(200, 400, 200);
+      scene.add(directionalLight);
+      
+      // Load the coordinate data
+      loadCoordinateData().then(() => {
+        // Create map with texture once coordinates are loaded
+        createMapWithTexture();
+        
+        // Add territory labels
+        if (coordinateData && coordinateData.coordinates) {
+          console.log('Adding territory labels...');
+          for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+            // Don't add labels for coast variants (they have underscores)
+            if (!province.includes('_')) {
+              addLabel(province, position.x, position.z);
+            }
+          }
+        }
+        
+        // Add supply centers
+        displaySupplyCenters();
+      });
+      
+      // Start animation loop
+      animate();
+      
+      // Add window resize handler
+      window.addEventListener('resize', onWindowResize);
+    }
+    
+    // Load coordinate data
+    function loadCoordinateData() {
+      return new Promise((resolve, reject) => {
+        fetch('./assets/maps/standard_coords.json')
+          .then(response => {
+            if (!response.ok) {
+              // Try alternate path
+              return fetch('../assets/maps/standard_coords.json');
+            }
+            return response;
+          })
+          .then(response => {
+            if (!response.ok) {
+              // Try another alternate path
+              return fetch('/diplomacy/animation/assets/maps/standard_coords.json');
+            }
+            return response;
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`Failed to load coordinates: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            coordinateData = data;
+            infoPanel.textContent = 'Coordinate data loaded successfully!';
+            console.log('Loaded coordinates for', Object.keys(coordinateData.coordinates).length, 'provinces');
+            resolve(coordinateData);
+          })
+          .catch(error => {
+            console.error('Error loading coordinates:', error);
+            infoPanel.textContent = `Error loading coordinates: ${error.message}. Using placeholder positions.`;
+            // Resolve anyway so we can continue with placeholder positions
+            resolve(null);
+          });
+      });
+    }
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    
+    // Handle window resize
+    function onWindowResize() {
+      camera.aspect = mapView.clientWidth / mapView.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(mapView.clientWidth, mapView.clientHeight);
+    }
+    
+    // Create a map with texture
+    function createMapWithTexture() {
+      // Create a large plane for the map
+      const geometry = new THREE.PlaneGeometry(1000, 1000);
+      
+      // Try to load the map texture
+      const textureLoader = new THREE.TextureLoader();
+      
+      // Try multiple possible paths for the map texture
+      const tryLoadTexture = (paths, index = 0) => {
+        if (index >= paths.length) {
+          console.warn('Failed to load map texture from all paths, using fallback');
+          // Fallback to basic material if texture can't be loaded
+          const material = new THREE.MeshBasicMaterial({ 
+            color: 0x66BB66, 
+            side: THREE.DoubleSide 
+          });
+          const mapMesh = new THREE.Mesh(geometry, material);
+          mapMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+          scene.add(mapMesh);
+          return mapMesh;
+        }
+        
+        console.log(`Attempting to load map texture from ${paths[index]}`);
+        textureLoader.load(
+          paths[index], 
+          (texture) => {
+            console.log(`Successfully loaded map texture from ${paths[index]}`);
+            
+            // Configure texture settings for better appearance
+            texture.wrapS = THREE.ClampToEdgeWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            texture.magFilter = THREE.LinearFilter;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            
+            const material = new THREE.MeshBasicMaterial({ 
+              map: texture, 
+              side: THREE.DoubleSide 
+            });
+            
+            // Create mesh with the texture
+            const mapMesh = new THREE.Mesh(geometry, material);
+            mapMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+            mapMesh.position.y = -1; // Slightly below other elements
+            scene.add(mapMesh);
+            
+            // Save reference to the map mesh
+            return mapMesh;
+          },
+          undefined, // onProgress callback not needed
+          (error) => {
+            console.warn(`Failed to load texture from ${paths[index]}: ${error.message}, trying next path`);
+            return tryLoadTexture(paths, index + 1);
+          }
+        );
+      };
+      
+      // List of possible paths to try
+      const texturePaths = [
+        './assets/maps/standard_map.jpg',
+        '../assets/maps/standard_map.jpg',
+        '/diplomacy/animation/assets/maps/standard_map.jpg'
+      ];
+      
+      return tryLoadTexture(texturePaths);
+    }
+    
+    // Display a unit on the map
+    function displayUnit(unitData) {
+      // Simple shape for units
+      let geometry;
+      let color;
+      
+      // Different shapes for army vs fleet
+      if (unitData.type === 'A') {
+        geometry = new THREE.BoxGeometry(20, 20, 20);
+      } else {
+        geometry = new THREE.ConeGeometry(15, 30, 4);
+      }
+      
+      // Color based on power
+      switch(unitData.power) {
+        case 'AUSTRIA': color = 0xFF0000; break;
+        case 'ENGLAND': color = 0x0000FF; break;
+        case 'FRANCE': color = 0x00FFFF; break;
+        case 'GERMANY': color = 0x000000; break;
+        case 'ITALY': color = 0x00FF00; break;
+        case 'RUSSIA': color = 0xFFFFFF; break;
+        case 'TURKEY': color = 0xFFFF00; break;
+        default: color = 0xAAAAAA;
+      }
+      
+      const material = new THREE.MeshStandardMaterial({ 
+        color,
+        emissive: new THREE.Color(color).multiplyScalar(0.2), // Add a slight glow
+        metalness: 0.3,
+        roughness: 0.7
+      });
+      const unitMesh = new THREE.Mesh(geometry, material);
+      
+      // Get position for this province
+      const position = getProvincePosition(unitData.location);
+      unitMesh.position.set(position.x, 10, position.z);
+      
+      // For fleets, rotate them
+      if (unitData.type === 'F') {
+        unitMesh.rotation.y = Math.PI / 4;
+      }
+      
+      // Add to scene
+      scene.add(unitMesh);
+      
+      // Store metadata about the unit
+      unitMesh.userData = {
+        id: unitData.id,
+        power: unitData.power,
+        type: unitData.type,
+        location: unitData.location
+      };
+      
+      // Track for cleanup
+      unitMeshes.push(unitMesh);
+      
+      // We don't need to add labels here anymore - they're already added when initializing
+      
+      return unitMesh;
+    }
+    
+    // Get proper position for a province using coordinate data
+    function getProvincePosition(location) {
+      // Handle both formats for special coast locations
+      const normalizedLocation = location.toUpperCase().replace('/', '_');
+      const baseLocation = normalizedLocation.split('_')[0];
+      
+      // If we have coordinate data, use it
+      if (coordinateData && coordinateData.coordinates) {
+        // Try exact match first
+        if (coordinateData.coordinates[normalizedLocation]) {
+          return coordinateData.coordinates[normalizedLocation];
+        }
+        
+        // Then try base location
+        if (coordinateData.coordinates[baseLocation]) {
+          return coordinateData.coordinates[baseLocation];
+        }
+      }
+      
+      // Fallback to hash function if we don't have the coordinates
+      console.warn(`No coordinates found for ${location}, using hash position`);
+      return hashStringToPosition(location);
+    }
+    
+    // Fallback hash function to position units when coordinates aren't available
+    function hashStringToPosition(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0; // Convert to 32bit integer
+      }
+      
+      // Use modulo to keep within bounds of map (-500 to 500)
+      const x = (hash % 800) - 400;
+      const z = ((hash >> 8) % 800) - 400;
+      
+      return { x, y: 0, z };
+    }
+    
+    // Add text label
+    function addLabel(text, x, z) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 64;
+      
+      const context = canvas.getContext('2d');
+      
+      // Draw background with border
+      context.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+      context.lineWidth = 2;
+      context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+      
+      // Draw text
+      context.font = 'bold 24px Arial';
+      context.fillStyle = 'black';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, canvas.width / 2, canvas.height / 2);
+      
+      // Create texture and sprite
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter; // Prevent blurry text
+      const material = new THREE.SpriteMaterial({ 
+        map: texture,
+        transparent: true,
+        depthTest: false, // Always show on top
+        sizeAttenuation: false // Keep consistent size regardless of distance
+      });
+      const sprite = new THREE.Sprite(material);
+      
+      sprite.position.set(x, 35, z); // Position above the map
+      sprite.scale.set(80, 40, 1); // Smaller than before
+      
+      scene.add(sprite);
+      unitMeshes.push(sprite); // Add to unit meshes array for proper cleanup
+      
+      return sprite;
+    }
+    
+    // Load a game file
+    function loadGame(file) {
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          // Parse the JSON
+          let data = JSON.parse(e.target.result);
+          
+          console.log('Parsed game data:', data);
+          infoPanel.textContent = 'Loading game data...';
+          
+          // Just use the data directly without conversion
+          gameData = data;
+            
+          
+          // Set phase index to start
+          currentPhaseIndex = 0;
+          
+          // Check if phases exist
+          if (!gameData.phases || !Array.isArray(gameData.phases) || gameData.phases.length === 0) {
+            infoPanel.textContent = 'Error: No phases found in game data';
+            return;
+          }
+          
+          // Enable navigation buttons
+          prevBtn.disabled = false;
+          nextBtn.disabled = false;
+          
+          // Display the first phase
+          displayPhase(currentPhaseIndex);
+          
+          infoPanel.textContent = `Game loaded successfully!\n${gameData.phases.length} phases found.`;
+        } catch (error) {
+          infoPanel.textContent = `Error loading game: ${error.message}`;
+          console.error('Error loading game:', error);
+        }
+      };
+      
+      reader.onerror = function() {
+        infoPanel.textContent = 'Error reading file';
+      };
+      
+      reader.readAsText(file);
+    }
+    
+    // Display a specific phase
+    function displayPhase(index) {
+      if (!gameData || !gameData.phases || index < 0 || index >= gameData.phases.length) {
+        infoPanel.textContent = 'Invalid phase index';
+        return;
+      }
+      
+      // Clean up previous unit meshes
+      unitMeshes.forEach(mesh => {
+        scene.remove(mesh);
+      });
+      unitMeshes = [];
+      
+      // Create grid and map if scene is empty
+      if (scene.children.length === 0) {
+        // Recreate the map
+        createMapWithTexture();
+        
+        // Add a grid for reference
+        const gridHelper = new THREE.GridHelper(1000, 20);
+        scene.add(gridHelper);
+        
+        // Add ambient and directional lights back
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(200, 400, 200);
+        scene.add(directionalLight);
+        
+        // Add territory labels for all provinces if coordinate data is available
+        if (coordinateData && coordinateData.coordinates) {
+          for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+            // Don't add labels for coast variants (they have underscores)
+            if (!province.includes('_')) {
+              addLabel(province, position.x, position.z);
+            }
+          }
+        }
+        
+        // Add supply centers
+        displaySupplyCenters();
+      }
+      
+      // Get the phase data
+      const phase = gameData.phases[index];
+      
+      // Update phase display
+      phaseDisplay.textContent = `${phase.name} (${index + 1}/${gameData.phases.length})`;
+      
+      // Extract units from the state object
+      if (phase.state && phase.state.units) {
+        // Process units from state.units (actual format from the game)
+        for (const [power, powerUnits] of Object.entries(phase.state.units)) {
+          if (Array.isArray(powerUnits)) {
+            powerUnits.forEach(unitStr => {
+              // Parse unit string (e.g., "A PAR" or "F BRE")
+              const match = unitStr.match(/^([AF])\s+(.+)$/);
+              if (match) {
+                const unitType = match[1]; // 'A' or 'F'
+                const location = match[2]; 
+                
+                // Create unit object
+                const unit = {
+                  id: `${power}_${unitType}_${location}`,
+                  type: unitType,
+                  power: power.toUpperCase(),
+                  location: location
+                };
+                
+                // Display the unit
+                try {
+                  displayUnit(unit);
+                } catch (error) {
+                  console.error(`Error displaying unit ${power} ${unitType} ${location}:`, error);
+                }
+              }
+            });
+          }
+        }
+      } else {
+        infoPanel.textContent = `No units found in phase ${index + 1}`;
+        console.warn('No units found in phase state', index + 1);
+      }
+      
+      // Update supply center ownership if available
+      if (phase.state && phase.state.centers) {
+        updateSupplyCenterOwnership(phase.state.centers);
+      }
+      
+      // Show order info
+      if (phase.orders) {
+        let orderInfo = 'Orders:\n';
+        
+        // Handle object format of orders
+        for (const [power, powerOrders] of Object.entries(phase.orders)) {
+          if (Array.isArray(powerOrders)) {
+            powerOrders.forEach(order => {
+              orderInfo += `${power.toUpperCase()}: ${order}\n`;
+            });
+          }
+        }
+        
+        infoPanel.textContent = orderInfo;
+      } else {
+        if (!infoPanel.textContent.includes('No units found')) {
+          infoPanel.textContent += '\nNo orders found in this phase.';
+        }
+      }
+      
+      // Log info about this phase
+      console.log(`Displaying phase ${index + 1}/${gameData.phases.length}:`, phase);
+      console.log(`- ${phase.units ? phase.units.length : 0} units`);
+      console.log(`- ${phase.orders ? phase.orders.length : 0} orders`);
+    }
+    
+    // Display supply centers as yellow cylinders
+    function displaySupplyCenters() {
+      if (!coordinateData || !coordinateData.provinces) {
+        console.warn('No province data available for supply centers');
+        return;
+      }
+      
+      const supplyCenterGeometry = new THREE.CylinderGeometry(10, 10, 3, 16);
+      const supplyCenterMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFF00, emissive: 0x333300 });
+      
+      for (const [province, data] of Object.entries(coordinateData.provinces)) {
+        // Check if this province is a supply center
+        if (data.isSupplyCenter) {
+          // Get the position for this province
+          const position = getProvincePosition(province);
+          
+          // Create a cylinder to represent the supply center
+          const scMesh = new THREE.Mesh(supplyCenterGeometry, supplyCenterMaterial);
+          scMesh.position.set(position.x, 2, position.z); // Just above the map
+          scMesh.rotation.x = Math.PI / 2; // Stand upright
+          
+          // Add to the scene
+          scene.add(scMesh);
+          
+          // Store a reference to remove/update later
+          scMesh.userData.province = province;
+          scMesh.userData.isSupplyCenter = true;
+          unitMeshes.push(scMesh); // Add to unit meshes so they get cleaned up properly
+        }
+      }
+    }
+    
+    // Update supply center ownership
+    function updateSupplyCenterOwnership(centers) {
+      if (!centers) return;
+      
+      // Create a map of province to power
+      const centerOwnership = {};
+      
+      // Process centers from the game data
+      for (const [power, powerCenters] of Object.entries(centers)) {
+        if (Array.isArray(powerCenters)) {
+          powerCenters.forEach(center => {
+            centerOwnership[center.toUpperCase()] = power.toUpperCase();
+          });
+        }
+      }
+      
+      // Update the colors of the supply center markers
+      unitMeshes.forEach(mesh => {
+        if (mesh.userData.isSupplyCenter) {
+          const province = mesh.userData.province;
+          const owner = centerOwnership[province];
+          
+          if (owner) {
+            // Color based on power
+            let color;
+            switch(owner) {
+              case 'AUSTRIA': color = 0xFF0000; break;
+              case 'ENGLAND': color = 0x0000FF; break;
+              case 'FRANCE': color = 0x00FFFF; break;
+              case 'GERMANY': color = 0x000000; break;
+              case 'ITALY': color = 0x00FF00; break;
+              case 'RUSSIA': color = 0xFFFFFF; break;
+              case 'TURKEY': color = 0xFFFF00; break;
+              default: color = 0xAAAAAA;
+            }
+            
+            mesh.material.color.set(color);
+          }
+        }
+      });
+    }
+    
+    // Event listeners
+    loadBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        loadGame(file);
+      }
+    });
+    
+    prevBtn.addEventListener('click', () => {
+      if (currentPhaseIndex > 0) {
+        currentPhaseIndex--;
+        displayPhase(currentPhaseIndex);
+      }
+    });
+    
+    nextBtn.addEventListener('click', () => {
+      if (gameData && currentPhaseIndex < gameData.phases.length - 1) {
+        currentPhaseIndex++;
+        displayPhase(currentPhaseIndex);
+      }
+    });
+    
+    // Initialize the scene when page loads
+    window.addEventListener('load', initScene);
+  </script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diplomacy Animation</title>
+  <!-- Import map for Three.js and dependencies -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js",
+        "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .viewer {
+      width: 100%;
+      height: 600px;
+      background-color: #87CEEB;
+      margin-top: 20px;
+      position: relative;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin: 20px 0;
+      gap: 10px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #4a5568;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #2d3748;
+    }
+    button:disabled {
+      background-color: #a0aec0;
+      cursor: not-allowed;
+    }
+    .info {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #e6f7ff;
+      border-left: 4px solid #1890ff;
+      border-radius: 0 4px 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Diplomacy Game Viewer</h1>
+    
+    <div class="controls">
+      <button id="load-game-btn">Load Game File</button>
+      <button id="play-btn" disabled>Play</button>
+      <button id="pause-btn" disabled>Pause</button>
+      <button id="next-btn" disabled>Next Phase</button>
+      <button id="prev-btn" disabled>Previous Phase</button>
+    </div>
+    
+    <div class="info" id="info-panel">
+      <p>Load a Diplomacy game file to view the animation.</p>
+      <p>Supported formats:</p>
+      <ul>
+        <li>AI Diplomacy result files (.json)</li>
+        <li>Standard Diplomacy game files (.json)</li>
+      </ul>
+    </div>
+    
+    <div class="viewer" id="map-container">
+      <!-- 3D map will be rendered here -->
+    </div>
+    
+    <div class="phase-info" id="phase-info" style="display: none;">
+      <h3>Current Phase: <span id="phase-name">-</span></h3>
+      <div id="orders-list"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Add console logging to track execution
+    console.log('Script starting...');
+    
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+    
+    // Import local modules
+    console.log('Importing local modules...');
+    import { GameStateManager } from './utils/GameStateManager.js';
+    import { CoordinateMapper } from './utils/CoordinateMapper.js';
+    import { MapRenderer } from './renderer/MapRenderer.js';
+    
+    // DOM Elements
+    const loadGameBtn = document.getElementById('load-game-btn');
+    const playBtn = document.getElementById('play-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const prevBtn = document.getElementById('prev-btn');
+    const infoPanel = document.getElementById('info-panel');
+    const phaseInfo = document.getElementById('phase-info');
+    const phaseName = document.getElementById('phase-name');
+    const ordersList = document.getElementById('orders-list');
+    
+    // Global variables
+    let gameStateManager;
+    let mapRenderer;
+    let animationInterval;
+    let isPlaying = false;
+    
+    // Initialize the application
+    function init() {
+      console.log('Initializing application...');
+      
+      try {
+        console.log('Creating GameStateManager');
+        gameStateManager = new GameStateManager();
+        
+        console.log('Adding event listeners');
+        // Event listeners
+        loadGameBtn.addEventListener('click', function(e) {
+          console.log('Load button clicked!');
+          loadGame();
+        });
+        
+        playBtn.addEventListener('click', startPlayback);
+        pauseBtn.addEventListener('click', pausePlayback);
+        nextBtn.addEventListener('click', nextPhase);
+        prevBtn.addEventListener('click', previousPhase);
+        
+        console.log('Diplomacy animation viewer initialized');
+        infoPanel.innerHTML = 'Click "Load Game File" to start.';
+      } catch (error) {
+        console.error('Error during initialization:', error);
+      }
+    }
+    
+    // Load a game file
+    function loadGame() {
+      gameStateManager.loadGameFromDisk()
+        .then(() => {
+          console.log('Game loaded successfully');
+          infoPanel.innerHTML = 'Game loaded successfully!';
+          
+          // Initialize the map renderer
+          const coordinateMapper = new CoordinateMapper('standard');
+          
+          mapRenderer = new MapRenderer({
+            containerId: 'map-container',
+            mapVariant: 'standard',
+            coordinateMapper: coordinateMapper,
+            detailLevel: 'medium'
+          });
+          
+          // Start rendering
+          mapRenderer.startRendering();
+          
+          // Update UI for the first phase
+          updatePhaseInfo(gameStateManager.getCurrentPhase());
+          
+          // Enable controls
+          playBtn.disabled = false;
+          nextBtn.disabled = false;
+          prevBtn.disabled = false;
+          
+          // Show phase info
+          phaseInfo.style.display = 'block';
+        })
+        .catch(error => {
+          console.error('Error loading game:', error);
+          infoPanel.innerHTML = `<strong>Error:</strong> ${error.message}`;
+        });
+    }
+    
+    // Update the phase info panel
+    function updatePhaseInfo(phase) {
+      if (!phase) return;
+      
+      // Update phase name
+      phaseName.textContent = `${phase.season} ${phase.year} (${phase.type})`;
+      
+      // Clear orders list
+      ordersList.innerHTML = '';
+      
+      // Add units to the map
+      if (mapRenderer) {
+        // First clear existing units
+        mapRenderer.clearUnits();
+        
+        // Add current units
+        if (phase.units && phase.units.length > 0) {
+          phase.units.forEach(unit => {
+            // Create a unique ID if not present
+            const unitId = unit.id || `${unit.power}_${unit.type}_${unit.location}`;
+            
+            mapRenderer.addUnit({
+              id: unitId,
+              type: unit.type,
+              power: unit.power,
+              location: unit.location
+            });
+          });
+        }
+        
+        // Visualize orders if available
+        if (phase.orders && phase.orders.length > 0) {
+          // Clear previous visualizations
+          mapRenderer.clearOrderVisualizations();
+          
+          // Add new visualizations
+          phase.orders.forEach(order => {
+            mapRenderer.visualizeOrder(order);
+          });
+        }
+      }
+    }
+    
+    // Play animation
+    function startPlayback() {
+      if (isPlaying) return;
+      
+      isPlaying = true;
+      playBtn.disabled = true;
+      pauseBtn.disabled = false;
+      
+      // Start interval for auto-advancing phases
+      animationInterval = setInterval(() => {
+        const hasNext = gameStateManager.advancePhase();
+        if (!hasNext) {
+          pausePlayback();
+        }
+        updatePhaseInfo(gameStateManager.getCurrentPhase());
+      }, 3000); // Change phase every 3 seconds
+    }
+    
+    // Pause animation
+    function pausePlayback() {
+      if (!isPlaying) return;
+      
+      isPlaying = false;
+      playBtn.disabled = false;
+      pauseBtn.disabled = true;
+      
+      clearInterval(animationInterval);
+    }
+    
+    // Go to next phase
+    function nextPhase() {
+      const hasNext = gameStateManager.advancePhase();
+      if (hasNext) {
+        updatePhaseInfo(gameStateManager.getCurrentPhase());
+      }
+    }
+    
+    // Go to previous phase
+    function previousPhase() {
+      const hasPrev = gameStateManager.previousPhase();
+      if (hasPrev) {
+        updatePhaseInfo(gameStateManager.getCurrentPhase());
+      }
+    }
+    
+    // Initialize the app when the page loads
+    console.log('Setting up window load listener');
+    window.addEventListener('load', function() {
+      console.log('Window loaded! Calling init()');
+      init();
+    });
+    
+    // Also initialize directly in case the load event already fired
+    console.log('Calling init directly');
+    init();
+  </script>
+</body>
+</html>

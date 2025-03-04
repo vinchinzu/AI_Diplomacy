@@ -103,9 +103,9 @@ export class OrderVisualizer {
     if (moveMatch) {
       return {
         type: 'move',
-        unitType: moveMatch[1], // A or F
-        from: moveMatch[2],     // Source location
-        to: moveMatch[3]        // Destination location
+        unitType: moveMatch[1],      // A or F
+        location: moveMatch[2],      // Source location
+        destination: moveMatch[3]    // Destination location
       };
     }
     
@@ -133,7 +133,7 @@ export class OrderVisualizer {
       return {
         type: 'support',
         unitType: supportHoldMatch[1],       // A or F
-        from: supportHoldMatch[2],           // Supporting unit location
+        location: supportHoldMatch[2],       // Supporting unit location
         supportedUnitType: supportHoldMatch[3], // Supported unit type
         supportedLocation: supportHoldMatch[4],  // Supported unit location
         supportType: 'hold'
@@ -186,31 +186,52 @@ export class OrderVisualizer {
    * @private
    */
   _visualizeMoveOrder(parsedOrder, power, success) {
-    const { unitType, from, to } = parsedOrder;
+    const { unitType, location, destination } = parsedOrder;
+    
+    // Extract locations
+    const from = location;
+    const to = destination;
     
     // Get positions for the locations
     const fromPos = this.coordinateMapper.getPositionForLocation(from);
     const toPos = this.coordinateMapper.getPositionForLocation(to);
     
     if (!fromPos || !toPos) {
-      console.error(`Invalid locations for move order: ${from} to ${to}`);
+      console.error(`[OrderVisualizer] Invalid locations for move order: ${from} to ${to}`);
       return null;
     }
     
-    // Create path with arc between positions
-    const pathPoints = this.coordinateMapper.getPathBetween(from, to, 10, 30);
-    
-    // Create visual elements
-    const path = this.animationEffects.createMovementPath(pathPoints, 'move', success);
-    const arrow = this.animationEffects.createMovementArrow(fromPos, toPos, 'move', success);
-    
-    // If unsuccessful, add bounce effect at destination
-    if (!success) {
-      const bounceEffect = this.animationEffects.createBounceEffect(toPos);
-      return { path, arrow, bounceEffect };
+    try {
+      // Create path with arc between positions
+      const pathPoints = this.coordinateMapper.getPathBetween(from, to, 10, 30);
+      
+      if (!pathPoints || pathPoints.length < 2) {
+        console.error(`[OrderVisualizer] Failed to generate path between ${from} and ${to}`);
+        return null;
+      }
+      
+      // Create visual elements
+      const path = this.animationEffects.createMovementPath(pathPoints, 'move', success);
+      
+      // Handle case where path creation failed
+      if (!path) {
+        console.error(`[OrderVisualizer] Failed to create movement path for ${from} to ${to}`);
+        return null;
+      }
+      
+      const arrow = this.animationEffects.createMovementArrow(fromPos, toPos, 'move', success);
+      
+      // If unsuccessful, add bounce effect at destination
+      if (!success) {
+        const bounceEffect = this.animationEffects.createBounceEffect(toPos);
+        return { path, arrow, bounceEffect };
+      }
+      
+      return { path, arrow };
+    } catch (error) {
+      console.error(`[OrderVisualizer] Error visualizing move order: ${error.message}`);
+      return null;
     }
-    
-    return { path, arrow };
   }
   
   /**

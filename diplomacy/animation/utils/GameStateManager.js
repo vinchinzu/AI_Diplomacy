@@ -98,77 +98,268 @@ export class GameStateManager {
   }
 
   /**
-   * Format phases from game data into a consistent format
-   * @param {Object} gameData - The raw game data
-   * @returns {Array} - Array of formatted phase objects
+   * Load a game file from disk
+   * @param {Event} event - File input event
+   * @returns {Promise} Promise that resolves when the file is loaded
+   */
+  loadGameFromDisk() {
+    return new Promise((resolve, reject) => {
+      console.log('[GameStateManager] Preparing to load game from disk');
+      
+      // Create a file input element
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,.lmvsgame';
+      
+      // Handle file selection
+      input.onchange = (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+          reject(new Error('No file selected'));
+          return;
+        }
+        
+        console.log(`[GameStateManager] Selected file: ${file.name}`);
+        
+        const reader = new FileReader();
+        
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            console.log('[GameStateManager] Successfully parsed game file');
+            
+            // Detect if this is a results file or a standard game file
+            if (data.rounds && Array.isArray(data.rounds)) {
+              // This appears to be a results file, convert it
+              console.log('[GameStateManager] Detected results file format, converting...');
+              const convertedData = this.processResultsFile(data);
+              this.loadGameState(convertedData)
+                .then(resolve)
+                .catch(reject);
+            } else {
+              // Standard game file format
+              this.loadGameState(data)
+                .then(resolve)
+                .catch(reject);
+            }
+          } catch (error) {
+            console.error('[GameStateManager] Error parsing game file:', error);
+            reject(new Error(`Failed to parse game file: ${error.message}`));
+          }
+        };
+        
+        reader.onerror = () => {
+          reject(new Error('Error reading file'));
+        };
+        
+        reader.readAsText(file);
+      };
+      
+      // Trigger file selection dialog
+      input.click();
+    });
+  }
+
+  /**
+   * Process and convert results-file format to animation format
+   * This method takes the output format from the AI Diplomacy results and 
+   * converts it to the format needed by the animation system
+   * @param {Object} resultsData - Results data from AI Diplomacy
+   * @returns {Object} Formatted game data compatible with the animation system
+   */
+  processResultsFile(resultsData) {
+    // Create a base game data structure
+    const gameData = {
+      map_name: "standard",
+      game_id: resultsData.game_id || "ai-diplomacy-game",
+      phases: []
+    };
+    
+    try {
+      // Extract phases from the results data
+      // Typical format includes rounds with states, orders, etc.
+      if (resultsData.rounds && Array.isArray(resultsData.rounds)) {
+        console.log(`[GameStateManager] Processing ${resultsData.rounds.length} rounds from results file`);
+        
+        // Convert each round to a phase
+        gameData.phases = resultsData.rounds.map((round, index) => {
+          // Extract phase info
+          const phase = {
+            name: round.name || `Round ${index + 1}`,
+            year: round.year || 1900 + Math.floor(index / 3),
+            season: round.season || (index % 3 === 0 ? "SPRING" : (index % 3 === 1 ? "FALL" : "WINTER")),
+            type: round.type || (index % 3 === 2 ? "ADJUSTMENT" : "MOVEMENT"),
+            units: [],
+            orders: [],
+            results: [],
+            messages: round.messages || [],
+            index: index
+          };
+          
+          // Extract unit positions
+          if (round.state && round.state.units) {
+            // Convert units to expected format
+            for (const [power, units] of Object.entries(round.state.units)) {
+              if (Array.isArray(units)) {
+                units.forEach(unit => {
+                  // Parse unit info (e.g., "A PAR" or "F BRE")
+                  const match = unit.match(/^([AF])\s+(.+)$/);
+                  if (match) {
+                    const unitType = match[1]; // 'A' or 'F'
+                    const location = match[2];
+                    
+                    // Create a unique ID for the unit
+                    const unitId = `${power.toUpperCase()}_${unitType}_${location}_${index}`;
+                    
+                    phase.units.push({
+                      id: unitId,
+                      type: unitType,
+                      power: power.toUpperCase(),
+                      location: location
+                    });
+                  }
+                });
+              }
+            }
+          }
+          
+          // Extract orders
+          if (round.orders) {
+            for (const [power, orders] of Object.entries(round.orders)) {
+              if (Array.isArray(orders)) {
+                orders.forEach(order => {
+                  // Extract the region from the order (e.g., "A PAR-BUR" -> "PAR")
+                  const regionMatch = order.match(/^[AF]\s+([A-Za-z_]+)/);
+                  const region = regionMatch ? regionMatch[1] : "";
+                  
+                  // Check if the order format needs to be standardized
+                  let standardizedOrder = order;
+                  // Ensure there are spaces between order components (e.g., A PAR-BUR, not A PAR - BUR)
+                  standardizedOrder = standardizedOrder
+                    .replace(/([A-Z]{3})\s*-\s*([A-Z]{3})/g, '$1-$2')
+                    .replace(/([A-Z]{3})\s*H/g, '$1 H')
+                    .replace(/([A-Z]{3})\s*S\s*([AF])\s*([A-Z]{3})/g, '$1 S $2 $3');
+                  
+                  phase.orders.push({
+                    text: standardizedOrder,
+                    power: power.toUpperCase(),
+                    region: region,
+                    success: true // Default to true unless specified otherwise
+                  });
+                });
+              }
+            }
+          }
+          
+          return phase;
+        });
+      }
+      
+      console.log(`[GameStateManager] Processed ${gameData.phases.length} phases from results file`);
+      return gameData;
+    } catch (error) {
+      console.error(`[GameStateManager] Error processing results file: ${error.message}`);
+      console.error(error);
+      throw new Error(`Failed to process results file: ${error.message}`);
+    }
+  }
+
+  /**
+   * Format game data into a consistent phase format for animation
+   * @param {Object} gameData - The game data to format
+   * @returns {Array} Array of formatted phases
    * @private
    */
   _formatPhases(gameData) {
-    // Handle both the format from loadGameFromDisk and our custom format
-    if (gameData.phases) {
-      return gameData.phases.map(phase => ({
-        name: phase.name,
-        state: phase.state,
-        orders: phase.orders || {},
-        results: phase.results || {},
-        messages: Array.isArray(phase.messages) 
-          ? phase.messages 
-          : Object.values(phase.messages || {})
-      }));
-    } 
-    
-    // If using the Game object directly from the engine
     const phases = [];
     
-    // Add historical phases
-    if (gameData.state_history) {
-      for (const [phaseName, state] of Object.entries(gameData.state_history)) {
-        phases.push({
-          name: phaseName,
-          state: state,
-          orders: (gameData.order_history && gameData.order_history[phaseName]) || {},
-          results: (gameData.result_history && gameData.result_history[phaseName]) || {},
-          messages: (gameData.message_history && gameData.message_history[phaseName]) 
-            ? Object.values(gameData.message_history[phaseName])
-            : []
+    try {
+      console.log('[GameStateManager] Formatting phases');
+      
+      // If gameData contains a 'phases' array, we can use it directly
+      if (Array.isArray(gameData.phases)) {
+        console.log(`[GameStateManager] Found ${gameData.phases.length} phases in game data`);
+        
+        // Map directly from phases array
+        return gameData.phases.map((phase, index) => {
+          // Ensure phase has a name
+          if (!phase.name) {
+            if (phase.state && phase.state.name) {
+              phase.name = phase.state.name;
+            } else {
+              phase.name = `Phase ${index + 1}`;
+            }
+          }
+          
+          // Copy properties from phase object or from its state object
+          return {
+            name: phase.name,
+            year: phase.year || (phase.state ? phase.state.year : null) || '?',
+            season: phase.season || (phase.state ? phase.state.season : null) || '?',
+            type: phase.type || (phase.state ? phase.state.type : null) || '?',
+            units: phase.units || (phase.state ? phase.state.units : null) || [],
+            centers: phase.centers || (phase.state ? phase.state.centers : null) || {},
+            orders: phase.orders || [],
+            results: phase.results || [],
+            messages: phase.messages || [],
+            summary: phase.summary || null,
+            index: index
+          };
         });
       }
+      
+      // For backward compatibility with older formats
+      // (Add any other format conversions as needed)
+      console.log('[GameStateManager] No phases array found, checking for state_history');
+      
+      // Fallback for older formats that use state_history
+      if (gameData.state_history) {
+        const stateHistory = gameData.state_history;
+        const orderHistory = gameData.order_history || {};
+        const resultHistory = gameData.result_history || {};
+        const messageHistory = gameData.message_history || {};
+        
+        console.log(`[GameStateManager] Found ${Object.keys(stateHistory).length} phases in state_history`);
+        
+        // Convert to array of phases
+        Object.entries(stateHistory).forEach(([phaseName, state], index) => {
+          phases.push({
+            name: phaseName,
+            year: state.year || '?',
+            season: state.season || '?',
+            type: state.type || '?',
+            units: state.units || [],
+            centers: state.centers || {},
+            orders: orderHistory[phaseName] ? Object.values(orderHistory[phaseName]) : [],
+            results: resultHistory[phaseName] ? Object.values(resultHistory[phaseName]) : [],
+            messages: messageHistory[phaseName] ? Object.values(messageHistory[phaseName]) : [],
+            summary: gameData.phase_summaries && gameData.phase_summaries[phaseName] ? 
+                    gameData.phase_summaries[phaseName] : null,
+            index: index
+          });
+        });
+        
+        // Sort phases by year, season, and type
+        phases.sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          if (a.season !== b.season) {
+            const seasons = ['SPRING', 'SUMMER', 'FALL', 'AUTUMN', 'WINTER'];
+            return seasons.indexOf(a.season) - seasons.indexOf(b.season);
+          }
+          const types = ['MOVEMENT', 'RETREAT', 'ADJUSTMENT', 'BUILD'];
+          return types.indexOf(a.type) - types.indexOf(b.type);
+        });
+        
+        console.log(`[GameStateManager] Formatted ${phases.length} phases from state_history`);
+        return phases;
+      }
+      
+      console.warn('[GameStateManager] Could not find phase data in the expected format');
+      return [];
+    } catch (error) {
+      console.error(`[GameStateManager] Error formatting phases: ${error.message}`);
+      return [];
     }
-    
-    // Add current phase
-    if (gameData.phase) {
-      phases.push({
-        name: gameData.phase,
-        state: gameData,
-        orders: gameData.orders || {},
-        results: (gameData.result_history && gameData.result_history[gameData.phase]) || {},
-        messages: gameData.messages || []
-      });
-    }
-    
-    // Sort phases chronologically
-    phases.sort((a, b) => {
-      // Parse phase names and compare
-      const aMatch = a.name.match(/([SFWR])(\d+)([AMRB])/);
-      const bMatch = b.name.match(/([SFWR])(\d+)([AMRB])/);
-      
-      if (!aMatch || !bMatch) return 0;
-      
-      // Compare years
-      const yearDiff = parseInt(aMatch[2]) - parseInt(bMatch[2]);
-      if (yearDiff !== 0) return yearDiff;
-      
-      // Compare seasons (S-Spring, F-Fall, W-Winter, R-Retreat)
-      const seasonOrder = {S: 0, F: 1, W: 2, R: 3};
-      const seasonDiff = seasonOrder[aMatch[1]] - seasonOrder[bMatch[1]];
-      if (seasonDiff !== 0) return seasonDiff;
-      
-      // Compare phase types (M-Movement, R-Retreat, A-Adjustment, B-Build)
-      const phaseOrder = {M: 0, R: 1, A: 2, B: 3};
-      return phaseOrder[aMatch[3]] - phaseOrder[bMatch[3]];
-    });
-    
-    return phases;
   }
 
   /**
@@ -369,5 +560,18 @@ export class GameStateManager {
    */
   getPhaseCount() {
     return this.phases.length;
+  }
+
+  /**
+   * Get a specific phase by index
+   * @param {number} index - The phase index to retrieve
+   * @returns {Object|null} The phase at the specified index, or null if not found
+   */
+  getPhase(index) {
+    if (index < 0 || index >= this.phases.length) {
+      console.warn(`[GameStateManager] Phase index out of range: ${index}`);
+      return null;
+    }
+    return this.phases[index];
   }
 } 

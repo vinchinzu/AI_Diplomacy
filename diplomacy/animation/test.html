@@ -117,7 +117,7 @@
     <div class="loading-overlay" id="loading-overlay">
       <h1>Diplomacy Animation Test</h1>
       <p>This page tests the Three.js animation system for Diplomacy with enhanced order visualization and unit movement.</p>
-      <button id="load-game-btn">Load Test Game</button>
+      <button id="load-game-btn">Load Game File</button>
       <div id="debug-info"></div>
       <div class="test-controls" id="test-controls" style="display: none;">
         <h2>Phase 3 Test Scenarios</h2>
@@ -212,547 +212,149 @@
           
           debugInfo.textContent += '\nDOM elements retrieved.';
           
-          // Create test game state
-          function createTestGameState() {
-            debugInfo.textContent += '\nCreating test game state...';
-            return {
-              game_id: 'test-game',
-              map_name: 'standard',
-              phases: [
-                {
-                  name: 'Spring 1901 Movement',
-                  year: 1901,
-                  season: 'Spring',
-                  type: 'Movement',
-                  units: [
-                    { type: 'A', power: 'AUSTRIA', location: 'VIE' },
-                    { type: 'A', power: 'AUSTRIA', location: 'BUD' },
-                    { type: 'F', power: 'AUSTRIA', location: 'TRI' },
-                    { type: 'F', power: 'ENGLAND', location: 'LON' },
-                    { type: 'F', power: 'ENGLAND', location: 'EDI' },
-                    { type: 'A', power: 'ENGLAND', location: 'LVP' },
-                    { type: 'A', power: 'FRANCE', location: 'PAR' },
-                    { type: 'A', power: 'FRANCE', location: 'MAR' },
-                    { type: 'F', power: 'FRANCE', location: 'BRE' },
-                    { type: 'A', power: 'GERMANY', location: 'BER' },
-                    { type: 'A', power: 'GERMANY', location: 'MUN' },
-                    { type: 'F', power: 'GERMANY', location: 'KIE' },
-                    { type: 'F', power: 'ITALY', location: 'NAP' },
-                    { type: 'A', power: 'ITALY', location: 'ROM' },
-                    { type: 'A', power: 'ITALY', location: 'VEN' },
-                    { type: 'F', power: 'RUSSIA', location: 'SEV' },
-                    { type: 'F', power: 'RUSSIA', location: 'STP_SC' },
-                    { type: 'A', power: 'RUSSIA', location: 'WAR' },
-                    { type: 'A', power: 'RUSSIA', location: 'MOS' },
-                    { type: 'F', power: 'TURKEY', location: 'ANK' },
-                    { type: 'A', power: 'TURKEY', location: 'CON' },
-                    { type: 'A', power: 'TURKEY', location: 'SMY' }
-                  ],
-                  messages: [
-                    { type: 'system', text: 'Game started!' }
-                  ]
-                },
-                {
-                  name: 'Fall 1901 Movement',
-                  year: 1901,
-                  season: 'Fall',
-                  type: 'Movement',
-                  units: [
-                    { type: 'A', power: 'AUSTRIA', location: 'GAL', fromLocation: 'VIE' },
-                    { type: 'A', power: 'AUSTRIA', location: 'SER', fromLocation: 'BUD' },
-                    { type: 'F', power: 'AUSTRIA', location: 'ADR', fromLocation: 'TRI' },
-                    { type: 'F', power: 'ENGLAND', location: 'NTH', fromLocation: 'LON' },
-                    { type: 'F', power: 'ENGLAND', location: 'NWG', fromLocation: 'EDI' },
-                    { type: 'A', power: 'ENGLAND', location: 'YOR', fromLocation: 'LVP' },
-                    { type: 'A', power: 'FRANCE', location: 'BUR', fromLocation: 'PAR' },
-                    { type: 'A', power: 'FRANCE', location: 'SPA', fromLocation: 'MAR' },
-                    { type: 'F', power: 'FRANCE', location: 'MAO', fromLocation: 'BRE' },
-                    { type: 'A', power: 'GERMANY', location: 'SIL', fromLocation: 'BER' },
-                    { type: 'A', power: 'GERMANY', location: 'RUH', fromLocation: 'MUN' },
-                    { type: 'F', power: 'GERMANY', location: 'DEN', fromLocation: 'KIE' },
-                    { type: 'F', power: 'ITALY', location: 'ION', fromLocation: 'NAP' },
-                    { type: 'A', power: 'ITALY', location: 'TUS', fromLocation: 'ROM' },
-                    { type: 'A', power: 'ITALY', location: 'TYR', fromLocation: 'VEN' },
-                    { type: 'F', power: 'RUSSIA', location: 'BLA', fromLocation: 'SEV' },
-                    { type: 'F', power: 'RUSSIA', location: 'BOT', fromLocation: 'STP_SC' },
-                    { type: 'A', power: 'RUSSIA', location: 'UKR', fromLocation: 'WAR' },
-                    { type: 'A', power: 'RUSSIA', location: 'SEV', fromLocation: 'MOS' },
-                    { type: 'F', power: 'TURKEY', location: 'BLA', fromLocation: 'ANK' },
-                    { type: 'A', power: 'TURKEY', location: 'BUL', fromLocation: 'CON' },
-                    { type: 'A', power: 'TURKEY', location: 'ARM', fromLocation: 'SMY' }
-                  ],
-                  orders: [
-                    { power: 'AUSTRIA', text: 'A VIE-GAL' },
-                    { power: 'AUSTRIA', text: 'A BUD-SER' },
-                    { power: 'AUSTRIA', text: 'F TRI-ADR' },
-                    { power: 'ENGLAND', text: 'F LON-NTH' },
-                    { power: 'ENGLAND', text: 'F EDI-NWG' },
-                    { power: 'ENGLAND', text: 'A LVP-YOR' },
-                    { power: 'FRANCE', text: 'A PAR-BUR' },
-                    { power: 'FRANCE', text: 'A MAR-SPA' },
-                    { power: 'FRANCE', text: 'F BRE-MAO' },
-                    { power: 'GERMANY', text: 'A BER-SIL' },
-                    { power: 'GERMANY', text: 'A MUN-RUH' },
-                    { power: 'GERMANY', text: 'F KIE-DEN' },
-                    { power: 'ITALY', text: 'F NAP-ION' },
-                    { power: 'ITALY', text: 'A ROM-TUS' },
-                    { power: 'ITALY', text: 'A VEN-TYR' },
-                    { power: 'RUSSIA', text: 'F SEV-BLA' },
-                    { power: 'RUSSIA', text: 'F STP/SC-BOT' },
-                    { power: 'RUSSIA', text: 'A WAR-UKR' },
-                    { power: 'RUSSIA', text: 'A MOS-SEV' },
-                    { power: 'TURKEY', text: 'F ANK-BLA' },
-                    { power: 'TURKEY', text: 'A CON-BUL' },
-                    { power: 'TURKEY', text: 'A SMY-ARM' }
-                  ],
-                  results: [
-                    { power: 'RUSSIA', region: 'SEV', success: true, text: 'F SEV-BLA succeeds' },
-                    { power: 'TURKEY', region: 'ANK', success: false, text: 'F ANK-BLA bounces with F SEV-BLA' }
-                  ]
-                },
-                {
-                  name: 'Winter 1901 Adjustment',
-                  year: 1901,
-                  season: 'Winter',
-                  type: 'Adjustment',
-                  units: [
-                    { type: 'A', power: 'AUSTRIA', location: 'GAL' },
-                    { type: 'A', power: 'AUSTRIA', location: 'SER' },
-                    { type: 'F', power: 'AUSTRIA', location: 'ADR' },
-                    { type: 'F', power: 'ENGLAND', location: 'NTH' },
-                    { type: 'F', power: 'ENGLAND', location: 'NWG' },
-                    { type: 'A', power: 'ENGLAND', location: 'YOR' },
-                    { type: 'A', power: 'FRANCE', location: 'BUR' },
-                    { type: 'A', power: 'FRANCE', location: 'SPA' },
-                    { type: 'F', power: 'FRANCE', location: 'MAO' },
-                    { type: 'A', power: 'GERMANY', location: 'SIL' },
-                    { type: 'A', power: 'GERMANY', location: 'RUH' },
-                    { type: 'F', power: 'GERMANY', location: 'DEN' },
-                    { type: 'F', power: 'ITALY', location: 'ION' },
-                    { type: 'A', power: 'ITALY', location: 'TUS' },
-                    { type: 'A', power: 'ITALY', location: 'TYR' },
-                    { type: 'F', power: 'RUSSIA', location: 'BLA' },
-                    { type: 'F', power: 'RUSSIA', location: 'BOT' },
-                    { type: 'A', power: 'RUSSIA', location: 'UKR' },
-                    { type: 'A', power: 'RUSSIA', location: 'SEV' },
-                    { type: 'F', power: 'TURKEY', location: 'ANK' },
-                    { type: 'A', power: 'TURKEY', location: 'BUL' },
-                    { type: 'A', power: 'TURKEY', location: 'ARM' }
-                  ],
-                  messages: [
-                    { type: 'system', text: 'Winter 1901 - No adjustments needed.' }
-                  ]
-                }
-              ]
-            };
-          }
-
-          // Event Listeners
-          debugInfo.textContent += '\nSetting up load game button event listener...';
+          // Initialize animation system
+          const gameStateManager = new GameStateManager();
           
-          loadGameBtn.addEventListener('click', async () => {
-            debugInfo.textContent += '\nLoad game button clicked!';
-            loadGameBtn.disabled = true;
-            loadGameBtn.textContent = 'Loading...';
-            
-            try {
-              debugInfo.textContent += '\nCreating game state manager...';
-              // Create a game state manager
-              const gameStateManager = new GameStateManager();
-              
-              // Create and load test data
-              const testData = createTestGameState();
-              debugInfo.textContent += '\nLoading game state data...';
-              await gameStateManager.loadGameState(testData);
-              
-              debugInfo.textContent += '\nInitializing animation system...';
-              
-              // Check if initializeAnimation is available
-              if (typeof window.initializeAnimation !== 'function') {
-                throw new Error('initializeAnimation function not found. Available exports: ' + 
-                  Object.keys(window).filter(k => k.includes('initialize')).join(', '));
-              }
-              
-              // Initialize the animation system with the global function
-              const animationPlayer = window.initializeAnimation({
-                containerId: 'animation-container',
-                gameStateManager: gameStateManager,
-                mapVariant: 'standard',
-                detailLevel: 'medium'
+          // Add event listeners for test buttons
+          document.getElementById('load-game-btn').addEventListener('click', () => {
+            // Use the existing loadGameFromDisk method instead of trying to fetch a file
+            gameStateManager.loadGameFromDisk()
+              .then(gameData => {
+                console.log('Game data loaded successfully');
+                return gameStateManager;
+              })
+              .then(() => {
+                console.log('Game loaded successfully');
+                document.getElementById('loading-overlay').style.display = 'none';
+                
+                // Create an animation player container if it doesn't exist
+                let animationPlayer = document.getElementById('animation-player');
+                if (!animationPlayer) {
+                  animationPlayer = document.createElement('div');
+                  animationPlayer.id = 'animation-player';
+                  document.getElementById('animation-container').appendChild(animationPlayer);
+                }
+                
+                animationPlayer.style.display = 'block';
+                
+                // Initialize the animation player
+                initializeAnimationPlayer(gameStateManager);
+              })
+              .catch(error => {
+                console.error('Error loading game:', error);
+                document.getElementById('debug-info').style.display = 'block';
+                document.getElementById('debug-info').innerHTML = `<strong>Error:</strong> ${error.message}`;
               });
-              
-              debugInfo.textContent += '\nAnimation system initialized successfully!';
-              
-              // Hide loading overlay and show test controls
-              loadingOverlay.style.display = 'none';
-              testControls.style.display = 'block';
-              
-              // Set up test buttons
-              setupTestButtons(gameStateManager, animationPlayer);
-            } catch (error) {
-              console.error('Error loading game:', error);
-              debugInfo.textContent += `\nError: ${error.message}`;
-              if (error.stack) {
-                debugInfo.textContent += `\nStack: ${error.stack}`;
-              }
-              loadGameBtn.textContent = `Error: ${error.message}`;
-              setTimeout(() => {
-                loadGameBtn.disabled = false;
-                loadGameBtn.textContent = 'Try Again';
-              }, 3000);
-            }
           });
           
           // Manually trigger a click to ensure it's working
           debugInfo.textContent += '\nEvent listener set up! Try clicking the button.';
           
-          // Just define setupTestButtons function to avoid errors, but don't call it directly
-          function setupTestButtons(gameStateManager, animationPlayer) {
-            debugInfo.textContent += '\nSetting up test buttons...';
-            // Test basic movement button
-            document.getElementById('test-movement').addEventListener('click', () => {
-              // Add a custom phase with movement
-              const customMovementPhase = {
-                name: 'Custom Movement Test',
-                year: 1902,
-                season: 'Spring',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'PAR' },
-                  { type: 'F', power: 'ENGLAND', location: 'LON' },
-                  { type: 'A', power: 'GERMANY', location: 'BER' },
-                  { type: 'F', power: 'RUSSIA', location: 'STP_SC' }
-                ],
-                messages: [
-                  { type: 'system', text: 'Testing unit movement...' }
-                ]
-              };
-              
-              const movementResultPhase = {
-                name: 'Movement Test Result',
-                year: 1902,
-                season: 'Fall',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'BUR', fromLocation: 'PAR' },
-                  { type: 'F', power: 'ENGLAND', location: 'NTH', fromLocation: 'LON' },
-                  { type: 'A', power: 'GERMANY', location: 'SIL', fromLocation: 'BER' },
-                  { type: 'F', power: 'RUSSIA', location: 'BOT', fromLocation: 'STP_SC' }
-                ],
-                orders: [
-                  { power: 'FRANCE', text: 'A PAR-BUR' },
-                  { power: 'ENGLAND', text: 'F LON-NTH' },
-                  { power: 'GERMANY', text: 'A BER-SIL' },
-                  { power: 'RUSSIA', text: 'F STP/SC-BOT' }
-                ],
-                results: [
-                  { power: 'FRANCE', region: 'PAR', success: true, text: 'A PAR-BUR succeeds' },
-                  { power: 'ENGLAND', region: 'LON', success: true, text: 'F LON-NTH succeeds' },
-                  { power: 'GERMANY', region: 'BER', success: true, text: 'A BER-SIL succeeds' },
-                  { power: 'RUSSIA', region: 'STP_SC', success: true, text: 'F STP/SC-BOT succeeds' }
-                ]
-              };
-              
-              // Add phases to game state
-              gameStateManager.appendPhases([customMovementPhase, movementResultPhase]);
-              
-              // Update animation to show new phases
-              gameStateManager.notifyListeners('phasesAdded', 
-                [customMovementPhase, movementResultPhase]);
-            });
+          // Define the initializeAnimationPlayer function
+          function initializeAnimationPlayer(gameStateManager) {
+            console.log('Initializing animation player with game state manager');
             
-            // Test basic orders button
-            document.getElementById('test-basic-orders').addEventListener('click', () => {
-              // Create a phase with basic orders (move, hold, support)
-              const basicOrdersPhase = {
-                name: 'Basic Orders Test',
-                year: 1902,
-                season: 'Spring',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'PAR' },
-                  { type: 'A', power: 'FRANCE', location: 'BUR' },
-                  { type: 'F', power: 'ENGLAND', location: 'LON' },
-                  { type: 'A', power: 'GERMANY', location: 'MUN' },
-                  { type: 'A', power: 'GERMANY', location: 'BER' }
-                ],
-                orders: [
-                  { power: 'FRANCE', text: 'A PAR-BUR' },
-                  { power: 'FRANCE', text: 'A BUR H' },
-                  { power: 'ENGLAND', text: 'F LON H' },
-                  { power: 'GERMANY', text: 'A MUN S A BER' },
-                  { power: 'GERMANY', text: 'A BER H' }
-                ]
-              };
-              
-              const basicOrdersResultPhase = {
-                name: 'Basic Orders Result',
-                year: 1902,
-                season: 'Fall',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'BUR' },
-                  { type: 'F', power: 'ENGLAND', location: 'LON' },
-                  { type: 'A', power: 'GERMANY', location: 'MUN' },
-                  { type: 'A', power: 'GERMANY', location: 'BER' }
-                ],
-                orders: [
-                  { power: 'FRANCE', text: 'A BUR H' },
-                  { power: 'ENGLAND', text: 'F LON H' },
-                  { power: 'GERMANY', text: 'A MUN H' },
-                  { power: 'GERMANY', text: 'A BER H' }
-                ]
-              };
-              
-              // Add phases to game state
-              gameStateManager.appendPhases([basicOrdersPhase, basicOrdersResultPhase]);
-              
-              // Update animation to show new phases
-              gameStateManager.notifyListeners('phasesAdded', 
-                [basicOrdersPhase, basicOrdersResultPhase]);
-            });
+            // Create a map container if it doesn't exist
+            let mapContainer = document.getElementById('map-container');
+            if (!mapContainer) {
+              mapContainer = document.createElement('div');
+              mapContainer.id = 'map-container';
+              mapContainer.style.width = '100%';
+              mapContainer.style.height = '600px';
+              mapContainer.style.position = 'relative';
+              mapContainer.style.backgroundColor = '#87CEEB';
+              mapContainer.style.marginTop = '20px';
+              document.getElementById('animation-player').appendChild(mapContainer);
+            }
             
-            // Test complex orders button
-            document.getElementById('test-complex-orders').addEventListener('click', () => {
-              // Create a phase with complex orders (support moves, convoys)
-              const complexOrdersPhase = {
-                name: 'Complex Orders Test',
-                year: 1902,
-                season: 'Spring',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'PAR' },
-                  { type: 'A', power: 'FRANCE', location: 'MAR' },
-                  { type: 'F', power: 'FRANCE', location: 'MAO' },
-                  { type: 'A', power: 'ENGLAND', location: 'LVP' },
-                  { type: 'F', power: 'ENGLAND', location: 'NTH' },
-                  { type: 'F', power: 'GERMANY', location: 'KIE' },
-                  { type: 'A', power: 'GERMANY', location: 'BER' }
-                ],
-                orders: [
-                  { power: 'FRANCE', text: 'A PAR-BUR' },
-                  { power: 'FRANCE', text: 'A MAR S A PAR-BUR' },
-                  { power: 'FRANCE', text: 'F MAO H' },
-                  { power: 'ENGLAND', text: 'A LVP-BEL' },
-                  { power: 'ENGLAND', text: 'F NTH C A LVP-BEL' },
-                  { power: 'GERMANY', text: 'F KIE-DEN' },
-                  { power: 'GERMANY', text: 'A BER S F KIE-DEN' }
-                ]
-              };
+            // Create animation controls if they don't exist
+            let animationControls = document.getElementById('animation-controls');
+            if (!animationControls) {
+              animationControls = document.createElement('div');
+              animationControls.id = 'animation-controls';
+              animationControls.style.marginTop = '20px';
               
-              const complexOrdersResultPhase = {
-                name: 'Complex Orders Result',
-                year: 1902,
-                season: 'Fall',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'BUR', fromLocation: 'PAR' },
-                  { type: 'A', power: 'FRANCE', location: 'MAR' },
-                  { type: 'F', power: 'FRANCE', location: 'MAO' },
-                  { type: 'A', power: 'ENGLAND', location: 'BEL', fromLocation: 'LVP' },
-                  { type: 'F', power: 'ENGLAND', location: 'NTH' },
-                  { type: 'F', power: 'GERMANY', location: 'DEN', fromLocation: 'KIE' },
-                  { type: 'A', power: 'GERMANY', location: 'BER' }
-                ],
-                results: [
-                  { power: 'FRANCE', region: 'PAR', success: true, text: 'A PAR-BUR succeeds' },
-                  { power: 'ENGLAND', region: 'LVP', success: true, text: 'A LVP-BEL succeeds (convoyed)' },
-                  { power: 'GERMANY', region: 'KIE', success: true, text: 'F KIE-DEN succeeds' }
-                ]
-              };
+              // Add play controls
+              animationControls.innerHTML = `
+                <div class="control-group">
+                  <button id="prev-phase">◀ Prev</button>
+                  <button id="play-button">▶ Play</button>
+                  <button id="next-phase">Next ▶</button>
+                  <label>Speed: <select id="speed-control">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="2">2x</option>
+                    <option value="4">4x</option>
+                  </select></label>
+                  <span id="phase-display">Phase: 1 of ${gameStateManager.getPhaseCount()}</span>
+                </div>
+                <div class="control-group">
+                  <label><input type="checkbox" id="show-order-viz" checked> Show Order Visualizations</label>
+                  <label><input type="checkbox" id="animate-units" checked> Animate Unit Movements</label>
+                  <label><input type="checkbox" id="use-easing" checked> Use Animation Easing</label>
+                  <label><input type="checkbox" id="auto-advance" checked> Auto-Advance to Next Phase</label>
+                </div>
+              `;
               
-              // Add phases to game state
-              gameStateManager.appendPhases([complexOrdersPhase, complexOrdersResultPhase]);
-              
-              // Update animation to show new phases
-              gameStateManager.notifyListeners('phasesAdded', 
-                [complexOrdersPhase, complexOrdersResultPhase]);
-            });
+              document.getElementById('animation-player').prepend(animationControls);
+            }
             
-            // Test failed orders button
-            document.getElementById('test-failed-orders').addEventListener('click', () => {
-              // Create a phase with failed orders (bounces, cuts)
-              const failedOrdersPhase = {
-                name: 'Failed Orders Test',
-                year: 1902,
-                season: 'Spring',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'PAR' },
-                  { type: 'A', power: 'GERMANY', location: 'BUR' },
-                  { type: 'F', power: 'ENGLAND', location: 'NTH' },
-                  { type: 'F', power: 'GERMANY', location: 'DEN' },
-                  { type: 'A', power: 'AUSTRIA', location: 'VIE' },
-                  { type: 'A', power: 'ITALY', location: 'TYR' },
-                  { type: 'A', power: 'TURKEY', location: 'ANK' },
-                  { type: 'F', power: 'RUSSIA', location: 'SEV' }
-                ],
-                orders: [
-                  { power: 'FRANCE', text: 'A PAR-BUR' },
-                  { power: 'GERMANY', text: 'A BUR H' },
-                  { power: 'ENGLAND', text: 'F NTH-SKA' },
-                  { power: 'GERMANY', text: 'F DEN-SKA' },
-                  { power: 'AUSTRIA', text: 'A VIE-TYR' },
-                  { power: 'ITALY', text: 'A TYR S A VIE-TYR' },
-                  { power: 'TURKEY', text: 'A ANK-ARM' },
-                  { power: 'RUSSIA', text: 'F SEV-BLA' }
-                ]
-              };
+            // Now use the initializeAnimation function from the index.js module
+            if (typeof window.initializeAnimation === 'function') {
+              const animationPlayer = window.initializeAnimation({
+                containerId: 'map-container',
+                gameStateManager: gameStateManager,
+                mapVariant: 'standard',
+                detailLevel: 'medium'
+              });
               
-              const failedOrdersResultPhase = {
-                name: 'Failed Orders Result',
-                year: 1902,
-                season: 'Fall',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'FRANCE', location: 'PAR' },
-                  { type: 'A', power: 'GERMANY', location: 'BUR' },
-                  { type: 'F', power: 'ENGLAND', location: 'NTH' },
-                  { type: 'F', power: 'GERMANY', location: 'DEN' },
-                  { type: 'A', power: 'AUSTRIA', location: 'TYR', fromLocation: 'VIE' },
-                  { type: 'A', power: 'ITALY', location: 'TYR' },
-                  { type: 'A', power: 'TURKEY', location: 'ARM', fromLocation: 'ANK' },
-                  { type: 'F', power: 'RUSSIA', location: 'BLA', fromLocation: 'SEV' }
-                ],
-                results: [
-                  { power: 'FRANCE', region: 'PAR', success: false, text: 'A PAR-BUR bounces' },
-                  { power: 'ENGLAND', region: 'NTH', success: false, text: 'F NTH-SKA bounces with F DEN-SKA' },
-                  { power: 'GERMANY', region: 'DEN', success: false, text: 'F DEN-SKA bounces with F NTH-SKA' },
-                  { power: 'AUSTRIA', region: 'VIE', success: true, text: 'A VIE-TYR succeeds with support' },
-                  { power: 'TURKEY', region: 'ANK', success: true, text: 'A ANK-ARM succeeds' }
-                ]
-              };
+              // Set up control event listeners
+              document.getElementById('prev-phase')?.addEventListener('click', () => {
+                animationPlayer.previousPhase();
+              });
               
-              // Add phases to game state
-              gameStateManager.appendPhases([failedOrdersPhase, failedOrdersResultPhase]);
+              document.getElementById('play-button')?.addEventListener('click', () => {
+                if (animationPlayer.isPlaying) {
+                  animationPlayer.pause();
+                  document.getElementById('play-button').textContent = '▶ Play';
+                } else {
+                  animationPlayer.play();
+                  document.getElementById('play-button').textContent = '⏸ Pause';
+                }
+              });
               
-              // Update animation to show new phases
-              gameStateManager.notifyListeners('phasesAdded', 
-                [failedOrdersPhase, failedOrdersResultPhase]);
-            });
-            
-            // Test retreat button
-            document.getElementById('test-retreat').addEventListener('click', () => {
-              // Create phases for a retreat scenario
-              const retreatSetupPhase = {
-                name: 'Retreat Setup',
-                year: 1902,
-                season: 'Spring',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'AUSTRIA', location: 'TYR' },
-                  { type: 'A', power: 'ITALY', location: 'VEN' },
-                  { type: 'A', power: 'ITALY', location: 'PIE' },
-                  { type: 'F', power: 'FRANCE', location: 'MAR' },
-                  { type: 'F', power: 'ITALY', location: 'TYS' }
-                ],
-                orders: [
-                  { power: 'AUSTRIA', text: 'A TYR-VEN' },
-                  { power: 'ITALY', text: 'A VEN H' },
-                  { power: 'ITALY', text: 'A PIE S A VEN' },
-                  { power: 'FRANCE', text: 'F MAR-TYS' },
-                  { power: 'ITALY', text: 'F TYS H' }
-                ]
-              };
+              document.getElementById('next-phase')?.addEventListener('click', () => {
+                animationPlayer.nextPhase();
+              });
               
-              const retreatPhase = {
-                name: 'Retreat Phase',
-                year: 1902,
-                season: 'Spring',
-                type: 'Retreat',
-                units: [
-                  { type: 'A', power: 'AUSTRIA', location: 'TYR' },
-                  { type: 'A', power: 'ITALY', location: 'VEN' },
-                  { type: 'A', power: 'ITALY', location: 'PIE' },
-                  { type: 'F', power: 'FRANCE', location: 'MAR' },
-                  { type: 'F', power: 'ITALY', location: 'TYS', dislodged: true, retreatOptions: ['NAP', 'ROM', 'ION'] }
-                ],
-                results: [
-                  { power: 'ITALY', region: 'TYS', success: false, text: 'F TYS dislodged by F MAR-TYS' },
-                  { power: 'AUSTRIA', region: 'TYR', success: false, text: 'A TYR-VEN bounces' }
-                ],
-                retreats: [
-                  { power: 'ITALY', text: 'F TYS-ION' }
-                ]
-              };
+              document.getElementById('speed-control')?.addEventListener('change', (e) => {
+                animationPlayer.setPlaybackSpeed(parseFloat(e.target.value));
+              });
               
-              const retreatResultPhase = {
-                name: 'After Retreat',
-                year: 1902,
-                season: 'Fall',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'AUSTRIA', location: 'TYR' },
-                  { type: 'A', power: 'ITALY', location: 'VEN' },
-                  { type: 'A', power: 'ITALY', location: 'PIE' },
-                  { type: 'F', power: 'FRANCE', location: 'TYS', fromLocation: 'MAR' },
-                  { type: 'F', power: 'ITALY', location: 'ION', fromLocation: 'TYS' }
-                ]
-              };
+              document.getElementById('show-order-viz')?.addEventListener('change', (e) => {
+                animationPlayer.showOrderVisualizations = e.target.checked;
+              });
               
-              // Add phases to game state
-              gameStateManager.appendPhases([retreatSetupPhase, retreatPhase, retreatResultPhase]);
+              document.getElementById('animate-units')?.addEventListener('change', (e) => {
+                animationPlayer.animateUnitMovements = e.target.checked;
+              });
               
-              // Update animation to show new phases
-              gameStateManager.notifyListeners('phasesAdded', 
-                [retreatSetupPhase, retreatPhase, retreatResultPhase]);
-            });
-            
-            // Test build button
-            document.getElementById('test-build').addEventListener('click', () => {
-              // Create phases for a build scenario
-              const buildSetupPhase = {
-                name: 'Build Setup',
-                year: 1902,
-                season: 'Fall',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'AUSTRIA', location: 'VIE' },
-                  { type: 'A', power: 'AUSTRIA', location: 'BUD' },
-                  { type: 'F', power: 'FRANCE', location: 'BRE' },
-                  { type: 'A', power: 'FRANCE', location: 'PAR' }
-                ]
-              };
+              document.getElementById('use-easing')?.addEventListener('change', (e) => {
+                animationPlayer.setEasing(e.target.checked);
+              });
               
-              const buildPhase = {
-                name: 'Build Phase',
-                year: 1902,
-                season: 'Winter',
-                type: 'Adjustment',
-                units: [
-                  { type: 'A', power: 'AUSTRIA', location: 'VIE' },
-                  { type: 'A', power: 'AUSTRIA', location: 'BUD' },
-                  { type: 'F', power: 'FRANCE', location: 'BRE' },
-                  { type: 'A', power: 'FRANCE', location: 'PAR' }
-                ],
-                builds: [
-                  { power: 'AUSTRIA', text: 'Build A TRI' },
-                  { power: 'FRANCE', text: 'Build F MAR' }
-                ]
-              };
+              document.getElementById('auto-advance')?.addEventListener('change', (e) => {
+                animationPlayer.autoAdvance = e.target.checked;
+              });
               
-              const buildResultPhase = {
-                name: 'After Builds',
-                year: 1903,
-                season: 'Spring',
-                type: 'Movement',
-                units: [
-                  { type: 'A', power: 'AUSTRIA', location: 'VIE' },
-                  { type: 'A', power: 'AUSTRIA', location: 'BUD' },
-                  { type: 'A', power: 'AUSTRIA', location: 'TRI' },
-                  { type: 'F', power: 'FRANCE', location: 'BRE' },
-                  { type: 'A', power: 'FRANCE', location: 'PAR' },
-                  { type: 'F', power: 'FRANCE', location: 'MAR' }
-                ]
-              };
-              
-              // Add phases to game state
-              gameStateManager.appendPhases([buildSetupPhase, buildPhase, buildResultPhase]);
-              
-              // Update animation to show new phases
-              gameStateManager.notifyListeners('phasesAdded', 
-                [buildSetupPhase, buildPhase, buildResultPhase]);
-            });
+              console.log('Animation player initialized successfully');
+            } else {
+              console.error('initializeAnimation function not found. Available exports:', 
+                Object.keys(window).filter(k => k.includes('initialize')).join(', '));
+              document.getElementById('debug-info').style.display = 'block';
+              document.getElementById('debug-info').innerHTML = 
+                '<strong>Error:</strong> initializeAnimation function not available. Ensure index.js is loaded correctly.';
+            }
           }
         })
         .catch(error => {

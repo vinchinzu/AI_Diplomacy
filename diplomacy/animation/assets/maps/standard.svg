@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <!-- Simple placeholder map for Diplomacy -->
+  <rect width="1000" height="1000" fill="#8baed8" /> <!-- Ocean background -->
+  
+  <!-- Land masses (simple rectangles as a placeholder) -->
+  <rect x="300" y="300" width="400" height="400" fill="#c9b18c" /> <!-- Europe -->
+  
+  <!-- Add some region names -->
+  <text x="500" y="500" font-family="Arial" font-size="20" text-anchor="middle" fill="#000">Europe</text>
+</svg>
