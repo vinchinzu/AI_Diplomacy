@@ -1,5 +1,8 @@
 {
   "dependencies": {
-    "three": "^0.174.0"
+    "canvas": "^3.1.0",
+    "svgo": "^3.3.2",
+    "three": "^0.174.0",
+    "xmldom": "^0.6.0"
   }
 }

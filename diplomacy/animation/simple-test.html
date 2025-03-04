@@ -96,6 +96,7 @@
     let currentPhaseIndex = 0;
     let coordinateData = null; // Will hold map coordinates
     let unitMeshes = []; // Track unit meshes for cleanup
+    let mapGeometry; // Shared geometry for map components
     
     // DOM elements
     const loadBtn = document.getElementById('load-btn');
@@ -110,7 +111,7 @@
     function initScene() {
       // Create scene
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x87CEEB);
+      scene.background = new THREE.Color(0x87CEEB); // Sky blue background
       
       // Setup camera
       camera = new THREE.PerspectiveCamera(
@@ -122,31 +123,48 @@
       camera.position.set(0, 500, 500);
       camera.lookAt(0, 0, 0);
       
-      // Setup renderer
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      // Setup renderer with improved quality
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        alpha: true
+      });
       renderer.setSize(mapView.clientWidth, mapView.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       mapView.appendChild(renderer.domElement);
       
-      // Add controls
+      // Add controls with better defaults
       controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.screenSpacePanning = true;
+      controls.minDistance = 100;
+      controls.maxDistance = 1000;
+      controls.maxPolarAngle = Math.PI / 2.1; // Limit rotation to prevent seeing under the map
       
-      // Add a grid for reference
-      const gridHelper = new THREE.GridHelper(1000, 20);
+      // Add camera preset buttons
+      createCameraPresetButtons();
+      
+      // Enhanced lighting setup
+      setupLighting();
+      
+      // Add an environment (skybox, fog)
+      setupEnvironment();
+      
+      // Add a subtle grid for reference that fades with distance
+      const gridHelper = new THREE.GridHelper(1000, 50, 0x444444, 0x222222);
+      gridHelper.material.opacity = 0.2;
+      gridHelper.material.transparent = true;
       scene.add(gridHelper);
-      
-      // Add some lights
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-      scene.add(ambientLight);
-      
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(200, 400, 200);
-      scene.add(directionalLight);
       
       // Load the coordinate data
       loadCoordinateData().then(() => {
-        // Create map with texture once coordinates are loaded
+        // Create enhanced map with texture once coordinates are loaded
         createMapWithTexture();
+        
+        // Disable territory disks - we'll draw territories directly on the canvas map
+        // createTerritoryBoundaries();
         
         // Add territory labels
         if (coordinateData && coordinateData.coordinates) {
@@ -161,6 +179,12 @@
         
         // Add supply centers
         displaySupplyCenters();
+        
+        // Add territory interactivity
+        addTerritoryInteractivity();
+        
+        // Optimize label visibility
+        optimizeLabels();
       });
       
       // Start animation loop
@@ -168,6 +192,659 @@
       
       // Add window resize handler
       window.addEventListener('resize', onWindowResize);
+    }
+    
+    // Enhanced lighting setup
+    function setupLighting() {
+      // Clear existing lights if any
+      scene.children.forEach(child => {
+        if (child.isLight) scene.remove(child);
+      });
+      
+      // Add ambient light for base illumination
+      const ambientLight = new THREE.AmbientLight(0xCCDDFF, 0.4);
+      scene.add(ambientLight);
+      
+      // Main directional light (sun-like)
+      const mainLight = new THREE.DirectionalLight(0xFFFFCC, 0.8);
+      mainLight.position.set(300, 400, 300);
+      mainLight.castShadow = true;
+      
+      // Better shadow quality
+      mainLight.shadow.mapSize.width = 2048;
+      mainLight.shadow.mapSize.height = 2048;
+      mainLight.shadow.camera.near = 0.5;
+      mainLight.shadow.camera.far = 1000;
+      mainLight.shadow.camera.left = -500;
+      mainLight.shadow.camera.right = 500;
+      mainLight.shadow.camera.top = 500;
+      mainLight.shadow.camera.bottom = -500;
+      scene.add(mainLight);
+      
+      // Helper backlight
+      const backLight = new THREE.DirectionalLight(0x9999FF, 0.3);
+      backLight.position.set(-200, 200, -300);
+      scene.add(backLight);
+      
+      // Add some point lights for atmosphere
+      const colors = [0xFF6666, 0x66AAFF, 0x66FFAA, 0xFFFF66];
+      
+      for (let i = 0; i < 4; i++) {
+        const pointLight = new THREE.PointLight(colors[i % colors.length], 0.4, 300);
+        const angle = (i / 4) * Math.PI * 2;
+        pointLight.position.set(
+          Math.cos(angle) * 400,
+          100,
+          Math.sin(angle) * 400
+        );
+        scene.add(pointLight);
+      }
+    }
+    
+    // Create an environmental atmosphere
+    function setupEnvironment() {
+      // Add subtle fog for depth
+      scene.fog = new THREE.FogExp2(0xCCDDFF, 0.0005);
+      
+      // Store initial background color for day/night transitions
+      scene.userData.dayColor = new THREE.Color(0x87CEEB);
+      scene.userData.nightColor = new THREE.Color(0x001133);
+      scene.userData.currentTimeOfDay = 'day';
+    }
+    
+    // Create camera preset buttons
+    function createCameraPresetButtons() {
+      const presetContainer = document.createElement('div');
+      presetContainer.style.position = 'absolute';
+      presetContainer.style.bottom = '20px';
+      presetContainer.style.left = '20px';
+      presetContainer.style.zIndex = '100';
+      
+      const presets = [
+        { name: 'Top View', position: [0, 600, 0], target: [0, 0, 0] },
+        { name: 'Europe', position: [0, 400, 400], target: [0, 0, 0] },
+        { name: 'West', position: [-500, 300, 0], target: [0, 0, 0] },
+        { name: 'East', position: [500, 300, 0], target: [0, 0, 0] },
+        { name: 'North', position: [0, 300, -500], target: [0, 0, 0] },
+        { name: 'South', position: [0, 300, 500], target: [0, 0, 0] },
+        { name: 'Toggle Day/Night', action: toggleDayNight }
+      ];
+      
+      presets.forEach(preset => {
+        const btn = document.createElement('button');
+        btn.innerText = preset.name;
+        btn.style.margin = '5px';
+        btn.style.padding = '8px 12px';
+        btn.style.backgroundColor = '#444';
+        btn.style.color = 'white';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '4px';
+        btn.style.cursor = 'pointer';
+        
+        btn.addEventListener('click', () => {
+          if (preset.action) {
+            preset.action();
+          } else {
+            moveCamera(preset.position, preset.target);
+          }
+        });
+        
+        presetContainer.appendChild(btn);
+      });
+      
+      document.body.appendChild(presetContainer);
+    }
+    
+    // Smoothly move camera to new position and target
+    function moveCamera(position, target) {
+      const startPosition = camera.position.clone();
+      const startTarget = controls.target.clone();
+      const endPosition = new THREE.Vector3(...position);
+      const endTarget = new THREE.Vector3(...target);
+      
+      const duration = 1000; // ms
+      const startTime = Date.now();
+      
+      function updateCamera() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Use easing function for smoother motion
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        
+        // Interpolate position and target
+        camera.position.lerpVectors(startPosition, endPosition, easeProgress);
+        controls.target.lerpVectors(startTarget, endTarget, easeProgress);
+        controls.update();
+        
+        if (progress < 1) {
+          requestAnimationFrame(updateCamera);
+        }
+      }
+      
+      updateCamera();
+    }
+    
+    // Toggle between day and night mode
+    function toggleDayNight() {
+      const isDay = scene.userData.currentTimeOfDay === 'day';
+      const targetColor = isDay ? scene.userData.nightColor : scene.userData.dayColor;
+      const currentColor = scene.background.clone();
+      
+      // Get all directional lights
+      const lights = scene.children.filter(child => child.isDirectionalLight);
+      const currentIntensities = lights.map(light => light.intensity);
+      const targetIntensities = isDay ? lights.map(light => light.intensity * 0.3) : lights.map(light => light.intensity / 0.3);
+      
+      // Get the ambient light
+      const ambientLight = scene.children.find(child => child.isAmbientLight);
+      const currentAmbientIntensity = ambientLight ? ambientLight.intensity : 0.4;
+      const targetAmbientIntensity = isDay ? currentAmbientIntensity * 0.5 : currentAmbientIntensity / 0.5;
+      
+      // Update fog
+      const currentFogColor = scene.fog.color.clone();
+      const targetFogColor = isDay ? new THREE.Color(0x001133) : new THREE.Color(0xCCDDFF);
+      
+      const duration = 1000; // ms
+      const startTime = Date.now();
+      
+      function updateLighting() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Use easing function for smoother transition
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        
+        // Interpolate background color
+        scene.background.lerpColors(currentColor, targetColor, easeProgress);
+        
+        // Interpolate light intensities
+        lights.forEach((light, index) => {
+          light.intensity = currentIntensities[index] + (targetIntensities[index] - currentIntensities[index]) * easeProgress;
+        });
+        
+        // Interpolate ambient light intensity
+        if (ambientLight) {
+          ambientLight.intensity = currentAmbientIntensity + (targetAmbientIntensity - currentAmbientIntensity) * easeProgress;
+        }
+        
+        // Interpolate fog color
+        scene.fog.color.lerpColors(currentFogColor, targetFogColor, easeProgress);
+        
+        if (progress < 1) {
+          requestAnimationFrame(updateLighting);
+        } else {
+          // Update current time of day
+          scene.userData.currentTimeOfDay = isDay ? 'night' : 'day';
+        }
+      }
+      
+      updateLighting();
+    }
+    
+    // Create territory boundaries based on coordinate data
+    function createTerritoryBoundaries() {
+      if (!coordinateData || !coordinateData.coordinates) {
+        console.warn('No coordinate data available for territory boundaries');
+        return;
+      }
+      
+      // Group provinces by country
+      const countries = {
+        'AUSTRIA': ['VIE', 'BUD', 'TRI', 'GAL', 'BOH', 'TYR'],
+        'ENGLAND': ['LON', 'EDI', 'LVP', 'WAL', 'YOR', 'CLY'],
+        'FRANCE': ['PAR', 'BRE', 'MAR', 'PIC', 'GAS', 'BUR'],
+        'GERMANY': ['BER', 'MUN', 'KIE', 'RUH', 'PRU', 'SIL'],
+        'ITALY': ['ROM', 'VEN', 'NAP', 'TUS', 'PIE', 'APU'],
+        'RUSSIA': ['STP', 'MOS', 'WAR', 'SEV', 'UKR', 'LVN'],
+        'TURKEY': ['CON', 'ANK', 'SMY', 'SYR', 'ARM']
+      };
+      
+      // Sea provinces for special styling
+      const seaProvinces = [
+        'NAO', 'NWG', 'BAR', 'NTH', 'SKA', 'HEL', 'BAL', 'BOT', 'ENG', 'IRI', 'MAO', 
+        'WES', 'LYO', 'TYS', 'ADR', 'ION', 'AEG', 'EAS', 'BLA'
+      ];
+      
+      // Country colors with better contrast and theme
+      const countryColors = {
+        'AUSTRIA': 0xd82b2b,
+        'ENGLAND': 0x223a87,
+        'FRANCE': 0x3699d4,
+        'GERMANY': 0x232323,
+        'ITALY': 0x35a335,
+        'RUSSIA': 0xcccccc,
+        'TURKEY': 0xe0c846
+      };
+      
+      // Create a group for all territory boundaries
+      const territoriesGroup = new THREE.Group();
+      territoriesGroup.name = 'territories';
+      
+      // Main group for land territories
+      const landGroup = new THREE.Group();
+      landGroup.name = 'land_territories';
+      
+      // Main group for sea territories
+      const seaGroup = new THREE.Group();
+      seaGroup.name = 'sea_territories';
+      
+      // Process each province
+      for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+        if (!province.includes('_')) { // Skip coast variants
+          // Determine if this is a sea province
+          const isSea = seaProvinces.includes(province);
+          
+          // Determine country by checking each country's provinces
+          let country = null;
+          for (const [countryName, provinces] of Object.entries(countries)) {
+            if (provinces.includes(province)) {
+              country = countryName;
+              break;
+            }
+          }
+          
+          // Larger radius for territories
+          const radius = isSea ? 35 : 33;
+          
+          // Create appearance based on territory type
+          if (isSea) {
+            // Sea territory - blue with wave effect
+            const circleGeometry = new THREE.CircleGeometry(radius, 32);
+            const circleMaterial = new THREE.MeshStandardMaterial({
+              color: 0x1a3c6e,
+              transparent: true,
+              opacity: 0.8,
+              side: THREE.DoubleSide,
+              metalness: 0.3,
+              roughness: 0.7
+            });
+            
+            const circleMesh = new THREE.Mesh(circleGeometry, circleMaterial);
+            circleMesh.position.set(position.x, 0.2, position.z); // Slightly lower than land
+            circleMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+            
+            // Add a wave effect overlay
+            const waveGeometry = new THREE.CircleGeometry(radius - 2, 32);
+            const waveTexture = createWaveTexture();
+            const waveMaterial = new THREE.MeshStandardMaterial({
+              color: 0x66aadd,
+              transparent: true,
+              opacity: 0.7,
+              alphaMap: waveTexture,
+              side: THREE.DoubleSide
+            });
+            
+            const waveMesh = new THREE.Mesh(waveGeometry, waveMaterial);
+            waveMesh.position.set(position.x, 0.3, position.z);
+            waveMesh.rotation.x = -Math.PI / 2;
+            
+            // Store province data
+            circleMesh.userData = {
+              province,
+              country,
+              isSea: true
+            };
+            
+            // Add territory border (thicker for seas)
+            const borderGeometry = new THREE.RingGeometry(radius - 0.5, radius + 5, 32);
+            const borderMaterial = new THREE.MeshStandardMaterial({
+              color: 0x0a1a3c,
+              transparent: true,
+              opacity: 0.8,
+              side: THREE.DoubleSide
+            });
+            
+            const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+            borderMesh.position.set(position.x, 0.25, position.z);
+            borderMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+            
+            // Add to sea group
+            seaGroup.add(circleMesh);
+            seaGroup.add(waveMesh);
+            seaGroup.add(borderMesh);
+            
+            // Add animation for waves
+            if (!scene.userData.animatedObjects) {
+              scene.userData.animatedObjects = [];
+            }
+            
+            waveMesh.userData.waveAnimation = {
+              speed: 0.0015 + Math.random() * 0.001,
+              time: Math.random() * Math.PI * 2
+            };
+            
+            scene.userData.animatedObjects.push(waveMesh);
+            
+          } else {
+            // Land territory - color based on country
+            const color = country ? countryColors[country] : 0xb19b69; // Default to tan for neutral provinces
+            
+            // Create a more natural territory shape
+            const circleGeometry = new THREE.CircleGeometry(radius, 32);
+            const circleMaterial = new THREE.MeshStandardMaterial({
+              color,
+              transparent: false,
+              side: THREE.DoubleSide,
+              metalness: 0.1,
+              roughness: 0.9
+            });
+            
+            const circleMesh = new THREE.Mesh(circleGeometry, circleMaterial);
+            circleMesh.position.set(position.x, 0.5, position.z); // Higher than sea
+            circleMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+            
+            // Add a raised border around the territory (thinner for land)
+            const borderGeometry = new THREE.RingGeometry(radius - 0.5, radius + 3.5, 32);
+            
+            // Use contrasting border color based on territory color brightness
+            const brightness = getBrightness(color);
+            const borderColor = brightness > 0.6 ? 0x333333 : 0xdddddd;
+            
+            const borderMaterial = new THREE.MeshStandardMaterial({
+              color: borderColor,
+              transparent: true,
+              opacity: 0.9,
+              side: THREE.DoubleSide
+            });
+            
+            const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+            borderMesh.position.set(position.x, 0.55, position.z); // Slightly above territory
+            borderMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+            
+            // Add subtle terrain texture
+            const terrainGeometry = new THREE.CircleGeometry(radius - 2, 32);
+            const terrainTexture = createTerrainTexture(country);
+            const terrainMaterial = new THREE.MeshStandardMaterial({
+              color,
+              transparent: true,
+              opacity: 0.5,
+              alphaMap: terrainTexture,
+              side: THREE.DoubleSide
+            });
+            
+            const terrainMesh = new THREE.Mesh(terrainGeometry, terrainMaterial);
+            terrainMesh.position.set(position.x, 0.6, position.z);
+            terrainMesh.rotation.x = -Math.PI / 2;
+            
+            // Store province data
+            circleMesh.userData = {
+              province,
+              country,
+              isSea: false
+            };
+            
+            // Add to land group
+            landGroup.add(circleMesh);
+            landGroup.add(borderMesh);
+            landGroup.add(terrainMesh);
+          }
+        }
+      }
+      
+      // Add land and sea groups to the main territories group
+      territoriesGroup.add(seaGroup); // Sea goes first (below land)
+      territoriesGroup.add(landGroup); // Land on top
+      
+      // Add to scene
+      scene.add(territoriesGroup);
+    }
+    
+    // Create wave texture for sea territories
+    function createWaveTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      
+      // Create gradient background
+      const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
+      gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.05)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 128, 128);
+      
+      // Add wave patterns
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 2;
+      
+      // Draw wavy lines
+      for (let i = 0; i < 8; i++) {
+        const y = i * 16 + 8;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        
+        for (let x = 0; x < 128; x += 16) {
+          const amplitude = 4;
+          const yOffset = Math.sin(x / 16 + i) * amplitude;
+          
+          ctx.quadraticCurveTo(
+            x + 8, y + yOffset,
+            x + 16, y
+          );
+        }
+        
+        ctx.stroke();
+      }
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+    
+    // Create terrain texture for land territories
+    function createTerrainTexture(country) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      
+      // Different patterns based on country
+      if (country) {
+        // Color based on country
+        switch(country) {
+          case 'AUSTRIA':
+            drawMountainTexture(ctx);
+            break;
+          case 'ITALY':
+            drawMediterraneanTexture(ctx);
+            break;
+          case 'RUSSIA':
+            drawTundraTexture(ctx);
+            break;
+          case 'GERMANY':
+            drawForestTexture(ctx);
+            break;
+          case 'FRANCE':
+            drawPlainsTexture(ctx);
+            break;
+          case 'ENGLAND':
+            drawIslandTexture(ctx);
+            break;
+          case 'TURKEY':
+            drawAridTexture(ctx);
+            break;
+          default:
+            drawGenericLandTexture(ctx);
+        }
+      } else {
+        // Generic neutral territory
+        drawGenericLandTexture(ctx);
+      }
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      return texture;
+    }
+    
+    // Utility to get brightness of a color
+    function getBrightness(hexColor) {
+      const r = (hexColor >> 16) & 255;
+      const g = (hexColor >> 8) & 255;
+      const b = hexColor & 255;
+      
+      // Convert to relative luminance
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    }
+    
+    // Draw various terrain textures
+    function drawMountainTexture(ctx) {
+      // Draw small triangle patterns for mountains
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      
+      for (let i = 0; i < 15; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const size = 5 + Math.random() * 10;
+        
+        ctx.beginPath();
+        ctx.moveTo(x, y + size);
+        ctx.lineTo(x - size / 2, y - size / 2);
+        ctx.lineTo(x + size / 2, y - size / 2);
+        ctx.fill();
+      }
+    }
+    
+    function drawMediterraneanTexture(ctx) {
+      // Olive/vineyard-like pattern
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      
+      for (let i = 0; i < 30; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const radius = 2 + Math.random() * 4;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    function drawTundraTexture(ctx) {
+      // Sparse dots for tundra
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      
+      for (let i = 0; i < 80; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const radius = 1 + Math.random() * 2;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    function drawForestTexture(ctx) {
+      // Small tree-like shapes
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      
+      for (let i = 0; i < 20; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const size = 3 + Math.random() * 6;
+        
+        // Tree top
+        ctx.beginPath();
+        ctx.arc(x, y - size/2, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Trunk
+        ctx.fillRect(x - 1, y, 2, size);
+      }
+    }
+    
+    function drawPlainsTexture(ctx) {
+      // Horizontal line patterns for fields
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      
+      for (let i = 0; i < 12; i++) {
+        const y = i * 10 + Math.random() * 5;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(128, y);
+        ctx.stroke();
+      }
+    }
+    
+    function drawIslandTexture(ctx) {
+      // Small dots and lines for coastal features
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      
+      // Dots
+      for (let i = 0; i < 50; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const radius = 1 + Math.random();
+        
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Curved lines for terrain contours
+      for (let i = 0; i < 5; i++) {
+        const x1 = Math.random() * 128;
+        const y1 = Math.random() * 128;
+        const x2 = x1 + (Math.random() * 40 - 20);
+        const y2 = y1 + (Math.random() * 40 - 20);
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.quadraticCurveTo(
+          (x1 + x2) / 2 + (Math.random() * 20 - 10),
+          (y1 + y2) / 2 + (Math.random() * 20 - 10),
+          x2, y2
+        );
+        ctx.stroke();
+      }
+    }
+    
+    function drawAridTexture(ctx) {
+      // Sand dune-like patterns
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      
+      for (let i = 0; i < 10; i++) {
+        const yBase = i * 12 + Math.random() * 5;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, yBase);
+        
+        for (let x = 0; x < 128; x += 16) {
+          const amplitude = 2 + Math.random() * 2;
+          const yOffset = Math.sin(x / 16) * amplitude;
+          
+          ctx.quadraticCurveTo(
+            x + 8, yBase + yOffset,
+            x + 16, yBase
+          );
+        }
+        
+        ctx.stroke();
+      }
+    }
+    
+    function drawGenericLandTexture(ctx) {
+      // Simple noise pattern
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      
+      for (let i = 0; i < 60; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const radius = 1 + Math.random() * 3;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     
     // Load coordinate data
@@ -212,6 +889,45 @@
     // Animation loop
     function animate() {
       requestAnimationFrame(animate);
+      
+      // Update pulsing animations for supply centers
+      if (scene.userData.animatedObjects) {
+        scene.userData.animatedObjects.forEach(obj => {
+          // Handle supply center pulsing
+          if (obj.userData.pulseAnimation) {
+            const anim = obj.userData.pulseAnimation;
+            anim.time += anim.speed;
+            
+            // Pulsing effect on the glow
+            if (obj.userData.glowMesh) {
+              const pulseValue = Math.sin(anim.time) * anim.intensity + 0.5;
+              obj.userData.glowMesh.material.opacity = 0.2 + (pulseValue * 0.3);
+              obj.userData.glowMesh.scale.set(
+                1 + (pulseValue * 0.1),
+                1 + (pulseValue * 0.1),
+                1 + (pulseValue * 0.1)
+              );
+            }
+            
+            // Subtle height movement
+            obj.position.y = 2 + (Math.sin(anim.time) * 0.5);
+          }
+          
+          // Handle wave animation for sea territories
+          if (obj.userData.waveAnimation) {
+            const anim = obj.userData.waveAnimation;
+            anim.time += anim.speed;
+            
+            // Rotate texture coordinates for wave effect
+            if (obj.material && obj.material.map) {
+              obj.material.map.offset.x = Math.sin(anim.time) * 0.05;
+              obj.material.map.offset.y = Math.cos(anim.time) * 0.05;
+              obj.material.map.needsUpdate = true;
+            }
+          }
+        });
+      }
+      
       controls.update();
       renderer.render(scene, camera);
     }
@@ -226,82 +942,259 @@
     // Create a map with texture
     function createMapWithTexture() {
       // Create a large plane for the map
-      const geometry = new THREE.PlaneGeometry(1000, 1000);
+      mapGeometry = new THREE.PlaneGeometry(1000, 1000);
       
-      // Try to load the map texture
-      const textureLoader = new THREE.TextureLoader();
+      // Display loading status
+      infoPanel.textContent = 'Loading map texture...';
       
-      // Try multiple possible paths for the map texture
-      const tryLoadTexture = (paths, index = 0) => {
-        if (index >= paths.length) {
-          console.warn('Failed to load map texture from all paths, using fallback');
-          // Fallback to basic material if texture can't be loaded
-          const material = new THREE.MeshBasicMaterial({ 
-            color: 0x66BB66, 
-            side: THREE.DoubleSide 
-          });
-          const mapMesh = new THREE.Mesh(geometry, material);
-          mapMesh.rotation.x = -Math.PI / 2; // Make it horizontal
-          scene.add(mapMesh);
-          return mapMesh;
-        }
-        
-        console.log(`Attempting to load map texture from ${paths[index]}`);
-        textureLoader.load(
-          paths[index], 
-          (texture) => {
-            console.log(`Successfully loaded map texture from ${paths[index]}`);
-            
-            // Configure texture settings for better appearance
-            texture.wrapS = THREE.ClampToEdgeWrapping;
-            texture.wrapT = THREE.ClampToEdgeWrapping;
-            texture.magFilter = THREE.LinearFilter;
-            texture.minFilter = THREE.LinearMipmapLinearFilter;
-            
+      // Use the SVG map directly
+      const svgMapPaths = [
+        './diplomacy/maps/svg/standard.svg',
+        '../maps/svg/standard.svg',
+        '../../maps/svg/standard.svg',
+        '/maps/svg/standard.svg',
+        '/diplomacy/maps/svg/standard.svg',
+        './maps/svg/standard.svg' // Add another path to try
+      ];
+      
+      // First try to load the SVG map
+      return fetchSVGMap(svgMapPaths)
+        .then(svgData => {
+          if (svgData) {
+            // Convert SVG to image texture
+            const texture = createTextureFromSVG(svgData);
             const material = new THREE.MeshBasicMaterial({ 
               map: texture, 
               side: THREE.DoubleSide 
             });
             
-            // Create mesh with the texture
-            const mapMesh = new THREE.Mesh(geometry, material);
+            const mapMesh = new THREE.Mesh(mapGeometry, material);
             mapMesh.rotation.x = -Math.PI / 2; // Make it horizontal
             mapMesh.position.y = -1; // Slightly below other elements
             scene.add(mapMesh);
             
-            // Save reference to the map mesh
+            infoPanel.textContent = 'Map loaded successfully using SVG!';
             return mapMesh;
-          },
-          undefined, // onProgress callback not needed
-          (error) => {
-            console.warn(`Failed to load texture from ${paths[index]}: ${error.message}, trying next path`);
-            return tryLoadTexture(paths, index + 1);
+          } else {
+            // Fallback to trying to load image textures
+            return tryLoadImageTextures();
           }
-        );
-      };
+        })
+        .catch(error => {
+          console.error('Error loading SVG map:', error);
+          // Fallback to trying to load image textures
+          return tryLoadImageTextures();
+        });
+    }
+    
+    // Fetch SVG map from various possible paths
+    function fetchSVGMap(paths) {
+      const fetchPromises = paths.map(path => 
+        fetch(path)
+          .then(response => {
+            if (!response.ok) {
+              return null;
+            }
+            return response.text();
+          })
+          .catch(() => null)
+      );
+      
+      return Promise.all(fetchPromises).then(results => {
+        // Find the first successful result
+        const svgData = results.find(data => data !== null);
+        return svgData;
+      });
+    }
+    
+    // Create a texture from SVG data
+    function createTextureFromSVG(svgData) {
+      // Create a data URL from the SVG
+      const blob = new Blob([svgData], {type: 'image/svg+xml'});
+      const url = URL.createObjectURL(blob);
+      
+      // Load the texture
+      const texture = new THREE.TextureLoader().load(url, 
+        // onLoad callback
+        function(texture) {
+          // Cleanup
+          URL.revokeObjectURL(url);
+          // Configure texture settings
+          texture.wrapS = THREE.ClampToEdgeWrapping;
+          texture.wrapT = THREE.ClampToEdgeWrapping;
+          texture.magFilter = THREE.LinearFilter;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          console.log('SVG texture loaded successfully');
+        }, 
+        // onProgress callback (not used)
+        undefined, 
+        // onError callback
+        function(error) {
+          console.error('Error loading SVG texture:', error);
+          URL.revokeObjectURL(url);
+        }
+      );
+      
+      return texture;
+    }
+    
+    // Try to load map image textures as fallback
+    function tryLoadImageTextures() {
+      // Try to load the map texture
+      const textureLoader = new THREE.TextureLoader();
       
       // List of possible paths to try
       const texturePaths = [
         './assets/maps/standard_map.jpg',
         '../assets/maps/standard_map.jpg',
-        '/diplomacy/animation/assets/maps/standard_map.jpg'
+        '/diplomacy/animation/assets/maps/standard_map.jpg',
+        './diplomacy/assets/maps/standard_map.jpg', // Add another path to try
+        // Remove the problematic base64 image that's causing errors
       ];
       
-      return tryLoadTexture(texturePaths);
+      // Add a resource checker that runs after all attempts
+      let textureLoadSuccess = false;
+      
+      // Attempt loading each texture until one works
+      return new Promise((resolve) => {
+        let currentIndex = 0;
+        
+        function tryNextTexture() {
+          if (currentIndex >= texturePaths.length) {
+            // If all paths failed, use enhanced fallback
+            return resolve(createFallbackMap());
+          }
+          
+          console.log(`Attempting to load map texture from ${texturePaths[currentIndex]}`);
+          textureLoader.load(
+            texturePaths[currentIndex], 
+            (texture) => {
+              // Check if texture is valid (has dimensions)
+              if (texture.image && texture.image.width > 0 && texture.image.height > 0) {
+                console.log(`Successfully loaded map texture from ${texturePaths[currentIndex]}`);
+                textureLoadSuccess = true;
+                infoPanel.textContent = 'Map texture loaded successfully';
+                
+                // Configure texture settings for better appearance
+                texture.wrapS = THREE.ClampToEdgeWrapping;
+                texture.wrapT = THREE.ClampToEdgeWrapping;
+                texture.magFilter = THREE.LinearFilter;
+                texture.minFilter = THREE.LinearMipmapLinearFilter;
+                
+                const material = new THREE.MeshBasicMaterial({ 
+                  map: texture, 
+                  side: THREE.DoubleSide 
+                });
+                
+                // Create mesh with the texture
+                const mapMesh = new THREE.Mesh(mapGeometry, material);
+                mapMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+                mapMesh.position.y = -1; // Slightly below other elements
+                scene.add(mapMesh);
+                
+                resolve(mapMesh);
+              } else {
+                console.warn(`Loaded texture from ${texturePaths[currentIndex]} appears invalid (empty or corrupt)`);
+                currentIndex++;
+                tryNextTexture();
+              }
+            },
+            undefined, // onProgress callback not needed
+            (error) => {
+              console.warn(`Failed to load texture from ${texturePaths[currentIndex]}: ${error.message}, trying next path`);
+              currentIndex++;
+              tryNextTexture();
+            }
+          );
+        }
+        
+        tryNextTexture();
+      });
+    }
+    
+    // Fix optimizeLabels to make labels always visible at normal zoom levels
+    function optimizeLabels() {
+      // Find all label sprites
+      const labels = scene.children.filter(child => 
+        child.isSprite && child.userData && child.userData.isLabel);
+      
+      // First set all labels to visible by default and enlarge them
+      labels.forEach(label => {
+        label.visible = true;
+        // Make labels more visible by default
+        label.scale.set(100, 50, 1); // Larger size for better readability
+      });
+      
+      // Register a camera change callback
+      controls.addEventListener('change', () => {
+        const distance = camera.position.y; // Height is a good approximation of distance for top-down view
+        
+        labels.forEach(label => {
+          // Only hide labels at very far distances (>800 instead of 400)
+          if (distance > 800) {
+            label.visible = false;
+          } else {
+            label.visible = true;
+            
+            // Adjust size based on distance for readable text
+            const scale = Math.max(0.8, Math.min(1.2, 800 / distance));
+            label.scale.set(scale * 100, scale * 50, 1);
+          }
+        });
+      });
+    }
+    
+    // Improve the label function to create more visible labels
+    function addLabel(text, x, z) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 64;
+      
+      const context = canvas.getContext('2d');
+      
+      // Make label background more opaque for better readability
+      context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      context.lineWidth = 3; // Thicker border
+      context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+      
+      // Use larger, bolder text for better visibility
+      context.font = 'bold 28px Arial';
+      context.fillStyle = 'black';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, canvas.width / 2, canvas.height / 2);
+      
+      // Create texture and sprite
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter; // Prevent blurry text
+      const material = new THREE.SpriteMaterial({ 
+        map: texture,
+        transparent: true,
+        depthTest: false, // Always show on top
+        sizeAttenuation: false // Keep consistent size regardless of distance
+      });
+      const sprite = new THREE.Sprite(material);
+      
+      sprite.position.set(x, 40, z); // Position higher above the map for better visibility
+      sprite.scale.set(100, 50, 1); // Larger size for better readability
+      
+      // Mark as label for optimization
+      sprite.userData.isLabel = true;
+      sprite.userData.text = text;
+      
+      scene.add(sprite);
+      unitMeshes.push(sprite); // Add to unit meshes array for proper cleanup
+      
+      return sprite;
     }
     
     // Display a unit on the map
     function displayUnit(unitData) {
-      // Simple shape for units
+      // Create more sophisticated unit representations
       let geometry;
       let color;
-      
-      // Different shapes for army vs fleet
-      if (unitData.type === 'A') {
-        geometry = new THREE.BoxGeometry(20, 20, 20);
-      } else {
-        geometry = new THREE.ConeGeometry(15, 30, 4);
-      }
       
       // Color based on power
       switch(unitData.power) {
@@ -315,19 +1208,159 @@
         default: color = 0xAAAAAA;
       }
       
-      const material = new THREE.MeshStandardMaterial({ 
-        color,
-        emissive: new THREE.Color(color).multiplyScalar(0.2), // Add a slight glow
-        metalness: 0.3,
-        roughness: 0.7
-      });
-      const unitMesh = new THREE.Mesh(geometry, material);
+      // Different shapes for army vs fleet with more details
+      if (unitData.type === 'A') { // Army
+        // Create a more complex army unit (soldier-like)
+        geometry = new THREE.Group();
+        
+        // Body (main cube)
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(15, 20, 10),
+          new THREE.MeshStandardMaterial({ 
+            color,
+            emissive: new THREE.Color(color).multiplyScalar(0.2),
+            metalness: 0.3,
+            roughness: 0.7
+          })
+        );
+        geometry.add(body);
+        
+        // Head (smaller cube on top)
+        const head = new THREE.Mesh(
+          new THREE.BoxGeometry(8, 8, 8),
+          new THREE.MeshStandardMaterial({ 
+            color,
+            emissive: new THREE.Color(color).multiplyScalar(0.2),
+            metalness: 0.3,
+            roughness: 0.7
+          })
+        );
+        head.position.set(0, 14, 0);
+        geometry.add(head);
+        
+        // Add a spear or flag
+        const spearPole = new THREE.Mesh(
+          new THREE.CylinderGeometry(1, 1, 30, 8),
+          new THREE.MeshStandardMaterial({ color: 0x8B4513 })
+        );
+        spearPole.position.set(10, 5, 0);
+        spearPole.rotation.z = Math.PI / 6; // Tilt
+        geometry.add(spearPole);
+        
+        // Add a flag to the pole
+        const flag = new THREE.Mesh(
+          new THREE.BoxGeometry(15, 8, 1),
+          new THREE.MeshStandardMaterial({ 
+            color,
+            emissive: new THREE.Color(color).multiplyScalar(0.4),
+            metalness: 0.1,
+            roughness: 0.9,
+            side: THREE.DoubleSide
+          })
+        );
+        flag.position.set(15, 15, 0);
+        flag.rotation.z = Math.PI / 6; // Match spear tilt
+        geometry.add(flag);
+        
+        // Add a base
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(12, 12, 3, 16),
+          new THREE.MeshStandardMaterial({ 
+            color: 0x333333,
+            metalness: 0.5,
+            roughness: 0.5
+          })
+        );
+        base.position.set(0, -10, 0);
+        geometry.add(base);
+        
+      } else { // Fleet
+        // Create a more sophisticated ship
+        geometry = new THREE.Group();
+        
+        // Ship hull
+        const hull = new THREE.Mesh(
+          new THREE.BoxGeometry(30, 8, 15),
+          new THREE.MeshStandardMaterial({ 
+            color: 0x8B4513,
+            metalness: 0.3,
+            roughness: 0.7
+          })
+        );
+        geometry.add(hull);
+        
+        // Front point (bow)
+        const bow = new THREE.Mesh(
+          new THREE.ConeGeometry(7.5, 15, 4, 1),
+          new THREE.MeshStandardMaterial({ 
+            color: 0x8B4513,
+            metalness: 0.3,
+            roughness: 0.7
+          })
+        );
+        bow.rotation.set(0, 0, -Math.PI / 2);
+        bow.position.set(22.5, 0, 0);
+        geometry.add(bow);
+        
+        // Sail
+        const sail = new THREE.Mesh(
+          new THREE.PlaneGeometry(20, 25),
+          new THREE.MeshStandardMaterial({ 
+            color,
+            emissive: new THREE.Color(color).multiplyScalar(0.2),
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide
+          })
+        );
+        sail.rotation.set(0, Math.PI / 2, 0);
+        sail.position.set(0, 15, 0);
+        geometry.add(sail);
+        
+        // Mast
+        const mast = new THREE.Mesh(
+          new THREE.CylinderGeometry(1, 1, 30, 8),
+          new THREE.MeshStandardMaterial({ color: 0x8B4513 })
+        );
+        mast.position.set(0, 15, 0);
+        geometry.add(mast);
+        
+        // Base
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(12, 12, 3, 16),
+          new THREE.MeshStandardMaterial({ 
+            color: 0x333333,
+            metalness: 0.5,
+            roughness: 0.5
+          })
+        );
+        base.position.set(0, -8, 0);
+        geometry.add(base);
+      }
       
       // Get position for this province
       const position = getProvincePosition(unitData.location);
-      unitMesh.position.set(position.x, 10, position.z);
       
-      // For fleets, rotate them
+      // Create a unit container for the geometry
+      let unitMesh;
+      
+      // For simple meshes, the geometry is the mesh
+      if (unitData.type === 'A' || unitData.type === 'F') {
+        unitMesh = geometry;
+        unitMesh.position.set(position.x, 15, position.z); // Higher position for better visibility
+      } else {
+        // If something went wrong and we don't have proper geometry
+        const fallbackMaterial = new THREE.MeshStandardMaterial({ 
+          color,
+          emissive: new THREE.Color(color).multiplyScalar(0.2),
+          metalness: 0.3,
+          roughness: 0.7
+        });
+        unitMesh = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20), fallbackMaterial);
+        unitMesh.position.set(position.x, 10, position.z);
+      }
+      
+      // For fleets, rotate them to face a consistent direction
       if (unitData.type === 'F') {
         unitMesh.rotation.y = Math.PI / 4;
       }
@@ -343,10 +1376,14 @@
         location: unitData.location
       };
       
+      // Add outline for highlighting (optional)
+      const outlineMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xFFFFFF, 
+        side: THREE.BackSide 
+      });
+      
       // Track for cleanup
       unitMeshes.push(unitMesh);
-      
-      // We don't need to add labels here anymore - they're already added when initializing
       
       return unitMesh;
     }
@@ -388,48 +1425,6 @@
       const z = ((hash >> 8) % 800) - 400;
       
       return { x, y: 0, z };
-    }
-    
-    // Add text label
-    function addLabel(text, x, z) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 128;
-      canvas.height = 64;
-      
-      const context = canvas.getContext('2d');
-      
-      // Draw background with border
-      context.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-      context.lineWidth = 2;
-      context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-      
-      // Draw text
-      context.font = 'bold 24px Arial';
-      context.fillStyle = 'black';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(text, canvas.width / 2, canvas.height / 2);
-      
-      // Create texture and sprite
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.minFilter = THREE.LinearFilter; // Prevent blurry text
-      const material = new THREE.SpriteMaterial({ 
-        map: texture,
-        transparent: true,
-        depthTest: false, // Always show on top
-        sizeAttenuation: false // Keep consistent size regardless of distance
-      });
-      const sprite = new THREE.Sprite(material);
-      
-      sprite.position.set(x, 35, z); // Position above the map
-      sprite.scale.set(80, 40, 1); // Smaller than before
-      
-      scene.add(sprite);
-      unitMeshes.push(sprite); // Add to unit meshes array for proper cleanup
-      
-      return sprite;
     }
     
     // Load a game file
@@ -491,107 +1486,95 @@
       });
       unitMeshes = [];
       
-      // Create grid and map if scene is empty
-      if (scene.children.length === 0) {
-        // Recreate the map
-        createMapWithTexture();
-        
-        // Add a grid for reference
-        const gridHelper = new THREE.GridHelper(1000, 20);
-        scene.add(gridHelper);
-        
-        // Add ambient and directional lights back
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(200, 400, 200);
-        scene.add(directionalLight);
-        
-        // Add territory labels for all provinces if coordinate data is available
-        if (coordinateData && coordinateData.coordinates) {
-          for (const [province, position] of Object.entries(coordinateData.coordinates)) {
-            // Don't add labels for coast variants (they have underscores)
-            if (!province.includes('_')) {
-              addLabel(province, position.x, position.z);
-            }
-          }
-        }
-        
-        // Add supply centers
-        displaySupplyCenters();
-      }
-      
-      // Get the phase data
+      // Get the current phase
       const phase = gameData.phases[index];
+      infoPanel.textContent = `Displaying phase: ${phase.name || 'Unknown'}`;
       
-      // Update phase display
+      // Update phase display header
       phaseDisplay.textContent = `${phase.name} (${index + 1}/${gameData.phases.length})`;
       
-      // Extract units from the state object
-      if (phase.state && phase.state.units) {
-        // Process units from state.units (actual format from the game)
-        for (const [power, powerUnits] of Object.entries(phase.state.units)) {
-          if (Array.isArray(powerUnits)) {
-            powerUnits.forEach(unitStr => {
-              // Parse unit string (e.g., "A PAR" or "F BRE")
+      // Check if we have state data
+      if (!phase.state) {
+        infoPanel.textContent += '\nNo state data found in this phase';
+        return;
+      }
+      
+      // Update supply centers if available
+      if (phase.state.centers) {
+        updateSupplyCenterOwnership(phase.state.centers);
+        infoPanel.textContent += `\nSupply centers updated`;
+      }
+      
+      // Process units - check if exists in the state object
+      if (phase.state.units) {
+        const unitsList = [];
+        
+        // Process units from state (format is power -> array of unit strings)
+        // Example: {"AUSTRIA":["A VIE","A BUD","F TRI"],"ENGLAND":["F LON","F EDI","A LVP"], ... }
+        for (const [power, units] of Object.entries(phase.state.units)) {
+          if (Array.isArray(units)) {
+            units.forEach(unitStr => {
+              // Parse unit string (format: "A VIE" or "F LON")
               const match = unitStr.match(/^([AF])\s+(.+)$/);
               if (match) {
                 const unitType = match[1]; // 'A' or 'F'
-                const location = match[2]; 
+                const location = match[2]; // 'VIE', 'LON', etc.
                 
-                // Create unit object
-                const unit = {
-                  id: `${power}_${unitType}_${location}`,
-                  type: unitType,
+                unitsList.push({
                   power: power.toUpperCase(),
-                  location: location
-                };
-                
-                // Display the unit
-                try {
-                  displayUnit(unit);
-                } catch (error) {
-                  console.error(`Error displaying unit ${power} ${unitType} ${location}:`, error);
-                }
+                  type: unitType,
+                  location: location,
+                  id: `${power}-${unitType}-${location}`
+                });
               }
             });
           }
         }
+        
+        console.log(`Found ${unitsList.length} units to display:`, unitsList);
+        
+        // Display each unit
+        unitsList.forEach(unit => {
+          try {
+            displayUnit(unit);
+          } catch (error) {
+            console.error(`Error displaying unit ${unit.power} ${unit.type} ${unit.location}:`, error);
+          }
+        });
+        
+        infoPanel.textContent += `\nDisplayed ${unitsList.length} units on the map`;
       } else {
-        infoPanel.textContent = `No units found in phase ${index + 1}`;
-        console.warn('No units found in phase state', index + 1);
+        infoPanel.textContent += '\nNo units found in this phase';
       }
       
-      // Update supply center ownership if available
-      if (phase.state && phase.state.centers) {
-        updateSupplyCenterOwnership(phase.state.centers);
-      }
-      
-      // Show order info
+      // Process orders if available
       if (phase.orders) {
         let orderInfo = 'Orders:\n';
+        let orderCount = 0;
         
         // Handle object format of orders
-        for (const [power, powerOrders] of Object.entries(phase.orders)) {
-          if (Array.isArray(powerOrders)) {
-            powerOrders.forEach(order => {
+        for (const [power, orders] of Object.entries(phase.orders)) {
+          if (Array.isArray(orders)) {
+            orders.forEach(order => {
               orderInfo += `${power.toUpperCase()}: ${order}\n`;
+              orderCount++;
             });
           }
         }
         
-        infoPanel.textContent = orderInfo;
-      } else {
-        if (!infoPanel.textContent.includes('No units found')) {
-          infoPanel.textContent += '\nNo orders found in this phase.';
+        if (orderCount > 0) {
+          infoPanel.textContent = orderInfo;
+        } else {
+          infoPanel.textContent += '\nNo orders found in this phase';
         }
+      } else {
+        infoPanel.textContent += '\nNo orders found in this phase';
       }
       
       // Log info about this phase
       console.log(`Displaying phase ${index + 1}/${gameData.phases.length}:`, phase);
-      console.log(`- ${phase.units ? phase.units.length : 0} units`);
-      console.log(`- ${phase.orders ? phase.orders.length : 0} orders`);
+      console.log(`- Units: ${unitsList ? unitsList.length : 0}`);
+      console.log(`- Orders: ${phase.orders ? Object.values(phase.orders).flat().length : 0}`);
     }
     
     // Display supply centers as yellow cylinders
@@ -601,27 +1584,119 @@
         return;
       }
       
-      const supplyCenterGeometry = new THREE.CylinderGeometry(10, 10, 3, 16);
-      const supplyCenterMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFF00, emissive: 0x333300 });
-      
+      // Create a more sophisticated supply center representation
       for (const [province, data] of Object.entries(coordinateData.provinces)) {
         // Check if this province is a supply center
         if (data.isSupplyCenter) {
           // Get the position for this province
           const position = getProvincePosition(province);
           
-          // Create a cylinder to represent the supply center
-          const scMesh = new THREE.Mesh(supplyCenterGeometry, supplyCenterMaterial);
-          scMesh.position.set(position.x, 2, position.z); // Just above the map
-          scMesh.rotation.x = Math.PI / 2; // Stand upright
+          // Create a group for the supply center elements
+          const scGroup = new THREE.Group();
+          
+          // Base (platform)
+          const baseGeometry = new THREE.CylinderGeometry(15, 18, 3, 16);
+          const baseMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x333333, 
+            metalness: 0.6, 
+            roughness: 0.3 
+          });
+          const base = new THREE.Mesh(baseGeometry, baseMaterial);
+          base.position.y = 1;
+          scGroup.add(base);
+          
+          // Center pillar
+          const pillarGeometry = new THREE.CylinderGeometry(3, 3, 12, 8);
+          const pillarMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xCCCCCC, 
+            metalness: 0.8, 
+            roughness: 0.2 
+          });
+          const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+          pillar.position.y = 7;
+          scGroup.add(pillar);
+          
+          // Star (using custom geometry)
+          const starPoints = 5;
+          const starOuterRadius = 10;
+          const starInnerRadius = 5;
+          const starGeometry = new THREE.BufferGeometry();
+          
+          // Create star shape vertices
+          const vertices = [];
+          const angle = Math.PI * 2 / starPoints;
+          
+          for (let i = 0; i < starPoints; i++) {
+            // Outer point
+            const outerAngle = i * angle;
+            vertices.push(
+              Math.cos(outerAngle) * starOuterRadius,
+              0,
+              Math.sin(outerAngle) * starOuterRadius
+            );
+            
+            // Inner point
+            const innerAngle = outerAngle + angle / 2;
+            vertices.push(
+              Math.cos(innerAngle) * starInnerRadius,
+              0,
+              Math.sin(innerAngle) * starInnerRadius
+            );
+          }
+          
+          // Create faces (triangles)
+          const indices = [];
+          for (let i = 0; i < starPoints * 2 - 2; i++) {
+            indices.push(0, i + 1, i + 2);
+          }
+          indices.push(0, starPoints * 2 - 1, 1);
+          
+          starGeometry.setIndex(indices);
+          starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+          starGeometry.computeVertexNormals();
+          
+          // Star material (yellow by default, will update based on ownership)
+          const starMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xFFD700, 
+            emissive: 0x666600,
+            metalness: 0.8,
+            roughness: 0.2,
+            side: THREE.DoubleSide
+          });
+          
+          const starMesh = new THREE.Mesh(starGeometry, starMaterial);
+          starMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+          starMesh.position.y = 14; // Above the pillar
+          scGroup.add(starMesh);
+          
+          // Add a subtle glow effect
+          const glowGeometry = new THREE.CircleGeometry(15, 32);
+          const glowMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xFFFFAA, 
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide
+          });
+          const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+          glowMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+          glowMesh.position.y = 1.5; // Just above the base
+          scGroup.add(glowMesh);
+          
+          // Position the entire group
+          scGroup.position.set(position.x, 2, position.z);
+          
+          // Store center data for ownership updates
+          scGroup.userData = {
+            province: province,
+            isSupplyCenter: true,
+            owner: null,
+            starMesh: starMesh,
+            glowMesh: glowMesh
+          };
           
           // Add to the scene
-          scene.add(scMesh);
-          
-          // Store a reference to remove/update later
-          scMesh.userData.province = province;
-          scMesh.userData.isSupplyCenter = true;
-          unitMeshes.push(scMesh); // Add to unit meshes so they get cleaned up properly
+          scene.add(scGroup);
+          unitMeshes.push(scGroup); // Add to unit meshes for cleanup
         }
       }
     }
@@ -642,27 +1717,73 @@
         }
       }
       
+      // Power-specific colors for consistency
+      const powerColors = {
+        'AUSTRIA': 0xFF0000,
+        'ENGLAND': 0x0000FF,
+        'FRANCE': 0x00FFFF,
+        'GERMANY': 0x000000,
+        'ITALY': 0x00FF00,
+        'RUSSIA': 0xFFFFFF,
+        'TURKEY': 0xFFFF00
+      };
+      
       // Update the colors of the supply center markers
       unitMeshes.forEach(mesh => {
         if (mesh.userData.isSupplyCenter) {
           const province = mesh.userData.province;
           const owner = centerOwnership[province];
           
-          if (owner) {
-            // Color based on power
-            let color;
-            switch(owner) {
-              case 'AUSTRIA': color = 0xFF0000; break;
-              case 'ENGLAND': color = 0x0000FF; break;
-              case 'FRANCE': color = 0x00FFFF; break;
-              case 'GERMANY': color = 0x000000; break;
-              case 'ITALY': color = 0x00FF00; break;
-              case 'RUSSIA': color = 0xFFFFFF; break;
-              case 'TURKEY': color = 0xFFFF00; break;
-              default: color = 0xAAAAAA;
+          // Store the owner for future reference
+          mesh.userData.owner = owner;
+          
+          if (owner && mesh.userData.starMesh) {
+            // Get color for this power
+            const color = powerColors[owner] || 0xAAAAAA;
+            
+            // Update star color to match owner
+            mesh.userData.starMesh.material.color.set(color);
+            mesh.userData.starMesh.material.emissive.set(new THREE.Color(color).multiplyScalar(0.3));
+            
+            // Update glow color to match owner (with transparency)
+            if (mesh.userData.glowMesh) {
+              mesh.userData.glowMesh.material.color.set(color);
             }
             
-            mesh.material.color.set(color);
+            // Add a pulsing animation to owned supply centers
+            if (!mesh.userData.pulseAnimation) {
+              mesh.userData.pulseAnimation = {
+                speed: 0.003 + Math.random() * 0.002, // Slightly randomized speed
+                intensity: 0.3,
+                time: Math.random() * Math.PI * 2 // Random starting phase
+              };
+              
+              // Add this mesh to a list of animated objects
+              if (!scene.userData.animatedObjects) {
+                scene.userData.animatedObjects = [];
+              }
+              scene.userData.animatedObjects.push(mesh);
+            }
+      } else {
+            // Reset to default yellow for unowned centers
+            if (mesh.userData.starMesh) {
+              mesh.userData.starMesh.material.color.set(0xFFD700);
+              mesh.userData.starMesh.material.emissive.set(0x666600);
+            }
+            if (mesh.userData.glowMesh) {
+              mesh.userData.glowMesh.material.color.set(0xFFFFAA);
+            }
+            
+            // Remove any animation
+            mesh.userData.pulseAnimation = null;
+            
+            // Remove from animated objects list if it exists
+            if (scene.userData.animatedObjects) {
+              const index = scene.userData.animatedObjects.indexOf(mesh);
+              if (index !== -1) {
+                scene.userData.animatedObjects.splice(index, 1);
+              }
+            }
           }
         }
       });
@@ -693,6 +1814,1070 @@
         displayPhase(currentPhaseIndex);
       }
     });
+    
+    // Add interactive hovering and selection for territories
+    function addTerritoryInteractivity() {
+      // Create a raycaster for mouse interaction
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+      
+      // Track hovering and selection
+      let hoveredObject = null;
+      let selectedObject = null;
+      
+      // Detail panel for territory information
+      const detailPanel = document.createElement('div');
+      detailPanel.style.position = 'absolute';
+      detailPanel.style.top = '80px';
+      detailPanel.style.left = '20px';
+      detailPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      detailPanel.style.color = 'white';
+      detailPanel.style.padding = '10px';
+      detailPanel.style.borderRadius = '5px';
+      detailPanel.style.display = 'none';
+      detailPanel.style.zIndex = '100';
+      detailPanel.style.maxWidth = '300px';
+      document.body.appendChild(detailPanel);
+      
+      // Handle mouse move for hovering
+      mapView.addEventListener('mousemove', (event) => {
+        // Calculate mouse position in normalized device coordinates
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        // Cast a ray from the camera through the mouse position
+        raycaster.setFromCamera(mouse, camera);
+        
+        // Find intersections with territory objects
+        const territories = scene.getObjectByName('territories');
+        let intersects = [];
+        
+        if (territories) {
+          // Only check for intersections with territory circles (not borders)
+          const territoryCircles = territories.children.filter(child => 
+            child.geometry instanceof THREE.CircleGeometry);
+          
+          intersects = raycaster.intersectObjects(territoryCircles);
+        }
+        
+        // Add supply centers to intersect check
+        const supplyCenters = scene.children.filter(child => 
+          child.userData && child.userData.isSupplyCenter);
+        
+        intersects = intersects.concat(raycaster.intersectObjects(supplyCenters));
+        
+        // Handle hover highlights
+        if (intersects.length > 0) {
+          const intersectedObject = intersects[0].object;
+          
+          // Skip if we're already hovering this object
+          if (hoveredObject === intersectedObject) return;
+          
+          // Remove highlight from previous hovered object
+          if (hoveredObject) {
+            if (hoveredObject.userData.originalScale) {
+              hoveredObject.scale.copy(hoveredObject.userData.originalScale);
+            }
+            if (hoveredObject.material && hoveredObject.userData.originalEmissive) {
+              hoveredObject.material.emissive.copy(hoveredObject.userData.originalEmissive);
+            }
+          }
+          
+          // Add highlight to new hovered object
+          hoveredObject = intersectedObject;
+          
+          // Store original scale for restoration
+          hoveredObject.userData.originalScale = hoveredObject.scale.clone();
+          
+          // Slightly enlarge the hovered object
+          hoveredObject.scale.multiplyScalar(1.1);
+          
+          // Show detail panel with territory information
+          const territoryData = getObjectData(hoveredObject);
+          if (territoryData) {
+            detailPanel.innerHTML = territoryData;
+            detailPanel.style.display = 'block';
+            
+            // Position the panel near the mouse but avoid edge clipping
+            detailPanel.style.left = `${Math.min(event.clientX + 20, window.innerWidth - 320)}px`;
+            detailPanel.style.top = `${Math.min(event.clientY - 30, window.innerHeight - 200)}px`;
+          }
+          
+          // Add glow effect if material has emissive property
+          if (hoveredObject.material && hoveredObject.material.emissive) {
+            hoveredObject.userData.originalEmissive = hoveredObject.material.emissive.clone();
+            hoveredObject.material.emissive.set(0x444444);
+          }
+          
+          // Change cursor to indicate interactive element
+          renderer.domElement.style.cursor = 'pointer';
+        } else {
+          // No intersections, restore previous hovered object
+          if (hoveredObject) {
+            if (hoveredObject.userData.originalScale) {
+              hoveredObject.scale.copy(hoveredObject.userData.originalScale);
+            }
+            if (hoveredObject.material && hoveredObject.userData.originalEmissive) {
+              hoveredObject.material.emissive.copy(hoveredObject.userData.originalEmissive);
+            }
+            hoveredObject = null;
+            
+            // Hide detail panel
+            detailPanel.style.display = 'none';
+            
+            // Reset cursor
+            renderer.domElement.style.cursor = 'auto';
+          }
+        }
+      });
+      
+      // Handle click for selection
+      mapView.addEventListener('click', () => {
+        if (hoveredObject) {
+          if (selectedObject) {
+            // Deselect if clicking the same object
+            if (selectedObject === hoveredObject) {
+              if (selectedObject.material) {
+                selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive || new THREE.Color(0x000000));
+              }
+              selectedObject = null;
+              return;
+            }
+            
+            // Deselect previous selection
+            if (selectedObject.material) {
+              selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive || new THREE.Color(0x000000));
+            }
+          }
+          
+          // Select new object
+          selectedObject = hoveredObject;
+          
+          // Add permanent highlight to selected object
+          if (selectedObject.material) {
+            selectedObject.material.emissive.set(0x666666);
+          }
+          
+          // Update info panel with details
+          if (selectedObject.userData.province) {
+            // Show province details in the main info panel
+            showProvinceDetails(selectedObject.userData.province);
+          }
+        }
+      });
+      
+      function getObjectData(object) {
+        // Get data from territory or supply center
+        let html = '';
+        
+        // For territories
+        if (object.userData.province) {
+          const province = object.userData.province;
+          const country = object.userData.country;
+          
+          html = `<div style="font-weight: bold; margin-bottom: 5px;">${province}</div>`;
+          
+          if (country) {
+            html += `<div>Country: ${country}</div>`;
+          }
+          
+          if (object.userData.isSupplyCenter || 
+             (object.parent && object.parent.userData && object.parent.userData.isSupplyCenter)) {
+            html += `<div style="margin-top: 5px;">Supply Center</div>`;
+            
+            // If owned, show owner
+            const owner = object.userData.owner || (object.parent && object.parent.userData.owner);
+            if (owner) {
+              html += `<div>Controlled by: ${owner}</div>`;
+            }
+          }
+          
+          // Add any units in this location
+          const units = unitMeshes.filter(unit => 
+            unit.userData && unit.userData.location === province);
+          
+          if (units.length > 0) {
+            html += `<div style="margin-top: 5px; border-top: 1px solid #666; padding-top: 5px;">Units:</div>`;
+            
+            units.forEach(unit => {
+              if (unit.userData.power && unit.userData.type) {
+                html += `<div>${unit.userData.power} ${unit.userData.type}</div>`;
+              }
+            });
+          }
+        }
+        
+        return html;
+      }
+      
+      function showProvinceDetails(province) {
+        // Prepare details for the main info panel
+        let details = `<strong>Province: ${province}</strong><br>`;
+        
+        // Look for units at this location in the current phase
+        if (gameData && gameData.phases && currentPhaseIndex >= 0) {
+          const phase = gameData.phases[currentPhaseIndex];
+          
+          // Check for units
+          if (phase.state && phase.state.units) {
+            for (const [power, units] of Object.entries(phase.state.units)) {
+              if (Array.isArray(units)) {
+                units.forEach(unitStr => {
+                  const match = unitStr.match(/^([AF])\s+(.+)$/);
+                  if (match && match[2] === province) {
+                    details += `<br>Unit: ${power.toUpperCase()} ${match[1]} (${match[1] === 'A' ? 'Army' : 'Fleet'})<br>`;
+                  }
+                });
+              }
+            }
+          }
+          
+          // Check for supply center ownership
+          if (phase.state && phase.state.centers) {
+            for (const [power, centers] of Object.entries(phase.state.centers)) {
+              if (Array.isArray(centers) && centers.includes(province)) {
+                details += `<br>Supply Center owned by: ${power.toUpperCase()}<br>`;
+                break;
+              }
+            }
+          }
+          
+          // Check for orders affecting this province
+      if (phase.orders) {
+            details += `<br><strong>Orders:</strong><br>`;
+            let ordersFound = false;
+        
+        for (const [power, orders] of Object.entries(phase.orders)) {
+          if (Array.isArray(orders)) {
+            orders.forEach(order => {
+                  if (order.includes(province)) {
+                    details += `${power.toUpperCase()}: ${order}<br>`;
+                    ordersFound = true;
+                  }
+            });
+          }
+        }
+        
+            if (!ordersFound) {
+              details += "No orders involving this province<br>";
+            }
+          }
+        }
+        
+        // Update the info panel
+        infoPanel.innerHTML = details;
+      }
+    }
+    
+    // Create fallback texture with enhanced visual appearance
+    function createFallbackMap() {
+      console.warn('Using enhanced fallback map due to texture loading failure');
+      infoPanel.textContent = 'Using enhanced diplomacy map (custom rendered)';
+      
+      // Create a canvas for dynamic map rendering
+      const canvas = document.createElement('canvas');
+      canvas.width = 2048;
+      canvas.height = 2048;
+      const ctx = canvas.getContext('2d');
+      
+      // Fill with a gradient sea background
+      const seaGradient = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, 0,
+        canvas.width / 2, canvas.height / 2, canvas.width / 1.5
+      );
+      seaGradient.addColorStop(0, '#1a3c6e');  // Deep blue center
+      seaGradient.addColorStop(0.7, '#2a5d9e'); // Mid-tone blue
+      seaGradient.addColorStop(0.9, '#3973ac'); // Lighter blue edges
+      seaGradient.addColorStop(1, '#4b8bc5');   // Very light blue at extremes
+      
+      ctx.fillStyle = seaGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw accurate map with province boundaries
+      if (coordinateData && coordinateData.coordinates) {
+        // Draw the map with accurate territory boundaries
+        drawAccurateMap(ctx, canvas.width, canvas.height);
+        } else {
+        // Fallback to simplified country outlines if no coordinate data
+        drawSimplifiedMap(ctx, canvas.width, canvas.height);
+      }
+      
+      // Create texture from canvas
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.magFilter = THREE.LinearFilter;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.DoubleSide
+      });
+      
+      // Make sure we have geometry available
+      if (!mapGeometry) {
+        mapGeometry = new THREE.PlaneGeometry(1000, 1000);
+      }
+      
+      const mapMesh = new THREE.Mesh(mapGeometry, material);
+      mapMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+      mapMesh.position.y = -1; // Slightly below other elements
+      scene.add(mapMesh);
+      
+      // Create invisible territory hitboxes for interaction
+      createInvisibleTerritoryHitboxes();
+      
+      return mapMesh;
+    }
+    
+    // Draw accurate map with territory boundaries
+    function drawAccurateMap(ctx, width, height) {
+      const scaleX = width / 1000;
+      const scaleY = height / 1000;
+      const offsetX = width / 2;
+      const offsetY = height / 2;
+      
+      // Group provinces by country (for default coloring)
+      const countries = {
+        'AUSTRIA': ['VIE', 'BUD', 'TRI', 'GAL', 'BOH', 'TYR'],
+        'ENGLAND': ['LON', 'EDI', 'LVP', 'WAL', 'YOR', 'CLY'],
+        'FRANCE': ['PAR', 'BRE', 'MAR', 'PIC', 'GAS', 'BUR'],
+        'GERMANY': ['BER', 'MUN', 'KIE', 'RUH', 'PRU', 'SIL'],
+        'ITALY': ['ROM', 'VEN', 'NAP', 'TUS', 'PIE', 'APU'],
+        'RUSSIA': ['STP', 'MOS', 'WAR', 'SEV', 'UKR', 'LVN'],
+        'TURKEY': ['CON', 'ANK', 'SMY', 'SYR', 'ARM']
+      };
+      
+      const seaProvinces = [
+        'NAO', 'NWG', 'BAR', 'NTH', 'SKA', 'HEL', 'BAL', 'BOT', 'ENG', 'IRI', 'MAO', 
+        'WES', 'LYO', 'TYS', 'ADR', 'ION', 'AEG', 'EAS', 'BLA'
+      ];
+      
+      const countryColors = {
+        'AUSTRIA': '#d82b2b',
+        'ENGLAND': '#223a87',
+        'FRANCE': '#3699d4',
+        'GERMANY': '#232323',
+        'ITALY': '#35a335',
+        'RUSSIA': '#cccccc',
+        'TURKEY': '#e0c846'
+      };
+      
+      // Map power to color (consistent with unit colors in displayUnit)
+      const powerColors = {
+        'AUSTRIA': '#FF0000',
+        'ENGLAND': '#0000FF',
+        'FRANCE': '#00FFFF',
+        'GERMANY': '#000000',
+        'ITALY': '#00FF00',
+        'RUSSIA': '#FFFFFF',
+        'TURKEY': '#FFFF00'
+      };
+      
+      const neutralLandColor = '#b19b69';
+      
+      // Get current phase data
+      let supplyCenterOwnership = {};
+      let unitOccupancy = {};
+      
+      if (gameData && gameData.phases && currentPhaseIndex >= 0) {
+        const phase = gameData.phases[currentPhaseIndex];
+        
+        // Supply center ownership
+        if (phase.state && phase.state.centers) {
+          for (const [power, centers] of Object.entries(phase.state.centers)) {
+            if (Array.isArray(centers)) {
+              centers.forEach(center => {
+                supplyCenterOwnership[center.toUpperCase()] = power.toUpperCase();
+              });
+            }
+          }
+        }
+        
+        // Unit occupancy
+        if (phase.state && phase.state.units) {
+          for (const [power, units] of Object.entries(phase.state.units)) {
+            if (Array.isArray(units)) {
+              units.forEach(unitStr => {
+                const match = unitStr.match(/^([AF])\s+(.+)$/);
+                if (match) {
+                  const location = match[2].toUpperCase();
+                  unitOccupancy[location] = power.toUpperCase();
+                }
+              });
+            }
+          }
+        }
+      }
+      
+      // Draw sea territories
+      for (const province of seaProvinces) {
+        if (coordinateData.coordinates[province]) {
+          const position = coordinateData.coordinates[province];
+          const x = (position.x * scaleX) + offsetX;
+          const y = (position.z * scaleY) + offsetY;
+          
+          const connectedProvinces = getConnectedProvinces(province);
+          
+          // Color sea based on unit occupancy, if any
+          const occupyingPower = unitOccupancy[province];
+          const color = occupyingPower ? powerColors[occupyingPower] : '#1a3c6e';
+          const opacity = occupyingPower ? 0.9 : 0.7;
+          
+          if (connectedProvinces.length > 0) {
+            drawTerritoryPolygon(ctx, province, connectedProvinces, color, opacity);
+          } else {
+            const radius = 35;
+            const seaGradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+            seaGradient.addColorStop(0, color);
+            seaGradient.addColorStop(1, '#1a3c6e');
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = seaGradient;
+            ctx.fill();
+            ctx.strokeStyle = '#0a1a3c';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            drawWavePattern(ctx, x, y, 30);
+          }
+        }
+      }
+      
+      // Draw land territories
+      const drawnProvinces = new Set();
+      
+      // First, draw by country for default coloring
+      for (const [country, provinces] of Object.entries(countries)) {
+        const defaultColor = countryColors[country];
+        
+        for (const province of provinces) {
+          if (coordinateData.coordinates[province] && !drawnProvinces.has(province)) {
+            const position = coordinateData.coordinates[province];
+            const x = (position.x * scaleX) + offsetX;
+            const y = (position.z * scaleY) + offsetY;
+            
+            // Determine color based on supply center or unit
+            let color = defaultColor;
+            if (supplyCenterOwnership[province]) {
+              color = powerColors[supplyCenterOwnership[province]];
+            } else if (unitOccupancy[province]) {
+              color = powerColors[unitOccupancy[province]];
+            }
+            
+            const connectedProvinces = getConnectedProvinces(province);
+            
+            if (connectedProvinces.length > 0) {
+              drawTerritoryPolygon(ctx, province, connectedProvinces, color, 0.8);
+            } else {
+              drawNaturalTerritory(ctx, x, y, 33, color);
+            }
+            
+            drawnProvinces.add(province);
+          }
+        }
+      }
+      
+      // Draw remaining neutral provinces
+      for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+        if (!province.includes('_') && !drawnProvinces.has(province) && !seaProvinces.includes(province)) {
+          const x = (position.x * scaleX) + offsetX;
+          const y = (position.z * scaleY) + offsetY;
+          
+          // Determine color based on supply center or unit
+          let color = neutralLandColor;
+          if (supplyCenterOwnership[province]) {
+            color = powerColors[supplyCenterOwnership[province]];
+          } else if (unitOccupancy[province]) {
+            color = powerColors[unitOccupancy[province]];
+          }
+          
+          const connectedProvinces = getConnectedProvinces(province);
+          
+          if (connectedProvinces.length > 0) {
+            drawTerritoryPolygon(ctx, province, connectedProvinces, color, 0.8);
+          } else {
+            drawNaturalTerritory(ctx, x, y, 33, color);
+          }
+          
+          drawnProvinces.add(province);
+        }
+      }
+      
+      drawTerritoryBorders(ctx, width, height);
+      drawSupplyCenters(ctx, width, height);
+      drawProvinceNames(ctx, width, height);
+    }
+    
+    // Helper function to get connected provinces (uses adjacency data or approximates)
+    function getConnectedProvinces(province) {
+      // If we have explicit adjacency data, use it
+      const connections = {
+        // These are approximate connections to create more realistic territory shapes
+        // Generally, each territory connects to 3-6 neighbors
+        'LON': ['WAL', 'YOR', 'NTH', 'ENG'],
+        'EDI': ['CLY', 'YOR', 'NWG', 'NTH'],
+        'LVP': ['CLY', 'EDI', 'WAL', 'IRI'],
+        'WAL': ['LON', 'LVP', 'IRI', 'ENG'],
+        'YOR': ['LON', 'EDI', 'LVP', 'NTH'],
+        'CLY': ['EDI', 'LVP', 'NAO', 'NWG'],
+        
+        'BRE': ['PIC', 'PAR', 'GAS', 'MAO', 'ENG'],
+        'PAR': ['BRE', 'PIC', 'BUR', 'GAS'],
+        'MAR': ['GAS', 'BUR', 'PIE', 'SPA', 'LYO'],
+        'PIC': ['BRE', 'PAR', 'BUR', 'BEL', 'ENG'],
+        'GAS': ['BRE', 'PAR', 'BUR', 'MAR', 'SPA', 'MAO'],
+        'BUR': ['PIC', 'PAR', 'GAS', 'MAR', 'MUN', 'RUH', 'BEL'],
+        
+        // Add more connections for other territories
+        // This is just a sample - a complete map would define all connections
+      };
+      
+      if (connections[province]) {
+        return connections[province];
+      }
+      
+      // If we don't have explicit connections, approximate based on coordinates
+      const result = [];
+      
+      if (!coordinateData || !coordinateData.coordinates || !coordinateData.coordinates[province]) {
+        return result;
+      }
+      
+      const pos = coordinateData.coordinates[province];
+      const threshold = 150; // Distance threshold to consider provinces connected
+      
+      for (const [otherProvince, otherPos] of Object.entries(coordinateData.coordinates)) {
+        if (otherProvince !== province && !otherProvince.includes('_')) {
+          // Calculate distance between provinces
+          const dx = pos.x - otherPos.x;
+          const dz = pos.z - otherPos.z;
+          const distance = Math.sqrt(dx * dx + dz * dz);
+          
+          if (distance < threshold) {
+            result.push(otherProvince);
+          }
+        }
+      }
+      
+      return result;
+    }
+    
+    // Draw a territory polygon based on connected provinces
+    function drawTerritoryPolygon(ctx, province, connectedProvinces, color, opacity) {
+      if (!coordinateData || !coordinateData.coordinates) return;
+      
+      const position = coordinateData.coordinates[province];
+      if (!position) return;
+      
+      const scaleX = ctx.canvas.width / 1000;
+      const scaleY = ctx.canvas.height / 1000;
+      const offsetX = ctx.canvas.width / 2;
+      const offsetY = ctx.canvas.height / 2;
+      
+      const x = (position.x * scaleX) + offsetX;
+      const y = (position.z * scaleY) + offsetY;
+      
+      const isSea = ['NAO', 'NWG', 'BAR', 'NTH', 'SKA', 'HEL', 'BAL', 'BOT', 'ENG', 'IRI', 'MAO', 
+                  'WES', 'LYO', 'TYS', 'ADR', 'ION', 'AEG', 'EAS', 'BLA'].includes(province);
+      
+      // Create points for the polygon
+      const points = [];
+      const center = { x, y };
+      
+      for (const connectedProvince of connectedProvinces) {
+        if (coordinateData.coordinates[connectedProvince]) {
+          const connPos = coordinateData.coordinates[connectedProvince];
+          const connX = (connPos.x * scaleX) + offsetX;
+          const connY = (connPos.z * scaleY) + offsetY;
+          
+          const midX = x + (connX - x) * 0.4;
+          const midY = y + (connY - y) * 0.4;
+          
+          const dx = connX - x;
+          const dy = connY - y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          const perpX = dy / dist;
+          const perpY = -dx / dist;
+          
+          const scale = 40;
+          const pointX = midX + perpX * scale;
+          const pointY = midY + perpY * scale;
+          
+          points.push({ x: pointX, y: pointY, angle: Math.atan2(pointY - y, pointX - x) });
+        }
+      }
+      
+      points.sort((a, b) => a.angle - b.angle);
+      
+      if (points.length > 2) {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        
+        ctx.closePath();
+        
+        if (isSea) {
+          // Deeper sea color with gradient
+          const seaGradient = ctx.createRadialGradient(x, y, 0, x, y, 50);
+          seaGradient.addColorStop(0, '#0a2a5c'); // Very dark blue center
+          seaGradient.addColorStop(1, '#1a3c6e'); // Dark blue edge
+          ctx.fillStyle = seaGradient;
+          ctx.fill();
+          
+          // Subtle sea border
+          ctx.strokeStyle = '#0a1a3c';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          // Add wave pattern for sea
+          drawWavePattern(ctx, x, y, 30);
+        } else {
+          // Land territory
+          drawNaturalTerritory(ctx, x, y, 33, color);
+        }
+      } else {
+        if (isSea) {
+          const radius = 35;
+          const seaGradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+          seaGradient.addColorStop(0, '#0a2a5c');
+          seaGradient.addColorStop(1, '#1a3c6e');
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = seaGradient;
+          ctx.fill();
+          ctx.strokeStyle = '#0a1a3c';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          drawWavePattern(ctx, x, y, 30);
+        } else {
+          drawNaturalTerritory(ctx, x, y, 33, color);
+        }
+      }
+    }
+    
+    // Draw a more natural territory shape (not a perfect circle)
+    function drawNaturalTerritory(ctx, x, y, radius, color) {
+      ctx.beginPath();
+      
+      const points = 16; // More points for a smoother, yet irregular shape
+      const angleStep = (Math.PI * 2) / points;
+      
+      for (let i = 0; i < points; i++) {
+        const angle = i * angleStep;
+        // Vary the radius more significantly for each point
+        const variation = 0.7 + (Math.random() * 0.6); // Wider variation
+        const pointRadius = radius * variation;
+        
+        // Add a slight distortion using Perlin-like noise simulation
+        const noise = Math.sin(angle * 3 + i) * 0.2;
+        const distortedRadius = pointRadius * (1 + noise);
+        
+        const px = x + Math.cos(angle) * distortedRadius;
+        const py = y + Math.sin(angle) * distortedRadius;
+        
+        if (i === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          // Use quadratic curves for smoother transitions between points
+          const midAngle = angle - angleStep / 2;
+          const midRadius = (pointRadius + (radius * (0.7 + Math.random() * 0.6))) / 2;
+          const midX = x + Math.cos(midAngle) * midRadius;
+          const midY = y + Math.sin(midAngle) * midRadius;
+          ctx.quadraticCurveTo(midX, midY, px, py);
+        }
+      }
+      
+      ctx.closePath();
+      
+      // Add a gradient fill for land to make it more visually distinct
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, color + 'FF'); // Opaque center
+      gradient.addColorStop(1, color + 'AA'); // Slightly transparent edge
+      
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Add a subtle border
+      ctx.strokeStyle = '#333333';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    
+    // Draw wave patterns for sea territories
+    function drawWavePattern(ctx, x, y, size) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; // Slightly more visible waves
+      ctx.lineWidth = 1.5;
+      
+      for (let i = 0; i < 4; i++) { // More waves for better texture
+        const offset = i * (size / 4) - size / 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(x - size / 2, y + offset);
+        
+        for (let j = 0; j < 3; j++) {
+          const segX = x - size / 2 + ((j + 1) * size / 3);
+          const segY = y + offset + (j % 2 === 0 ? 6 : -6);
+          
+          ctx.quadraticCurveTo(
+            x - size / 2 + (j * size / 3) + (size / 6),
+            y + offset + (j % 2 === 0 ? -6 : 6),
+            segX, segY
+          );
+        }
+        
+        ctx.stroke();
+      }
+    }
+    
+    // Draw borders between territories
+    function drawTerritoryBorders(ctx, width, height) {
+      const scaleX = width / 1000;
+      const scaleY = height / 1000;
+      const offsetX = width / 2;
+      const offsetY = height / 2;
+      
+      // Sea provinces for identifying land-sea borders
+      const seaProvinces = [
+        'NAO', 'NWG', 'BAR', 'NTH', 'SKA', 'HEL', 'BAL', 'BOT', 'ENG', 'IRI', 'MAO', 
+        'WES', 'LYO', 'TYS', 'ADR', 'ION', 'AEG', 'EAS', 'BLA'
+      ];
+      
+      // For each province, draw borders with its neighbors
+      for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+        if (!province.includes('_')) { // Skip coast variants
+          const x1 = (position.x * scaleX) + offsetX;
+          const y1 = (position.z * scaleY) + offsetY;
+          
+          const isSea = seaProvinces.includes(province);
+          
+          // Get connected neighbors
+          const neighbors = getConnectedProvinces(province);
+          
+          for (const neighbor of neighbors) {
+            if (coordinateData.coordinates[neighbor] && !neighbor.includes('_')) {
+              const neighborPos = coordinateData.coordinates[neighbor];
+              const x2 = (neighborPos.x * scaleX) + offsetX;
+              const y2 = (neighborPos.z * scaleY) + offsetY;
+              
+              const isNeighborSea = seaProvinces.includes(neighbor);
+              
+              // Only draw each border once (when province < neighbor)
+              if (province < neighbor) {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                
+                // Make borders slightly curved for more natural appearance
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                
+                // Add a slight curve
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Calculate perpendicular direction for the curve
+                const perpX = -dy / dist;
+                const perpY = dx / dist;
+                
+                // Apply a small curve
+                const curveSize = 10 + Math.random() * 10;
+                const curveX = midX + perpX * curveSize;
+                const curveY = midY + perpY * curveSize;
+                
+                // Draw the curved line
+                ctx.quadraticCurveTo(curveX, curveY, x2, y2);
+                
+                // Style based on type of border
+                if (isSea !== isNeighborSea) {
+                  // Land-sea border (coastline)
+                  ctx.strokeStyle = '#000000';
+                  ctx.lineWidth = 2.5;
+                } else if (isSea && isNeighborSea) {
+                  // Sea-sea border (lighter)
+                  ctx.strokeStyle = 'rgba(20, 60, 120, 0.5)';
+                  ctx.lineWidth = 1.5;
+                } else {
+                  // Land-land border
+                  ctx.strokeStyle = '#333333';
+                  ctx.lineWidth = 2;
+                }
+                
+                ctx.stroke();
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Draw supply centers on the map
+    function drawSupplyCenters(ctx, width, height) {
+      if (!coordinateData || !coordinateData.provinces) return;
+      
+      const scaleX = width / 1000;
+      const scaleY = height / 1000;
+      const offsetX = width / 2;
+      const offsetY = height / 2;
+      
+      // Draw supply centers as star symbols
+      for (const [province, data] of Object.entries(coordinateData.provinces)) {
+        if (data.isSupplyCenter && coordinateData.coordinates[province]) {
+          const position = coordinateData.coordinates[province];
+          const x = (position.x * scaleX) + offsetX;
+          const y = (position.z * scaleY) + offsetY;
+          
+          // Draw a star symbol
+          const starPoints = 5;
+          const outerRadius = 12;
+          const innerRadius = 6;
+          
+          ctx.beginPath();
+          
+          for (let i = 0; i < starPoints * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (Math.PI * i) / starPoints;
+            
+            const px = x + Math.cos(angle) * radius;
+            const py = y + Math.sin(angle) * radius;
+            
+            if (i === 0) {
+              ctx.moveTo(px, py);
+            } else {
+              ctx.lineTo(px, py);
+            }
+          }
+          
+          ctx.closePath();
+          
+          // Fill and stroke
+          ctx.fillStyle = '#FFD700'; // Gold
+          ctx.fill();
+          ctx.strokeStyle = '#333333';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+    }
+    
+    // Draw province names on the map
+    function drawProvinceNames(ctx, width, height) {
+      const scaleX = width / 1000;
+      const scaleY = height / 1000;
+      const offsetX = width / 2;
+      const offsetY = height / 2;
+      
+      for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+        if (!province.includes('_')) { // Skip coast variants
+          const x = (position.x * scaleX) + offsetX;
+          const y = (position.z * scaleY) + offsetY;
+          
+          // Add the province name
+          ctx.font = 'bold 20px Arial';
+          ctx.fillStyle = '#000000';
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 3;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Draw text outline for better visibility
+          ctx.strokeText(province, x, y);
+          ctx.fillText(province, x, y);
+        }
+      }
+    }
+    
+    // Create invisible hitboxes for territory interaction
+    function createInvisibleTerritoryHitboxes() {
+      if (!coordinateData || !coordinateData.coordinates) return;
+      
+      // Create a group for all territory hitboxes
+      const territoriesGroup = new THREE.Group();
+      territoriesGroup.name = 'territories';
+      
+      // Sea provinces for special styling
+      const seaProvinces = [
+        'NAO', 'NWG', 'BAR', 'NTH', 'SKA', 'HEL', 'BAL', 'BOT', 'ENG', 'IRI', 'MAO', 
+        'WES', 'LYO', 'TYS', 'ADR', 'ION', 'AEG', 'EAS', 'BLA'
+      ];
+      
+      // Group provinces by country
+      const countries = {
+        'AUSTRIA': ['VIE', 'BUD', 'TRI', 'GAL', 'BOH', 'TYR'],
+        'ENGLAND': ['LON', 'EDI', 'LVP', 'WAL', 'YOR', 'CLY'],
+        'FRANCE': ['PAR', 'BRE', 'MAR', 'PIC', 'GAS', 'BUR'],
+        'GERMANY': ['BER', 'MUN', 'KIE', 'RUH', 'PRU', 'SIL'],
+        'ITALY': ['ROM', 'VEN', 'NAP', 'TUS', 'PIE', 'APU'],
+        'RUSSIA': ['STP', 'MOS', 'WAR', 'SEV', 'UKR', 'LVN'],
+        'TURKEY': ['CON', 'ANK', 'SMY', 'SYR', 'ARM']
+      };
+      
+      // Determine country for each province
+      const provinceToCountry = {};
+      for (const [country, provinces] of Object.entries(countries)) {
+        for (const province of provinces) {
+          provinceToCountry[province] = country;
+        }
+      }
+      
+      // Create hitboxes for each province
+      for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+        if (!province.includes('_')) { // Skip coast variants
+          // Determine if this is a sea province
+          const isSea = seaProvinces.includes(province);
+          
+          // Determine country
+          const country = provinceToCountry[province];
+          
+          // Create a circular hitbox (nearly invisible)
+          const radius = 30; // Slightly smaller than visual territory
+          const geometry = new THREE.CircleGeometry(radius, 32);
+          const material = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0.01, // Nearly invisible
+            side: THREE.DoubleSide
+          });
+          
+          const circleMesh = new THREE.Mesh(geometry, material);
+          circleMesh.position.set(position.x, 0.5, position.z);
+          circleMesh.rotation.x = -Math.PI / 2; // Make it horizontal
+          
+          // Store province data for interaction
+          circleMesh.userData = {
+            province,
+            country,
+            isSea
+          };
+          
+          // Add to the territories group
+          territoriesGroup.add(circleMesh);
+        }
+      }
+      
+      // Add to scene
+      scene.add(territoriesGroup);
+    }
+    
+    // Draw a simplified map with country outlines for the fallback
+    function drawSimplifiedMap(ctx, width, height) {
+      // Sea opacity fill
+      ctx.fillStyle = 'rgba(30, 70, 150, 0.1)';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Country regions - approximate simplified polygons for each major power
+      const regions = {
+        'ENGLAND': [
+          [0.35, 0.25], [0.38, 0.2], [0.42, 0.22], [0.43, 0.25], 
+          [0.40, 0.27], [0.37, 0.3], [0.35, 0.25]
+        ],
+        'FRANCE': [
+          [0.4, 0.35], [0.35, 0.4], [0.3, 0.45], [0.35, 0.5], 
+          [0.4, 0.48], [0.45, 0.45], [0.42, 0.40], [0.4, 0.35]
+        ],
+        'GERMANY': [
+          [0.48, 0.31], [0.5, 0.36], [0.55, 0.38], [0.5, 0.43], 
+          [0.45, 0.4], [0.43, 0.35], [0.48, 0.31]
+        ],
+        'ITALY': [
+          [0.45, 0.48], [0.5, 0.5], [0.53, 0.53], [0.5, 0.58], 
+          [0.45, 0.55], [0.43, 0.5], [0.45, 0.48]
+        ],
+        'AUSTRIA': [
+          [0.55, 0.42], [0.6, 0.45], [0.58, 0.5], [0.53, 0.48], 
+          [0.52, 0.45], [0.55, 0.42]
+        ],
+        'RUSSIA': [
+          [0.6, 0.25], [0.7, 0.3], [0.75, 0.4], [0.7, 0.5], 
+          [0.62, 0.45], [0.58, 0.4], [0.55, 0.35], [0.6, 0.25]
+        ],
+        'TURKEY': [
+          [0.65, 0.5], [0.7, 0.55], [0.75, 0.6], [0.65, 0.6], 
+          [0.6, 0.55], [0.65, 0.5]
+        ]
+      };
+      
+      // Color palette for countries
+      const countryColors = {
+        'ENGLAND': '#223a87',
+        'FRANCE': '#3699d4',
+        'GERMANY': '#232323',
+        'ITALY': '#35a335',
+        'AUSTRIA': '#d82b2b',
+        'RUSSIA': '#dad6d6',
+        'TURKEY': '#e0c846'
+      };
+      
+      // Draw each country region
+      Object.entries(regions).forEach(([country, points]) => {
+        ctx.beginPath();
+        
+        // Scale points to canvas size
+        const scaledPoints = points.map(([x, y]) => [x * width, y * height]);
+        
+        // Draw the country shape
+        ctx.moveTo(scaledPoints[0][0], scaledPoints[0][1]);
+        for (let i = 1; i < scaledPoints.length; i++) {
+          ctx.lineTo(scaledPoints[i][0], scaledPoints[i][1]);
+        }
+        ctx.closePath();
+        
+        // Fill with country color (semi-transparent)
+        ctx.fillStyle = countryColors[country] + '88'; // Add alpha
+        ctx.fill();
+        
+        // Add a border
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+        
+        // Add country label
+        ctx.font = 'bold 48px Arial';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Calculate center point for label
+        const centerX = scaledPoints.reduce((sum, [x]) => sum + x, 0) / scaledPoints.length;
+        const centerY = scaledPoints.reduce((sum, [_, y]) => sum + y, 0) / scaledPoints.length;
+        
+        ctx.fillText(country, centerX, centerY);
+      });
+      
+      // Add province markers if coordinate data is available
+      if (coordinateData && coordinateData.coordinates) {
+        const scaleX = width / 1000;
+        const scaleY = height / 1000;
+        const offsetX = width / 2;
+        const offsetY = height / 2;
+        
+        // Draw province markers and names
+        for (const [province, position] of Object.entries(coordinateData.coordinates)) {
+          if (!province.includes('_')) { // Skip coast variants
+            const x = (position.x * scaleX) + offsetX;
+            const y = (position.z * scaleY) + offsetY;
+            
+            // Draw a dot for the province
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#000000';
+            ctx.fill();
+            
+            // Add the province name
+            ctx.font = '20px Arial';
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(province, x, y + 25);
+          }
+        }
+      }
+    }
     
     // Initialize the scene when page loads
     window.addEventListener('load', initScene);

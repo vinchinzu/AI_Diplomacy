@@ -45,10 +45,10 @@ const { optimize } = require('svgo');
 
 // Map sources - adjust these paths for your codebase
 const MAP_SOURCES = {
-  standard: '../../maps/standard.svg',
-  ancmed: '../../maps/ancmed.svg',
-  modern: '../../maps/modern.svg',
-  pure: '../../maps/pure.svg'
+  standard: '../../maps/svg/standard.svg',
+  ancmed: '../../maps/svg/ancmed.svg',
+  modern: '../../maps/svg/modern.svg',
+  pure: '../../maps/svg/pure.svg'
 };
 
 // Supply centers for standard map (others will be determined from SVG)
