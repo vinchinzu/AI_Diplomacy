@@ -413,83 +413,91 @@ class BaseModelClient:
             game_phase,
         )
 
-        raw_response = self.generate_response(prompt)
+        try:
+            raw_response = self.generate_response(prompt)
+            messages = []
+            
+            if raw_response:
+                try:
+                    # Find the JSON block between double curly braces
+                    json_matches = re.findall(r"\{\{(.*?)\}\}", raw_response, re.DOTALL)
 
-        messages = []
-        import pdb; pdb.set_trace()
-        if raw_response:
-            try:
-                # Find the JSON block between double curly braces
-                json_matches = re.findall(r"\{\{(.*?)\}\}", raw_response, re.DOTALL)
-
-                if not json_matches:
-                    # try normal
-                    logger.debug(
-                        f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying double braces."
-                    )
-                    json_matches = re.findall(
-                        r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
-                    )
-
-                if not json_matches:
-                    # try backtick fences
-                    logger.debug(
-                        f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying backtick fences."
-                    )
-                    json_matches = re.findall(
-                        r"```json\n(.*?)\n```", raw_response, re.DOTALL
-                    )
-
-                for match in json_matches:
-                    try:
-                        if match.strip().startswith(r"{"):
-                            message_data = json.loads(match.strip())
-                        else:
-                            message_data = json.loads(f"{{{match}}}")
-
-                        # Extract message details
-                        message_type = message_data.get("message_type", "global")
-                        content = message_data.get("content", "").strip()
-                        recipient = message_data.get("recipient", GLOBAL)
-
-                        # Validate recipient if private message
-                        if message_type == "private" and recipient not in active_powers:
-                            logger.warning(
-                                f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
-                            )
-                            recipient = GLOBAL
-
-                        # For private messages, ensure recipient is specified
-                        if message_type == "private" and recipient == GLOBAL:
-                            logger.warning(
-                                "Private message without recipient specified, defaulting to GLOBAL"
-                            )
-
-                        # Log for debugging
-                        logger.info(
-                            f"Power {power_name} sends {message_type} message to {recipient}"
+                    if not json_matches:
+                        # try normal
+                        logger.debug(
+                            f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying double braces."
+                        )
+                        json_matches = re.findall(
+                            r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
                         )
 
-                        # Keep local record for building future conversation context
-                        message = {
-                            "sender": power_name,
-                            "recipient": recipient,
-                            "content": content,
-                        }
+                    if not json_matches:
+                        # try backtick fences
+                        logger.debug(
+                            f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying backtick fences."
+                        )
+                        json_matches = re.findall(
+                            r"```json\n(.*?)\n```", raw_response, re.DOTALL
+                        )
 
-                        messages.append(message)
+                    for match in json_matches:
+                        try:
+                            if match.strip().startswith(r"{"):
+                                message_data = json.loads(match.strip())
+                            else:
+                                message_data = json.loads(f"{{{match}}}")
 
-                    except (json.JSONDecodeError, AttributeError) as e:
-                        message = None
+                            # Extract message details
+                            message_type = message_data.get("message_type", "global")
+                            content = message_data.get("content", "").strip()
+                            recipient = message_data.get("recipient", GLOBAL)
 
-            except AttributeError:
-                logger.error("Error parsing raw response")
+                            # Validate recipient if private message
+                            if message_type == "private" and recipient not in active_powers:
+                                logger.warning(
+                                    f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
+                                )
+                                recipient = GLOBAL
 
-        # Deduplicate messages
-        messages = list(set([json.dumps(m) for m in messages]))
-        messages = [json.loads(m) for m in messages]
+                            # For private messages, ensure recipient is specified
+                            if message_type == "private" and recipient == GLOBAL:
+                                logger.warning(
+                                    "Private message without recipient specified, defaulting to GLOBAL"
+                                )
 
-        return messages
+                            # Log for debugging
+                            logger.info(
+                                f"Power {power_name} sends {message_type} message to {recipient}"
+                            )
+
+                            # Keep local record for building future conversation context
+                            message = {
+                                "sender": power_name,
+                                "recipient": recipient,
+                                "content": content,
+                            }
+
+                            messages.append(message)
+
+                        except (json.JSONDecodeError, AttributeError) as e:
+                            logger.error(f"Error parsing message JSON for {power_name}: {str(e)}")
+                            continue
+
+                    # Deduplicate messages
+                    messages = list(set([json.dumps(m) for m in messages]))
+                    messages = [json.loads(m) for m in messages]
+                    
+                    return messages
+
+                except Exception as e:
+                    logger.error(f"Error parsing model response for {power_name}: {str(e)}")
+                    return []
+            else:
+                logger.warning(f"Empty response from model for {power_name}")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting model response for {power_name}: {str(e)}")
+            return []
 
 
 ##############################################################################
