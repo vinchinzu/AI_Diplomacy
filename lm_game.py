@@ -20,6 +20,7 @@ from ai_diplomacy.utils import (
     assign_models_to_powers,
 )
 from ai_diplomacy.negotiations import conduct_negotiations
+from ai_diplomacy.planning import planning_phase
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.long_story_short import configure_context_manager
 from ai_diplomacy.clients import configure_logging
@@ -46,13 +47,6 @@ logging.getLogger("client").setLevel(logging.INFO)
 logging.getLogger("ai_diplomacy").setLevel(logging.INFO)
 
 
-def my_summary_callback(system_prompt, user_prompt, model_name):
-    # Route to the desired model specified by the command-line argument
-    client = load_model_client(model_name, emptysystem=True)
-    combined_prompt = f"{system_prompt}\n\n{user_prompt}"
-    logger.debug(f"SUMMARY | Requesting phase summary from {model_name}")
-    return client.generate_response(combined_prompt, empty_system=True)
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -63,12 +57,6 @@ def parse_arguments():
         type=int,
         default=1910,
         help="Maximum year to simulate. The game will stop once this year is reached.",
-    )
-    parser.add_argument(
-        "--summary_model",
-        type=str,
-        default="o3-mini",
-        help="Model name to use for generating phase summaries.",
     )
     parser.add_argument(
         "--num_negotiation_rounds",
@@ -91,28 +79,10 @@ def parse_arguments():
             "The order is: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY."
         ),
     )
-    # Logging configuration options
     parser.add_argument(
-        "--log_full_prompts",
+        "--planning_phase", 
         action="store_true",
-        help="Log the full prompts sent to models",
-    )
-    parser.add_argument(
-        "--log_full_responses",
-        action="store_true",
-        help="Log the full responses from models",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging including HTTP connection details",
-    )
-    parser.add_argument(
-        "--log_level",
-        type=str,
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set the logging level",
+        help="Enable the planning phase for each power to set strategic directives.",
     )
     return parser.parse_args()
  
@@ -172,7 +142,6 @@ def main():
         summary_model=args.summary_model
     )
     max_year = args.max_year
-    summary_model = args.summary_model
 
     logger.info("GAME_START | Initializing Diplomacy game with multiple LLM agents")
     start_whole = time.time()
@@ -275,17 +244,20 @@ def main():
 
         # If it's a movement phase (e.g. ends with "M"), conduct negotiations
         if game.current_short_phase.endswith("M"):
-            logger.info(f"NEGOTIATIONS | {current_phase} | Starting diplomacy round")
-            conversation_messages = conduct_negotiations(
+            if args.planning_phase:
+                logger.info("Starting planning phase block...")
+                game_history = planning_phase(
+                    game,
+                    game_history,
+                    model_error_stats,
+                )
+            logger.info("Starting negotiation phase block...")
+            game_history = conduct_negotiations(
                 game,
                 game_history,
                 model_error_stats,
                 max_rounds=args.num_negotiation_rounds,
             )
-            logger.debug(f"NEGOTIATIONS | {current_phase} | Completed with {len(conversation_messages)} messages")
-        else:
-            conversation_messages = []
-
         # Gather orders from each power concurrently
         active_powers = [
             (p_name, p_obj)
@@ -334,14 +306,8 @@ def main():
                         logger.warning(f"ORDERS | {p_name} | No valid orders returned")
                 except Exception as exc:
                     logger.error(f"ORDERS | {p_name} | Request failed: {str(exc)[:150]}")
-
-        logger.info(f"PROCESSING | {current_phase} | Processing orders")
-        # Pass the summary model to the callback via a lambda function
-        phase_data = game.process(
-            phase_summary_callback=lambda sys, usr: my_summary_callback(
-                sys, usr, summary_model
-            )
-        )
+        logger.info("Processing orders...\n")
+        game.process()
         # Add orders to game history
         for power_name in game.order_history[current_phase]:
             orders = game.order_history[current_phase][power_name]
@@ -363,29 +329,15 @@ def main():
                 results,
             )
         logger.info(f"PROCESSING | {current_phase} | Phase completed")
-
-        # Retrieve and log the summary of the phase
-        summary_text = phase_data.summary or "(No summary found.)"
-        border = "=" * 80
-        logger.info(
-            f"SUMMARY | {phase_data.name} | Phase summary: {len(summary_text)} chars"
-        )
-        logger.debug(f"SUMMARY | {phase_data.name} | Full text:\n{border}\n{summary_text}\n{border}")
-
-        # Append the summary to the manifesto file
-        with open(manifesto_path, "a") as f:
-            f.write(f"=== {phase_data.name} ===\n{summary_text}\n\n")
-            
-        phase_duration = time.time() - phase_start
-        logger.debug(f"PHASE | {current_phase} | Completed in {phase_duration:.2f}s")
-
-        # Increment round counter after processing each phase
-        round_counter += 1
-        
-        # Save every 5 rounds
-        if round_counter % 5 == 0:
-            logger.info(f"CHECKPOINT | Saving after round {round_counter}")
-            save_game_state(game, result_folder, game_file_path, model_error_stats, args, is_final=False)
+        # Append the strategic directives to the manifesto file
+        strategic_directives = game_history.get_strategic_directives()
+        if strategic_directives:
+            out_str = f"Strategic directives for {current_phase}:\n"
+            for power, directive in strategic_directives.items():
+                out_str += f"{power}: {directive}\n\n"
+            out_str += f"------------------------------------------\n"
+            with open(manifesto_path, "a") as f:
+                f.write(out_str)
 
         # Check if we've exceeded the max year
         year_str = current_phase[1:5]

@@ -1,0 +1,14 @@
+**CURRENT INSTRUCTIONS**
+
+You are now to prepare a high-level strategic directive for this phase. Remember that your goal is to win via capturing supply centers. There are opportunity costs in this game. 
+
+You should reason through 
+1. What would be ideal locations for you to capture during this phase (or in future phases), 
+2. What needs to happen for those orders to be successful (e.g. not bounce), 
+3. Are there strategic negotiations you could engage in with other powers to make those bounces less likely?, 
+4. Will other powers be targeting any of your supply centers in this phase (or in future phases)?, 
+5. Are there strategic negotiations you could engage in to reduce the chance they target your supply centers? 
+
+Develop a detailed directive that reasons through the supply centers you'd like to take and how you'll take them (including possible orders and possible alliances, concessions, lies, etc). Note that you can make deals, threats, or alliances with other powers. You can lie. 
+
+Note that the plan you outline below will be presented to yourself when you are asked to generate specific negotiation messages and specific orders. Be detailed, strategic, smart, and forward-thinking. Be wary of others trying to deceive you. Be specific as your response should help you produce messages for negotiation and orders later. Output a directive that is roughly a paragraph long. 

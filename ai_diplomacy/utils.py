@@ -9,52 +9,22 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 
-def assign_models_to_powers(randomize=True):
+def assign_models_to_powers():
     """
     Example usage: define which model each power uses.
     Return a dict: { power_name: model_id, ... }
-    """
-    # If True, we'll randomize the model assignment.
-    """model_list = [
-        "o3-mini",
-        "claude-3-5-sonnet-20241022",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "claude-3-5-haiku-20241022",
-        "claude-3-7-sonnet-20250219",
-
-    ]"""
-    model_list = [
-        "o3-mini",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gemini-1.5-pro",
-        "gpt-4o-mini",
-        "claude-3-5-haiku-20241022",
-    ]
     POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
-    if randomize:
-        # Create a copy of model_list to draw from
-        available_models = model_list.copy()
-        result = {}
-        for power in POWERS:
-            # If we've used all models, replenish the available models
-            if not available_models:
-                available_models = model_list.copy()
-            # Select and remove a random model from available ones
-            model = random.choice(available_models)
-            available_models.remove(model)
-            result[power] = model
-        logger.debug(f"CONFIG | Generated randomized power-model mapping for {len(POWERS)} powers")
-        return result
-    else:
-        logger.debug(f"CONFIG | Using fixed power-model mapping with {len(model_list)} models")
-        return {
-            power: model_list[i] for i, power in enumerate(POWERS)
-        }
+    """
+
+    return {
+        "FRANCE": "o3-mini",
+        "GERMANY": "claude-3-5-sonnet-latest",
+        "ENGLAND": "gemini-2.0-flash",
+        "RUSSIA": "claude-3.7-sonnet-latest",
+        "ITALY": "gpt-4o",
+        "AUSTRIA": "gpt-4o-mini",
+        "TURKEY": "claude-3-5-haiku-20241022",
+    }
 
 
 def gather_possible_orders(game, power_name):

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diplomacy File Converter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .input-container, .output-container {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f8f8f8;
+      border-radius: 5px;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      font-family: monospace;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #4a5568;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #2d3748;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #e6f7ff;
+      border-left: 4px solid #1890ff;
+    }
+    .control-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    #file-input {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Diplomacy File Converter</h1>
+    <p>This tool converts between different Diplomacy game file formats:</p>
+    <ul>
+      <li><strong>AI Diplomacy Results</strong> → <strong>Animation Format</strong></li>
+    </ul>
+    
+    <div class="input-container">
+      <h2>Input</h2>
+      <div class="control-group">
+        <button id="load-btn">Load File</button>
+        <button id="convert-btn">Convert</button>
+        <input type="file" id="file-input" accept=".json,.lmvsgame">
+      </div>
+      <textarea id="input-json" placeholder="Paste your JSON data here or load a file..."></textarea>
+      <div id="input-status" class="status">Ready to convert</div>
+    </div>
+    
+    <div class="output-container">
+      <h2>Output</h2>
+      <div class="control-group">
+        <button id="copy-btn">Copy to Clipboard</button>
+        <button id="download-btn">Download File</button>
+      </div>
+      <textarea id="output-json" placeholder="Converted JSON will appear here..." readonly></textarea>
+      <div id="output-status" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    // Converter function
+    function convertResultsToAnimationFormat(resultsData) {
+      // Create a base game data structure
+      const gameData = {
+        map_name: "standard",
+        game_id: resultsData.game_id || "ai-diplomacy-game",
+        phases: []
+      };
+      
+      // Extract phases from the results data
+      if (resultsData.rounds && Array.isArray(resultsData.rounds)) {
+        console.log(`Processing ${resultsData.rounds.length} rounds from results file`);
+        
+        // Convert each round to a phase
+        gameData.phases = resultsData.rounds.map((round, index) => {
+          // Extract phase info
+          const phase = {
+            name: round.name || `Round ${index + 1}`,
+            year: round.year || 1900 + Math.floor(index / 3),
+            season: round.season || (index % 3 === 0 ? "SPRING" : (index % 3 === 1 ? "FALL" : "WINTER")),
+            type: round.type || (index % 3 === 2 ? "ADJUSTMENT" : "MOVEMENT"),
+            units: [],
+            orders: [],
+            results: [],
+            messages: round.messages || [],
+            index: index
+          };
+          
+          // Extract unit positions
+          if (round.state && round.state.units) {
+            // Convert units to expected format
+            for (const [power, units] of Object.entries(round.state.units)) {
+              if (Array.isArray(units)) {
+                units.forEach(unit => {
+                  // Parse unit info (e.g., "A PAR" or "F BRE")
+                  const match = unit.match(/^([AF])\s+(.+)$/);
+                  if (match) {
+                    const unitType = match[1]; // 'A' or 'F'
+                    const location = match[2];
+                    
+                    // Create a unique ID for the unit
+                    const unitId = `${power.toUpperCase()}_${unitType}_${location}_${index}`;
+                    
+                    phase.units.push({
+                      id: unitId,
+                      type: unitType,
+                      power: power.toUpperCase(),
+                      location: location
+                    });
+                  }
+                });
+              }
+            }
+          }
+          
+          // Extract orders
+          if (round.orders) {
+            for (const [power, orders] of Object.entries(round.orders)) {
+              if (Array.isArray(orders)) {
+                orders.forEach(order => {
+                  // Extract the region from the order (e.g., "A PAR-BUR" -> "PAR")
+                  const regionMatch = order.match(/^[AF]\s+([A-Za-z_/]+)/);
+                  const region = regionMatch ? regionMatch[1] : "";
+                  
+                  // Standardize the order format
+                  let standardizedOrder = order;
+                  standardizedOrder = standardizedOrder
+                    .replace(/([A-Z]{3})\s*-\s*([A-Z]{3})/g, '$1-$2')
+                    .replace(/([A-Z]{3})\s*H/g, '$1 H')
+                    .replace(/([A-Z]{3})\s*S\s*([AF])\s*([A-Z]{3})/g, '$1 S $2 $3');
+                  
+                  phase.orders.push({
+                    text: standardizedOrder,
+                    power: power.toUpperCase(),
+                    region: region,
+                    success: true // Default to true unless specified otherwise
+                  });
+                });
+              }
+            }
+          }
+          
+          return phase;
+        });
+      }
+      
+      return gameData;
+    }
+
+    // When document is fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      // DOM Elements
+      const loadBtn = document.getElementById('load-btn');
+      const fileInput = document.getElementById('file-input');
+      const convertBtn = document.getElementById('convert-btn');
+      const copyBtn = document.getElementById('copy-btn');
+      const downloadBtn = document.getElementById('download-btn');
+      const inputTextarea = document.getElementById('input-json');
+      const outputTextarea = document.getElementById('output-json');
+      const inputStatus = document.getElementById('input-status');
+      const outputStatus = document.getElementById('output-status');
+      
+      // Event Listeners
+      loadBtn.addEventListener('click', () => fileInput.click());
+      
+      fileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        inputStatus.textContent = `Loading file: ${file.name}...`;
+        
+        const reader = new FileReader();
+        reader.onload = () => {
+          inputTextarea.value = reader.result;
+          inputStatus.textContent = `File loaded: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+        };
+        reader.onerror = () => {
+          inputStatus.textContent = `Error reading file: ${file.name}`;
+        };
+        reader.readAsText(file);
+      });
+      
+      convertBtn.addEventListener('click', () => {
+        try {
+          const inputData = JSON.parse(inputTextarea.value);
+          outputStatus.textContent = 'Converting...';
+          
+          // Detect format and convert
+          let outputData;
+          
+          if (inputData.rounds && Array.isArray(inputData.rounds)) {
+            outputStatus.textContent = 'AI Diplomacy Results format detected. Converting...';
+            outputData = convertResultsToAnimationFormat(inputData);
+          } else {
+            outputStatus.textContent = 'Unknown format. No conversion performed.';
+            outputData = inputData;
+          }
+          
+          // Format with indentation and display
+          outputTextarea.value = JSON.stringify(outputData, null, 2);
+          outputStatus.textContent = `Conversion complete! ${outputData.phases ? outputData.phases.length : 0} phases processed.`;
+        } catch (error) {
+          outputStatus.textContent = `Error: ${error.message}`;
+        }
+      });
+      
+      copyBtn.addEventListener('click', () => {
+        outputTextarea.select();
+        document.execCommand('copy');
+        outputStatus.textContent = 'Copied to clipboard!';
+      });
+      
+      downloadBtn.addEventListener('click', () => {
+        if (!outputTextarea.value) {
+          outputStatus.textContent = 'Nothing to download. Convert a file first.';
+          return;
+        }
+        
+        const blob = new Blob([outputTextarea.value], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'diplomacy_animation_format.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        outputStatus.textContent = 'File downloaded!';
+      });
+    });
+  </script>
+</body>
+</html>

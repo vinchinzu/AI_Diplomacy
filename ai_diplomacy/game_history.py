@@ -20,6 +20,7 @@ class Message:
 @dataclass
 class Phase:
     name: str  # e.g. "SPRING 1901"
+    plans: Dict[str, str] = field(default_factory=dict)
     messages: List[Message] = field(default_factory=list)
     orders_by_power: Dict[str, List[str]] = field(
         default_factory=lambda: defaultdict(list)
@@ -28,6 +29,9 @@ class Phase:
         default_factory=lambda: defaultdict(list)
     )
 
+    def add_plan(self, power_name: str, plan: str):
+        self.plans[power_name] = plan
+    
     def add_message(self, sender: str, recipient: str, content: str):
         self.messages.append(
             Message(sender=sender, recipient=recipient, content=content)
@@ -90,6 +94,11 @@ class GameHistory:
         self.phases.append(new_phase)
         return new_phase
 
+    def add_plan(self, phase_name: str, power_name: str, plan: str):
+        # get current phase
+        phase = self.add_phase(phase_name)
+        phase.add_plan(power_name, plan)
+    
     def add_message(self, phase_name: str, sender: str, recipient: str, content: str):
         phase = self.add_phase(phase_name)
         phase.add_message(sender, recipient, content)
@@ -100,7 +109,13 @@ class GameHistory:
         phase = self.add_phase(phase_name)
         phase.add_orders(power, orders, results)
 
-    def get_game_history(self, power_name: str, num_prev_phases: int = 5) -> str:
+    def get_strategic_directives(self): 
+        # returns for last phase only if exists
+        if not self.phases: 
+            return {}
+        return self.phases[-1].plans
+
+    def get_game_history(self, power_name: str, include_plans: bool = True, num_prev_phases: int = 5) -> str:
         if not self.phases:
             logger.debug(f"HISTORY | {power_name} | No phases recorded yet")
             return "COMMUNICATION HISTORY:\n\n(No game phases recorded yet)"
@@ -159,49 +174,35 @@ class GameHistory:
             if private_msgs:
                 phase_str += "\nPRIVATE:\n"
                 for other_power, messages in private_msgs.items():
-                    phase_str += f" {other_power}:\n\n"
-                    phase_str += messages + "\n"
-                phase_has_content = True
-                has_content = True
-            
-            # Only add ORDERS section if we have any content in this phase
-            # or if it's the most recent phase (always include latest orders)
-            is_latest_phase = phase == phases_to_report[-1]
-            
-            if phase_has_content or is_latest_phase:
-                # Add ORDERS section for this phase
-                if phase.orders_by_power:
-                    phase_str += "\nORDERS:\n"
-                    for power, orders in phase.orders_by_power.items():
-                        phase_str += f"{power}:\n"
-                        if not orders:
-                            phase_str += "  (No orders)\n\n"
-                            continue
-                        
-                        results = phase.results_by_power.get(power, [])
-                        for i, order in enumerate(orders):
-                            if (
-                                i < len(results)
-                                and results[i]
-                                and not all(r == "" for r in results[i])
-                            ):
-                                # Join multiple results with commas
-                                result_str = f" ({', '.join(results[i])})"
-                            else:
-                                result_str = " (successful)"
-                            phase_str += f"  {order}{result_str}\n"
-                        phase_str += "\n"
-                
-                # Only add this phase to the history if it has content or is the latest phase
-                game_history_str += phase_str
-                game_history_str += "-" * 50 + "\n"  # Add separator between phases
+                    game_history_str += f" {other_power}:\n\n"
+                    game_history_str += messages + "\n"
 
-        # If we have no content at all, provide a meaningful message
-        if not has_content:
-            logger.warning(f"HISTORY | {power_name} | No message content found for display, providing fallback message")
-            # Don't overwrite previous content - append this explanation
-            game_history_str += f"\nNote: No diplomatic communications to display for {power_name} in recent phases.\n"
-        else:
-            logger.debug(f"HISTORY | {power_name} | Generated history with content from {recent_phases_message_count} phases")
-        
+            # Add ORDERS section for this phase
+            if phase.orders_by_power:
+                game_history_str += "\nORDERS:\n"
+                for power, orders in phase.orders_by_power.items():
+                    game_history_str += f"{power}:\n"
+                    results = phase.results_by_power.get(power, [])
+                    for i, order in enumerate(orders):
+                        if (
+                            i < len(results)
+                            and results[i]
+                            and not all(r == "" for r in results[i])
+                        ):
+                            # Join multiple results with commas
+                            result_str = f" ({', '.join(results[i])})"
+                        else:
+                            result_str = " (successful)"
+                        game_history_str += f"  {order}{result_str}\n"
+                    game_history_str += "\n"
+
+            game_history_str += "-" * 50 + "\n"  # Add separator between phases
+            
+        # NOTE: only reports plan for the last phase (otherwise too much clutter)
+        if include_plans and phases_to_report and (power_name in phases_to_report[-1].plans):
+            game_history_str += f"\n{power_name} STRATEGIC DIRECTIVE:\n"
+            game_history_str += "Here is a high-level directive you have planned out previously for this phase.\n"
+            game_history_str += phases_to_report[-1].plans[power_name] + "\n"
+
+
         return game_history_str

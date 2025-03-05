@@ -152,94 +152,46 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        game_history,  # Or GameHistory instance
-        phase_summaries: Optional[Dict[str, str]] = None,
+        game_history: GameHistory,
+        include_plans: bool = True
     ) -> str:
-        """
-        Overhauled to delegate the final formatting to context_prompt.txt, inserting
-        placeholders for expansions (phase info, supply centers, units, blah blah).
+        context = load_prompt("context_prompt.txt")
 
-        This version is 'surgical' and uses placeholders from @context_prompt.txt 
-        rather than building large strings in code.
-        """
-        from ai_diplomacy.utils import (
-            expand_phase_info,
-            format_power_units_and_centers,  # Now includes neutral centers info
-            organize_history_by_relationship,
-            format_possible_orders,
-            format_convoy_paths,
-            generate_threat_assessment,
-            generate_sc_projection
-        )
-        # 1) Grab the template from context_prompt.txt
-        template_text = load_prompt("context_prompt.txt")
+        # Get our units and centers
+        units_info = board_state["units"].get(power_name, [])
+        units_info_set = set(units_info)
+        centers_info = board_state["centers"].get(power_name, [])
 
-        # 2) Expand the current phase 
-        phase_expanded = expand_phase_info(game, board_state)
+        # Get the current phase
+        year_phase = board_state["phase"]  # e.g. 'S1901M'
 
-        # 3) Our forces (units + centers, including neutral centers)
-        our_forces_summary = format_power_units_and_centers(game, power_name, board_state)
+        # Get enemy units and centers and label them for each power
+        enemy_units = {}
+        enemy_centers = {}
+        for power, info in board_state["units"].items():
+            if power != power_name:
+                enemy_units[power] = info
+                enemy_centers[power] = board_state["centers"].get(power, [])
 
-        # 4) Summaries for enemies
-        enemies_forces_summary = ""
-        for pwr in board_state["units"]:
-            if pwr != power_name:
-                enemies_forces_summary += format_power_units_and_centers(game, pwr, board_state)
+        # Get possible orders
+        possible_orders_str = ""
+        for loc, orders in possible_orders.items():
+            possible_orders_str += f"  {loc}: {orders}\n"
 
-        # 5) Neutral Supply Centers
-        neutral_supply_centers_summary = format_power_units_and_centers(game, 'NEUTRAL', board_state)
+        # Convoy paths
+        all_convoy_paths_possible = game.convoy_paths_possible
+        convoy_paths_possible = {}
+        for start_loc, fleets_req, end_loc in all_convoy_paths_possible:
+            for fleet in fleets_req:
+                if fleet in units_info_set:
+                    convoy_paths_possible.append((start_loc, fleets_req, end_loc))
 
-        # 6) Gather the conversation text
-        raw_conversation_text = ""
-        if hasattr(game_history, "get_game_history"):
-            raw_conversation_text = game_history.get_game_history(power_name) or "(No history yet)"
-        else:
-            # Might be a plain string
-            raw_conversation_text = game_history if isinstance(game_history, str) else "(No history yet)"
+        conversation_text = game_history.get_game_history(power_name, include_plans=include_plans)
+        if not conversation_text:
+            conversation_text = "\n(No game history yet)\n"
 
-        # Organize history by relationship
-        organized_history = organize_history_by_relationship(raw_conversation_text)
-
-        # Get optimized context (summaries if needed)
-        optimized_phases, optimized_messages = get_optimized_context(
-            game, 
-            game_history, 
-            power_name, 
-            organized_history
-        )
-
-        # Use the optimized message history
-        history_text = optimized_messages
-
-        # 7) Format possible orders
-        possible_orders_text = format_possible_orders(game, possible_orders)
-
-        # 8) Convoy Paths
-        logger.debug(f"CONTEXT | {self.model_name} | {power_name} | Convoy paths: {len(game.convoy_paths_possible) if game.convoy_paths_possible else 0} available")
-        convoy_paths_text = format_convoy_paths(game, game.convoy_paths_possible, power_name)
-
-        # 9) Threat Assessment
-        threat_text = generate_threat_assessment(game, board_state, power_name)
-
-        # 10) Supply Center Projection
-        sc_projection_text = generate_sc_projection(game, board_state, power_name)
-
-        # 11) Past Phase Summaries
-        if optimized_phases:
-            # Combine each phase summary for reference
-            lines = []
-            for ph, summ in optimized_phases.items():
-                # Check if this is a summary entry
-                if ph.startswith("SUMMARY_UNTIL_"):
-                    lines.append(f"HISTORICAL SUMMARY (until {ph[13:]}):\n{summ}\n")
-                else:
-                    lines.append(f"PHASE {ph}:\n{summ}\n")
-            historical_summaries = "\n".join(lines)
-        else:
-            historical_summaries = "(No historical summaries yet)"
-
-        # 12) Plug everything into context_prompt.txt
-        final_prompt = template_text.format(
+        # Load in current context values
+        context = context.format(
             power_name=power_name,
             phase_expanded=phase_expanded,
             our_forces_summary=our_forces_summary,
@@ -486,6 +438,29 @@ class BaseModelClient:
                 fallback.append(holds[0] if holds else orders_list[0])
         return fallback
 
+    def build_planning_prompt(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        game_history: GameHistory,
+        game_phase: str,
+    ) -> str:
+        
+        instructions = load_prompt("planning_instructions.txt")
+
+        context = self.build_context_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            game_history,
+            include_plans=False
+        )
+
+        return context + "\n\n" + instructions
+
     def build_conversation_prompt(
         self,
         game,
@@ -509,7 +484,7 @@ class BaseModelClient:
 
         return context + "\n\n" + instructions
 
-    def get_conversation_reply(
+    def get_planning_reply(
         self,
         game,
         board_state,
@@ -520,7 +495,8 @@ class BaseModelClient:
         active_powers: Optional[List[str]] = None,
         phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
-        prompt = self.build_conversation_prompt(
+        
+        prompt = self.build_planning_prompt(
             game,
             board_state,
             power_name,
@@ -531,82 +507,115 @@ class BaseModelClient:
         )
 
         raw_response = self.generate_response(prompt)
+        return raw_response
+    
+    def get_conversation_reply(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        game_history: GameHistory,
+        game_phase: str,
+        active_powers: Optional[List[str]] = None,
+    ) -> str:
+        
+        prompt = self.build_conversation_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            game_history,
+            game_phase,
+        )
 
-        messages = []
-        if raw_response:
-            try:
-                # Find the JSON block between double curly braces
-                json_matches = re.findall(r"\{\{(.*?)\}\}", raw_response, re.DOTALL)
+        try:
+            raw_response = self.generate_response(prompt)
+            messages = []
+            
+            if raw_response:
+                try:
+                    # Find the JSON block between double curly braces
+                    json_matches = re.findall(r"\{\{(.*?)\}\}", raw_response, re.DOTALL)
 
-                if not json_matches:
-                    # try normal
-                    logger.debug(
-                        f"CHAT | {self.model_name} | {power_name} | No JSON block, trying double braces"
-                    )
-                    json_matches = re.findall(
-                        r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
-                    )
-
-                if not json_matches:
-                    # try backtick fences
-                    logger.debug(
-                        f"CHAT | {self.model_name} | {power_name} | Trying backtick fences"
-                    )
-                    json_matches = re.findall(
-                        r"```json\n(.*?)\n```", raw_response, re.DOTALL
-                    )
-
-                for match in json_matches:
-                    try:
-                        if match.strip().startswith(r"{"):
-                            message_data = json.loads(match.strip())
-                        else:
-                            message_data = json.loads(f"{{{match}}}")
-
-                        # Extract message details
-                        message_type = message_data.get("message_type", "global")
-                        content = message_data.get("content", "").strip()
-                        recipient = message_data.get("recipient", GLOBAL)
-                        recipient = recipient.upper()
-
-                        # Validate recipient if private message
-                        if message_type == "private" and recipient not in active_powers:
-                            logger.warning(
-                                f"CHAT | {self.model_name} | {power_name} | Invalid recipient '{recipient}', defaulting to GLOBAL"
-                            )
-                            recipient = GLOBAL
-
-                        # For private messages, ensure recipient is specified
-                        if message_type == "private" and recipient == GLOBAL:
-                            logger.warning(
-                                f"CHAT | {self.model_name} | {power_name} | Private message without recipient, defaulting to GLOBAL"
-                            )
-
-                        # Log for debugging
-                        logger.info(
-                            f"CHAT | {self.model_name} | {power_name} | Sending {message_type} message to {recipient}"
+                    if not json_matches:
+                        # try normal
+                        logger.debug(
+                            f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying double braces."
+                        )
+                        json_matches = re.findall(
+                            r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
                         )
 
-                        # Keep local record for building future conversation context
-                        message = {
-                            "sender": power_name,
-                            "recipient": recipient,
-                            "content": content,
-                        }
+                    if not json_matches:
+                        # try backtick fences
+                        logger.debug(
+                            f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying backtick fences."
+                        )
+                        json_matches = re.findall(
+                            r"```json\n(.*?)\n```", raw_response, re.DOTALL
 
-                        messages.append(message)
+                        )
 
-                    except (json.JSONDecodeError, AttributeError) as e:
-                        message = None
+                    for match in json_matches:
+                        try:
+                            if match.strip().startswith(r"{"):
+                                message_data = json.loads(match.strip())
+                            else:
+                                message_data = json.loads(f"{{{match}}}")
 
-            except AttributeError:
-                logger.error(f"CHAT | {self.model_name} | {power_name} | Error parsing raw response")
+                            # Extract message details
+                            message_type = message_data.get("message_type", "global")
+                            content = message_data.get("content", "").strip()
+                            recipient = message_data.get("recipient", GLOBAL)
 
-        # Deduplicate messages
-        messages = list(set([json.dumps(m) for m in messages]))
-        messages = [json.loads(m) for m in messages]
+                            # Validate recipient if private message
+                            if message_type == "private" and recipient not in active_powers:
+                                logger.warning(
+                                    f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
+                                )
+                                recipient = GLOBAL
 
-        return messages
+                            # For private messages, ensure recipient is specified
+                            if message_type == "private" and recipient == GLOBAL:
+                                logger.warning(
+                                    "Private message without recipient specified, defaulting to GLOBAL"
+                                )
+
+                            # Log for debugging
+                            logger.info(
+                                f"Power {power_name} sends {message_type} message to {recipient}"
+                            )
+
+                            # Keep local record for building future conversation context
+                            message = {
+                                "sender": power_name,
+                                "recipient": recipient,
+                                "content": content,
+                            }
+
+                            messages.append(message)
+
+                        except (json.JSONDecodeError, AttributeError) as e:
+                            logger.error(f"Error parsing message JSON for {power_name}: {str(e)}")
+                            continue
+
+
+                    # Deduplicate messages
+                    messages = list(set([json.dumps(m) for m in messages]))
+                    messages = [json.loads(m) for m in messages]
+                    
+                    return messages
+
+                except Exception as e:
+                    logger.error(f"Error parsing model response for {power_name}: {str(e)}")
+                    return []
+            else:
+                logger.warning(f"Empty response from model for {power_name}")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting model response for {power_name}: {str(e)}")
+            return []
 
 
 ##############################################################################

@@ -48,6 +48,6 @@ PARSABLE OUTPUT:
     "content": "Let's form a secret alliance against Germany."
 }}
 
-Reason step-by-step through your diplomatic position and the past phase summaries. Make sure you give thorough and clear reasoning. Send messages that tactically advance your position in the future. Be concrete in your messages. Your goal is to acquire supply centers and win the game. You can lie to achieve this goal. If there is no value in sending messages, then don't send any messages. Just respond with '.'. 
+Reason step-by-step through your diplomatic position, the state of the game, and your past strategic directive. Make sure you give thorough and clear reasoning. Send messages that tactically advance your position in the future. Be concrete in your messages. Your goal is to acquire supply centers and win the game. You can lie to achieve this goal. If there is no value in sending messages, then don't send any messages. Just respond with '.'. 
 
 Remember you are in messaging mode right now. Do not give any orders. Each message you send must be in a separate bracketed JSON section. You may send multiple messages. Do not send them all as one JSON object. Do not repeat any JSON object in your output twice. 
