@@ -96,6 +96,12 @@
         <button id="load-btn">Load Game</button>
         <button id="prev-btn" disabled>← Prev</button>
         <button id="next-btn" disabled>Next →</button>
+        <button id="play-btn" disabled>▶ Play</button>
+        <select id="speed-selector" disabled>
+          <option value="1000">Slow</option>
+          <option value="500" selected>Medium</option>
+          <option value="200">Fast</option>
+        </select>
         <span id="phase-display">No game loaded</span>
       </div>
     </div>
@@ -117,16 +123,24 @@
     let coordinateData = null;
     let unitMeshes = []; // To store references for units + supply center 3D objects
     let mapPlane = null; // The fallback map plane
+    let isPlaying = false; // Track playback state
+    let playbackSpeed = 500; // Default speed in ms
+    let playbackTimer = null; // Timer reference for playback
+    let animationDuration = 1500; // Duration of unit movement animation in ms
+    let unitAnimations = []; // Track ongoing unit animations
+    let territoryTransitions = []; // Track territory color transitions
     
     // --- DOM ELEMENTS ---
-    const loadBtn       = document.getElementById('load-btn');
-    const fileInput     = document.getElementById('file-input');
-    const prevBtn       = document.getElementById('prev-btn');
-    const nextBtn       = document.getElementById('next-btn');
-    const phaseDisplay  = document.getElementById('phase-display');
-    const infoPanel     = document.getElementById('info-panel');
-    const mapView       = document.getElementById('map-view');
-    const leaderboard   = document.getElementById('leaderboard');
+    const loadBtn         = document.getElementById('load-btn');
+    const fileInput       = document.getElementById('file-input');
+    const prevBtn         = document.getElementById('prev-btn');
+    const nextBtn         = document.getElementById('next-btn');
+    const playBtn         = document.getElementById('play-btn');
+    const speedSelector   = document.getElementById('speed-selector');
+    const phaseDisplay    = document.getElementById('phase-display');
+    const infoPanel       = document.getElementById('info-panel');
+    const mapView         = document.getElementById('map-view');
+    const leaderboard     = document.getElementById('leaderboard');
 
     // Add roundRect polyfill for browsers that don't support it
     if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -231,6 +245,74 @@
     function animate() {
       requestAnimationFrame(animate);
       
+      const currentTime = Date.now();
+      
+      // Process unit movement animations
+      if (unitAnimations.length > 0) {
+        unitAnimations.forEach((anim, index) => {
+          // Calculate progress (0 to 1)
+          const elapsed = currentTime - anim.startTime;
+          const progress = Math.min(1, elapsed / anim.duration);
+          
+          // Apply movement
+          if (progress < 1) {
+            // Apply easing for more natural movement - ease in and out
+            const easedProgress = easeInOutCubic(progress);
+            
+            // Update position
+            anim.object.position.x = anim.startPos.x + (anim.endPos.x - anim.startPos.x) * easedProgress;
+            anim.object.position.z = anim.startPos.z + (anim.endPos.z - anim.startPos.z) * easedProgress;
+            
+            // Subtle bobbing up and down during movement
+            anim.object.position.y = 10 + Math.sin(progress * Math.PI * 2) * 5;
+            
+            // For fleets (ships), add a gentle rocking motion
+            if (anim.object.userData.type === 'F') {
+              anim.object.rotation.z = Math.sin(progress * Math.PI * 3) * 0.05;
+              anim.object.rotation.x = Math.sin(progress * Math.PI * 2) * 0.05;
+            }
+          } else {
+            // Animation complete, remove from active animations
+            unitAnimations.splice(index, 1);
+            
+            // Set final position
+            anim.object.position.x = anim.endPos.x;
+            anim.object.position.z = anim.endPos.z;
+            anim.object.position.y = 10; // Reset height
+            
+            // Reset rotation for ships
+            if (anim.object.userData.type === 'F') {
+              anim.object.rotation.z = 0;
+              anim.object.rotation.x = 0;
+            }
+            
+            // If this was the last animation and playback is active, continue after delay
+            if (unitAnimations.length === 0 && isPlaying) {
+              // Schedule next phase after a pause delay
+              playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+            }
+          }
+        });
+      }
+      
+      // Process territory color transitions
+      if (territoryTransitions.length > 0) {
+        territoryTransitions.forEach((transition, index) => {
+          const elapsed = currentTime - transition.startTime;
+          const progress = Math.min(1, elapsed / transition.duration);
+          
+          if (progress < 1) {
+            // Interpolate colors
+            const easedProgress = easeInOutCubic(progress);
+            transition.canvas.style.opacity = easedProgress;
+          } else {
+            // Transition complete
+            territoryTransitions.splice(index, 1);
+            transition.canvas.style.opacity = 1;
+          }
+        });
+      }
+      
       // Update any pulsing or wave animations on supply centers or units
       if (scene.userData.animatedObjects) {
         scene.userData.animatedObjects.forEach(obj => {
@@ -254,6 +336,11 @@
       
       controls.update();
       renderer.render(scene, camera);
+    }
+    
+    // Easing function for smooth animations
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     }
     
     // --- RESIZE HANDLER ---
@@ -415,7 +502,7 @@
 
       // Apply bubble-physics to make territories squish against each other
       applyTerritorySquishing(provinces);
-      
+
       // Draw each province as an irregular territory
       // Draw in reverse order so water is on bottom, land on top
       provinces
@@ -1284,6 +1371,8 @@
           if (gameData.phases?.length) {
             prevBtn.disabled = false;
             nextBtn.disabled = false;
+            playBtn.disabled = false;
+            speedSelector.disabled = false;
             displayPhase(currentPhaseIndex);
           }
         } catch (err) {
@@ -1305,7 +1394,7 @@
       // Clear old units
       unitMeshes.forEach(m => scene.remove(m));
       unitMeshes = [];
-      
+
       const phase = gameData.phases[index];
       phaseDisplay.textContent = `${phase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
 
@@ -1320,7 +1409,7 @@
           ownershipMap[p.toUpperCase()] = power.toUpperCase();
         });
       }
-      
+
       // Then add territories where units are located (if not already claimed by supply centers)
       for (const [power, unitArray] of Object.entries(units)) {
         unitArray.forEach(unitStr => {
@@ -1425,6 +1514,276 @@
       leaderboard.innerHTML = html;
     }
 
+    // --- PLAYBACK CONTROLS ---
+    function togglePlayback() {
+      if (!gameData || gameData.phases.length <= 1) return;
+      
+      isPlaying = !isPlaying;
+      
+      if (isPlaying) {
+        // Update button text to show pause
+        playBtn.textContent = "⏸ Pause";
+        
+        // Disable manual navigation during playback
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        
+        // Start playback
+        advanceToNextPhase();
+      } else {
+        // Update button text to show play
+        playBtn.textContent = "▶ Play";
+        
+        // Clear any pending timers
+        if (playbackTimer) {
+          clearTimeout(playbackTimer);
+          playbackTimer = null;
+        }
+        
+        // Cancel any ongoing animations
+        unitAnimations = [];
+        
+        // Re-enable manual navigation
+        prevBtn.disabled = false;
+        nextBtn.disabled = false;
+      }
+    }
+
+    function advanceToNextPhase() {
+      // If we've reached the end, loop back to the beginning
+      if (currentPhaseIndex >= gameData.phases.length - 1) {
+        currentPhaseIndex = 0;
+      } else {
+        currentPhaseIndex++;
+      }
+      
+      // Display the new phase with animation
+      displayPhaseWithAnimation(currentPhaseIndex);
+    }
+
+    function displayPhaseWithAnimation(index) {
+      if (!gameData || !gameData.phases || index < 0 || index >= gameData.phases.length) {
+        infoPanel.textContent = "Invalid phase index.";
+        return;
+      }
+
+      const previousIndex = index > 0 ? index - 1 : gameData.phases.length - 1;
+      const currentPhase = gameData.phases[index];
+      const previousPhase = gameData.phases[previousIndex];
+      
+      phaseDisplay.textContent = `${currentPhase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
+
+      // Build ownership maps for territory coloring
+      const currentCenters = currentPhase.state?.centers || {};
+      const currentUnits = currentPhase.state?.units || {};
+      const previousCenters = previousPhase.state?.centers || {};
+      const previousUnits = previousPhase.state?.units || {};
+      
+      const currentOwnershipMap = buildOwnershipMap(currentCenters, currentUnits);
+      const previousOwnershipMap = buildOwnershipMap(previousCenters, previousUnits);
+      
+      // Update map with new territory colors
+      createFallbackMap(currentOwnershipMap);
+      
+      // Clear previous unit meshes (except supply centers)
+      const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
+      const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
+      
+      oldUnits.forEach(m => scene.remove(m));
+      unitMeshes = supplyCenters; // Keep supply centers
+      
+      // Update supply center ownership
+      if (currentPhase.state?.centers) {
+        updateSupplyCenterOwnership(currentPhase.state.centers);
+      }
+      
+      // Create unit position maps for animation
+      const previousUnitPositions = {};
+      const currentUnitPositions = {};
+      
+      // Map previous unit positions
+      if (previousPhase.state?.units) {
+        for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
+          unitArr.forEach(unitStr => {
+            const match = unitStr.match(/^([AF])\s+(.+)$/);
+            if (match) {
+              const key = `${power}-${match[1]}-${match[2]}`;
+              previousUnitPositions[key] = getProvincePosition(match[2]);
+            }
+          });
+        }
+      }
+      
+      // Create and position new units, with animation from previous positions if available
+      if (currentPhase.state?.units) {
+        for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
+          unitArr.forEach(unitStr => {
+            const match = unitStr.match(/^([AF])\s+(.+)$/);
+            if (match) {
+              const unitType = match[1];
+              const location = match[2];
+              const key = `${power}-${unitType}-${location}`;
+              
+              // Create the unit mesh
+              const unitMesh = createUnitMesh({
+                power: power.toUpperCase(),
+                type: unitType,
+                location: location,
+              });
+              
+              // Get current position
+              const currentPos = getProvincePosition(location);
+              currentUnitPositions[key] = currentPos;
+              
+              // Choose starting position
+              let startPos;
+              
+              // Try to find a matching unit in the previous phase
+              let matchFound = false;
+              for (const prevKey in previousUnitPositions) {
+                // Check if same power and type (but possibly different location)
+                if (prevKey.startsWith(`${power}-${unitType}`)) {
+                  startPos = previousUnitPositions[prevKey];
+                  matchFound = true;
+                  delete previousUnitPositions[prevKey]; // Mark as matched
+                  break;
+                }
+              }
+              
+              if (!matchFound) {
+                // New unit - create with a "spawn" animation
+                startPos = { 
+                  x: currentPos.x, 
+                  y: -20, // Start below the map
+                  z: currentPos.z 
+                };
+              }
+              
+              // Position at start position
+              unitMesh.position.set(startPos.x, 10, startPos.z);
+              scene.add(unitMesh);
+              unitMeshes.push(unitMesh);
+              
+              // Add animation to move to final position
+              unitAnimations.push({
+                object: unitMesh,
+                startPos: startPos,
+                endPos: currentPos,
+                startTime: Date.now(),
+                duration: animationDuration
+              });
+            }
+          });
+        }
+      }
+      
+      // Update the leaderboard
+      updateLeaderboard(currentPhase);
+      
+      // Show phase info
+      infoPanel.textContent = `Phase: ${currentPhase.name}\nSupply centers: ${
+        currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
+      }\nUnits: ${
+        currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
+      }`;
+    }
+
+    // Helper function to create ownership map from centers and units
+    function buildOwnershipMap(centers, units) {
+      const ownershipMap = {};
+      
+      // First add supply centers
+      for (const [power, provinces] of Object.entries(centers)) {
+        provinces.forEach(p => {
+          ownershipMap[p.toUpperCase()] = power.toUpperCase();
+        });
+      }
+
+      // Then add territories with units
+      for (const [power, unitArray] of Object.entries(units)) {
+        unitArray.forEach(unitStr => {
+          const match = unitStr.match(/^([AF])\s+(.+)$/);
+          if (match) {
+            const location = match[2].toUpperCase().split('/')[0];
+            if (!ownershipMap[location]) {
+              ownershipMap[location] = power.toUpperCase();
+            }
+          }
+        });
+      }
+      
+      return ownershipMap;
+    }
+
+    // Create a unit mesh (extracted from displayUnit for reuse)
+    function createUnitMesh(unitData) {
+      // Choose color by power
+      const powerColors = {
+        'AUSTRIA': 0xc40000,
+        'ENGLAND': 0x00008B,
+        'FRANCE':  0x0fa0d0,
+        'GERMANY': 0x444444,
+        'ITALY':   0x008000,
+        'RUSSIA':  0xcccccc,
+        'TURKEY':  0xe0c846
+      };
+      const color = powerColors[unitData.power] || 0xAAAAAA;
+
+      let group = new THREE.Group();
+      // Minimal shape difference for armies vs fleets
+      if (unitData.type === 'A') {
+        // Army: a block + small head for soldier-like appearance
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(15, 20, 10),
+          new THREE.MeshStandardMaterial({ color })
+        );
+        body.position.y = 10;
+        group.add(body);
+        
+        // Head
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(4, 12, 12),
+          new THREE.MeshStandardMaterial({ color })
+        );
+        head.position.set(0, 24, 0);
+        group.add(head);
+      } else {
+        // Fleet: a rectangle + a mast and sail
+        const hull = new THREE.Mesh(
+          new THREE.BoxGeometry(30, 8, 15),
+          new THREE.MeshStandardMaterial({ color: 0x8B4513 })
+        );
+        hull.position.y = 4;
+        group.add(hull);
+        
+        // Mast
+        const mast = new THREE.Mesh(
+          new THREE.CylinderGeometry(1, 1, 30, 8),
+          new THREE.MeshStandardMaterial({ color: 0x000000 })
+        );
+        mast.position.y = 15;
+        group.add(mast);
+        
+        // Sail
+        const sail = new THREE.Mesh(
+          new THREE.PlaneGeometry(20, 15),
+          new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide })
+        );
+        sail.rotation.y = Math.PI/2;
+        sail.position.set(0, 15, 0);
+        group.add(sail);
+      }
+
+      // Store metadata
+      group.userData = {
+        power: unitData.power,
+        type: unitData.type,
+        location: unitData.location
+      };
+      
+      return group;
+    }
+
     // --- EVENT HANDLERS ---
     loadBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', e => {
@@ -1444,6 +1803,17 @@
       if (gameData && currentPhaseIndex < gameData.phases.length - 1) {
         currentPhaseIndex++;
         displayPhase(currentPhaseIndex);
+      }
+    });
+
+    playBtn.addEventListener('click', togglePlayback);
+
+    speedSelector.addEventListener('change', e => {
+      playbackSpeed = parseInt(e.target.value);
+      // If we're currently playing, restart the timer with the new speed
+      if (isPlaying && playbackTimer) {
+        clearTimeout(playbackTimer);
+        playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
       }
     });
 
