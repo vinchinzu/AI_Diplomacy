@@ -5,6 +5,15 @@ You can now send a message to other powers. Messages that have been sent before 
 • Decide whether to send a private or global message.
 • You can propose alliances, ask for support, threaten, etc.  
 
+EFFECTIVE DIPLOMATIC PRINCIPLES:
+1. Form specific, multi-turn plans with allies that create mutual advantage
+2. Clearly coordinate the control of strategic non-supply territories
+3. Discuss specific paths to victory with potential long-term allies
+4. Balance deception with reliability - being seen as reliable to at least one power increases your chances
+5. When communicating, focus on shared paths to expansion, not just immediate gains
+6. Create coordinated pressure against common enemies to break through defensive positions
+7. Make sure you stay skeptical. Be one step ahead always.
+
 Remember:
 1. "message_type" can be "global" or "private".
 2. If "private", specify "recipient" (one of the powers).

@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 import anthropic
 
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
-import google.generativeai as genai  # Import after setting log level
 from openai import OpenAI as DeepSeekOpenAI
 from openai import OpenAI
 from anthropic import Anthropic
@@ -20,11 +19,91 @@ from google import genai
 from diplomacy.engine.message import GLOBAL
 
 from .game_history import GameHistory
+from .long_story_short import get_optimized_context
+from .model_loader import load_model_client
 
-# set logger back to just info
+# Configure logger with a more useful format
 logger = logging.getLogger("client")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(level=logging.DEBUG)
+
+# Function to configure logging options
+def configure_logging(
+    log_full_prompts=True, 
+    log_full_responses=True,
+    suppress_connection_logs=True,
+    log_level=logging.INFO
+):
+    """
+    Configure the logging system for AI Diplomacy
+    
+    Parameters:
+    - log_full_prompts: Whether to log the full prompts sent to models
+    - log_full_responses: Whether to log the full responses from models
+    - suppress_connection_logs: Whether to suppress HTTP connection logs
+    - log_level: The overall logging level for the application
+    """
+    # Configure root logger
+    logging.getLogger().setLevel(log_level)
+    
+    # Set client logger level
+    logger.setLevel(log_level)
+    
+    # Configure specific loggers based on parameters
+    if suppress_connection_logs:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("anthropic").setLevel(logging.WARNING)
+        logging.getLogger("openai").setLevel(logging.WARNING)
+    
+    # Set module-level configuration
+    global SHOULD_LOG_FULL_PROMPTS, SHOULD_LOG_FULL_RESPONSES
+    SHOULD_LOG_FULL_PROMPTS = log_full_prompts
+    SHOULD_LOG_FULL_RESPONSES = log_full_responses
+    
+    logger.info(f"Logging configured: full_prompts={log_full_prompts}, full_responses={log_full_responses}, level={logging.getLevelName(log_level)}")
+
+# Initialize defaults
+SHOULD_LOG_FULL_PROMPTS = True
+SHOULD_LOG_FULL_RESPONSES = True
+
+# Helper function for truncating long outputs in logs
+def _truncate_text(text, max_length=500):
+    """Truncate text for logging purposes with indicator of original length"""
+    if not text or len(text) <= max_length:
+        return text
+    return f"{text[:max_length]}... [truncated, total length: {len(text)} chars]"
+
+# Helper function to log full model responses
+def _log_full_response(model_type, model_name, power_name, response):
+    """Logs the full model response at INFO level"""
+    if not response or not SHOULD_LOG_FULL_RESPONSES:
+        return
+    
+    border = "=" * 80
+    logger.info(f"\nMODEL RESPONSE | {model_type} | {model_name} | {power_name or 'Unknown'}\n{border}")
+    logger.info(f"{response}")
+    logger.info(f"{border}\n")
+
+# Helper function to log prompt details    
+def _log_prompt_details(model_type, model_name, power_name, prompt, system_prompt=None):
+    """Logs the prompt details at INFO level"""
+    if not prompt or not SHOULD_LOG_FULL_PROMPTS:
+        return
+    
+    border = "=" * 80
+    total_tokens = len(prompt.split())
+    
+    if system_prompt:
+        system_tokens = len(system_prompt.split())
+        logger.info(f"\nPROMPT | {model_type} | {model_name} | {power_name or 'Unknown'} | ~{total_tokens} tokens (user) + ~{system_tokens} tokens (system)\n{border}")
+        logger.debug(f"System prompt: {_truncate_text(system_prompt)}")
+    else:
+        logger.info(f"\nPROMPT | {model_type} | {model_name} | {power_name or 'Unknown'} | ~{total_tokens} tokens\n{border}")
+    
+    logger.debug(f"User prompt: {_truncate_text(prompt)}")
+    logger.info(f"{border}\n")
 
 load_dotenv()
 
@@ -36,16 +115,31 @@ class BaseModelClient:
     """
     Base interface for any LLM client we want to plug in.
     Each must provide:
-      - generate_response(prompt: str) -> str
-      - get_orders(board_state, power_name, possible_orders) -> List[str]
+      - generate_response(prompt: str) -> str (with empty_system=True if needed)
+      - get_orders(board_state, power_name, possible_orders, game_history, phase_summaries) -> List[str]
       - get_conversation_reply(power_name, conversation_so_far, game_phase) -> str
     """
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
         self.model_name = model_name
-        self.system_prompt = load_prompt("system_prompt.txt")
+        self.power_name = power_name
+        self.emptysystem = emptysystem
 
-    def generate_response(self, prompt: str) -> str:
+        # Conditionally load system prompt
+        if not self.emptysystem:
+            if self.power_name:
+                try:
+                    self.system_prompt = load_prompt(f"{self.power_name.lower()}_system_prompt.txt")
+                except FileNotFoundError:
+                    logger.warning(f"CONFIG | {self.model_name} | No specific system prompt for {self.power_name}, using default")
+                    self.system_prompt = load_prompt("system_prompt.txt")
+            else:
+                self.system_prompt = load_prompt("system_prompt.txt")
+        else:
+            # If emptysystem is True, skip loading any system prompt
+            self.system_prompt = ""
+    # emptysystem defaults to false but if true will tell the LLM to not add a system prompt
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         """
         Returns a raw string from the LLM.
         Subclasses override this.
@@ -99,22 +193,19 @@ class BaseModelClient:
         # Load in current context values
         context = context.format(
             power_name=power_name,
-            current_phase=year_phase,
-            game_map_loc_name=game.map.loc_name,
-            game_map_loc_type=game.map.loc_type,
-            map_as_adjacency_list=game.map.loc_abut,
-            possible_coasts=game.map.loc_coasts,
-            game_map_scs=game.map.scs,
-            game_history=conversation_text,
-            enemy_units=enemy_units,
-            enemy_centers=enemy_centers,
-            units_info=units_info,
-            centers_info=centers_info,
-            possible_orders=possible_orders_str,
-            convoy_paths_possible=convoy_paths_possible,
+            phase_expanded=phase_expanded,
+            our_forces_summary=our_forces_summary,
+            neutral_supply_centers_summary=neutral_supply_centers_summary,
+            enemies_forces_summary=enemies_forces_summary,
+            history_text=history_text,
+            possible_orders_text=possible_orders_text,
+            convoy_paths_text=convoy_paths_text,
+            threat_text=threat_text,
+            sc_projection_text=sc_projection_text,
+            historical_summaries=historical_summaries,
         )
 
-        return context
+        return final_prompt
 
     def build_prompt(
         self,
@@ -123,6 +214,7 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
@@ -138,6 +230,7 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
+            phase_summaries,
         )
 
         return context + "\n\n" + instructions
@@ -149,7 +242,8 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         conversation_text: str,
-        model_error_stats=None,  # New optional param
+        phase_summaries: Optional[Dict[str, str]] = None,
+        model_error_stats=None,
     ) -> List[str]:
         """
         1) Builds the prompt with conversation context if available
@@ -162,14 +256,15 @@ class BaseModelClient:
             power_name,
             possible_orders,
             conversation_text,
+            phase_summaries,
         )
 
         raw_response = ""
 
         try:
             raw_response = self.generate_response(prompt)
-            logger.info(
-                f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
+            logger.debug(
+                f"ORDERS | {self.model_name} | {power_name} | Raw response: {_truncate_text(raw_response)}"
             )
 
             # Attempt to parse the final "orders" from the LLM
@@ -177,17 +272,25 @@ class BaseModelClient:
 
             if not move_list:
                 logger.warning(
-                    f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback."
+                    f"PARSE_ERROR | {self.model_name} | {power_name} | Failed to extract moves, using fallback"
                 )
                 if model_error_stats is not None:
-                    model_error_stats[self.model_name]["order_decoding_errors"] += 1
+                    # forcibly convert sets to string
+                    model_name_for_stats = str(self.model_name)
+                    model_error_stats[model_name_for_stats]["order_decoding_errors"] += 1
+
                 return self.fallback_orders(possible_orders)
             # Validate or fallback
             validated_moves = self._validate_orders(move_list, possible_orders)
             return validated_moves
 
         except Exception as e:
-            logger.error(f"[{self.model_name}] LLM error for {power_name}: {e}")
+            logger.error(f"LLM_ERROR | {self.model_name} | {power_name} | {str(e)}")
+            if model_error_stats is not None:
+                # forcibly convert sets to string
+                model_name_for_stats = str(self.model_name)
+                model_error_stats[model_name_for_stats]["order_decoding_errors"] += 1
+
             return self.fallback_orders(possible_orders)
 
     def _extract_moves(self, raw_response: str, power_name: str) -> Optional[List[str]]:
@@ -207,7 +310,7 @@ class BaseModelClient:
         if not matches:
             # Some LLMs might not put the colon or might have triple backtick fences.
             logger.debug(
-                f"[{self.model_name}] Regex parse #1 failed for {power_name}. Trying alternative patterns."
+                f"PARSE | {self.model_name} | {power_name} | Regex #1 failed, trying alternative patterns"
             )
 
             # 1b) Check for inline JSON after "PARSABLE OUTPUT"
@@ -216,34 +319,42 @@ class BaseModelClient:
 
         if not matches:
             logger.debug(
-                f"[{self.model_name}] Regex parse #2 failed for {power_name}. Trying triple-backtick code fences."
+                f"PARSE | {self.model_name} | {power_name} | Regex #2 failed, trying triple-backtick code fences"
             )
 
         # 2) If still no match, check for triple-backtick code fences containing JSON
         if not matches:
             code_fence_pattern = r"```json\s*(\{.*?\})\s*```"
             matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
+
             if matches:
                 logger.debug(
-                    f"[{self.model_name}] Found triple-backtick JSON block for {power_name}."
+                    f"PARSE | {self.model_name} | {power_name} | Found triple-backtick JSON block"
                 )
 
         # 3) Attempt to parse JSON if we found anything
         json_text = None
         if matches:
-            # Add braces back around the captured group
-            if matches.group(1).strip().startswith(r"{{"):
-                json_text = matches.group(1).strip()[1:-1]
-            elif matches.group(1).strip().startswith(r"{"):
-                json_text = matches.group(1).strip()
+            # Add braces back around the captured group as needed
+            captured = matches.group(1).strip()
+
+            if captured.startswith("{{") and captured.endswith("}}"):
+                # remove ONE leading '{' and ONE trailing '}'
+                # so {{ "orders": [...] }} becomes { "orders": [...] }
+                logger.debug(f"PARSE | {self.model_name} | {power_name} | Detected double braces, trimming extra braces")
+                # strip exactly one brace pair
+                trimmed = captured[1:-1].strip()
+                json_text = trimmed
+            elif captured.startswith("{"):
+                json_text = captured
             else:
-                json_text = "{%s}" % matches.group(1).strip
+                json_text = "{" + captured + "}"
 
             json_text = json_text.strip()
 
         if not json_text:
             logger.debug(
-                f"[{self.model_name}] No JSON text found in LLM response for {power_name}."
+                f"PARSE | {self.model_name} | {power_name} | No JSON text found in response"
             )
             return None
 
@@ -253,7 +364,7 @@ class BaseModelClient:
             return data.get("orders", None)
         except json.JSONDecodeError as e:
             logger.warning(
-                f"[{self.model_name}] JSON decode failed for {power_name}: {e}. Trying bracket fallback."
+                f"PARSE | {self.model_name} | {power_name} | JSON decode failed: {str(e)[:100]}. Trying bracket fallback"
             )
 
         # 3b) Attempt bracket fallback: we look for the substring after "orders"
@@ -266,10 +377,11 @@ class BaseModelClient:
                 raw_list_str = "[" + bracket_match.group(1).strip() + "]"
                 moves = ast.literal_eval(raw_list_str)
                 if isinstance(moves, list):
+                    logger.debug(f"PARSE | {self.model_name} | {power_name} | Bracket fallback successful")
                     return moves
             except Exception as e2:
                 logger.warning(
-                    f"[{self.model_name}] Bracket fallback parse also failed for {power_name}: {e2}"
+                    f"PARSE | {self.model_name} | {power_name} | Bracket fallback failed: {str(e2)[:100]}"
                 )
 
         # If all attempts failed
@@ -281,12 +393,12 @@ class BaseModelClient:
         """
         Filter out invalid moves, fill missing with HOLD, else fallback.
         """
-        logger.debug(f"[{self.model_name}] Proposed LLM moves: {moves}")
+        logger.debug(f"VALIDATE | {self.model_name} | Validating {len(moves)} proposed moves")
         validated = []
         used_locs = set()
 
         if not isinstance(moves, list):
-            logger.debug(f"[{self.model_name}] Moves not a list, fallback.")
+            logger.debug(f"VALIDATE | {self.model_name} | Moves not a list type, using fallback")
             return self.fallback_orders(possible_orders)
 
         for move in moves:
@@ -298,7 +410,7 @@ class BaseModelClient:
                 if len(parts) >= 2:
                     used_locs.add(parts[1][:3])
             else:
-                logger.debug(f"[{self.model_name}] Invalid move from LLM: {move_str}")
+                logger.debug(f"VALIDATE | {self.model_name} | Invalid move: {move_str}")
 
         # Fill missing with hold
         for loc, orders_list in possible_orders.items():
@@ -309,10 +421,10 @@ class BaseModelClient:
                 )
 
         if not validated:
-            logger.warning(f"[{self.model_name}] All moves invalid, fallback.")
+            logger.warning(f"VALIDATE | {self.model_name} | All moves invalid, using fallback")
             return self.fallback_orders(possible_orders)
 
-        logger.debug(f"[{self.model_name}] Validated moves: {validated}")
+        logger.debug(f"VALIDATE | {self.model_name} | Final valid moves: {len(validated)}")
         return validated
 
     def fallback_orders(self, possible_orders: Dict[str, List[str]]) -> List[str]:
@@ -357,6 +469,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         instructions = load_prompt("conversation_instructions.txt")
 
@@ -366,6 +479,7 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
+            phase_summaries,
         )
 
         return context + "\n\n" + instructions
@@ -379,6 +493,7 @@ class BaseModelClient:
         game_history: GameHistory,
         game_phase: str,
         active_powers: Optional[List[str]] = None,
+        phase_summaries: Optional[Dict[str, str]] = None,
     ) -> str:
         
         prompt = self.build_planning_prompt(
@@ -388,6 +503,7 @@ class BaseModelClient:
             possible_orders,
             game_history,
             game_phase,
+            phase_summaries,
         )
 
         raw_response = self.generate_response(prompt)
@@ -438,6 +554,7 @@ class BaseModelClient:
                         )
                         json_matches = re.findall(
                             r"```json\n(.*?)\n```", raw_response, re.DOTALL
+
                         )
 
                     for match in json_matches:
@@ -483,6 +600,7 @@ class BaseModelClient:
                             logger.error(f"Error parsing message JSON for {power_name}: {str(e)}")
                             continue
 
+
                     # Deduplicate messages
                     messages = list(set([json.dumps(m) for m in messages]))
                     messages = [json.loads(m) for m in messages]
@@ -510,34 +628,39 @@ class OpenAIClient(BaseModelClient):
     For 'o3-mini', 'gpt-4o', or other OpenAI model calls.
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
-        # Updated to new API format
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            logger.debug(f"API | OpenAI | {self.model_name} | Sending request")
+            
+            _log_prompt_details("OpenAI", self.model_name, self.power_name, prompt, system_content)
+            
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ],
             )
-            if not response or not hasattr(response, "choices") or not response.choices:
-                logger.warning(
-                    f"[{self.model_name}] Empty or invalid result in generate_response. Returning empty."
-                )
+            if not response or not response.choices:
+                logger.warning(f"API | OpenAI | {self.model_name} | Empty or invalid response")
                 return ""
-            return response.choices[0].message.content.strip()
+            logger.debug(f"API | OpenAI | {self.model_name} | Received response of length {len(response.choices[0].message.content)}")
+            content = response.choices[0].message.content.strip()
+            _log_full_response("OpenAI", self.model_name, self.power_name, content)
+            return content
         except json.JSONDecodeError as json_err:
             logger.error(
-                f"[{self.model_name}] JSON decoding failed in generate_response: {json_err}"
+                f"API | OpenAI | {self.model_name} | JSON decode error: {str(json_err)[:100]}"
             )
             return ""
         except Exception as e:
             logger.error(
-                f"[{self.model_name}] Unexpected error in generate_response: {e}"
+                f"API | OpenAI | {self.model_name} | Error: {str(e)[:150]}"
             )
             return ""
 
@@ -547,34 +670,45 @@ class ClaudeClient(BaseModelClient):
     For 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', etc.
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         # Updated Claude messages format
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            
+            _log_prompt_details("Claude", self.model_name, self.power_name, prompt, system_content)
+            
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=2000,
-                system=self.system_prompt,  # system is now a top-level parameter
+                system=system_content,
                 messages=[{"role": "user", "content": prompt}],
             )
-            if not response.content:
-                logger.warning(
-                    f"[{self.model_name}] Empty content in Claude generate_response. Returning empty."
-                )
+            if not response or not response.content:
+                logger.warning(f"API | Claude | {self.model_name} | Empty or invalid response")
                 return ""
-            return response.content[0].text.strip() if response.content else ""
-        except json.JSONDecodeError as json_err:
-            logger.error(
-                f"[{self.model_name}] JSON decoding failed in generate_response: {json_err}"
-            )
-            return ""
+            logger.debug(f"API | Claude | {self.model_name} | Received response of length {len(response.content)}")
+            
+            # Handle the new response format which might be a list of TextBlock objects
+            if isinstance(response.content, list):
+                # Extract text from each TextBlock
+                content = ""
+                for block in response.content:
+                    if hasattr(block, 'text'):
+                        content += block.text
+                    elif isinstance(block, dict) and 'text' in block:
+                        content += block['text']
+                logger.debug(f"API | Claude | {self.model_name} | Extracted text from {len(response.content)} TextBlocks")
+            else:
+                content = response.content
+                
+            _log_full_response("Claude", self.model_name, self.power_name, content)
+            return content
         except Exception as e:
-            logger.error(
-                f"[{self.model_name}] Unexpected error in generate_response: {e}"
-            )
+            logger.error(f"API | Claude | {self.model_name} | Error: {str(e)[:150]}")
             return ""
 
 
@@ -583,26 +717,29 @@ class GeminiClient(BaseModelClient):
     For 'gemini-1.5-flash' or other Google Generative AI models.
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
-        full_prompt = self.system_prompt + prompt
-
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            logger.debug(f"API | Gemini | {self.model_name} | Sending request")
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=full_prompt,
+                contents=system_content + prompt,
             )
             if not response or not response.text:
                 logger.warning(
-                    f"[{self.model_name}] Empty Gemini generate_response. Returning empty."
+                    f"API | Gemini | {self.model_name} | Empty response"
                 )
                 return ""
-            return response.text.strip()
+            logger.debug(f"API | Gemini | {self.model_name} | Received response of length {len(response.text)}")
+            content = response.text.strip()
+            _log_full_response("Gemini", self.model_name, self.power_name, content)
+            return content
         except Exception as e:
-            logger.error(f"[{self.model_name}] Error in Gemini generate_response: {e}")
+            logger.error(f"API | Gemini | {self.model_name} | Error: {str(e)[:150]}")
             return ""
 
 
@@ -611,36 +748,43 @@ class DeepSeekClient(BaseModelClient):
     For DeepSeek R1 'deepseek-reasoner'
     """
 
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+    def __init__(self, model_name: str, power_name: Optional[str] = None, emptysystem: bool = False):
+        super().__init__(model_name, power_name, emptysystem)
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         self.client = DeepSeekOpenAI(
             api_key=self.api_key, base_url="https://api.deepseek.com/"
         )
 
-    def generate_response(self, prompt: str) -> str:
+    def generate_response(self, prompt: str, empty_system: bool = False) -> str:
         try:
+            system_content = self.system_prompt if not empty_system else ""
+            logger.debug(f"API | DeepSeek | {self.model_name} | Sending request")
+            
+            _log_prompt_details("DeepSeek", self.model_name, self.power_name, prompt, system_content)
+            
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ],
                 stream=False,
             )
-            logger.debug(f"[{self.model_name}] Raw DeepSeek response:\n{response}")
+            logger.debug(f"API | DeepSeek | {self.model_name} | Received response")
 
             if not response or not response.choices:
                 logger.warning(
-                    f"[{self.model_name}] No valid response in generate_response."
+                    f"API | DeepSeek | {self.model_name} | No valid response"
                 )
                 return ""
 
             content = response.choices[0].message.content.strip()
             if not content:
-                logger.warning(f"[{self.model_name}] DeepSeek returned empty content.")
+                logger.warning(f"API | DeepSeek | {self.model_name} | Empty content")
                 return ""
-
+            
+            _log_full_response("DeepSeek", self.model_name, self.power_name, content)
+            
             try:
                 json_response = json.loads(content)
                 required_fields = ["message_type", "content"]
@@ -648,13 +792,13 @@ class DeepSeekClient(BaseModelClient):
                     required_fields.append("recipient")
                 if not all(field in json_response for field in required_fields):
                     logger.error(
-                        f"[{self.model_name}] Missing required fields in response: {content}"
+                        f"API | DeepSeek | {self.model_name} | Missing fields: {_truncate_text(content, 100)}"
                     )
                     return ""
                 return content
             except JSONDecodeError:
                 logger.error(
-                    f"[{self.model_name}] Response is not valid JSON: {content}"
+                    f"API | DeepSeek | {self.model_name} | Invalid JSON: {_truncate_text(content, 100)}"
                 )
                 content = content.replace("'", '"')
                 try:
@@ -665,33 +809,9 @@ class DeepSeekClient(BaseModelClient):
 
         except Exception as e:
             logger.error(
-                f"[{self.model_name}] Unexpected error in generate_response: {e}"
+                f"API | DeepSeek | {self.model_name} | Error: {str(e)[:150]}"
             )
             return ""
-
-
-##############################################################################
-# 3) Factory to Load Model Client
-##############################################################################
-
-
-def load_model_client(model_id: str) -> BaseModelClient:
-    """
-    Returns the appropriate LLM client for a given model_id string.
-    Example usage:
-       client = load_model_client("claude-3-5-sonnet-20241022")
-    """
-    # Basic pattern matching or direct mapping
-    lower_id = model_id.lower()
-    if "claude" in lower_id:
-        return ClaudeClient(model_id)
-    elif "gemini" in lower_id:
-        return GeminiClient(model_id)
-    elif "deepseek" in lower_id:
-        return DeepSeekClient(model_id)
-    else:
-        # Default to OpenAI
-        return OpenAIClient(model_id)
 
 
 ##############################################################################
@@ -713,7 +833,7 @@ def example_game_loop(game):
 
     for power_name, power_obj in active_powers:
         model_id = power_model_mapping.get(power_name, "o3-mini")
-        client = load_model_client(model_id)
+        client = load_model_client(model_id, power_name=power_name)
 
         # Get possible orders from the game
         possible_orders = game.get_all_possible_orders()
@@ -734,11 +854,11 @@ class LMServiceVersus:
     """
 
     def __init__(self):
-        self.power_model_map = assign_models_to_powers()
+        self.power_model_map = assign_models_to_powers(randomize=True)
 
     def get_orders_for_power(self, game, power_name):
         model_id = self.power_model_map.get(power_name, "o3-mini")
-        client = load_model_client(model_id)
+        client = load_model_client(model_id, power_name=power_name)
         possible_orders = gather_possible_orders(game, power_name)
         board_state = game.get_state()
         return client.get_orders(board_state, power_name, possible_orders)

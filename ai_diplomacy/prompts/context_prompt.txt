@@ -1,45 +1,33 @@
 **PLAYER DETAILS**
 
 Power: {power_name}
-Current phase: {current_phase}
+Current phase: {phase_expanded}
 
-**MAP DETAILS**
+**HISTORY OF COMMUNICATION**
 
-Abbreviations: 
-{game_map_loc_name}
+{history_text}
 
-Type of each location: 
-{game_map_loc_type}
+**PAST PHASE SUMMARIES**
+{historical_summaries}
 
-Game map as an adjacency list: 
-{map_as_adjacency_list}
+**YOUR FORCES**
+{our_forces_summary}
 
-Possible coasts at each location: 
-{possible_coasts}
+**ENEMY FORCES**
+{enemies_forces_summary}
 
-All supply centers on the map: 
-{game_map_scs}
+**NEUTRAL SUPPLY CENTERS**
+{neutral_supply_centers_summary}
 
-**GAME HISTORY**
+**THREAT ASSESSMENT**
+{threat_text}
 
-{game_history}
+**SUPPLY CENTER PROJECTION**
+{sc_projection_text}
 
-**CURRENT CONTEXT**
+**CONVOY PATHS**
+{convoy_paths_text}
 
-Enemy units: 
-{enemy_units}
+**POSSIBLE ORDERS**
+{possible_orders_text}
 
-Enemy supply centers: 
-{enemy_centers}
-
-Your units: 
-{units_info}
-
-Your supply centers: 
-{centers_info}
-
-Possible orders: 
-{possible_orders}
-
-Convoy paths possible: 
-{convoy_paths_possible}
