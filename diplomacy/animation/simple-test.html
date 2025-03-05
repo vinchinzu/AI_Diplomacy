@@ -118,9 +118,6 @@
     let unitMeshes = []; // To store references for units + supply center 3D objects
     let mapPlane = null; // The fallback map plane
     
-    // New variable to store province labels
-    let provinceLabels = [];
-
     // --- DOM ELEMENTS ---
     const loadBtn       = document.getElementById('load-btn');
     const fileInput     = document.getElementById('file-input');
@@ -189,6 +186,29 @@
       const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
       dirLight.position.set(300, 400, 300);
       scene.add(dirLight);
+
+      // Territory type mapping (Water, Coast, Land)
+      // This data is from the standard Diplomacy board
+      const territoryTypes = {
+        'ADR': 'Water', 'AEG': 'Water', 'ALB': 'Coast', 'ANK': 'Coast', 'APU': 'Coast',
+        'ARM': 'Coast', 'BAL': 'Water', 'BAR': 'Water', 'BEL': 'Coast', 'BER': 'Coast',
+        'BLA': 'Water', 'BOH': 'Land', 'BRE': 'Coast', 'BUD': 'Land', 'BUL': 'Coast',
+        'BUR': 'Land', 'CLY': 'Coast', 'CON': 'Coast', 'DEN': 'Coast', 'EAS': 'Water',
+        'EDI': 'Coast', 'ENG': 'Water', 'FIN': 'Coast', 'GAL': 'Land', 'GAS': 'Coast',
+        'GRE': 'Coast', 'GOB': 'Water', 'GOL': 'Water', 'HEL': 'Water', 'HOL': 'Coast',
+        'ION': 'Water', 'IRI': 'Water', 'KIE': 'Coast', 'LVP': 'Coast', 'LVN': 'Coast',
+        'LON': 'Coast', 'MAR': 'Coast', 'MAO': 'Water', 'MOS': 'Land', 'MUN': 'Land',
+        'NAP': 'Coast', 'NAO': 'Water', 'NAF': 'Coast', 'NTH': 'Water', 'NWY': 'Coast',
+        'NWG': 'Water', 'PAR': 'Land', 'PIC': 'Coast', 'PIE': 'Coast', 'POR': 'Coast',
+        'PRU': 'Coast', 'ROM': 'Coast', 'RUH': 'Land', 'RUM': 'Coast', 'SER': 'Land',
+        'SEV': 'Coast', 'SIL': 'Land', 'SKA': 'Water', 'SMY': 'Coast', 'SPA': 'Coast',
+        'STP': 'Coast', 'SWE': 'Coast', 'SYR': 'Coast', 'TRI': 'Coast', 'TUN': 'Coast',
+        'TUS': 'Coast', 'TYR': 'Land', 'TYS': 'Water', 'UKR': 'Land', 'VEN': 'Coast',
+        'VIE': 'Land', 'WAL': 'Coast', 'WAR': 'Land', 'WES': 'Water', 'YOR': 'Coast'
+      };
+      
+      // Add to global scope for use in other functions
+      window.territoryTypes = territoryTypes;
 
       // Load coordinate data, then build the fallback map
       loadCoordinateData()
@@ -354,9 +374,6 @@
           const x = pos.x * scaleX + offsetX;
           const y = pos.z * scaleY + offsetY;
           
-          // Increased base radius (was 30)
-          const baseRadius = 45;
-          
           // Check if this province is a supply center and if so, who owns it
           let fillColor = '#b19b69'; // neutral land color
           if (ownershipMap && ownershipMap[prov.toUpperCase()]) {
@@ -366,70 +383,67 @@
             fillColor = powerColor || '#b19b69';
           }
           
+          // Get territory type (default to 'Land' if not found)
+          const territoryType = window.territoryTypes?.[prov.toUpperCase()] || 'Land';
+          
+          // Adjust colors based on territory type
+          if (territoryType === 'Water') {
+            fillColor = '#1a3c6e'; // Dark blue for water
+          } else if (!ownershipMap || !ownershipMap[prov.toUpperCase()]) {
+            // Only change colors of neutral territories
+            if (territoryType === 'Coast') {
+              fillColor = '#8fa86b'; // Greenish for coastal areas
+            } else if (territoryType === 'Land') {
+              fillColor = '#b19b69'; // Brownish for land
+            }
+          }
+          
           // Store province data for later use
           provinces.push({
             prov,
             x,
             y,
-            radius: baseRadius,
+            radius: 80, // REDUCED from 110 to 95 for slightly smaller territories
             fillColor,
             isSupplyCenter: coordinateData.provinces && 
                             coordinateData.provinces[prov] && 
-                            coordinateData.provinces[prov].isSupplyCenter
+                            coordinateData.provinces[prov].isSupplyCenter,
+            territoryType
           });
         }
       }
 
+      // Apply bubble-physics to make territories squish against each other
+      applyTerritorySquishing(provinces);
+      
       // Draw each province as an irregular territory
-      provinces.forEach(province => {
-        const { x, y, radius, fillColor, prov } = province;
-        
-        // Create an irregular shape instead of a perfect circle
-        ctx.beginPath();
-        
-        // Draw a blob-like shape with random variations
-        const points = 12; // Number of points around the circle
-        const angleStep = (Math.PI * 2) / points;
-        const seed = prov.charCodeAt(0) + prov.charCodeAt(prov.length - 1); // Use province name as seed
-        
-        // First point
-        let angle = 0;
-        let r = radius * (0.9 + 0.2 * Math.sin(seed + angle * 3));
-        ctx.moveTo(x + r * Math.cos(angle), y + r * Math.sin(angle));
-        
-        // Remaining points with bezier curves for smoothness
-        for (let i = 1; i <= points; i++) {
-          const prevAngle = angle;
-          angle = i * angleStep;
+      // Draw in reverse order so water is on bottom, land on top
+      provinces
+        .sort((a, b) => {
+          // Water territories first (at the bottom)
+          if (a.territoryType === 'Water' && b.territoryType !== 'Water') return -1;
+          if (a.territoryType !== 'Water' && b.territoryType === 'Water') return 1;
+          // Then coastal
+          if (a.territoryType === 'Coast' && b.territoryType === 'Land') return -1;
+          if (a.territoryType === 'Land' && b.territoryType === 'Coast') return 1;
+          return 0;
+        })
+        .forEach(province => {
+          const { x, y, radius, fillColor, prov, territoryType, squishData } = province;
           
-          // Random radius variation based on angle and province name
-          const prevR = r;
-          r = radius * (0.9 + 0.2 * Math.sin(seed + angle * 3));
-          
-          // Control points for bezier curve
-          const cp1x = x + prevR * 1.2 * Math.cos(prevAngle + angleStep * 0.3);
-          const cp1y = y + prevR * 1.2 * Math.sin(prevAngle + angleStep * 0.3);
-          const cp2x = x + r * 1.2 * Math.cos(angle - angleStep * 0.3);
-          const cp2y = y + r * 1.2 * Math.sin(angle - angleStep * 0.3);
-          const endX = x + r * Math.cos(angle);
-          const endY = y + r * Math.sin(angle);
-          
-          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
-        }
-        
-        ctx.closePath();
-        ctx.fillStyle = fillColor;
-        ctx.fill();
-        
-        // Add a subtle stroke
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#333';
-        ctx.stroke();
-      });
+          // Draw different shapes based on territory type
+          if (territoryType === 'Water') {
+            drawWaterTerritory(ctx, x, y, radius, fillColor, prov, squishData);
+          } else if (territoryType === 'Coast') {
+            drawCoastalTerritory(ctx, x, y, radius, fillColor, prov, squishData);
+          } else {
+            drawLandTerritory(ctx, x, y, radius, fillColor, prov, squishData);
+          }
+        });
 
-      // Draw the adjacency lines as "country borders"
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      // Draw the adjacency lines as "country borders" - but thinner now that we have squishing
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
       for (const [prov, neighbors] of Object.entries(adjacency)) {
         const posA = coordinateData.coordinates[prov];
         if (!posA) continue;
@@ -571,7 +585,7 @@
       
       textLabels.forEach(label => {
         const x = label.x + label.dx;
-        const y = label.y + label.dy;
+        const y = label.y + label.dy + 20; // ADDED 20 to move text down to avoid unit overlap
         
         // Draw text background
         const padding = 4;
@@ -588,6 +602,9 @@
           4 // Rounded corners
         );
         ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
         
         // Draw text
         ctx.fillStyle = '#000';
@@ -595,65 +612,396 @@
       });
     }
 
-    // Create a naive adjacency list by distance
-    function buildAdjacencyList() {
-      const adjacency = {};
-      const threshold = 150; // Increased distance threshold for adjacency (was 120)
+    // New function to handle territory squishing effects
+    function applyTerritorySquishing(provinces) {
+      // Run several iterations of the simulation with improved approach
+      const iterations = 35; // Increased iterations for more stable packing
       
-      // Initialize empty adjacency lists
-      for (const p1 of Object.keys(coordinateData.coordinates)) {
-        if (p1.includes('_')) continue;
-        adjacency[p1] = [];
-      }
+      // Configure physical simulation parameters - improved values for tighter packing
+      const repulsionStrength = 0.04;  // Fine-tuned for better spacing
+      const squishFactor = 0.85;      // Increased - makes territories deform more on contact
+      const minSquish = 0.22;         // Adjusted for better deformation
+      const expansionFactor = 0.012;  // Slightly reduced expansion to prevent oversized territories
       
-      // Compare each pair of provinces
-      const keys = Object.keys(adjacency);
-      for (let i = 0; i < keys.length; i++) {
-        for (let j = i+1; j < keys.length; j++) {
-          const a = keys[i];
-          const b = keys[j];
-          const posA = coordinateData.coordinates[a];
-          const posB = coordinateData.coordinates[b];
-          const dx = posA.x - posB.x;
-          const dz = posA.z - posB.z;
-          const dist = Math.sqrt(dx*dx + dz*dz);
+      // For each province, we'll store squish data about where and how it's being squished
+      provinces.forEach(p => {
+        p.squishData = [];
+        // Add some variance to radius based on province type
+        if (p.territoryType === 'Water') {
+          p.radius *= 0.92; // Water even smaller to create more space
+        } else if (p.territoryType === 'Land') {
+          p.radius *= 1.03; // Land slightly larger
+        }
+      });
+      
+      // Run the simulation
+      for (let iter = 0; iter < iterations; iter++) {
+        // On each iteration, reset squish data but preserve positions
+        provinces.forEach(p => p.squishData = []);
+        
+        // First all territories attempt to expand to fill available space
+        for (let i = 0; i < provinces.length; i++) {
+          const p = provinces[i];
+          // Expansion rate is higher in early iterations, then diminishes
+          const currentExpansion = expansionFactor * (1 - iter/iterations);
           
-          // Use a dynamic threshold based on province names to handle special cases
-          let dynamicThreshold = threshold;
-          
-          // If either province is a known coastal province, increase threshold slightly
-          const coastalProvinces = ['spa', 'por', 'bre', 'gas', 'mar', 'pie', 'ven', 'rom', 'nap', 'apu', 'tus'];
-          if (coastalProvinces.includes(a.toLowerCase()) || coastalProvinces.includes(b.toLowerCase())) {
-            dynamicThreshold *= 1.1;
+          // Water expands less than land (water can have gaps)
+          if (p.territoryType !== 'Water') {
+            p.radius *= (1 + currentExpansion);
           }
-          
-          if (dist < dynamicThreshold) {
-            adjacency[a].push(b);
-            adjacency[b].push(a);
+        }
+        
+        // Then check for collisions and resolve them
+        for (let i = 0; i < provinces.length; i++) {
+          for (let j = i + 1; j < provinces.length; j++) {
+            const a = provinces[i];
+            const b = provinces[j];
+            
+            // Calculate distance between province centers
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Only process meaningful interactions (not extremely distant territories)
+            if (distance > a.radius * 3 || distance > b.radius * 3) continue;
+            
+            // Calculate how much provinces would overlap
+            const overlap = a.radius + b.radius - distance;
+            
+            // If they overlap, calculate repulsion and deformation
+            if (overlap > 0) {
+              // Normalize direction vector
+              const nx = dx / distance;
+              const ny = dy / distance;
+              
+              // Calculate squish angles (direction from center to contact point)
+              const squishAngleA = Math.atan2(dy, dx);
+              const squishAngleB = Math.atan2(-dy, -dx);
+              
+              // Add squish data for both provinces
+              a.squishData.push({
+                angle: squishAngleA,
+                amount: Math.min(overlap * squishFactor, a.radius * (1 - minSquish)),
+                contactPoint: { x: a.x + nx * a.radius, y: a.y + ny * a.radius },
+                otherProvince: b.prov
+              });
+              
+              b.squishData.push({
+                angle: squishAngleB,
+                amount: Math.min(overlap * squishFactor, b.radius * (1 - minSquish)),
+                contactPoint: { x: b.x - nx * b.radius, y: b.y - ny * b.radius },
+                otherProvince: a.prov
+              });
+              
+              // Reduce repulsion for water vs land/coast territories
+              let actualRepulsion = repulsionStrength;
+              if (a.territoryType === 'Water' || b.territoryType === 'Water') {
+                actualRepulsion *= 0.3; // Much less repulsion if water is involved
+              }
+              
+              // Move provinces apart very slightly to prevent extreme overlaps
+              a.x -= nx * overlap * actualRepulsion;
+              a.y -= ny * overlap * actualRepulsion;
+              b.x += nx * overlap * actualRepulsion;
+              b.y += ny * overlap * actualRepulsion;
+            }
           }
         }
       }
       
-      // Add some known adjacencies that might be missed due to distance
-      const knownAdjacencies = {
-        'stp': ['fin', 'nwy', 'lvn', 'mos'],
-        'naf': ['tun'],
-        'spa': ['por', 'gas', 'mar'],
-        'swe': ['fin', 'nwy', 'den']
-      };
+      // Final pass - add neighbor awareness
+      provinces.forEach(p => {
+        // Get list of neighboring provinces from squish data
+        p.neighbors = [...new Set(p.squishData.map(sd => sd.otherProvince))];
+      });
+    }
+
+    // --- NEW FUNCTIONS FOR TERRITORY TYPES ---
+    // Draw water territories with wave patterns
+    function drawWaterTerritory(ctx, x, y, radius, fillColor, prov, squishData) {
+      ctx.beginPath();
       
-      for (const [prov, neighbors] of Object.entries(knownAdjacencies)) {
-        if (adjacency[prov]) {
-          neighbors.forEach(n => {
-            if (adjacency[n] && !adjacency[prov].includes(n)) {
-              adjacency[prov].push(n);
-              adjacency[n].push(prov);
+      // Create a more wavy shape for water territories
+      const points = 24; // More points for smoother waves
+      const angleStep = (Math.PI * 2) / points;
+      const seed = prov.charCodeAt(0) + prov.charCodeAt(prov.length - 1);
+      
+      // Draw the shape point by point, applying squishing where needed
+      for (let i = 0; i <= points; i++) {
+        const angle = i * angleStep;
+        
+        // Base radius with wave pattern (reduced wave amplitude for cleaner edges)
+        let waveFreq = 6; // Wave frequency
+        let waveAmp = 0.15; // REDUCED wave amplitude for smoother edges
+        let r = radius * (1 + waveAmp * Math.sin(seed + angle * waveFreq));
+        
+        // Apply squishing based on overlap data
+        if (squishData && squishData.length > 0) {
+          // For each squish point, reduce radius in that direction
+          squishData.forEach(squish => {
+            // Calculate how much this angle is affected by the squish
+            const angleDiff = Math.abs(normalizeAngle(angle - squish.angle));
+            
+            // Apply squish with a sharper falloff (more squish closer to the contact point)
+            if (angleDiff < Math.PI / 2) {
+              // Non-linear falloff that creates more natural squishing
+              const falloff = Math.pow(1 - (angleDiff / (Math.PI / 2)), 2);
+              const squishEffect = falloff * squish.amount;
+              r -= squishEffect;
             }
           });
         }
+        
+        // Ensure minimum radius
+        r = Math.max(r, radius * 0.3);
+        
+        const px = x + r * Math.cos(angle);
+        const py = y + r * Math.sin(angle);
+        
+        if (i === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
       }
       
-      return adjacency;
+      ctx.closePath();
+      
+      // Fill with gradient for water look
+      const gradient = ctx.createRadialGradient(
+        x, y, radius * 0.4,
+        x, y, radius * 1.2
+      );
+      gradient.addColorStop(0, fillColor);
+      gradient.addColorStop(1, '#0c1d36'); // Darker blue at edges
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Add wave details
+      ctx.save();
+      ctx.clip(); // Clip to territory shape
+      
+      // Draw wave lines within the territory
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1.5;
+      
+      // Randomly positioned wave lines
+      for (let i = 0; i < 8; i++) {
+        const waveY = y - radius + (i * radius / 4);
+        
+        ctx.beginPath();
+        for (let wx = x - radius; wx < x + radius; wx += 5) {
+          const waveDist = Math.sin((wx + seed) / 20) * 5;
+          ctx.lineTo(wx, waveY + waveDist);
+        }
+        ctx.stroke();
+      }
+      
+      ctx.restore();
+      
+      // Add subtle border
+      ctx.lineWidth = 0.8; // Thinner border for cleaner appearance
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'; // More subtle border
+      ctx.stroke();
+    }
+
+    // Draw coastal territories with beach-like transitions
+    function drawCoastalTerritory(ctx, x, y, radius, fillColor, prov, squishData) {
+      // Base shape with slightly irregular coastline
+      ctx.beginPath();
+      
+      const points = 20; // Increased for smoother shapes
+      const angleStep = (Math.PI * 2) / points;
+      const seed = prov.charCodeAt(0) + prov.charCodeAt(prov.length - 1);
+      
+      // Draw the shape point by point
+      for (let i = 0; i <= points; i++) {
+        const angle = i * angleStep;
+        
+        // Base radius with coastal variation (reduced variation for cleaner edges)
+        let r = radius * (0.95 + 0.1 * Math.sin(seed + angle * 4));
+        
+        // Add occasional small inlets (reduced frequency)
+        if (Math.random() > 0.92) {
+          r *= 0.96;
+        }
+        
+        // Apply squishing where needed
+        if (squishData && squishData.length > 0) {
+          squishData.forEach(squish => {
+            // Calculate how much this angle is affected by the squish
+            const angleDiff = Math.abs(normalizeAngle(angle - squish.angle));
+            
+            // Apply squish with a natural deformation profile
+            if (angleDiff < Math.PI / 3) {
+              // Create a natural squish curve (more at direct impact, less at edges)
+              const falloff = Math.pow(1 - (angleDiff / (Math.PI / 3)), 1.5);
+              const squishEffect = falloff * squish.amount * 1.1;
+              r -= squishEffect;
+              
+              // Add bulges on the sides with a nice natural curve
+              if (angleDiff > Math.PI / 6 && angleDiff < Math.PI / 3) {
+                const bulgeAmount = Math.sin((angleDiff - Math.PI / 6) / (Math.PI / 6) * Math.PI);
+                r += squish.amount * 0.3 * bulgeAmount;
+              }
+            }
+          });
+        }
+        
+        // Ensure minimum radius
+        r = Math.max(r, radius * 0.3);
+        
+        const px = x + r * Math.cos(angle);
+        const py = y + r * Math.sin(angle);
+        
+        if (i === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      
+      ctx.closePath();
+      
+      // Create a coastal gradient (land blending to beach to water)
+      const gradient = ctx.createRadialGradient(
+        x, y, radius * 0.5,
+        x, y, radius
+      );
+      gradient.addColorStop(0, fillColor);
+      gradient.addColorStop(0.7, fillColor);
+      gradient.addColorStop(0.85, '#c2b280'); // Sandy beach color
+      gradient.addColorStop(1, '#88a0bd'); // Shallow water color at edge
+      
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Add a bit more texture for coast
+      ctx.save();
+      ctx.clip();
+      
+      // Draw some dots for sandy texture
+      ctx.fillStyle = 'rgba(194, 178, 128, 0.3)'; // Sandy color
+      for (let i = 0; i < 30; i++) {
+        const dotX = x + (Math.random() * 2 - 1) * radius * 0.8;
+        const dotY = y + (Math.random() * 2 - 1) * radius * 0.8;
+        const dotSize = 1 + Math.random() * 3;
+        
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+      
+      // Stronger border for coastal areas
+      ctx.lineWidth = 1.2; // Slightly thinner for cleaner edges
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'; // More subtle
+      ctx.stroke();
+    }
+
+    // Draw land territories with more angular shapes
+    function drawLandTerritory(ctx, x, y, radius, fillColor, prov, squishData) {
+      ctx.beginPath();
+      
+      // Land territories have fewer, more angular points
+      const points = 12; // Slightly more points for better squishing
+      const angleStep = (Math.PI * 2) / points;
+      const seed = prov.charCodeAt(0) + prov.charCodeAt(prov.length - 1);
+      
+      // Draw the shape point by point
+      for (let i = 0; i <= points; i++) {
+        const angle = i * angleStep;
+        
+        // Base radius with angular variation (reduced variation for cleaner edges)
+        let r = radius * (0.97 + 0.07 * Math.sin(seed + angle * 2));
+        
+        // Apply squishing where needed - much improved land squishing
+        if (squishData && squishData.length > 0) {
+          squishData.forEach(squish => {
+            // Calculate how much this angle is affected by the squish
+            const angleDiff = Math.abs(normalizeAngle(angle - squish.angle));
+            
+            // Apply squish with a sharper profile for land (more angular deformation)
+            if (angleDiff < Math.PI / 4) {
+              // Sharper, more pronounced squish for land
+              const falloff = Math.pow(1 - (angleDiff / (Math.PI / 4)), 1.8);
+              const squishEffect = falloff * squish.amount;
+              r -= squishEffect;
+              
+              // Add more dramatic bulges on edges - creates a "pressed against" effect
+              if (angleDiff > Math.PI / 8 && angleDiff < Math.PI / 4) {
+                const bulgePos = (angleDiff - Math.PI / 8) / (Math.PI / 8);
+                // Sine curve for natural bulging
+                const bulgeAmount = Math.sin(bulgePos * Math.PI);
+                r += squish.amount * 0.35 * bulgeAmount;
+              }
+            }
+          });
+        }
+        
+        // Ensure minimum radius but allow more squishing for land
+        r = Math.max(r, radius * 0.25);
+        
+        const px = x + r * Math.cos(angle);
+        const py = y + r * Math.sin(angle);
+        
+        if (i === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      
+      ctx.closePath();
+      
+      // Land has a bit of texture/gradient
+      const gradient = ctx.createRadialGradient(
+        x, y, radius * 0.2,
+        x, y, radius
+      );
+      const lighterColor = lightenColor(fillColor, 15);
+      const darkerColor = darkenColor(fillColor, 15);
+      
+      gradient.addColorStop(0, lighterColor);
+      gradient.addColorStop(0.7, fillColor);
+      gradient.addColorStop(1, darkerColor);
+      
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Add some terrain detail
+      ctx.save();
+      ctx.clip();
+      
+      // Add a few "mountain" or "hill" details as small triangles
+      ctx.fillStyle = darkenColor(fillColor, 25);
+      for (let i = 0; i < 5; i++) {
+        const mx = x + (Math.random() * 2 - 1) * radius * 0.6;
+        const my = y + (Math.random() * 2 - 1) * radius * 0.6;
+        const size = 3 + Math.random() * 6;
+        
+        ctx.beginPath();
+        ctx.moveTo(mx, my - size);
+        ctx.lineTo(mx - size, my + size);
+        ctx.lineTo(mx + size, my + size);
+        ctx.closePath();
+        ctx.fill();
+      }
+      
+      ctx.restore();
+      
+      // Strong border for land
+      ctx.lineWidth = 1.5; // Slightly thinner for cleaner look
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)'; // More subtle
+      ctx.stroke();
+    }
+
+    // Helper to normalize angle to range -PI to PI
+    function normalizeAngle(angle) {
+      while (angle > Math.PI) angle -= 2 * Math.PI;
+      while (angle < -Math.PI) angle += 2 * Math.PI;
+      return Math.abs(angle);
     }
 
     // Get color for a power
@@ -718,59 +1066,6 @@
     function drawSimplifiedOcean(ctx, width, height) {
       ctx.fillStyle = '#1a3c6e';
       ctx.fillRect(0, 0, width, height);
-    }
-
-    // --- 3D PROVINCE LABELS ---
-    function addProvinceLabel(province) {
-      if (!coordinateData?.coordinates[province]) return;
-      const { x, z } = coordinateData.coordinates[province];
-      
-      // Create a canvas for the label
-      const canvas = document.createElement('canvas');
-      canvas.width = 160; // Increased from 128
-      canvas.height = 40; // Increased from 32
-      const ctx = canvas.getContext('2d');
-
-      // Draw label background with rounded corners
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; // More opaque
-      ctx.beginPath();
-      ctx.roundRect(0, 0, 160, 40, 6); // Using roundRect with rounded corners
-      ctx.fill();
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Draw province name with larger font
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 22px Arial'; // Increased from 18px
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(province, 80, 20);
-
-      // Create a sprite with the label texture
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.minFilter = THREE.LinearFilter;
-      const material = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        depthTest: false
-      });
-      const sprite = new THREE.Sprite(material);
-      sprite.scale.set(50, 12.5, 1); // Increased from 40, 10
-      sprite.position.set(x, 35, z); // Raised from 30 to 35
-      
-      scene.add(sprite);
-      provinceLabels.push(sprite);
-    }
-
-    // Clear all province labels
-    function clearProvinceLabels() {
-      provinceLabels.forEach(label => {
-        scene.remove(label);
-        label.material.map.dispose();
-        label.material.dispose();
-      });
-      provinceLabels = [];
     }
 
     // --- 3D SUPPLY CENTERS ---
@@ -1007,32 +1302,41 @@
         return;
       }
 
-      // Clear old units and labels
+      // Clear old units
       unitMeshes.forEach(m => scene.remove(m));
       unitMeshes = [];
-      clearProvinceLabels();
-
+      
       const phase = gameData.phases[index];
       phaseDisplay.textContent = `${phase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
 
-      // Build ownership map for territory coloring
+      // Build ownership map for territory coloring - IMPROVED TO INCLUDE BOTH UNITS AND CENTERS
       const centers = phase.state?.centers || {};
+      const units = phase.state?.units || {};
       const ownershipMap = {};
+      
+      // First add supply centers to ownership map
       for (const [power, provinces] of Object.entries(centers)) {
         provinces.forEach(p => {
           ownershipMap[p.toUpperCase()] = power.toUpperCase();
         });
       }
+      
+      // Then add territories where units are located (if not already claimed by supply centers)
+      for (const [power, unitArray] of Object.entries(units)) {
+        unitArray.forEach(unitStr => {
+          const match = unitStr.match(/^([AF])\s+(.+)$/);
+          if (match) {
+            const location = match[2].toUpperCase().split('/')[0]; // Handle special coast cases like "SPA/SC"
+            // Only add if not already claimed as a supply center
+            if (!ownershipMap[location]) {
+              ownershipMap[location] = power.toUpperCase();
+            }
+          }
+        });
+      }
 
       // Re-draw the fallback map with updated territory colors
       createFallbackMap(ownershipMap);
-
-      // Add 3D labels for each province
-      Object.keys(coordinateData.coordinates).forEach(p => {
-        if (!p.includes('_')) {
-          addProvinceLabel(p);
-        }
-      });
 
       // 1) Show supply centers (3D approach)
       displaySupplyCenters();
@@ -1145,6 +1449,91 @@
 
     // --- BOOTSTRAP ON PAGE LOAD ---
     window.addEventListener('load', initScene);
+
+    // Utility functions for color manipulation
+    function lightenColor(hex, percent) {
+      return colorShift(hex, percent);
+    }
+
+    function darkenColor(hex, percent) {
+      return colorShift(hex, -percent);
+    }
+
+    function colorShift(hex, percent) {
+      // Convert hex to RGB
+      let r = parseInt(hex.substr(1, 2), 16);
+      let g = parseInt(hex.substr(3, 2), 16);
+      let b = parseInt(hex.substr(5, 2), 16);
+      
+      // Shift color by percentage
+      r = Math.min(255, Math.max(0, r + Math.floor(r * percent / 100)));
+      g = Math.min(255, Math.max(0, g + Math.floor(g * percent / 100)));
+      b = Math.min(255, Math.max(0, b + Math.floor(b * percent / 100)));
+      
+      // Convert back to hex
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+
+    // Create a naive adjacency list by distance - function that was previously removed
+    function buildAdjacencyList() {
+      const adjacency = {};
+      const threshold = 150; // Increased distance threshold for adjacency
+
+      // Initialize empty adjacency lists
+      for (const p1 of Object.keys(coordinateData.coordinates)) {
+        if (p1.includes('_')) continue;
+        adjacency[p1] = [];
+      }
+      
+      // Compare each pair of provinces
+      const keys = Object.keys(adjacency);
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i+1; j < keys.length; j++) {
+          const a = keys[i];
+          const b = keys[j];
+          const posA = coordinateData.coordinates[a];
+          const posB = coordinateData.coordinates[b];
+          const dx = posA.x - posB.x;
+          const dz = posA.z - posB.z;
+          const dist = Math.sqrt(dx*dx + dz*dz);
+          
+          // Use a dynamic threshold based on province names to handle special cases
+          let dynamicThreshold = threshold;
+          
+          // If either province is a known coastal province, increase threshold slightly
+          const coastalProvinces = ['spa', 'por', 'bre', 'gas', 'mar', 'pie', 'ven', 'rom', 'nap', 'apu', 'tus'];
+          if (coastalProvinces.includes(a.toLowerCase()) || coastalProvinces.includes(b.toLowerCase())) {
+            dynamicThreshold *= 1.1;
+          }
+          
+          if (dist < dynamicThreshold) {
+            adjacency[a].push(b);
+            adjacency[b].push(a);
+          }
+        }
+      }
+      
+      // Add some known adjacencies that might be missed due to distance
+      const knownAdjacencies = {
+        'stp': ['fin', 'nwy', 'lvn', 'mos'],
+        'naf': ['tun'],
+        'spa': ['por', 'gas', 'mar'],
+        'swe': ['fin', 'nwy', 'den']
+      };
+      
+      for (const [prov, neighbors] of Object.entries(knownAdjacencies)) {
+        if (adjacency[prov]) {
+          neighbors.forEach(n => {
+            if (adjacency[n] && !adjacency[prov].includes(n)) {
+              adjacency[prov].push(n);
+              adjacency[n].push(prov);
+            }
+          });
+        }
+      }
+      
+      return adjacency;
+    }
   </script>
 </body>
 </html>
