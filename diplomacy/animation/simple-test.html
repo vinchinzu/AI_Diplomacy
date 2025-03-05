@@ -87,6 +87,90 @@
       overflow-y: auto;
       pointer-events: none; /* so we don't block clicks */
     }
+    
+    /* Chat windows styles */
+    #chat-container {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 60vh;
+      width: 300px;
+      pointer-events: auto;
+      z-index: 100;
+    }
+    
+    .chat-window {
+      background-color: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      transition: all 0.3s ease;
+      max-height: 300px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .chat-header {
+      background-color: #333;
+      color: white;
+      padding: 8px 12px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+    
+    .chat-messages {
+      padding: 10px;
+      overflow-y: auto;
+      flex-grow: 1;
+      max-height: 250px;
+      font-size: 13px;
+    }
+    
+    .chat-message {
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      max-width: 85%;
+      word-break: break-word;
+    }
+    
+    .message-incoming {
+      background-color: #e9e9eb;
+      align-self: flex-start;
+      margin-right: auto;
+    }
+    
+    .message-outgoing {
+      background-color: #0b93f6;
+      color: white;
+      align-self: flex-end;
+      margin-left: auto;
+    }
+    
+    .message-time {
+      font-size: 10px;
+      color: #888;
+      margin-top: 2px;
+      text-align: right;
+    }
+    
+    .chat-collapsed {
+      max-height: 36px;
+    }
+    
+    .power-austria { color: #c40000; }
+    .power-england { color: #00008B; }
+    .power-france { color: #0fa0d0; }
+    .power-germany { color: #444444; }
+    .power-italy { color: #008000; }
+    .power-russia { color: #cccccc; }
+    .power-turkey { color: #e0c846; }
   </style>
 </head>
 <body>
@@ -110,6 +194,8 @@
     <div id="info-panel"></div>
     <!-- New leaderboard element -->
     <div id="leaderboard"></div>
+    <!-- Chat windows container -->
+    <div id="chat-container"></div>
   </div>
 
   <script type="module">
@@ -129,6 +215,8 @@
     let animationDuration = 1500; // Duration of unit movement animation in ms
     let unitAnimations = []; // Track ongoing unit animations
     let territoryTransitions = []; // Track territory color transitions
+    let chatWindows = {}; // Store chat window elements by power
+    let currentPower = 'FRANCE'; // Default perspective is France
 
     // --- DOM ELEMENTS ---
     const loadBtn         = document.getElementById('load-btn');
@@ -1373,6 +1461,10 @@
             nextBtn.disabled = false;
             playBtn.disabled = false;
             speedSelector.disabled = false;
+            
+            // Initialize chat windows
+            createChatWindows();
+            
             displayPhase(currentPhaseIndex);
           }
         } catch (err) {
@@ -1453,6 +1545,9 @@
 
       // Update the leaderboard
       updateLeaderboard(phase);
+      
+      // Update chat windows with messages from this phase
+      updateChatWindows(phase);
 
       // Show some info in the panel
       infoPanel.textContent = `Phase: ${phase.name}\nSupply centers: ${
@@ -1680,6 +1775,9 @@
       // Update the leaderboard
       updateLeaderboard(currentPhase);
       
+      // Update chat windows with messages from this phase
+      updateChatWindows(currentPhase);
+      
       // Show phase info
       infoPanel.textContent = `Phase: ${currentPhase.name}\nSupply centers: ${
         currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
@@ -1903,6 +2001,124 @@
       }
       
       return adjacency;
+    }
+
+    // --- CHAT WINDOW FUNCTIONS ---
+    function createChatWindows() {
+      // Clear existing chat windows
+      const chatContainer = document.getElementById('chat-container');
+      chatContainer.innerHTML = '';
+      chatWindows = {};
+      
+      // Create a chat window for each power (except the current power)
+      const powers = ['AUSTRIA', 'ENGLAND', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
+      
+      // Filter out the current power
+      const otherPowers = powers.filter(power => power !== currentPower);
+      
+      // Create chat windows for each power
+      otherPowers.forEach(power => {
+        const chatWindow = document.createElement('div');
+        chatWindow.className = 'chat-window';
+        chatWindow.id = `chat-${power}`;
+        
+        // Create header
+        const header = document.createElement('div');
+        header.className = 'chat-header';
+        header.innerHTML = `<span class="power-${power.toLowerCase()}">${power}</span><span class="toggle-chat">▼</span>`;
+        
+        // Create messages container
+        const messagesContainer = document.createElement('div');
+        messagesContainer.className = 'chat-messages';
+        messagesContainer.id = `messages-${power}`;
+        
+        // Add toggle functionality
+        header.addEventListener('click', () => {
+          chatWindow.classList.toggle('chat-collapsed');
+          header.querySelector('.toggle-chat').textContent = 
+            chatWindow.classList.contains('chat-collapsed') ? '▲' : '▼';
+        });
+        
+        // Assemble chat window
+        chatWindow.appendChild(header);
+        chatWindow.appendChild(messagesContainer);
+        
+        // Add to container
+        chatContainer.appendChild(chatWindow);
+        
+        // Store reference
+        chatWindows[power] = {
+          element: chatWindow,
+          messagesContainer: messagesContainer
+        };
+      });
+    }
+    
+    function updateChatWindows(phase) {
+      // If no messages in the phase, do nothing
+      if (!phase.messages || !phase.messages.length) return;
+      
+      // Clear all message containers
+      Object.values(chatWindows).forEach(window => {
+        window.messagesContainer.innerHTML = '';
+      });
+      
+      // Filter messages relevant to the current power
+      const relevantMessages = phase.messages.filter(msg => {
+        return (msg.sender === currentPower || msg.recipient === currentPower || msg.recipient === 'GLOBAL');
+      });
+      
+      // Sort messages by time
+      relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
+      
+      // Process each message
+      relevantMessages.forEach(msg => {
+        // Determine which chat window to use
+        let targetPower;
+        
+        if (msg.recipient === 'GLOBAL') {
+          // Global messages go to all windows
+          Object.keys(chatWindows).forEach(power => {
+            addMessageToChat(power, msg, phase.name);
+          });
+          return;
+        } else if (msg.sender === currentPower) {
+          // Outgoing message
+          targetPower = msg.recipient;
+        } else {
+          // Incoming message
+          targetPower = msg.sender;
+        }
+        
+        // Add to appropriate chat window
+        if (chatWindows[targetPower]) {
+          addMessageToChat(targetPower, msg, phase.name);
+        }
+      });
+    }
+    
+    function addMessageToChat(power, message, phaseName) {
+      if (!chatWindows[power]) return;
+      
+      const messagesContainer = chatWindows[power].messagesContainer;
+      const messageElement = document.createElement('div');
+      
+      // Determine if this is an incoming or outgoing message
+      const isOutgoing = message.sender === currentPower;
+      
+      messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
+      
+      // Format the message content
+      messageElement.innerHTML = `
+        ${message.message}
+        <div class="message-time">${phaseName}</div>
+      `;
+      
+      // Add to container
+      messagesContainer.appendChild(messageElement);
+      
+      // Scroll to bottom
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
   </script>
 </body>
