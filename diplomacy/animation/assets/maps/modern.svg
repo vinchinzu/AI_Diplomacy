@@ -3,7 +3,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:jdipNS="svg.dtd" version="1.0" width="716px" height="600px" viewBox="0 0 716 600" color-rendering="optimizeQuality" text-rendering="optimizeLegibility" preserveAspectRatio="xMinYMin" image-rendering="optimizeQuality" shape-rendering="geometricPrecision">
 
     <g id="MapLayer">
-        <rect x="205" y="355" width="210" height="85" class="style1"/>
+        <rect id="background" class="background" height="1360" width="1835" x="195" y="170"/>
         <polygon id="_ada" class="nopower" points="483,407 491,409 499,400 502,403 506,396,516,393,520,389,530,390,546,378,552,380,558,373 563,374 568,369 585,369 581,362 575,360 571,343 569,340 563,339 560,337 555,341,543,345,539,352,515,359,502,357 480,376 482,383 478,393"/>
         <polygon id="_adr" class="water"  points="309,374 308,372 288,354 291,350 281,351 275,348 271,342 266,325 258,319 258,305 266,300 269,302 268,305 271,311 274,305 279,306 281,319 298,337 310,346 319,352 321,354 319,371 321,374"/>
         <polygon id="_aeg" class="water"  points="361,423 357,412 362,413 361,406 369,408 366,399 355,392 362,388 353,378 356,372 363,379 368,373 365,368 389,366 395,369 391,374 393,375 390,382 398,381 400,397 397,400 402,402 404,410 408,412 404,417 413,415 413,421 402,432 390,429 376,430 371,428 368,430"/>
@@ -169,8 +169,8 @@
         <polygon id="_yor" class="nopower" points="169,184 172,181 172,164 166,157 166,145 160,148 160,158 155,168 155,182 157,187"/>
 
         <!-- coast labels -->
-        <text class="labeltext" x="635" y="362">nc</text>
-        <text class="labeltext" x="653" y="452">sc</text>
+        <!-- <text class="labeltext" x="635" y="362">nc</text> -->
+        <!-- <text class="labeltext" x="653" y="452">sc</text> -->
 
         <!-- title block -->
         <!-- <rect x="0" y="560" height="20" width="715" style="fill:black;stroke:black;stroke-width:1px;"/>

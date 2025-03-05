@@ -518,7 +518,7 @@
     function createFallbackMap(ownershipMap = null) {
       // If there's already a plane from a previous phase re-draw, remove it
       const loader = new SVGLoader();
-      loader.load('assets/maps/modern.svg',
+      loader.load('assets/maps/standard.svg',
         function (data) {
           let map_styles = {};
           fetch('assets/maps/modern-styles.json')
@@ -557,12 +557,25 @@
               const shape = shapes[j];
               const geometry = new THREE.ShapeGeometry(shape);
               const mesh = new THREE.Mesh(geometry, material);
+
+              mesh.rotation.x = Math.PI / 2;
               group.add(mesh);
+
+
+              // Create an edges geometry from the shape geometry.
+              const edges = new THREE.EdgesGeometry(geometry);
+              // Create a line material with black color for the border.
+              const lineMaterial = new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2});
+              // Create the line segments object to display the border.
+              const line = new THREE.LineSegments(edges, lineMaterial);
+              // Add the border as a child of the mesh.
+              mesh.add(line);
 
             }
 
           }
-          group.scale.set(1, -1, 1)
+          // This rotates the SVG the "correct" way round, and scales it down
+          group.scale.set(0.5, -0.5, 0.5)
 
           scene.add(group);
         },

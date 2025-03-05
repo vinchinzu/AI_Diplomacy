@@ -1,4 +1,13 @@
 {
+  "unplayable": {
+    "fill": "#D5D5D5"
+  },
+  "impassable": {
+    "fill": "#353433"
+  },
+  "background": {
+    "fill": "#FFFFFF"
+  },
   "labeltext": {
     "font-size": "12px",
     "fill": "black",
@@ -53,13 +62,13 @@
     "stroke-width": "2"
   },
   "nopower": {
-    "fill": "#FFEEEE",
+    "fill": "#ddd2af",
     "stroke": "black",
     "stroke-linejoin": "round",
     "stroke-width": "2"
   },
   "water": {
-    "fill": "#DDDDFF",
+    "fill": "#c5dfea",
     "stroke": "black",
     "stroke-linejoin": "round",
     "stroke-width": "2"
