@@ -59,7 +59,7 @@
     }
     #info-panel {
       position: absolute;
-      top: 60px;
+      bottom: 20px;
       right: 10px;
       width: 300px;
       background-color: rgba(255, 255, 255, 0.8);
@@ -67,14 +67,14 @@
       padding: 10px;
       font-family: monospace;
       font-size: 12px;
-      max-height: 80vh;
+      max-height: 300px;
       overflow-y: auto;
       pointer-events: none; /* Let clicks pass through */
     }
     /* New leaderboard styles */
     #leaderboard {
       position: absolute;
-      top: 60px;
+      bottom: 20px;
       left: 10px;
       width: 250px;
       background-color: rgba(0, 0, 0, 0.5);
@@ -83,7 +83,7 @@
       padding: 10px;
       font-size: 14px;
       line-height: 1.4em;
-      max-height: 80vh;
+      max-height: 300px;
       overflow-y: auto;
       pointer-events: none; /* so we don't block clicks */
     }
@@ -91,15 +91,17 @@
     /* Chat windows styles */
     #chat-container {
       position: absolute;
-      bottom: 20px;
-      right: 20px;
+      top: 60px;
+      left: 10px;
+      right: 10px;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       gap: 10px;
-      max-height: 60vh;
-      width: 300px;
+      height: 250px;
       pointer-events: auto;
       z-index: 100;
+      overflow-x: auto;
+      padding-bottom: 5px;
     }
     
     .chat-window {
@@ -108,9 +110,12 @@
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
       overflow: hidden;
       transition: all 0.3s ease;
-      max-height: 300px;
+      height: 100%;
+      width: 260px;
+      min-width: 260px;
       display: flex;
       flex-direction: column;
+      flex-shrink: 0;
     }
     
     .chat-header {
@@ -128,16 +133,16 @@
       padding: 10px;
       overflow-y: auto;
       flex-grow: 1;
-      max-height: 250px;
+      height: calc(100% - 36px);
       font-size: 13px;
     }
     
     .chat-message {
       margin-bottom: 8px;
       padding: 6px 10px;
-      border-radius: 12px;
-      max-width: 85%;
+      border-radius: 8px;
       word-break: break-word;
+      width: 85%;
     }
     
     .message-incoming {
@@ -2016,16 +2021,30 @@
       // Filter out the current power
       const otherPowers = powers.filter(power => power !== currentPower);
       
+      // Add a GLOBAL chat window first
+      createChatWindow('GLOBAL', true);
+      
       // Create chat windows for each power
       otherPowers.forEach(power => {
+        createChatWindow(power);
+      });
+      
+      // Helper function to create a chat window
+      function createChatWindow(power, isGlobal = false) {
         const chatWindow = document.createElement('div');
         chatWindow.className = 'chat-window';
         chatWindow.id = `chat-${power}`;
         
-        // Create header
+        // Create header with appropriate styling
         const header = document.createElement('div');
         header.className = 'chat-header';
-        header.innerHTML = `<span class="power-${power.toLowerCase()}">${power}</span><span class="toggle-chat">▼</span>`;
+        
+        // For global chat, use a different style
+        if (isGlobal) {
+          header.innerHTML = `<span style="color: #ffffff">GLOBAL</span><span class="toggle-chat">▼</span>`;
+        } else {
+          header.innerHTML = `<span class="power-${power.toLowerCase()}">${power}</span><span class="toggle-chat">▼</span>`;
+        }
         
         // Create messages container
         const messagesContainer = document.createElement('div');
@@ -2049,9 +2068,10 @@
         // Store reference
         chatWindows[power] = {
           element: chatWindow,
-          messagesContainer: messagesContainer
+          messagesContainer: messagesContainer,
+          isGlobal: isGlobal
         };
-      });
+      }
     }
     
     function updateChatWindows(phase) {
@@ -2073,16 +2093,19 @@
       
       // Process each message
       relevantMessages.forEach(msg => {
-        // Determine which chat window to use
+        // Special handling for global messages
+        if (msg.recipient === 'GLOBAL') {
+          // Add to the global chat window
+          if (chatWindows['GLOBAL']) {
+            addMessageToChat('GLOBAL', msg, phase.name);
+          }
+          return;
+        }
+        
+        // Determine which chat window to use for private messages
         let targetPower;
         
-        if (msg.recipient === 'GLOBAL') {
-          // Global messages go to all windows
-          Object.keys(chatWindows).forEach(power => {
-            addMessageToChat(power, msg, phase.name);
-          });
-          return;
-        } else if (msg.sender === currentPower) {
+        if (msg.sender === currentPower) {
           // Outgoing message
           targetPower = msg.recipient;
         } else {
@@ -2103,16 +2126,29 @@
       const messagesContainer = chatWindows[power].messagesContainer;
       const messageElement = document.createElement('div');
       
-      // Determine if this is an incoming or outgoing message
-      const isOutgoing = message.sender === currentPower;
-      
-      messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
-      
-      // Format the message content
-      messageElement.innerHTML = `
-        ${message.message}
-        <div class="message-time">${phaseName}</div>
-      `;
+      // For global chat, display sender information
+      if (power === 'GLOBAL') {
+        const senderColor = message.sender.toLowerCase();
+        messageElement.className = 'chat-message message-incoming';
+        
+        // Format the message content with sender info
+        messageElement.innerHTML = `
+          <span style="font-weight: bold;" class="power-${senderColor}">${message.sender}:</span>
+          ${message.message}
+          <div class="message-time">${phaseName}</div>
+        `;
+      } else {
+        // Determine if this is an incoming or outgoing message
+        const isOutgoing = message.sender === currentPower;
+        
+        messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
+        
+        // Format the message content
+        messageElement.innerHTML = `
+          ${message.message}
+          <div class="message-time">${phaseName}</div>
+        `;
+      }
       
       // Add to container
       messagesContainer.appendChild(messageElement);
