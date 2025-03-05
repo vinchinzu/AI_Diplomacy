@@ -531,13 +531,15 @@
         side: THREE.DoubleSide
       });
       const label = labelObj.label
-      const shapes = font.generateShapes(label, 25);
+      const shapes = font.generateShapes(label, 20);
 
       const geometry = new THREE.ShapeGeometry(shapes);
 
       geometry.computeBoundingBox();
+      const xMid = - 0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
+      const yMid = - 0.5 * (geometry.boundingBox.max.y - geometry.boundingBox.min.y);
 
-      geometry.translate(labelObj.x, -labelObj.y, 0);
+      geometry.translate(labelObj.x + xMid, -labelObj.y + yMid, 0);
       const text = new THREE.Mesh(geometry, matLite);
       //text.rotation.x = (Math.PI / 2);
       //text.rotation.x = (Math.PI / 2);
@@ -549,12 +551,12 @@
     // --- CREATE THE FALLBACK MAP AS A PLANE ---
     function createFallbackMap(ownershipMap = null) {
       //TODO: remove below
-      const size = 10;
-      const divisions = 10;
-
-      const gridHelper = new THREE.GridHelper(10000, 1000);
-      scene.add(gridHelper);
-      //TODO: remove above
+      // const size = 10;
+      // const divisions = 10;
+      //
+      // const gridHelper = new THREE.GridHelper(10000, 1000);
+      // scene.add(gridHelper);
+      // //TODO: remove above
 
 
       const loader = new SVGLoader();
@@ -637,8 +639,8 @@
               box.getCenter(center);
 
               // Offset the group's position by subtracting the center:
-              //group.position.sub(center);
-              //textGroup.position.sub(center);
+              group.position.sub(center);
+              textGroup.position.sub(center);
 
               scene.add(group);
               scene.add(textGroup);
