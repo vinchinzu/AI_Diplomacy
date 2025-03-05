@@ -527,7 +527,7 @@
       const matLite = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.7,
         side: THREE.DoubleSide
       });
       const label = labelObj.label
@@ -537,16 +537,25 @@
 
       geometry.computeBoundingBox();
 
-      const xMid = - 0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
-
-      geometry.translate(labelObj.x, labelObj.y, 0);
+      geometry.translate(labelObj.x, -labelObj.y, 0);
       const text = new THREE.Mesh(geometry, matLite);
-      text.rotation.x = -(Math.PI / 2);
+      //text.rotation.x = (Math.PI / 2);
+      //text.rotation.x = (Math.PI / 2);
+      //text.scale.multiply(new THREE.Vector(1, -1, 1))
+      //text.scale.set(1, -1, 1)
       return text
     }
 
     // --- CREATE THE FALLBACK MAP AS A PLANE ---
     function createFallbackMap(ownershipMap = null) {
+      //TODO: remove below
+      const size = 10;
+      const divisions = 10;
+
+      const gridHelper = new THREE.GridHelper(10000, 1000);
+      scene.add(gridHelper);
+      //TODO: remove above
+
 
       const loader = new SVGLoader();
       loader.load('assets/maps/standard.svg',
@@ -600,23 +609,24 @@
               }
 
               // Load all the labels for each map position
-              // const fontLoader = new FontLoader();
-              // fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
-              //   fetch("assets/maps/standard_labels.json")
-              //     .then(resp => resp.json())
-              //     .then(data => {
-              //       data.forEach(labelObj => {
-              //         textGroup.add(createLabel(font, labelObj))
-              //       })
-              //     })
-              //     .catch(error => {
-              //       console.error('Error loading map labels:', error);
-              //     });
-              // })
+              const fontLoader = new FontLoader();
+              fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
+                fetch("assets/maps/standard_labels.json")
+                  .then(resp => resp.json())
+                  .then(data => {
+                    data.forEach(labelObj => {
+                      textGroup.add(createLabel(font, labelObj))
+                    })
+                  })
+                  .catch(error => {
+                    console.error('Error loading map labels:', error);
+                  });
+              })
               // This rotates the SVG the "correct" way round, and scales it down
               group.scale.set(0.5, -0.5, 0.5)
               // Don't need to flip the text
-              textGroup.scale.set(0.5, 0.5, 0.5)
+              textGroup.rotation.x = Math.PI / 2;
+              textGroup.scale.set(0.5, -0.5, 0.5)
               // After adding all meshes to the group, update its matrix:
               group.updateMatrixWorld(true);
               textGroup.updateMatrixWorld(true);
@@ -627,7 +637,7 @@
               box.getCenter(center);
 
               // Offset the group's position by subtracting the center:
-              group.position.sub(center);
+              //group.position.sub(center);
               //textGroup.position.sub(center);
 
               scene.add(group);
