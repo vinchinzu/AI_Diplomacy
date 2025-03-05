@@ -240,6 +240,7 @@
   <script type="module">
     import * as THREE from 'three';
     import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
+    import {FontLoader} from 'three/addons/loaders/FontLoader.js';
     import {SVGLoader} from 'three/addons/loaders/SVGLoader.js';
 
     // --- CORE VARIABLES ---
@@ -514,105 +515,134 @@
       });
     }
 
+    function createLabel(font, labelObj) {
+
+      const color = 0x006699;
+
+      const matDark = new THREE.LineBasicMaterial({
+        color: color,
+        side: THREE.DoubleSide
+      });
+
+      const matLite = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide
+      });
+      const label = labelObj.label
+      const shapes = font.generateShapes(label, 25);
+
+      const geometry = new THREE.ShapeGeometry(shapes);
+
+      geometry.computeBoundingBox();
+
+      const xMid = - 0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
+
+      geometry.translate(labelObj.x, labelObj.y, 0);
+      const text = new THREE.Mesh(geometry, matLite);
+      text.rotation.x = -(Math.PI / 2);
+      return text
+    }
+
     // --- CREATE THE FALLBACK MAP AS A PLANE ---
     function createFallbackMap(ownershipMap = null) {
-      // If there's already a plane from a previous phase re-draw, remove it
+
       const loader = new SVGLoader();
       loader.load('assets/maps/standard.svg',
         function (data) {
           let map_styles = {};
           fetch('assets/maps/modern-styles.json')
             .then(resp => resp.json())
-            .then(data => {
-              map_styles = data;
+            .then(map_styles => {
+              const paths = data.paths;
+              const group = new THREE.Group();
+              const textGroup = new THREE.Group();
+
+              for (let i = 0; i < paths.length; i++) {
+                let fillColor = ""
+
+                const path = paths[i];
+                if (map_styles[path.userData.node.classList[0]] === undefined) {
+                  // If there is no style in the map_styles, skip drawing the shape
+                  continue
+                } else {
+                  fillColor = map_styles[path.userData.node.classList[0]].fill;
+                }
+
+                const material = new THREE.MeshBasicMaterial({
+                  color: fillColor,
+                  side: THREE.DoubleSide,
+                  depthWrite: false
+                });
+
+                const shapes = SVGLoader.createShapes(path);
+
+                for (let j = 0; j < shapes.length; j++) {
+
+                  const shape = shapes[j];
+                  const geometry = new THREE.ShapeGeometry(shape);
+                  const mesh = new THREE.Mesh(geometry, material);
+
+                  mesh.rotation.x = Math.PI / 2;
+                  group.add(mesh);
+
+
+                  // Create an edges geometry from the shape geometry.
+                  const edges = new THREE.EdgesGeometry(geometry);
+                  // Create a line material with black color for the border.
+                  const lineMaterial = new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2});
+                  // Create the line segments object to display the border.
+                  const line = new THREE.LineSegments(edges, lineMaterial);
+                  // Add the border as a child of the mesh.
+                  mesh.add(line);
+                }
+              }
+
+              // Load all the labels for each map position
+              // const fontLoader = new FontLoader();
+              // fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
+              //   fetch("assets/maps/standard_labels.json")
+              //     .then(resp => resp.json())
+              //     .then(data => {
+              //       data.forEach(labelObj => {
+              //         textGroup.add(createLabel(font, labelObj))
+              //       })
+              //     })
+              //     .catch(error => {
+              //       console.error('Error loading map labels:', error);
+              //     });
+              // })
+              // This rotates the SVG the "correct" way round, and scales it down
+              group.scale.set(0.5, -0.5, 0.5)
+              // Don't need to flip the text
+              textGroup.scale.set(0.5, 0.5, 0.5)
+              // After adding all meshes to the group, update its matrix:
+              group.updateMatrixWorld(true);
+              textGroup.updateMatrixWorld(true);
+
+              // Compute the bounding box of the group:
+              const box = new THREE.Box3().setFromObject(group);
+              const center = new THREE.Vector3();
+              box.getCenter(center);
+
+              // Offset the group's position by subtracting the center:
+              group.position.sub(center);
+              //textGroup.position.sub(center);
+
+              scene.add(group);
+              scene.add(textGroup);
             })
             .catch(error => {
               console.error('Error loading map styles:', error);
             });
-          const paths = data.paths;
-          const group = new THREE.Group();
-
-          for (let i = 0; i < paths.length; i++) {
-            let fillColor = ""
-
-            const path = paths[i];
-            if (map_styles[path.userData.node.classList[0]] === undefined) {
-              // If there is no style in the map_styles, skip drawing the shape
-              continue
-            } else {
-              fillColor = map_styles[path.userData.node.classList[0]].fill;
-            }
-            //debugger;
-
-            const material = new THREE.MeshBasicMaterial({
-              color: fillColor,
-              side: THREE.DoubleSide,
-              depthWrite: false
-            });
-
-            const shapes = SVGLoader.createShapes(path);
-
-            for (let j = 0; j < shapes.length; j++) {
-
-              const shape = shapes[j];
-              const geometry = new THREE.ShapeGeometry(shape);
-              const mesh = new THREE.Mesh(geometry, material);
-
-              mesh.rotation.x = Math.PI / 2;
-              group.add(mesh);
-
-
-              // Create an edges geometry from the shape geometry.
-              const edges = new THREE.EdgesGeometry(geometry);
-              // Create a line material with black color for the border.
-              const lineMaterial = new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2});
-              // Create the line segments object to display the border.
-              const line = new THREE.LineSegments(edges, lineMaterial);
-              // Add the border as a child of the mesh.
-              mesh.add(line);
-
-            }
-
-          }
-          // This rotates the SVG the "correct" way round, and scales it down
-          group.scale.set(0.5, -0.5, 0.5)
-          // After adding all meshes to the group, update its matrix:
-          group.updateMatrixWorld(true);
-
-          // Compute the bounding box of the group:
-          const box = new THREE.Box3().setFromObject(group);
-          const center = new THREE.Vector3();
-          box.getCenter(center);
-
-          // Offset the group's position by subtracting the center:
-          group.position.sub(center);
-
-          scene.add(group);
         },
         // Progress function
         undefined,
         function (error) {console.log(error)})
+
+
       return
-      //TODO: Remove below
-      if (mapPlane) {
-        scene.remove(mapPlane);
-        mapPlane.geometry.dispose();
-        mapPlane.material.dispose();
-        mapPlane = null;
-      }
-
-      const mapGeometry = new THREE.PlaneGeometry(1000, 1000);
-
-      // We'll create a texture by drawing on a <canvas>:
-      const texture = drawFallbackCanvas(ownershipMap);
-      const material = new THREE.MeshBasicMaterial({map: texture, side: THREE.DoubleSide});
-
-      mapPlane = new THREE.Mesh(mapGeometry, material);
-      mapPlane.rotation.x = -Math.PI / 2; // Lay flat
-      mapPlane.position.y = -1; // Slightly below any 3D items
-      scene.add(mapPlane);
-
-      infoPanel.textContent = "Fallback map loaded as primary texture!";
     }
 
     // --- DRAW THE FALLBACK MAP ON A CANVAS ---
