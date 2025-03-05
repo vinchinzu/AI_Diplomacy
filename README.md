@@ -1,94 +1,38 @@
-# AI Diplomacy
+# AI Diplomacy: 
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+## Extended AI Features (Experimental)
 
-## AI-Powered Diplomacy with LLMs
+This repository is an extension of the original [Diplomacy](https://github.com/diplomacy/diplomacy) project. This repository has been extended to integrate multiple Large Language Models (LLMs) into Diplomacy gameplay. **These extensions are experimental, subject to change**, and actively in development. The main additions are as follows:
 
-This repository extends the original [Diplomacy](https://github.com/diplomacy/diplomacy) project to create a completely LLM-powered version of the classic board game Diplomacy. Each power is controlled by an LLM that can negotiate, form alliances, and plan strategies across multiple game phases.
+- **Conversation & Negotiation**: Powers can have multi-turn negotiations with each other via `lm_game.py`. They can exchange private or global messages, allowing for more interactive diplomacy.  
+- **Order Generation**: Each power can choose its orders (moves, holds, supports, etc.) using LLMs via `lm_service_versus.py`. Currently supports OpenAI, Claude, Gemini, DeepSeek
+- **Phase Summaries**: Modifications in the `game.py` engine allow the generation of "phase summaries," providing a succinct recap of each turn's events. This could help both human spectators and the LLMs themselves to understand the game state more easily.  
+- **Prompt Templates**: Prompts used by the LLMs are stored in `/prompts/`. You can edit these to customize how models are instructed for both orders and conversations.  
+- **Experimental & WIP**: Ongoing development includes adding strategic goals for each power, more flexible conversation lengths, and a readiness check to advance the phase if all powers are done negotiating.
 
-## Features
+### How it Works
 
-- **Strategic LLM Agents**: Each country is controlled by an LLM with specialized prompting tailored to their unique geopolitical position
-- **Multi-Turn Negotiations**: Powers engage in diplomatic exchanges through global and private messages
-- **Automatic Order Generation**: Each power autonomously determines orders based on game state and diplomatic history
-- **Context Management**: Intelligent summarization of game state and message history to optimize context windows
-- **Enhanced Logging**: Structured, detailed logging for analysis of AI reasoning and decision-making
-- **Multi-Model Support**: Compatible with OpenAI, Anthropic Claude, Gemini, and DeepSeek models
-- **Power-Specific Strategy**: Country-specific system prompts that provide strategic guidance based on historical Diplomacy strategy
+1. **`lm_game.py`**  
+   - Orchestrates a Diplomacy game where each power's moves are decided by an LLM.  
+   - Manages conversation rounds (currently up to 3 by default) and calls `get_conversation_reply()` for each power.  
+   - After negotiations, each power's orders are gathered concurrently (via threads), using `get_orders()` from the respective LLM client.  
+   - Calls `game.process()` to move to the next phase, optionally collecting phase summaries along the way.
 
-## Getting Started
+2. **`lm_service_versus.py`**  
+   - Defines a base class (`BaseModelClient`) for hitting any LLM endpoint.  
+   - Subclasses (`OpenAIClient`, `ClaudeClient`, etc.) implement `generate_response()` and `get_conversation_reply()` with the specifics of each LLM's API.  
+   - Handles prompt construction for orders and conversation, JSON extraction to parse moves or messages, and fallback logic for invalid LLM responses.  
 
-```bash
-# Clone the repository
-git clone https://github.com/username/AI_Diplomacy.git
-cd AI_Diplomacy
+3. **Modifications in `game.py` (Engine)**  
+   - Added a `_generate_phase_summary()` method and `phase_summaries` dict to store short textual recaps of each phase.  
+   - Summaries can be viewed or repurposed for real-time commentary or as additional context fed back into the LLM.  
 
-# Install dependencies 
-pip install -r requirements.txt
+### Future Explorations
 
-# Run a game
-python lm_game.py --max_year 1910 --summary_model "gpt-4o-mini" --num_negotiation_rounds 3
-```
-
-## Command Line Options
-
-The main game script supports various configuration options:
-
-```
-python lm_game.py [options]
-
-Options:
-  --max_year INTEGER        Maximum year to simulate (default: 1910)
-  --summary_model STRING    Model to use for phase summarization (default: "gpt-4o-mini")
-  --num_negotiation_rounds  Number of message rounds per phase (default: 3)
-  --models STRING           Comma-separated list of models to use for each power
-  --log_full_prompts        Log complete prompts sent to models
-  --log_full_responses      Log complete responses from models
-  --verbose                 Enable verbose logging including connection details
-  --log_level STRING        Set logging level (DEBUG, INFO, WARNING, ERROR)
-```
-
-## How It Works
-
-1. **Game Initialization**  
-   - Creates a standard Diplomacy game and assigns an LLM to each power
-   - Initializes logging and context management systems
-
-2. **Diplomacy Phases**  
-   - For each movement phase, powers engage in negotiation rounds
-   - Each power analyzes game state, diplomatic history, and strategic position
-   - Powers autonomously generate orders through concurrent execution
-
-3. **Context Management**  
-   - Game history and diplomatic exchanges are intelligently summarized 
-   - Recursive summarization optimizes context windows while preserving crucial information
-   - System provides each power with relevant, concise context to make decisions
-
-4. **Order Processing**  
-   - Orders from all powers are collected and processed by the game engine
-   - Phase summaries are generated to capture key events
-   - Results are saved and the game advances to the next phase
-
-## Project Structure
-
-- **ai_diplomacy/**: Core extension code
-  - **clients.py**: Model client implementations for different LLM providers
-  - **game_history.py**: Tracks and manages game history for LLM context
-  - **long_story_short.py**: Context optimization and summarization
-  - **negotiations.py**: Handles diplomatic exchanges between powers
-  - **prompts/**: Templates for system instructions, orders, and negotiations
-  - **utils.py**: Helper functions for game state analysis and formatting
-
-- **lm_game.py**: Main game runner script
-- **diplomacy/**: Original game engine (with minor extensions)
-
-## Recent Improvements
-
-- **Enhanced Structured Logging**: Added structured logging with context tags for better debugging and analysis
-- **Optimized Context Management**: Rewrote the recursive summarization system to handle model context more efficiently
-- **Improved Power-Specific Prompts**: Updated all country-specific system prompts with more strategic guidance
-- **Better Convoy and Threat Analysis**: Enhanced convoy path detection and threat assessment
-- **Command Line Options**: Added configuration options for logging verbosity and model selection
+- **Longer Conversation Phases**: Support for more than 3 message rounds, or an adaptive approach that ends negotiation early if all powers signal "ready."  
+- **Strategic Goals**: Let each power maintain high-level goals (e.g., "ally with France," "defend Munich") that the LLM takes into account for orders and conversations.  
+- **Enhanced Summaries**: Summaries could incorporate conversation logs or trending alliances, giving the LLM even richer context each turn.  
+- **Live Front-End Integration**: Display phase summaries, conversation logs, and highlights of completed orders in a real-time UI. (an attempt to display phase summaries currently in progress)
 
 ---
 
