@@ -17,6 +17,7 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
+      font-family: sans-serif;
     }
     .container {
       width: 100vw;
@@ -68,6 +69,23 @@
       font-size: 12px;
       max-height: 80vh;
       overflow-y: auto;
+      pointer-events: none; /* Let clicks pass through */
+    }
+    /* New leaderboard styles */
+    #leaderboard {
+      position: absolute;
+      top: 60px;
+      left: 10px;
+      width: 250px;
+      background-color: rgba(0, 0, 0, 0.5);
+      color: white;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 14px;
+      line-height: 1.4em;
+      max-height: 80vh;
+      overflow-y: auto;
+      pointer-events: none; /* so we don't block clicks */
     }
   </style>
 </head>
@@ -84,6 +102,8 @@
     <div id="map-view" class="map-view"></div>
     <input type="file" id="file-input" accept=".json">
     <div id="info-panel"></div>
+    <!-- New leaderboard element -->
+    <div id="leaderboard"></div>
   </div>
 
   <script type="module">
@@ -97,6 +117,9 @@
     let coordinateData = null;
     let unitMeshes = []; // To store references for units + supply center 3D objects
     let mapPlane = null; // The fallback map plane
+    
+    // New variable to store province labels
+    let provinceLabels = [];
 
     // --- DOM ELEMENTS ---
     const loadBtn       = document.getElementById('load-btn');
@@ -106,6 +129,28 @@
     const phaseDisplay  = document.getElementById('phase-display');
     const infoPanel     = document.getElementById('info-panel');
     const mapView       = document.getElementById('map-view');
+    const leaderboard   = document.getElementById('leaderboard');
+
+    // Add roundRect polyfill for browsers that don't support it
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, width, height, radius) {
+        if (typeof radius === 'undefined') {
+          radius = 5;
+        }
+        this.beginPath();
+        this.moveTo(x + radius, y);
+        this.lineTo(x + width - radius, y);
+        this.arcTo(x + width, y, x + width, y + radius, radius);
+        this.lineTo(x + width, y + height - radius);
+        this.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+        this.lineTo(x + radius, y + height);
+        this.arcTo(x, y + height, x, y + height - radius, radius);
+        this.lineTo(x, y + radius);
+        this.arcTo(x, y, x + radius, y, radius);
+        this.closePath();
+        return this;
+      };
+    }
 
     // --- INITIALIZE SCENE ---
     function initScene() {
@@ -235,7 +280,7 @@
     }
 
     // --- CREATE THE FALLBACK MAP AS A PLANE ---
-    function createFallbackMap() {
+    function createFallbackMap(ownershipMap = null) {
       // If there's already a plane from a previous phase re-draw, remove it
       if (mapPlane) {
         scene.remove(mapPlane);
@@ -247,7 +292,7 @@
       const mapGeometry = new THREE.PlaneGeometry(1000, 1000);
 
       // We'll create a texture by drawing on a <canvas>:
-      const texture = drawFallbackCanvas();
+      const texture = drawFallbackCanvas(ownershipMap);
       const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
 
       mapPlane = new THREE.Mesh(mapGeometry, material);
@@ -259,7 +304,7 @@
     }
 
     // --- DRAW THE FALLBACK MAP ON A CANVAS ---
-    function drawFallbackCanvas() {
+    function drawFallbackCanvas(ownershipMap = null) {
       const canvas = document.createElement('canvas');
       canvas.width = 2048;
       canvas.height = 2048;
@@ -279,23 +324,17 @@
       
       // If we have coordinateData, we can draw an "accurate" map:
       if (coordinateData && coordinateData.coordinates) {
-        drawAccurateMap(ctx, canvas.width, canvas.height);
-        } else {
+        drawImprovedMap(ctx, canvas.width, canvas.height, ownershipMap);
+      } else {
         // Otherwise, just some placeholder
         drawSimplifiedOcean(ctx, canvas.width, canvas.height);
       }
 
-      // If we have current game data (and a chosen phase), we can reflect supply center ownership:
-      // But note, this fallback draw is only called once here, so it won't "live-update" supply center
-      // colors as you press next/prev. If you want that, you can call createFallbackMap() again inside
-      // displayPhase() each time. For now, we just do it once on load.
-
       return new THREE.CanvasTexture(canvas);
     }
 
-    // --- MINIMAL EXAMPLE: Draw a quick "accidental polygons" map ---
-    //    (This is the same core logic from the original fallback code, just shortened.)
-    function drawAccurateMap(ctx, width, height) {
+    // --- DRAW AN IMPROVED MAP WITH TERRITORIES ---
+    function drawImprovedMap(ctx, width, height, ownershipMap) {
       // Borrowed from the original: scaling & offset for province coordinates
       const scaleX = width / 1000;
       const scaleY = height / 1000;
@@ -305,32 +344,130 @@
       // Fill ocean pattern
       drawOceanBackground(ctx, width, height);
 
-      // We can do "approx polygon" logic for each province, or do circles.
-      // For brevity, let's just do circles to represent each land province, ignoring seas:
+      // Build adjacency list for drawing borders
+      const adjacency = buildAdjacencyList();
+
+      // First pass: collect all province positions for collision detection
+      const provinces = [];
       for (const [prov, pos] of Object.entries(coordinateData.coordinates)) {
         if (!prov.includes('_')) {
           const x = pos.x * scaleX + offsetX;
           const y = pos.z * scaleY + offsetY;
-
-          // Draw a circle
-          ctx.beginPath();
-          ctx.arc(x, y, 25, 0, Math.PI * 2);
-          ctx.fillStyle = '#b19b69'; // Land color
-          ctx.fill();
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Province label
-          ctx.font = 'bold 20px Arial';
-          ctx.fillStyle = '#000';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(prov, x, y);
+          
+          // Increased base radius (was 30)
+          const baseRadius = 45;
+          
+          // Check if this province is a supply center and if so, who owns it
+          let fillColor = '#b19b69'; // neutral land color
+          if (ownershipMap && ownershipMap[prov.toUpperCase()]) {
+            // We have an owner
+            const power = ownershipMap[prov.toUpperCase()];
+            const powerColor = getPowerHexColor(power);
+            fillColor = powerColor || '#b19b69';
+          }
+          
+          // Store province data for later use
+          provinces.push({
+            prov,
+            x,
+            y,
+            radius: baseRadius,
+            fillColor,
+            isSupplyCenter: coordinateData.provinces && 
+                            coordinateData.provinces[prov] && 
+                            coordinateData.provinces[prov].isSupplyCenter
+          });
         }
       }
 
-      // Optionally draw supply centers if coordinateData.provinces has them:
+      // Draw each province as an irregular territory
+      provinces.forEach(province => {
+        const { x, y, radius, fillColor, prov } = province;
+        
+        // Create an irregular shape instead of a perfect circle
+        ctx.beginPath();
+        
+        // Draw a blob-like shape with random variations
+        const points = 12; // Number of points around the circle
+        const angleStep = (Math.PI * 2) / points;
+        const seed = prov.charCodeAt(0) + prov.charCodeAt(prov.length - 1); // Use province name as seed
+        
+        // First point
+        let angle = 0;
+        let r = radius * (0.9 + 0.2 * Math.sin(seed + angle * 3));
+        ctx.moveTo(x + r * Math.cos(angle), y + r * Math.sin(angle));
+        
+        // Remaining points with bezier curves for smoothness
+        for (let i = 1; i <= points; i++) {
+          const prevAngle = angle;
+          angle = i * angleStep;
+          
+          // Random radius variation based on angle and province name
+          const prevR = r;
+          r = radius * (0.9 + 0.2 * Math.sin(seed + angle * 3));
+          
+          // Control points for bezier curve
+          const cp1x = x + prevR * 1.2 * Math.cos(prevAngle + angleStep * 0.3);
+          const cp1y = y + prevR * 1.2 * Math.sin(prevAngle + angleStep * 0.3);
+          const cp2x = x + r * 1.2 * Math.cos(angle - angleStep * 0.3);
+          const cp2y = y + r * 1.2 * Math.sin(angle - angleStep * 0.3);
+          const endX = x + r * Math.cos(angle);
+          const endY = y + r * Math.sin(angle);
+          
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
+        }
+        
+        ctx.closePath();
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        
+        // Add a subtle stroke
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#333';
+        ctx.stroke();
+      });
+
+      // Draw the adjacency lines as "country borders"
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      for (const [prov, neighbors] of Object.entries(adjacency)) {
+        const posA = coordinateData.coordinates[prov];
+        if (!posA) continue;
+        const xA = posA.x * scaleX + offsetX;
+        const yA = posA.z * scaleY + offsetY;
+
+        neighbors.forEach(n => {
+          const posB = coordinateData.coordinates[n];
+          if (!posB) return;
+          // We'll only draw each border once:
+          if (n < prov) return;
+          const xB = posB.x * scaleX + offsetX;
+          const yB = posB.z * scaleY + offsetY;
+
+          // Draw a light curved line
+          ctx.beginPath();
+          const midX = (xA + xB) / 2;
+          const midY = (yA + yB) / 2;
+          const dx = xB - xA;
+          const dy = yB - yA;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          // Perpendicular offset for curve
+          const px = -dy / dist;
+          const py = dx / dist;
+          const curvature = 10;
+
+          // Quadratic curve from A to B with control point offset
+          ctx.moveTo(xA, yA);
+          ctx.quadraticCurveTo(
+            midX + px*curvature,
+            midY + py*curvature,
+            xB, yB
+          );
+          ctx.stroke();
+        });
+      }
+
+      // Draw supply center "star" icons
       if (coordinateData.provinces) {
         for (const [province, data] of Object.entries(coordinateData.provinces)) {
           if (data.isSupplyCenter && coordinateData.coordinates[province]) {
@@ -339,8 +476,7 @@
             const y = pos.z * scaleY + offsetY;
             // Little star
             ctx.beginPath();
-            // simple star
-            starPath(ctx, x, y, 5, 10, 5);
+            starPath(ctx, x, y, 5, 12, 6); // Slightly larger star
             ctx.fillStyle = '#FFD700';
             ctx.fill();
             ctx.strokeStyle = '#000';
@@ -348,6 +484,190 @@
           }
         }
       }
+
+      // Apply force-directed layout for text labels to avoid overlaps
+      ctx.font = 'bold 20px Arial'; // Set font before measuring text
+      const textLabels = provinces.map(p => ({
+        text: p.prov,
+        x: p.x,
+        y: p.y,
+        width: ctx.measureText(p.prov).width + 10, // Add padding
+        height: 24, // Approximate text height with padding
+        dx: 0, // Displacement X
+        dy: 0  // Displacement Y
+      }));
+
+      // Simple force-directed layout to avoid overlaps
+      const iterations = 30;
+      const repulsionForce = 0.5;
+      
+      for (let iter = 0; iter < iterations; iter++) {
+        // Reset forces
+        textLabels.forEach(label => {
+          label.fx = 0;
+          label.fy = 0;
+        });
+        
+        // Calculate repulsion forces between overlapping labels
+        for (let i = 0; i < textLabels.length; i++) {
+          for (let j = i + 1; j < textLabels.length; j++) {
+            const a = textLabels[i];
+            const b = textLabels[j];
+            
+            // Check for overlap
+            const ax1 = a.x + a.dx - a.width/2;
+            const ay1 = a.y + a.dy - a.height/2;
+            const ax2 = a.x + a.dx + a.width/2;
+            const ay2 = a.y + a.dy + a.height/2;
+            
+            const bx1 = b.x + b.dx - b.width/2;
+            const by1 = b.y + b.dy - b.height/2;
+            const bx2 = b.x + b.dx + b.width/2;
+            const by2 = b.y + b.dy + b.height/2;
+            
+            // Check if rectangles overlap
+            if (ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1) {
+              // Calculate centers
+              const aCenterX = a.x + a.dx;
+              const aCenterY = a.y + a.dy;
+              const bCenterX = b.x + b.dx;
+              const bCenterY = b.y + b.dy;
+              
+              // Direction vector
+              const dx = bCenterX - aCenterX;
+              const dy = bCenterY - aCenterY;
+              const dist = Math.sqrt(dx*dx + dy*dy) || 1; // Avoid division by zero
+              
+              // Normalized direction with force magnitude
+              const fx = (dx / dist) * repulsionForce;
+              const fy = (dy / dist) * repulsionForce;
+              
+              // Apply forces in opposite directions
+              a.fx -= fx;
+              a.fy -= fy;
+              b.fx += fx;
+              b.fy += fy;
+            }
+          }
+        }
+        
+        // Apply forces with damping
+        const damping = 0.8;
+        textLabels.forEach(label => {
+          label.dx += label.fx * damping;
+          label.dy += label.fy * damping;
+          
+          // Add a small force to pull labels back toward their original positions
+          const centeringForce = 0.05;
+          label.dx *= (1 - centeringForce);
+          label.dy *= (1 - centeringForce);
+        });
+      }
+
+      // Draw province names with background for better readability
+      ctx.font = 'bold 20px Arial'; // Slightly larger font
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      textLabels.forEach(label => {
+        const x = label.x + label.dx;
+        const y = label.y + label.dy;
+        
+        // Draw text background
+        const padding = 4;
+        const textWidth = label.width - 10; // Remove the padding we added earlier
+        const textHeight = 20;
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.beginPath();
+        ctx.roundRect(
+          x - textWidth/2 - padding, 
+          y - textHeight/2 - padding,
+          textWidth + padding*2,
+          textHeight + padding*2,
+          4 // Rounded corners
+        );
+        ctx.fill();
+        
+        // Draw text
+        ctx.fillStyle = '#000';
+        ctx.fillText(label.text, x, y);
+      });
+    }
+
+    // Create a naive adjacency list by distance
+    function buildAdjacencyList() {
+      const adjacency = {};
+      const threshold = 150; // Increased distance threshold for adjacency (was 120)
+      
+      // Initialize empty adjacency lists
+      for (const p1 of Object.keys(coordinateData.coordinates)) {
+        if (p1.includes('_')) continue;
+        adjacency[p1] = [];
+      }
+      
+      // Compare each pair of provinces
+      const keys = Object.keys(adjacency);
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i+1; j < keys.length; j++) {
+          const a = keys[i];
+          const b = keys[j];
+          const posA = coordinateData.coordinates[a];
+          const posB = coordinateData.coordinates[b];
+          const dx = posA.x - posB.x;
+          const dz = posA.z - posB.z;
+          const dist = Math.sqrt(dx*dx + dz*dz);
+          
+          // Use a dynamic threshold based on province names to handle special cases
+          let dynamicThreshold = threshold;
+          
+          // If either province is a known coastal province, increase threshold slightly
+          const coastalProvinces = ['spa', 'por', 'bre', 'gas', 'mar', 'pie', 'ven', 'rom', 'nap', 'apu', 'tus'];
+          if (coastalProvinces.includes(a.toLowerCase()) || coastalProvinces.includes(b.toLowerCase())) {
+            dynamicThreshold *= 1.1;
+          }
+          
+          if (dist < dynamicThreshold) {
+            adjacency[a].push(b);
+            adjacency[b].push(a);
+          }
+        }
+      }
+      
+      // Add some known adjacencies that might be missed due to distance
+      const knownAdjacencies = {
+        'stp': ['fin', 'nwy', 'lvn', 'mos'],
+        'naf': ['tun'],
+        'spa': ['por', 'gas', 'mar'],
+        'swe': ['fin', 'nwy', 'den']
+      };
+      
+      for (const [prov, neighbors] of Object.entries(knownAdjacencies)) {
+        if (adjacency[prov]) {
+          neighbors.forEach(n => {
+            if (adjacency[n] && !adjacency[prov].includes(n)) {
+              adjacency[prov].push(n);
+              adjacency[n].push(prov);
+            }
+          });
+        }
+      }
+      
+      return adjacency;
+    }
+
+    // Get color for a power
+    function getPowerHexColor(power) {
+      const powerColors = {
+        'AUSTRIA':  '#c40000',
+        'ENGLAND':  '#00008B',
+        'FRANCE':   '#0fa0d0',
+        'GERMANY':  '#444444',
+        'ITALY':    '#008000',
+        'RUSSIA':   '#cccccc',
+        'TURKEY':   '#e0c846'
+      };
+      return powerColors[power] || '#b19b69'; // fallback to neutral
     }
 
     // Just a helper for the star shape
@@ -400,9 +720,60 @@
       ctx.fillRect(0, 0, width, height);
     }
 
-    // --- 3D SUPPLY CENTERS (Optional) ---
-    // If you want supply centers to be dynamic, keep these next two functions.
-    // If you'd rather rely on the fallback canvas's "star icons," remove them.
+    // --- 3D PROVINCE LABELS ---
+    function addProvinceLabel(province) {
+      if (!coordinateData?.coordinates[province]) return;
+      const { x, z } = coordinateData.coordinates[province];
+      
+      // Create a canvas for the label
+      const canvas = document.createElement('canvas');
+      canvas.width = 160; // Increased from 128
+      canvas.height = 40; // Increased from 32
+      const ctx = canvas.getContext('2d');
+
+      // Draw label background with rounded corners
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; // More opaque
+      ctx.beginPath();
+      ctx.roundRect(0, 0, 160, 40, 6); // Using roundRect with rounded corners
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Draw province name with larger font
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 22px Arial'; // Increased from 18px
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(province, 80, 20);
+
+      // Create a sprite with the label texture
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false
+      });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(50, 12.5, 1); // Increased from 40, 10
+      sprite.position.set(x, 35, z); // Raised from 30 to 35
+      
+      scene.add(sprite);
+      provinceLabels.push(sprite);
+    }
+
+    // Clear all province labels
+    function clearProvinceLabels() {
+      provinceLabels.forEach(label => {
+        scene.remove(label);
+        label.material.map.dispose();
+        label.material.dispose();
+      });
+      provinceLabels = [];
+    }
+
+    // --- 3D SUPPLY CENTERS ---
     function displaySupplyCenters() {
       if (!coordinateData || !coordinateData.provinces) return;
       for (const [province, data] of Object.entries(coordinateData.provinces)) {
@@ -468,13 +839,13 @@
 
       // Basic color scheme
       const powerColors = {
-        'AUSTRIA': 0xFF0000,
-        'ENGLAND': 0x0000FF,
-        'FRANCE':  0x00FFFF,
-        'GERMANY': 0x000000,
-        'ITALY':   0x00FF00,
-        'RUSSIA':  0xFFFFFF,
-        'TURKEY':  0xFFFF00
+        'AUSTRIA': 0xc40000,
+        'ENGLAND': 0x00008B,
+        'FRANCE':  0x0fa0d0,
+        'GERMANY': 0x444444,
+        'ITALY':   0x008000,
+        'RUSSIA':  0xcccccc,
+        'TURKEY':  0xe0c846
       };
 
       unitMeshes.forEach(obj => {
@@ -509,40 +880,58 @@
     function displayUnit(unitData) {
       // Choose color by power
       const powerColors = {
-        'AUSTRIA': 0xFF0000,
-        'ENGLAND': 0x0000FF,
-        'FRANCE':  0x00FFFF,
-        'GERMANY': 0x000000,
-        'ITALY':   0x00FF00,
-        'RUSSIA':  0xFFFFFF,
-        'TURKEY':  0xFFFF00
+        'AUSTRIA': 0xc40000,
+        'ENGLAND': 0x00008B,
+        'FRANCE':  0x0fa0d0,
+        'GERMANY': 0x444444,
+        'ITALY':   0x008000,
+        'RUSSIA':  0xcccccc,
+        'TURKEY':  0xe0c846
       };
       const color = powerColors[unitData.power] || 0xAAAAAA;
 
       let group = new THREE.Group();
       // Minimal shape difference for armies vs fleets
       if (unitData.type === 'A') {
-        // Army: a simple block + small flag
+        // Army: a block + small head for soldier-like appearance
         const body = new THREE.Mesh(
-          new THREE.BoxGeometry(15, 15, 15),
+          new THREE.BoxGeometry(15, 20, 10),
           new THREE.MeshStandardMaterial({ color })
         );
-        body.position.y = 7.5;
+        body.position.y = 10;
         group.add(body);
+        
+        // Head
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(4, 12, 12),
+          new THREE.MeshStandardMaterial({ color })
+        );
+        head.position.set(0, 24, 0);
+        group.add(head);
       } else {
-        // Fleet: a rectangle + a mast
+        // Fleet: a rectangle + a mast and sail
         const hull = new THREE.Mesh(
-          new THREE.BoxGeometry(30, 10, 15),
+          new THREE.BoxGeometry(30, 8, 15),
           new THREE.MeshStandardMaterial({ color: 0x8B4513 })
         );
-        hull.position.y = 5;
+        hull.position.y = 4;
         group.add(hull);
+        
+        // Mast
+        const mast = new THREE.Mesh(
+          new THREE.CylinderGeometry(1, 1, 30, 8),
+          new THREE.MeshStandardMaterial({ color: 0x000000 })
+        );
+        mast.position.y = 15;
+        group.add(mast);
+        
+        // Sail
         const sail = new THREE.Mesh(
-          new THREE.PlaneGeometry(20, 20),
+          new THREE.PlaneGeometry(20, 15),
           new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide })
         );
-        sail.position.y = 15;
-        sail.rotation.y = Math.PI / 2;
+        sail.rotation.y = Math.PI/2;
+        sail.position.set(0, 15, 0);
         group.add(sail);
       }
 
@@ -618,15 +1007,32 @@
         return;
       }
 
-      // Clear old units
+      // Clear old units and labels
       unitMeshes.forEach(m => scene.remove(m));
       unitMeshes = [];
-
-      // Possibly re-draw the fallback if you want the canvas to show updated supply center ownership text:
-      // createFallbackMap(); // <-- you could call this here if needed
+      clearProvinceLabels();
 
       const phase = gameData.phases[index];
       phaseDisplay.textContent = `${phase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
+
+      // Build ownership map for territory coloring
+      const centers = phase.state?.centers || {};
+      const ownershipMap = {};
+      for (const [power, provinces] of Object.entries(centers)) {
+        provinces.forEach(p => {
+          ownershipMap[p.toUpperCase()] = power.toUpperCase();
+        });
+      }
+
+      // Re-draw the fallback map with updated territory colors
+      createFallbackMap(ownershipMap);
+
+      // Add 3D labels for each province
+      Object.keys(coordinateData.coordinates).forEach(p => {
+        if (!p.includes('_')) {
+          addProvinceLabel(p);
+        }
+      });
 
       // 1) Show supply centers (3D approach)
       displaySupplyCenters();
@@ -652,12 +1058,67 @@
         }
       }
 
+      // Update the leaderboard
+      updateLeaderboard(phase);
+
       // Show some info in the panel
       infoPanel.textContent = `Phase: ${phase.name}\nSupply centers: ${
         phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'
       }\nUnits: ${
         phase.state?.units ? JSON.stringify(phase.state.units) : 'None'
       }`;
+    }
+
+    // --- LEADERBOARD FUNCTION ---
+    function updateLeaderboard(phase) {
+      // Get supply center counts
+      const centerCounts = {};
+      const unitCounts = {};
+      
+      // Count supply centers by power
+      if (phase.state?.centers) {
+        for (const [power, provinces] of Object.entries(phase.state.centers)) {
+          centerCounts[power] = provinces.length;
+        }
+      }
+      
+      // Count units by power
+      if (phase.state?.units) {
+        for (const [power, units] of Object.entries(phase.state.units)) {
+          unitCounts[power] = units.length;
+        }
+      }
+      
+      // Combine all powers from both centers and units
+      const allPowers = new Set([
+        ...Object.keys(centerCounts),
+        ...Object.keys(unitCounts)
+      ]);
+      
+      // Sort powers by supply center count (descending)
+      const sortedPowers = Array.from(allPowers).sort((a, b) => {
+        return (centerCounts[b] || 0) - (centerCounts[a] || 0);
+      });
+      
+      // Build HTML for leaderboard
+      let html = `<strong>Leaderboard</strong><br/>`;
+      
+      sortedPowers.forEach(power => {
+        const centers = centerCounts[power] || 0;
+        const units = unitCounts[power] || 0;
+        const powerColor = getPowerHexColor(power);
+        
+        html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
+          <span style="color: ${powerColor}; font-weight: bold;">${power}</span>
+          <span>${centers} SCs, ${units} units</span>
+        </div>`;
+      });
+      
+      // Add victory condition reminder
+      html += `<hr style="border-color: #555; margin: 8px 0;"/>
+        <small>Victory: 18 supply centers</small>`;
+      
+      leaderboard.innerHTML = html;
     }
 
     // --- EVENT HANDLERS ---
