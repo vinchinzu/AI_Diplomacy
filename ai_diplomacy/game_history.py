@@ -117,62 +117,25 @@ class GameHistory:
 
     def get_game_history(self, power_name: str, include_plans: bool = True, num_prev_phases: int = 5) -> str:
         if not self.phases:
-            logger.debug(f"HISTORY | {power_name} | No phases recorded yet")
-            return "COMMUNICATION HISTORY:\n\n(No game phases recorded yet)"
+            return ""
 
         phases_to_report = self.phases[-num_prev_phases:]
-        game_history_str = "COMMUNICATION HISTORY:\n"
-
-        # Count messages for this power across all available phases, not just recent
-        # This helps ensure we're not misreporting "no communication" when there is historical context
-        all_phases_message_count = 0
-        for phase in self.phases:
-            global_msgs = phase.get_global_messages()
-            private_msgs = phase.get_private_messages(power_name)
-            if global_msgs or private_msgs:
-                all_phases_message_count += 1
-                
-        # Count messages just in recent phases for display decisions
-        recent_phases_message_count = 0
-        for phase in phases_to_report:
-            global_msgs = phase.get_global_messages()
-            private_msgs = phase.get_private_messages(power_name)
-            if global_msgs or private_msgs:
-                recent_phases_message_count += 1
-        
-        logger.debug(f"HISTORY | {power_name} | Found {all_phases_message_count} phases with messages (total), {recent_phases_message_count} in recent phases")
-
-        # If there are no messages at all in any phase, provide a clear indicator
-        if all_phases_message_count == 0:
-            game_history_str += f"\n{power_name} has not engaged in any diplomatic exchanges yet.\n"
-            logger.debug(f"HISTORY | {power_name} | No diplomatic exchanges found in any phase")
-            return game_history_str
-        
-        # If there are messages in history but none in recent phases, note this
-        if all_phases_message_count > 0 and recent_phases_message_count == 0:
-            game_history_str += f"\n{power_name} has messages in earlier phases, but none in the last {len(phases_to_report)} phases.\n"
-            logger.debug(f"HISTORY | {power_name} | Has historical messages but none in recent phases")
-        
-        # Track if we have content for debugging
-        has_content = False
+        game_history_str = ""
 
         # Iterate through phases
         for phase in phases_to_report:
-            phase_has_content = False
-            phase_str = f"\n{phase.name}:\n"
+            game_history_str += f"\n{phase.name}:\n"
 
             # Add GLOBAL section for this phase
             global_msgs = phase.get_global_messages()
             if global_msgs:
-                phase_str += "\nGLOBAL:\n"
-                phase_str += global_msgs
-                phase_has_content = True
-                has_content = True
+                game_history_str += "\nGLOBAL:\n"
+                game_history_str += global_msgs
 
             # Add PRIVATE section for this phase
             private_msgs = phase.get_private_messages(power_name)
             if private_msgs:
-                phase_str += "\nPRIVATE:\n"
+                game_history_str += "\nPRIVATE:\n"
                 for other_power, messages in private_msgs.items():
                     game_history_str += f" {other_power}:\n\n"
                     game_history_str += messages + "\n"
@@ -203,6 +166,5 @@ class GameHistory:
             game_history_str += f"\n{power_name} STRATEGIC DIRECTIVE:\n"
             game_history_str += "Here is a high-level directive you have planned out previously for this phase.\n"
             game_history_str += phases_to_report[-1].plans[power_name] + "\n"
-
 
         return game_history_str
