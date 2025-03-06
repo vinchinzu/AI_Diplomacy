@@ -242,7 +242,7 @@ function onWindowResize() {
 // --- LOAD COORDINATE DATA ---
 function loadCoordinateData() {
   return new Promise((resolve, reject) => {
-    fetch('./assets/maps/standard_coords.json')
+    fetch('./assets/maps/standard/standard_coords.json')
       .then(response => {
         if (!response.ok) {
           // Try an alternate path if desired
@@ -311,10 +311,10 @@ function createLabel(font, labelObj) {
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
 function createFallbackMap(ownershipMap = null) {
   const loader = new SVGLoader();
-  loader.load('assets/maps/standard.svg',
+  loader.load('assets/maps/standard/standard.svg',
     function (data) {
       let map_styles = {};
-      fetch('assets/maps/modern-styles.json')
+      fetch('assets/maps/standard/standard_styles.json')
         .then(resp => resp.json())
         .then(map_styles => {
           const paths = data.paths;
@@ -364,7 +364,7 @@ function createFallbackMap(ownershipMap = null) {
           // Load all the labels for each map position
           const fontLoader = new FontLoader();
           fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
-            fetch("assets/maps/standard_labels.json")
+            fetch("assets/maps/standard/standard_labels.json")
               .then(resp => resp.json())
               .then(data => {
                 data.forEach(labelObj => {
