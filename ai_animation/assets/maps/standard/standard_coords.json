@@ -1,0 +1,536 @@
+{
+  "provinces": {
+    "SWI": {
+      "label": {
+        "x": 649.4,
+        "y": 924.2
+      },
+      "type": null
+    },
+    "ADR": {
+      "label": {
+        "x": 849.4,
+        "y": 1100.6
+      },
+      "type": "Water"
+    },
+    "AEG": {
+      "label": {
+        "x": 1085.7,
+        "y": 1296.4
+      },
+      "type": "Water"
+    },
+    "ALB": {
+      "label": {
+        "x": 932.4,
+        "y": 1164.4
+      },
+      "type": "Coast"
+    },
+    "ANK": {
+      "label": {
+        "x": 1368.8,
+        "y": 1115.5
+      },
+      "type": "Coast"
+    },
+    "APU": {
+      "label": {
+        "x": 832.3,
+        "y": 1151.7
+      },
+      "type": "Coast"
+    },
+    "ARM": {
+      "label": {
+        "x": 1603,
+        "y": 1145.3
+      },
+      "type": "Coast"
+    },
+    "BAL": {
+      "label": {
+        "x": 827.2,
+        "y": 660.2
+      },
+      "type": "Water"
+    },
+    "BAR": {
+      "label": {
+        "x": 1077.8,
+        "y": 59.3
+      },
+      "type": "Water"
+    },
+    "BEL": {
+      "label": {
+        "x": 591.8,
+        "y": 796.2
+      },
+      "type": "Coast"
+    },
+    "BER": {
+      "label": {
+        "x": 760,
+        "y": 728
+      },
+      "type": "Coast"
+    },
+    "BLA": {
+      "label": {
+        "x": 1319.8,
+        "y": 1034.6
+      },
+      "type": "Water"
+    },
+    "BOH": {
+      "label": {
+        "x": 800.4,
+        "y": 855.8
+      },
+      "type": "Land"
+    },
+    "BRE": {
+      "label": {
+        "x": 430,
+        "y": 866.4
+      },
+      "type": "Coast"
+    },
+    "BUD": {
+      "label": {
+        "x": 953.7,
+        "y": 964.3
+      },
+      "type": "Land"
+    },
+    "BUL": {
+      "label": {
+        "x": 1021.8,
+        "y": 1109.1
+      },
+      "type": "Coast"
+    },
+    "BUR": {
+      "label": {
+        "x": 530.1,
+        "y": 915.4
+      },
+      "type": "Land"
+    },
+    "CLY": {
+      "label": {
+        "x": 457.7,
+        "y": 479
+      },
+      "type": "Coast"
+    },
+    "CON": {
+      "label": {
+        "x": 1202.8,
+        "y": 1177.2
+      },
+      "type": "Coast"
+    },
+    "DEN": {
+      "label": {
+        "x": 718.2,
+        "y": 584.3
+      },
+      "type": "Coast"
+    },
+    "EAS": {
+      "label": {
+        "x": 1164.4,
+        "y": 1343.3
+      },
+      "type": "Water"
+    },
+    "EDI": {
+      "label": {
+        "x": 496,
+        "y": 500.3
+      },
+      "type": "Coast"
+    },
+    "ENG": {
+      "label": {
+        "x": 466.2,
+        "y": 762.6
+      },
+      "type": "Water"
+    },
+    "FIN": {
+      "label": {
+        "x": 1030.3,
+        "y": 347
+      },
+      "type": "Coast"
+    },
+    "GAL": {
+      "label": {
+        "x": 940.9,
+        "y": 840.9
+      },
+      "type": "Land"
+    },
+    "GAS": {
+      "label": {
+        "x": 447,
+        "y": 972.8
+      },
+      "type": "Coast"
+    },
+    "GRE": {
+      "label": {
+        "x": 981.4,
+        "y": 1160.2
+      },
+      "type": "Coast"
+    },
+    "BOT": {
+      "label": {
+        "x": 929.6,
+        "y": 538.9
+      },
+      "type": null
+    },
+    "LYO": {
+      "label": {
+        "x": 525.8,
+        "y": 1107
+      },
+      "type": null
+    },
+    "HEL": {
+      "label": {
+        "x": 654.2,
+        "y": 665.4
+      },
+      "type": "Water"
+    },
+    "HOL": {
+      "label": {
+        "x": 608.8,
+        "y": 749.3
+      },
+      "type": "Coast"
+    },
+    "ION": {
+      "label": {
+        "x": 894.1,
+        "y": 1251.7
+      },
+      "type": "Water"
+    },
+    "IRI": {
+      "label": {
+        "x": 318,
+        "y": 711.4
+      },
+      "type": "Water"
+    },
+    "KIE": {
+      "label": {
+        "x": 691.9,
+        "y": 753.6
+      },
+      "type": "Coast"
+    },
+    "LON": {
+      "label": {
+        "x": 500.3,
+        "y": 734.4
+      },
+      "type": "Coast"
+    },
+    "LVN": {
+      "label": {
+        "x": 1030.3,
+        "y": 640.8
+      },
+      "type": "Coast"
+    },
+    "LVP": {
+      "label": {
+        "x": 449.2,
+        "y": 564.1
+      },
+      "type": "Coast"
+    },
+    "MAR": {
+      "label": {
+        "x": 572.6,
+        "y": 962.2
+      },
+      "type": "Coast"
+    },
+    "MAO": {
+      "label": {
+        "x": 153.3,
+        "y": 815.3
+      },
+      "type": "Water"
+    },
+    "MOS": {
+      "label": {
+        "x": 1568.9,
+        "y": 572.6
+      },
+      "type": "Land"
+    },
+    "MUN": {
+      "label": {
+        "x": 681.2,
+        "y": 872.8
+      },
+      "type": "Land"
+    },
+    "NAF": {
+      "label": {
+        "x": 240.6,
+        "y": 1317.7
+      },
+      "type": "Coast"
+    },
+    "NAP": {
+      "label": {
+        "x": 832.3,
+        "y": 1211.3
+      },
+      "type": "Coast"
+    },
+    "NAO": {
+      "label": {
+        "x": 191.6,
+        "y": 268.2
+      },
+      "type": "Water"
+    },
+    "NTH": {
+      "label": {
+        "x": 595.5,
+        "y": 512
+      },
+      "type": "Water"
+    },
+    "NWY": {
+      "label": {
+        "x": 760,
+        "y": 391.7
+      },
+      "type": "Coast"
+    },
+    "NWG": {
+      "label": {
+        "x": 664.2,
+        "y": 161.8
+      },
+      "type": "Water"
+    },
+    "PAR": {
+      "label": {
+        "x": 481.1,
+        "y": 892
+      },
+      "type": "Land"
+    },
+    "PIC": {
+      "label": {
+        "x": 489.6,
+        "y": 802.5
+      },
+      "type": "Coast"
+    },
+    "PIE": {
+      "label": {
+        "x": 628,
+        "y": 1004.8
+      },
+      "type": "Coast"
+    },
+    "POR": {
+      "label": {
+        "x": 175.1,
+        "y": 1102.1
+      },
+      "type": "Coast"
+    },
+    "PRU": {
+      "label": {
+        "x": 938.8,
+        "y": 687.6
+      },
+      "type": "Coast"
+    },
+    "ROM": {
+      "label": {
+        "x": 729,
+        "y": 1092
+      },
+      "type": "Coast"
+    },
+    "RUH": {
+      "label": {
+        "x": 632.2,
+        "y": 826
+      },
+      "type": "Land"
+    },
+    "RUM": {
+      "label": {
+        "x": 1036.7,
+        "y": 1015.4
+      },
+      "type": "Coast"
+    },
+    "SER": {
+      "label": {
+        "x": 964.3,
+        "y": 1100.6
+      },
+      "type": "Land"
+    },
+    "SEV": {
+      "label": {
+        "x": 1479.3,
+        "y": 937.7
+      },
+      "type": "Coast"
+    },
+    "SIL": {
+      "label": {
+        "x": 791.9,
+        "y": 779.1
+      },
+      "type": "Land"
+    },
+    "SKA": {
+      "label": {
+        "x": 754.5,
+        "y": 571.2
+      },
+      "type": "Water"
+    },
+    "SMY": {
+      "label": {
+        "x": 1194.2,
+        "y": 1247.5
+      },
+      "type": "Coast"
+    },
+    "SPA": {
+      "label": {
+        "x": 302.3,
+        "y": 1119.7
+      },
+      "type": "Coast"
+    },
+    "STP": {
+      "label": {
+        "x": 1473.1,
+        "y": 217.1
+      },
+      "type": "Coast"
+    },
+    "SWE": {
+      "label": {
+        "x": 845.1,
+        "y": 391.7
+      },
+      "type": "Coast"
+    },
+    "SYR": {
+      "label": {
+        "x": 1639.2,
+        "y": 1292.2
+      },
+      "type": "Coast"
+    },
+    "TRI": {
+      "label": {
+        "x": 826,
+        "y": 966.5
+      },
+      "type": "Coast"
+    },
+    "TUN": {
+      "label": {
+        "x": 634.4,
+        "y": 1351.8
+      },
+      "type": "Coast"
+    },
+    "TUS": {
+      "label": {
+        "x": 706.5,
+        "y": 1069
+      },
+      "type": "Coast"
+    },
+    "TYR": {
+      "label": {
+        "x": 717.4,
+        "y": 936.7
+      },
+      "type": "Land"
+    },
+    "TYS": {
+      "label": {
+        "x": 710,
+        "y": 1209.1
+      },
+      "type": "Water"
+    },
+    "UKR": {
+      "label": {
+        "x": 1119.7,
+        "y": 860
+      },
+      "type": "Land"
+    },
+    "VEN": {
+      "label": {
+        "x": 749.3,
+        "y": 962.2
+      },
+      "type": "Coast"
+    },
+    "VIE": {
+      "label": {
+        "x": 834.5,
+        "y": 919.6
+      },
+      "type": "Land"
+    },
+    "WAL": {
+      "label": {
+        "x": 436.4,
+        "y": 719.5
+      },
+      "type": "Coast"
+    },
+    "WAR": {
+      "label": {
+        "x": 938.8,
+        "y": 783.4
+      },
+      "type": "Land"
+    },
+    "WES": {
+      "label": {
+        "x": 400.2,
+        "y": 1209.1
+      },
+      "type": "Water"
+    },
+    "YOR": {
+      "label": {
+        "x": 496,
+        "y": 653.5
+      },
+      "type": "Coast"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diplomacy Map (Fallback-Only)</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+
+  <div class="container">
+    <div class="top-controls">
+      <div>
+        <button id="load-btn">Load Game</button>
+        <button id="prev-btn" disabled>← Prev</button>
+        <button id="next-btn" disabled>Next →</button>
+        <button id="play-btn" disabled>▶ Play</button>
+        <select id="speed-selector" disabled>
+          <option value="1000">Slow</option>
+          <option value="500" selected>Medium</option>
+          <option value="200">Fast</option>
+        </select>
+        <span id="phase-display">No game loaded</span>
+      </div>
+    </div>
+    <div id="map-view" class="map-view"></div>
+    <input type="file" id="file-input" accept=".json">
+    <div id="info-panel"></div>
+    <!-- New leaderboard element -->
+    <div id="leaderboard"></div>
+    <!-- Chat windows container -->
+    <div id="chat-container"></div>
+  </div>
+</body>
+
+</html>
