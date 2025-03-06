@@ -279,6 +279,68 @@
     .phase-summary {
       white-space: pre-wrap;
       font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+      line-height: 1.5;
+    }
+    
+    /* Additional scroll content styling */
+    .scroll-body h3 {
+      font-family: 'Trajan Pro', 'Times New Roman', serif;
+      border-bottom: 1px solid rgba(74, 37, 17, 0.3);
+      padding-bottom: 5px;
+      margin-top: 0;
+      color: #4a2511;
+      text-align: center;
+    }
+    
+    .scroll-body h4 {
+      font-family: 'Trajan Pro', 'Times New Roman', serif;
+      margin: 10px 0 5px;
+      color: #4a2511;
+    }
+    
+    .summary-section {
+      margin-bottom: 15px;
+    }
+    
+    .summary-details {
+      margin-left: 10px;
+    }
+    
+    .power-entry {
+      margin: 5px 0;
+    }
+    
+    /* Make sure the scroll containers have proper z-index to not overlap */
+    .scroll-container {
+      z-index: 20;
+    }
+    
+    .chat-scroll {
+      z-index: 19;
+      bottom: 430px;
+    }
+    
+    .leaderboard-scroll {
+      z-index: 18;
+    }
+    
+    /* Improve scrollbar appearance in the scroll bodies */
+    .scroll-body::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .scroll-body::-webkit-scrollbar-track {
+      background: rgba(244, 230, 186, 0.4);
+      border-radius: 4px;
+    }
+    
+    .scroll-body::-webkit-scrollbar-thumb {
+      background: rgba(74, 37, 17, 0.3);
+      border-radius: 4px;
+    }
+    
+    .scroll-body::-webkit-scrollbar-thumb:hover {
+      background: rgba(74, 37, 17, 0.5);
     }
   </style>
 </head>
@@ -1675,18 +1737,49 @@
         }
       }
 
+      // Show info in the panel with better formatting
+      let summaryContent = '';
+      
+      // Check if there's a summary field in the phase data
+      if (phase.summary) {
+        try {
+          // Try to parse it as JSON (some summaries might be stored as JSON strings)
+          const summaryObj = typeof phase.summary === 'string' ? JSON.parse(phase.summary) : phase.summary;
+          if (summaryObj.summary) {
+            summaryContent = `<div class="phase-summary">${summaryObj.summary}</div>`;
+          } else {
+            summaryContent = `<div class="phase-summary">${phase.summary}</div>`;
+          }
+        } catch(e) {
+          // If not valid JSON, just use the string directly
+          summaryContent = `<div class="phase-summary">${phase.summary}</div>`;
+        }
+      } else {
+        // Default layout with basic phase info
+        summaryContent = `
+          <h3>${phase.name}</h3>
+          <div class="summary-section">
+            <h4>Supply Centers:</h4>
+            <div class="summary-details">
+              ${formatCenters(phase.state?.centers)}
+            </div>
+          </div>
+          <div class="summary-section">
+            <h4>Units:</h4>
+            <div class="summary-details">
+              ${formatUnits(phase.state?.units)}
+            </div>
+          </div>
+        `;
+      }
+      
+      infoPanel.innerHTML = summaryContent;
+      
       // Update the leaderboard
       updateLeaderboard(phase);
       
       // Update chat windows with messages from this phase
       updateChatWindows(phase);
-
-      // Show some info in the panel
-      infoPanel.textContent = `Phase: ${phase.name}\nSupply centers: ${
-        phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'
-      }\nUnits: ${
-        phase.state?.units ? JSON.stringify(phase.state.units) : 'None'
-      }`;
     }
 
     // --- LEADERBOARD FUNCTION ---
@@ -1906,18 +1999,49 @@
         }
       }
       
+      // Show phase info with better formatting
+      let summaryContent = '';
+      
+      // Check if there's a summary field in the phase data
+      if (currentPhase.summary) {
+        try {
+          // Try to parse it as JSON (some summaries might be stored as JSON strings)
+          const summaryObj = typeof currentPhase.summary === 'string' ? JSON.parse(currentPhase.summary) : currentPhase.summary;
+          if (summaryObj.summary) {
+            summaryContent = `<div class="phase-summary">${summaryObj.summary}</div>`;
+          } else {
+            summaryContent = `<div class="phase-summary">${currentPhase.summary}</div>`;
+          }
+        } catch(e) {
+          // If not valid JSON, just use the string directly
+          summaryContent = `<div class="phase-summary">${currentPhase.summary}</div>`;
+        }
+      } else {
+        // Default layout with basic phase info
+        summaryContent = `
+          <h3>${currentPhase.name}</h3>
+          <div class="summary-section">
+            <h4>Supply Centers:</h4>
+            <div class="summary-details">
+              ${formatCenters(currentPhase.state?.centers)}
+            </div>
+          </div>
+          <div class="summary-section">
+            <h4>Units:</h4>
+            <div class="summary-details">
+              ${formatUnits(currentPhase.state?.units)}
+            </div>
+          </div>
+        `;
+      }
+      
+      infoPanel.innerHTML = summaryContent;
+      
       // Update the leaderboard
       updateLeaderboard(currentPhase);
       
       // Update chat windows with messages from this phase
       updateChatWindows(currentPhase);
-      
-      // Show phase info
-      infoPanel.textContent = `Phase: ${currentPhase.name}\nSupply centers: ${
-        currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
-      }\nUnits: ${
-        currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
-      }`;
     }
 
     // Helper function to create ownership map from centers and units
@@ -2327,6 +2451,39 @@
           chatContainer.appendChild(chatWindow);
         }
       }
+    }
+
+    // Add helper functions for formatting centers and units (place these before the updateLeaderboard function)
+    // Helper function to format centers for display
+    function formatCenters(centers) {
+      if (!centers) return 'No supply centers data available';
+      
+      let html = '';
+      for (const [power, provinces] of Object.entries(centers)) {
+        const powerColor = getPowerHexColor(power);
+        html += `<div class="power-entry">
+          <span style="color: ${powerColor}; font-weight: bold;">${power}</span>: 
+          <span>${provinces.join(', ')}</span>
+        </div>`;
+      }
+      
+      return html || 'No supply centers claimed yet';
+    }
+    
+    // Helper function to format units for display
+    function formatUnits(units) {
+      if (!units) return 'No units data available';
+      
+      let html = '';
+      for (const [power, unitArr] of Object.entries(units)) {
+        const powerColor = getPowerHexColor(power);
+        html += `<div class="power-entry">
+          <span style="color: ${powerColor}; font-weight: bold;">${power}</span>: 
+          <span>${unitArr.join(', ')}</span>
+        </div>`;
+      }
+      
+      return html || 'No units on the board';
     }
   </script>
 </body>
