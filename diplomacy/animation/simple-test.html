@@ -176,172 +176,6 @@
     .power-italy { color: #008000; }
     .power-russia { color: #cccccc; }
     .power-turkey { color: #e0c846; }
-    
-    /* Age of Empires inspired scroll styles */
-    .scroll-container {
-      position: absolute;
-      bottom: 20px;
-      right: 10px;
-      width: 320px;
-      max-height: 400px;
-      display: flex;
-      flex-direction: column;
-      pointer-events: none;
-      z-index: 100;
-    }
-    
-    .scroll-header {
-      background-image: url('https://i.imgur.com/JY8Vz8T.png');
-      background-size: 100% 100%;
-      height: 40px;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    
-    .scroll-title {
-      color: #4a2511;
-      font-family: 'Trajan Pro', 'Times New Roman', serif;
-      font-weight: bold;
-      font-size: 16px;
-      text-shadow: 1px 1px 1px rgba(255, 235, 180, 0.7);
-    }
-    
-    .scroll-body {
-      background-image: url('https://i.imgur.com/pZzlNzn.png');
-      background-size: 100% 100%;
-      padding: 15px 25px;
-      color: #4a2511;
-      font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-      font-size: 14px;
-      line-height: 1.4;
-      overflow-y: auto;
-      max-height: 300px;
-    }
-    
-    .scroll-footer {
-      background-image: url('https://i.imgur.com/JY8Vz8T.png');
-      background-size: 100% 100%;
-      transform: rotate(180deg);
-      height: 40px;
-      width: 100%;
-    }
-    
-    .chat-scroll {
-      position: absolute;
-      bottom: 430px;
-      right: 10px;
-      width: 320px;
-      max-height: 300px;
-    }
-    
-    .leaderboard-scroll {
-      position: absolute;
-      bottom: 20px;
-      left: 10px;
-      width: 280px;
-      max-height: 350px;
-    }
-    
-    .power-name {
-      font-weight: bold;
-      margin-right: 5px;
-    }
-    
-    .message-item {
-      margin-bottom: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid rgba(74, 37, 17, 0.2);
-    }
-    
-    .message-item:last-child {
-      border-bottom: none;
-    }
-    
-    .message-header {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 5px;
-    }
-    
-    .message-content {
-      font-style: italic;
-    }
-    
-    .leaderboard-item {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
-    
-    /* Phase summary formatting */
-    .phase-summary {
-      white-space: pre-wrap;
-      font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-      line-height: 1.5;
-    }
-    
-    /* Additional scroll content styling */
-    .scroll-body h3 {
-      font-family: 'Trajan Pro', 'Times New Roman', serif;
-      border-bottom: 1px solid rgba(74, 37, 17, 0.3);
-      padding-bottom: 5px;
-      margin-top: 0;
-      color: #4a2511;
-      text-align: center;
-    }
-    
-    .scroll-body h4 {
-      font-family: 'Trajan Pro', 'Times New Roman', serif;
-      margin: 10px 0 5px;
-      color: #4a2511;
-    }
-    
-    .summary-section {
-      margin-bottom: 15px;
-    }
-    
-    .summary-details {
-      margin-left: 10px;
-    }
-    
-    .power-entry {
-      margin: 5px 0;
-    }
-    
-    /* Make sure the scroll containers have proper z-index to not overlap */
-    .scroll-container {
-      z-index: 20;
-    }
-    
-    .chat-scroll {
-      z-index: 19;
-      bottom: 430px;
-    }
-    
-    .leaderboard-scroll {
-      z-index: 18;
-    }
-    
-    /* Improve scrollbar appearance in the scroll bodies */
-    .scroll-body::-webkit-scrollbar {
-      width: 8px;
-    }
-    
-    .scroll-body::-webkit-scrollbar-track {
-      background: rgba(244, 230, 186, 0.4);
-      border-radius: 4px;
-    }
-    
-    .scroll-body::-webkit-scrollbar-thumb {
-      background: rgba(74, 37, 17, 0.3);
-      border-radius: 4px;
-    }
-    
-    .scroll-body::-webkit-scrollbar-thumb:hover {
-      background: rgba(74, 37, 17, 0.5);
-    }
   </style>
 </head>
 <body>
@@ -362,33 +196,9 @@
     </div>
     <div id="map-view" class="map-view"></div>
     <input type="file" id="file-input" accept=".json">
-    
-    <!-- Age of Empires inspired scroll for Phase Summary -->
-    <div class="scroll-container">
-      <div class="scroll-header">
-        <div class="scroll-title">Phase Summary</div>
-      </div>
-      <div class="scroll-body" id="info-panel"></div>
-      <div class="scroll-footer"></div>
-    </div>
-    
-    <!-- Age of Empires inspired scroll for Messages -->
-    <div class="scroll-container chat-scroll">
-      <div class="scroll-header">
-        <div class="scroll-title">Messages</div>
-      </div>
-      <div class="scroll-body" id="messages-scroll"></div>
-      <div class="scroll-footer"></div>
-    </div>
-    
-    <!-- Age of Empires inspired scroll for Leaderboard -->
-    <div class="scroll-container leaderboard-scroll">
-      <div class="scroll-header">
-        <div class="scroll-title">Leaderboard</div>
-      </div>
-      <div class="scroll-body" id="leaderboard"></div>
-      <div class="scroll-footer"></div>
-    </div>
+    <div id="info-panel"></div>
+    <!-- New leaderboard element -->
+    <div id="leaderboard"></div>
     <!-- Chat windows container -->
     <div id="chat-container"></div>
   </div>
@@ -1602,6 +1412,7 @@
 
       // Position
       const pos = getProvincePosition(unitData.location);
+      group.position.set(pos.x, 10, pos.z);
 
       // Store meta
       group.userData = {
@@ -1737,49 +1548,18 @@
         }
       }
 
-      // Show info in the panel with better formatting
-      let summaryContent = '';
-      
-      // Check if there's a summary field in the phase data
-      if (phase.summary) {
-        try {
-          // Try to parse it as JSON (some summaries might be stored as JSON strings)
-          const summaryObj = typeof phase.summary === 'string' ? JSON.parse(phase.summary) : phase.summary;
-          if (summaryObj.summary) {
-            summaryContent = `<div class="phase-summary">${summaryObj.summary}</div>`;
-          } else {
-            summaryContent = `<div class="phase-summary">${phase.summary}</div>`;
-          }
-        } catch(e) {
-          // If not valid JSON, just use the string directly
-          summaryContent = `<div class="phase-summary">${phase.summary}</div>`;
-        }
-      } else {
-        // Default layout with basic phase info
-        summaryContent = `
-          <h3>${phase.name}</h3>
-          <div class="summary-section">
-            <h4>Supply Centers:</h4>
-            <div class="summary-details">
-              ${formatCenters(phase.state?.centers)}
-            </div>
-          </div>
-          <div class="summary-section">
-            <h4>Units:</h4>
-            <div class="summary-details">
-              ${formatUnits(phase.state?.units)}
-            </div>
-          </div>
-        `;
-      }
-      
-      infoPanel.innerHTML = summaryContent;
-      
       // Update the leaderboard
       updateLeaderboard(phase);
       
       // Update chat windows with messages from this phase
       updateChatWindows(phase);
+
+      // Show some info in the panel
+      infoPanel.textContent = `Phase: ${phase.name}\nSupply centers: ${
+        phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'
+      }\nUnits: ${
+        phase.state?.units ? JSON.stringify(phase.state.units) : 'None'
+      }`;
     }
 
     // --- LEADERBOARD FUNCTION ---
@@ -1893,26 +1673,24 @@
       
       phaseDisplay.textContent = `${currentPhase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
 
-      // Clear any existing units
-      unitMeshes.forEach(m => scene.remove(m));
-      unitMeshes = [];
-
-      const centers = currentPhase.state?.centers || {};
-      const units = currentPhase.state?.units || {};
+      // Build ownership maps for territory coloring
+      const currentCenters = currentPhase.state?.centers || {};
+      const currentUnits = currentPhase.state?.units || {};
       const previousCenters = previousPhase.state?.centers || {};
       const previousUnits = previousPhase.state?.units || {};
       
-      const currentOwnershipMap = buildOwnershipMap(
-        centers,
-        units
-      );
-      const previousOwnershipMap = buildOwnershipMap(
-        previousCenters,
-        previousUnits
-      );
+      const currentOwnershipMap = buildOwnershipMap(currentCenters, currentUnits);
+      const previousOwnershipMap = buildOwnershipMap(previousCenters, previousUnits);
       
       // Update map with new territory colors
       createFallbackMap(currentOwnershipMap);
+      
+      // Clear previous unit meshes (except supply centers)
+      const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
+      const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
+      
+      oldUnits.forEach(m => scene.remove(m));
+      unitMeshes = supplyCenters; // Keep supply centers
       
       // Update supply center ownership
       if (currentPhase.state?.centers) {
@@ -1925,8 +1703,8 @@
       
       // Map previous unit positions
       if (previousPhase.state?.units) {
-        for (const [power, unitArray] of Object.entries(previousPhase.state.units)) {
-          unitArray.forEach(unitStr => {
+        for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
+          unitArr.forEach(unitStr => {
             const match = unitStr.match(/^([AF])\s+(.+)$/);
             if (match) {
               const key = `${power}-${match[1]}-${match[2]}`;
@@ -1999,49 +1777,18 @@
         }
       }
       
-      // Show phase info with better formatting
-      let summaryContent = '';
-      
-      // Check if there's a summary field in the phase data
-      if (currentPhase.summary) {
-        try {
-          // Try to parse it as JSON (some summaries might be stored as JSON strings)
-          const summaryObj = typeof currentPhase.summary === 'string' ? JSON.parse(currentPhase.summary) : currentPhase.summary;
-          if (summaryObj.summary) {
-            summaryContent = `<div class="phase-summary">${summaryObj.summary}</div>`;
-          } else {
-            summaryContent = `<div class="phase-summary">${currentPhase.summary}</div>`;
-          }
-        } catch(e) {
-          // If not valid JSON, just use the string directly
-          summaryContent = `<div class="phase-summary">${currentPhase.summary}</div>`;
-        }
-      } else {
-        // Default layout with basic phase info
-        summaryContent = `
-          <h3>${currentPhase.name}</h3>
-          <div class="summary-section">
-            <h4>Supply Centers:</h4>
-            <div class="summary-details">
-              ${formatCenters(currentPhase.state?.centers)}
-            </div>
-          </div>
-          <div class="summary-section">
-            <h4>Units:</h4>
-            <div class="summary-details">
-              ${formatUnits(currentPhase.state?.units)}
-            </div>
-          </div>
-        `;
-      }
-      
-      infoPanel.innerHTML = summaryContent;
-      
       // Update the leaderboard
       updateLeaderboard(currentPhase);
       
       // Update chat windows with messages from this phase
       updateChatWindows(currentPhase);
+      
+      // Show phase info
+      infoPanel.textContent = `Phase: ${currentPhase.name}\nSupply centers: ${
+        currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
+      }\nUnits: ${
+        currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
+      }`;
     }
 
     // Helper function to create ownership map from centers and units
@@ -2060,8 +1807,7 @@
         unitArray.forEach(unitStr => {
           const match = unitStr.match(/^([AF])\s+(.+)$/);
           if (match) {
-            const location = match[2].toUpperCase().split('/')[0]; // Handle special coast cases like "SPA/SC"
-            // Only add if not already claimed as a supply center
+            const location = match[2].toUpperCase().split('/')[0];
             if (!ownershipMap[location]) {
               ownershipMap[location] = power.toUpperCase();
             }
@@ -2219,9 +1965,7 @@
           const a = keys[i];
           const b = keys[j];
           const posA = coordinateData.coordinates[a];
-          if (!posA) continue;
           const posB = coordinateData.coordinates[b];
-          if (!posB) return;
           const dx = posA.x - posB.x;
           const dz = posA.z - posB.z;
           const dist = Math.sqrt(dx*dx + dz*dz);
@@ -2339,151 +2083,78 @@
         window.messagesContainer.innerHTML = '';
       });
       
-      // Also update the messages scroll
-      const messagesScroll = document.getElementById('messages-scroll');
-      messagesScroll.innerHTML = '';
-      
-      // Process messages for each power
-      const messagesByPower = {};
-      
-      phase.messages.forEach(msg => {
-        if (!messagesByPower[msg.sender]) {
-          messagesByPower[msg.sender] = [];
-        }
-        if (!messagesByPower[msg.recipient]) {
-          messagesByPower[msg.recipient] = [];
-        }
-        
-        // Add to sender's list (outgoing)
-        messagesByPower[msg.sender].push({
-          text: msg.message,
-          sender: msg.sender,
-          recipient: msg.recipient,
-          time: msg.time || 'Unknown',
-          direction: 'outgoing'
-        });
-        
-        // Add to recipient's list (incoming)
-        messagesByPower[msg.recipient].push({
-          text: msg.message,
-          sender: msg.sender,
-          recipient: msg.recipient,
-          time: msg.time || 'Unknown',
-          direction: 'incoming'
-        });
-        
-        // Add to messages scroll
-        const messageItem = document.createElement('div');
-        messageItem.className = 'message-item';
-        
-        const messageHeader = document.createElement('div');
-        messageHeader.className = 'message-header';
-        
-        const senderSpan = document.createElement('span');
-        senderSpan.className = `power-name power-${msg.sender.toLowerCase()}`;
-        senderSpan.textContent = msg.sender;
-        
-        const recipientSpan = document.createElement('span');
-        recipientSpan.className = `power-name power-${msg.recipient.toLowerCase()}`;
-        recipientSpan.textContent = msg.recipient;
-        
-        const timeSpan = document.createElement('span');
-        timeSpan.className = 'message-time';
-        timeSpan.textContent = msg.time || 'Unknown';
-        
-        messageHeader.appendChild(senderSpan);
-        messageHeader.appendChild(document.createTextNode(' → '));
-        messageHeader.appendChild(recipientSpan);
-        messageHeader.appendChild(timeSpan);
-        
-        const messageContent = document.createElement('div');
-        messageContent.className = 'message-content';
-        messageContent.textContent = msg.message;
-        
-        messageItem.appendChild(messageHeader);
-        messageItem.appendChild(messageContent);
-        
-        messagesScroll.appendChild(messageItem);
+      // Filter messages relevant to the current power
+      const relevantMessages = phase.messages.filter(msg => {
+        return (msg.sender === currentPower || msg.recipient === currentPower || msg.recipient === 'GLOBAL');
       });
       
-      // Create chat windows for each power (original functionality)
-      if (chatContainer) {
-        for (const [power, messages] of Object.entries(messagesByPower)) {
-          // Sort messages by time
-          messages.sort((a, b) => {
-            return new Date(a.time) - new Date(b.time);
-          });
-          
-          // Create chat window
-          const chatWindow = document.createElement('div');
-          chatWindow.className = 'chat-window';
-          
-          // Create header
-          const chatHeader = document.createElement('div');
-          chatHeader.className = 'chat-header';
-          chatHeader.innerHTML = `<span class="power-${power.toLowerCase()}">${power}</span>`;
-          
-          // Create messages container
-          const chatMessages = document.createElement('div');
-          chatMessages.className = 'chat-messages';
-          
-          // Add messages
-          messages.forEach(msg => {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `chat-message message-${msg.direction}`;
-            
-            const otherPower = msg.direction === 'outgoing' ? msg.recipient : msg.sender;
-            
-            messageDiv.innerHTML = `
-              <div>${msg.direction === 'outgoing' ? 'To' : 'From'} <span class="power-${otherPower.toLowerCase()}">${otherPower}</span>:</div>
-              <div>${msg.text}</div>
-              <div class="message-time">${msg.time}</div>
-            `;
-            
-            chatMessages.appendChild(messageDiv);
-          });
-          
-          // Assemble chat window
-          chatWindow.appendChild(chatHeader);
-          chatWindow.appendChild(chatMessages);
-          
-          // Add to container
-          chatContainer.appendChild(chatWindow);
+      // Sort messages by time
+      relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
+      
+      // Process each message
+      relevantMessages.forEach(msg => {
+        // Special handling for global messages
+        if (msg.recipient === 'GLOBAL') {
+          // Add to the global chat window
+          if (chatWindows['GLOBAL']) {
+            addMessageToChat('GLOBAL', msg, phase.name);
+          }
+          return;
         }
-      }
-    }
-
-    // Add helper functions for formatting centers and units (place these before the updateLeaderboard function)
-    // Helper function to format centers for display
-    function formatCenters(centers) {
-      if (!centers) return 'No supply centers data available';
-      
-      let html = '';
-      for (const [power, provinces] of Object.entries(centers)) {
-        const powerColor = getPowerHexColor(power);
-        html += `<div class="power-entry">
-          <span style="color: ${powerColor}; font-weight: bold;">${power}</span>: 
-          <span>${provinces.join(', ')}</span>
-        </div>`;
-      }
-      
-      return html || 'No supply centers claimed yet';
+        
+        // Determine which chat window to use for private messages
+        let targetPower;
+        
+        if (msg.sender === currentPower) {
+          // Outgoing message
+          targetPower = msg.recipient;
+        } else {
+          // Incoming message
+          targetPower = msg.sender;
+        }
+        
+        // Add to appropriate chat window
+        if (chatWindows[targetPower]) {
+          addMessageToChat(targetPower, msg, phase.name);
+        }
+      });
     }
     
-    // Helper function to format units for display
-    function formatUnits(units) {
-      if (!units) return 'No units data available';
+    function addMessageToChat(power, message, phaseName) {
+      if (!chatWindows[power]) return;
       
-      let html = '';
-      for (const [power, unitArr] of Object.entries(units)) {
-        const powerColor = getPowerHexColor(power);
-        html += `<div class="power-entry">
-          <span style="color: ${powerColor}; font-weight: bold;">${power}</span>: 
-          <span>${unitArr.join(', ')}</span>
-        </div>`;
+      const messagesContainer = chatWindows[power].messagesContainer;
+      const messageElement = document.createElement('div');
+      
+      // For global chat, display sender information
+      if (power === 'GLOBAL') {
+        const senderColor = message.sender.toLowerCase();
+        messageElement.className = 'chat-message message-incoming';
+        
+        // Format the message content with sender info
+        messageElement.innerHTML = `
+          <span style="font-weight: bold;" class="power-${senderColor}">${message.sender}:</span>
+          ${message.message}
+          <div class="message-time">${phaseName}</div>
+        `;
+      } else {
+        // Determine if this is an incoming or outgoing message
+        const isOutgoing = message.sender === currentPower;
+        
+        messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
+        
+        // Format the message content
+        messageElement.innerHTML = `
+          ${message.message}
+          <div class="message-time">${phaseName}</div>
+        `;
       }
       
-      return html || 'No units on the board';
+      // Add to container
+      messagesContainer.appendChild(messageElement);
+      
+      // Scroll to bottom
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
   </script>
 </body>
