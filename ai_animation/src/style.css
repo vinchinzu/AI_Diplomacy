@@ -94,7 +94,8 @@
     position: absolute;
     bottom: 20px;
     right: 10px;
-    width: 300px;
+    width: 350px;
+    max-height: 180px;
     
     /* Parchment style background */
     background: radial-gradient(ellipse at center, #f7ecd1 0%, #dbc08c 100%);
@@ -103,7 +104,6 @@
     padding: 10px;
     font-family: monospace;
     font-size: 12px;
-    max-height: 300px;
     overflow-y: auto;
     
     pointer-events: none; /* Let clicks pass through */
@@ -120,7 +120,8 @@
     position: absolute;
     bottom: 20px;
     left: 10px;
-    width: 250px;
+    width: 320px;
+    max-height: 180px;
     
     /* Another parchment style with slight variation */
     background: radial-gradient(ellipse at center, #f6e7ca 0%, #d8bc7e 100%);
@@ -129,7 +130,6 @@
     padding: 10px;
     font-size: 14px;
     line-height: 1.4em;
-    max-height: 300px;
     overflow-y: auto;
     pointer-events: none; /* so we don't block clicks */
     
@@ -152,13 +152,12 @@
     top: 60px;
     left: 10px;
     right: 10px;
-    display: flex;
-    flex-direction: row;
-    gap: 10px;
-    height: 250px;
     pointer-events: auto;
     z-index: 100;
-    overflow-x: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
     padding-bottom: 5px;
   }
   
@@ -170,13 +169,16 @@
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     overflow: hidden;
     transition: all 0.3s ease;
-    height: 100%;
-    width: 260px;
-    min-width: 260px;
+    
+    /* Wider but less tall than previous suggestion */
+    width: 280px;
+    min-width: 280px;
+    height: 200px; /* Reduced height significantly */
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
     font-family: "Book Antiqua", Palatino, serif;
+    margin-bottom: 10px;
   }
   
   .chat-header {
@@ -258,4 +260,18 @@
   }
   .power-turkey {
     color: #e0c846;
+  }
+  
+  /* Order manipulation for U-shape */
+  .chat-window:nth-child(2),
+  .chat-window:nth-child(3),
+  .chat-window:nth-child(4),
+  .chat-window:nth-child(5),
+  .chat-window:nth-child(6) {
+    order: 1; /* Middle 5 windows go on top row */
+  }
+  
+  .chat-window:nth-child(1),
+  .chat-window:nth-child(7) {
+    order: 2; /* First and last windows go on bottom row */
   }
