@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "firefox",
+      "request": "launch",
+      "name": "Debug App",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/ai_animation",
+      "sourceMapPathOverrides": {
+        "webpack:///./src/*": "${webRoot}/*"
+      },
+      "runtimeArgs": [
+        "--remote-debugging-port=9222"
+      ],
+      "sourceMaps": true
+    }
+  ]
+}
