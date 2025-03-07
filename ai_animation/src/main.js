@@ -1400,7 +1400,7 @@ function displayPhase(index) {
   unitMeshes = [];
 
   const phase = gameData.phases[index];
-  phaseDisplay.textContent = `${phase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
+  phaseDisplay.textContent = `Era: ${phase.name || 'Unknown Era'} (${index + 1}/${gameData.phases.length})`;
 
   // Build ownership map for territory coloring - IMPROVED TO INCLUDE BOTH UNITS AND CENTERS
   const centers = phase.state?.centers || {};
@@ -1499,7 +1499,7 @@ function updateLeaderboard(phase) {
   });
 
   // Build HTML for leaderboard
-  let html = `<strong>Leaderboard</strong><br/>`;
+  let html = `<strong>Council Standings</strong><br/>`;  // Changed from "Leaderboard"
 
   sortedPowers.forEach(power => {
     const centers = centerCounts[power] || 0;
@@ -2059,3 +2059,17 @@ function addMessageToChat(power, message, phaseName) {
   // Scroll to bottom
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
+
+// 1. Ensure the load button correctly triggers the file input
+document.addEventListener('DOMContentLoaded', function() {
+  // Get references to the load button and file input
+  const loadBtn = document.getElementById('load-btn');
+  const fileInput = document.getElementById('file-input');
+  
+  // Add event listener to the load button
+  loadBtn.addEventListener('click', function() {
+    fileInput.click(); // This is the critical line - it programmatically clicks the hidden file input
+  });
+  
+  // ... rest of your initialization code ...
+});

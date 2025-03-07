@@ -1,194 +1,261 @@
-    body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
+/* ------------------------------
+   Age of Empires–inspired styling
+   ------------------------------ */
 
-    .container {
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .top-controls {
-      padding: 10px;
-      background-color: #333;
-      color: white;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .map-view {
-      flex-grow: 1;
-      background-color: #87CEEB;
-      position: relative;
-    }
-
-    button {
-      padding: 8px 16px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      margin-right: 10px;
-    }
-
-    button:hover {
-      background-color: #45a049;
-    }
-
-    #phase-display {
-      font-weight: bold;
-      margin-left: 10px;
-    }
-
-    #file-input {
-      display: none;
-    }
-
-    #info-panel {
-      position: absolute;
-      bottom: 20px;
-      right: 10px;
-      width: 300px;
-      background-color: rgba(255, 255, 255, 0.8);
-      border-radius: 8px;
-      padding: 10px;
-      font-family: monospace;
-      font-size: 12px;
-      max-height: 300px;
-      overflow-y: auto;
-      pointer-events: none;
-      /* Let clicks pass through */
-    }
-
-    /* New leaderboard styles */
-    #leaderboard {
-      position: absolute;
-      bottom: 20px;
-      left: 10px;
-      width: 250px;
-      background-color: rgba(0, 0, 0, 0.5);
-      color: white;
-      border-radius: 8px;
-      padding: 10px;
-      font-size: 14px;
-      line-height: 1.4em;
-      max-height: 300px;
-      overflow-y: auto;
-      pointer-events: none;
-      /* so we don't block clicks */
-    }
-
-    /* Chat windows styles */
-    #chat-container {
-      position: absolute;
-      top: 60px;
-      left: 10px;
-      right: 10px;
-      display: flex;
-      flex-direction: row;
-      gap: 10px;
-      height: 250px;
-      pointer-events: auto;
-      z-index: 100;
-      overflow-x: auto;
-      padding-bottom: 5px;
-    }
-
-    .chat-window {
-      background-color: rgba(255, 255, 255, 0.9);
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-      overflow: hidden;
-      transition: all 0.3s ease;
-      height: 100%;
-      width: 260px;
-      min-width: 260px;
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-    }
-
-    .chat-header {
-      background-color: #333;
-      color: white;
-      padding: 8px 12px;
-      font-weight: bold;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-    }
-
-    .chat-messages {
-      padding: 10px;
-      overflow-y: auto;
-      flex-grow: 1;
-      height: calc(100% - 36px);
-      font-size: 13px;
-    }
-
-    .chat-message {
-      margin-bottom: 8px;
-      padding: 6px 10px;
-      border-radius: 8px;
-      word-break: break-word;
-      width: 85%;
-    }
-
-    .message-incoming {
-      background-color: #e9e9eb;
-      align-self: flex-start;
-      margin-right: auto;
-    }
-
-    .message-outgoing {
-      background-color: #0b93f6;
-      color: white;
-      align-self: flex-end;
-      margin-left: auto;
-    }
-
-    .message-time {
-      font-size: 10px;
-      color: #888;
-      margin-top: 2px;
-      text-align: right;
-    }
-
-    .chat-collapsed {
-      max-height: 36px;
-    }
-
-    .power-austria {
-      color: #c40000;
-    }
-
-    .power-england {
-      color: #00008B;
-    }
-
-    .power-france {
-      color: #0fa0d0;
-    }
-
-    .power-germany {
-      color: #444444;
-    }
-
-    .power-italy {
-      color: #008000;
-    }
-
-    .power-russia {
-      color: #cccccc;
-    }
-
-    .power-turkey {
-      color: #e0c846;
-    }
+   body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: "Book Antiqua", Palatino, serif; /* More old-school look */
+    background-color: #2a2a2a; /* Dark background around full viewport */
+  }
+  
+  /* Container that holds everything: top bar + map + side overlays */
+  .container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at center, #444 0%, #222 100%);
+  }
+  
+  /* --------------
+     Top Controls
+     -------------- */
+  .top-controls {
+    padding: 10px;
+    /* Simulate a carved stone or wooden bar at top */
+    background: linear-gradient(90deg, #5a3e2b 0%, #382519 100%);
+    color: #f0e6d2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid #2e1c10;
+  }
+  
+  /* Phase display text in top controls: style it like a stone plaque */
+  #phase-display {
+    font-weight: bold;
+    margin-left: 10px;
+    padding: 4px 8px;
+    border: 2px solid #2e1c10;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: #ffd;
+    font-family: "Book Antiqua", Palatino, serif;
+    font-size: 1rem;
+  }
+  
+  /* Buttons (Load Game, Next, Prev, etc.) */
+  button {
+    padding: 8px 16px;
+    background-color: #8d5a2b;
+    color: #f0e6d2;
+    border: 2px solid #2e1c10;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+    font-family: "Book Antiqua", Palatino, serif;
+  }
+  
+  button:hover {
+    background-color: #a4703a;
+  }
+  
+  #speed-selector {
+    background-color: #8d5a2b;
+    color: #f0e6d2;
+    border: 2px solid #2e1c10;
+    border-radius: 4px;
+    margin-left: 6px;
+    cursor: pointer;
+    font-family: "Book Antiqua", Palatino, serif;
+  }
+  
+  /* The file input is hidden (triggered by Load Game button) */
+  #file-input {
+    display: none;
+  }
+  
+  /* --------------
+     Map View
+     -------------- */
+  .map-view {
+    flex-grow: 1;
+    background-color: #333; /* 3D scene behind the map if no sky color is used by Three.js */
+    position: relative;
+  }
+  
+  /* -----------------
+     Info Panel 
+     (lower-right)
+     ----------------- */
+  #info-panel {
+    position: absolute;
+    bottom: 20px;
+    right: 10px;
+    width: 300px;
+    
+    /* Parchment style background */
+    background: radial-gradient(ellipse at center, #f7ecd1 0%, #dbc08c 100%);
+    border: 3px solid #4f3b16;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    
+    pointer-events: none; /* Let clicks pass through */
+    
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    color: #2f260b;
+  }
+  
+  /* -----------------
+     Leaderboard 
+     (lower-left)
+     ----------------- */
+  #leaderboard {
+    position: absolute;
+    bottom: 20px;
+    left: 10px;
+    width: 250px;
+    
+    /* Another parchment style with slight variation */
+    background: radial-gradient(ellipse at center, #f6e7ca 0%, #d8bc7e 100%);
+    border: 3px solid #4f3b16;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+    line-height: 1.4em;
+    max-height: 300px;
+    overflow-y: auto;
+    pointer-events: none; /* so we don't block clicks */
+    
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    color: #3b2c02;
+  }
+  
+  /* Make the power names stand out */
+  #leaderboard .power-name {
+    font-weight: bold;
+    font-variant: small-caps;
+    letter-spacing: 1px;
+  }
+  
+  /* --------------
+     Chat Container
+     -------------- */
+  #chat-container {
+    position: absolute;
+    top: 60px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    height: 250px;
+    pointer-events: auto;
+    z-index: 100;
+    overflow-x: auto;
+    padding-bottom: 5px;
+  }
+  
+  /* Each chat window: make it look like a scroll/paper note */
+  .chat-window {
+    background: radial-gradient(ellipse at center, #faf0d8 0%, #e2cfa1 100%);
+    border: 3px solid #694c21;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    height: 100%;
+    width: 260px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    font-family: "Book Antiqua", Palatino, serif;
+  }
+  
+  .chat-header {
+    background: linear-gradient(90deg, #5e4f38 0%, #3b2d1b 100%);
+    color: #ffe;
+    padding: 8px 12px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-variant: small-caps;
+    letter-spacing: 1px;
+  }
+  
+  .chat-messages {
+    padding: 10px;
+    overflow-y: auto;
+    flex-grow: 1;
+    height: calc(100% - 36px);
+    font-size: 13px;
+    color: #2f260b;
+  }
+  
+  /* Chat message bubbles */
+  .chat-message {
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    word-break: break-word;
+    width: 85%;
+  }
+  
+  /* Grayish bubble for incoming messages */
+  .message-incoming {
+    background-color: #efe9d3;
+    align-self: flex-start;
+    margin-right: auto;
+  }
+  
+  /* Bluish bubble for outgoing messages */
+  .message-outgoing {
+    background: linear-gradient(90deg, #316685 0%, #3886a2 100%);
+    color: #fff;
+    align-self: flex-end;
+    margin-left: auto;
+  }
+  
+  .message-time {
+    font-size: 10px;
+    color: #444;
+    margin-top: 2px;
+    text-align: right;
+  }
+  
+  /* Collapsed chat = only show header */
+  .chat-collapsed {
+    max-height: 36px;
+  }
+  
+  /* Color-coded power classes */
+  .power-austria {
+    color: #c40000;
+  }
+  .power-england {
+    color: #00008B;
+  }
+  .power-france {
+    color: #0fa0d0;
+  }
+  .power-germany {
+    color: #444444;
+  }
+  .power-italy {
+    color: #008000;
+  }
+  .power-russia {
+    color: #cccccc;
+  }
+  .power-turkey {
+    color: #e0c846;
+  }
