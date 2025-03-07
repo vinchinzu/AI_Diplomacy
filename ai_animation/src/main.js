@@ -293,7 +293,6 @@ function loadCoordinateData() {
   });
 }
 
-
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
 function drawMap(ownershipMap = null) {
   const loader = new SVGLoader();
@@ -339,6 +338,9 @@ function drawMap(ownershipMap = null) {
               const mesh = new THREE.Mesh(geometry, material);
 
               mesh.rotation.x = Math.PI / 2;
+              if (provinceKey && coordinateData.provinces[provinceKey] && coordinateData.provinces[provinceKey].owner) {
+                coordinateData.provinces[provinceKey].mesh = mesh
+              }
               group.add(mesh);
 
 
@@ -777,6 +779,7 @@ function advanceToNextPhase() {
 
   // Display the new phase with animation
   displayPhaseWithAnimation(currentPhaseIndex);
+  drawMap()
 }
 
 function displayPhaseWithAnimation(index) {
@@ -804,6 +807,8 @@ function displayPhaseWithAnimation(index) {
 
   // Update leaderboard
   updateLeaderboard(currentPhase);
+  updateMapOwnership(currentPhase)
+
 
   // First show messages, THEN animate units after
   if (currentPhase.messages && currentPhase.messages.length) {
@@ -821,6 +826,30 @@ function displayPhaseWithAnimation(index) {
   infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
     }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
     }`;
+}
+
+function updateMapOwnership(currentPhase) {
+
+  for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
+    unitArr.forEach(unitStr => {
+      const match = unitStr.match(/^([AF])\s+(.+)$/);
+      if (!match) return;
+      const unitType = match[1];
+      const location = match[2];
+      const normalized = location.toUpperCase().replace('/', '_');
+      const base = normalized.split('_')[0];
+      if (coordinateData.provinces[base] === undefined) {
+        console.log(base)
+      }
+      coordinateData.provinces[base].owner = power
+    })
+  }
+  for (const [key, value] of Object.entries(coordinateData.provinces)) {
+    let powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
+    powerColor = parseInt(powerColor.substring(1), 16);
+    coordinateData.provinces[key].mesh?.material.color.setHex(powerColor)
+
+  }
 }
 
 // New helper function to animate units for a phase
@@ -854,6 +883,7 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
           type: unitType,
           location
         });
+
 
         // Current final
         const currentPos = getProvincePosition(location);
