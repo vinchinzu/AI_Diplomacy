@@ -105,7 +105,7 @@ function initScene() {
   // Load coordinate data, then build the fallback map
   loadCoordinateData()
     .then(() => {
-      createFallbackMap();  // Create the map plane from the start
+      drawMap();  // Create the map plane from the start
       // target the center of the map
       controls.target = new THREE.Vector3(800, 0, 800)
     })
@@ -295,7 +295,7 @@ function loadCoordinateData() {
 
 
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
-function createFallbackMap(ownershipMap = null) {
+function drawMap(ownershipMap = null) {
   const loader = new SVGLoader();
   loader.load('assets/maps/standard/standard.svg',
     function (data) {
@@ -308,12 +308,19 @@ function createFallbackMap(ownershipMap = null) {
 
           for (let i = 0; i < paths.length; i++) {
             let fillColor = ""
-
             const path = paths[i];
+            // The "standard" map has keys like _mos, so remove that then send them to caps
+            let provinceKey = path.userData.node.id.substring(1).toUpperCase();
+
+
             if (map_styles[path.userData.node.classList[0]] === undefined) {
               // If there is no style in the map_styles, skip drawing the shape
               continue
-            } else {
+            } else if (provinceKey && coordinateData.provinces[provinceKey] && coordinateData.provinces[provinceKey].owner) {
+              fillColor = getPowerHexColor(coordinateData.provinces[provinceKey].owner)
+
+            }
+            else {
               fillColor = map_styles[path.userData.node.classList[0]].fill;
             }
 
@@ -669,6 +676,7 @@ function displayInitialPhase(index) {
   // DON'T show messages yet - skip updateChatWindows call
 
   infoPanel.textContent = `Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`;
+  drawMap()
 }
 
 // --- LEADERBOARD FUNCTION ---
