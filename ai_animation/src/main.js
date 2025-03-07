@@ -1206,7 +1206,13 @@ function updateChatWindows(phase, stepMessages = false) {
       }
       index++;
       // Increase the delay between messages - 3x the playback speed gives more spacing
-      setTimeout(showNext, playbackSpeed * 3);
+      // Remove the delay if we're developing
+      const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
+      if (isDebugMode) {
+        showNext()
+      } else {
+        setTimeout(showNext, playbackSpeed * 3);
+      }
     };
 
     // Start the message sequence
