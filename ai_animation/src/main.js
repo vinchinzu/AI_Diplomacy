@@ -88,7 +88,7 @@ function initScene() {
   controls.dampingFactor = 0.05;
   controls.screenSpacePanning = true;
   controls.minDistance = 100;
-  controls.maxDistance = 1500;
+  controls.maxDistance = 2000;
   controls.maxPolarAngle = Math.PI / 2; // Limit so you don't flip under the map
   controls.target.set(0, 0, 100); // ADDED: Set control target to new map center
 
@@ -357,9 +357,9 @@ function createFallbackMap(ownershipMap = null) {
             }
           })
           // This rotates the SVG the "correct" way round, and scales it down
-          group.scale.set(0.5, -0.5, 0.5)
+          group.scale.set(1, -1, 1)
           textGroup.rotation.x = Math.PI / 2;
-          textGroup.scale.set(0.5, -0.5, 0.5)
+          textGroup.scale.set(1, -1, 1)
 
           // After adding all meshes to the group, update its matrix:
           group.updateMatrixWorld(true);
@@ -384,7 +384,7 @@ function createFallbackMap(ownershipMap = null) {
 
           // Set the camera's target to the center of the map
           controls.target = center
-          camera.position.set(center.x, 800, 800)
+          camera.position.set(center.x, 1400, 1100)
         })
         .catch(error => {
           console.error('Error loading map styles:', error);
@@ -1324,14 +1324,16 @@ function getProvincePosition(loc) {
   const normalized = loc.toUpperCase().replace('/', '_');
   const base = normalized.split('_')[0];
 
-  if (coordinateData && coordinateData.coordinates) {
-    if (coordinateData.coordinates[normalized]) {
-      const pos = coordinateData.coordinates[normalized];
-      return { x: pos.x, y: pos.y, z: pos.z + 100 }; // Add offset
+  if (coordinateData && coordinateData.provinces) {
+    if (coordinateData.provinces[normalized]) {
+      return {
+        "x": coordinateData.provinces[normalized].label.x,
+        "y": 10,
+        "z": coordinateData.provinces[normalized].label.y
+      };
     }
-    if (coordinateData.coordinates[base]) {
-      const pos = coordinateData.coordinates[base];
-      return { x: pos.x, y: pos.y, z: pos.z + 100 }; // Add offset
+    if (coordinateData.provinces[base]) {
+      return coordinateData.provinces[base].label;
     }
   }
 
