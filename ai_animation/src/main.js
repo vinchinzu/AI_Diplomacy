@@ -408,7 +408,7 @@ function getPowerHexColor(power) {
 function displaySupplyCenters() {
   if (!coordinateData || !coordinateData.provinces) return;
   for (const [province, data] of Object.entries(coordinateData.provinces)) {
-    if (data.isSupplyCenter && coordinateData.coordinates[province]) {
+    if (data.isSupplyCenter && coordinateData.provinces[province]) {
       const pos = getProvincePosition(province);
 
       // Build a small pillar + star in 3D
@@ -464,6 +464,8 @@ function updateSupplyCenterOwnership(centers) {
   // centers is typically { "AUSTRIA":["VIE","BUD"], "FRANCE":["PAR","MAR"], ... }
   for (const [power, provinces] of Object.entries(centers)) {
     provinces.forEach(p => {
+      coordinateData.provinces[p.toUpperCase()].owner = power.toUpperCase();
+      // No messages, animate units immediately
       ownershipMap[p.toUpperCase()] = power.toUpperCase();
     });
   }
