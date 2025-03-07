@@ -370,14 +370,6 @@ function createFallbackMap(ownershipMap = null) {
           const center = new THREE.Vector3();
           box.getCenter(center);
 
-          // Offset the group's position by subtracting the center:
-          group.position.sub(center);
-          textGroup.position.sub(center);
-
-          // ADDED: Lower the map on the screen
-          const mapOffset = new THREE.Vector3(0, 0, 200); // Move map 200 units down/forward in z-axis
-          group.position.add(mapOffset);
-          textGroup.position.add(mapOffset);
 
           scene.add(group);
           scene.add(textGroup);
@@ -1652,13 +1644,13 @@ fileInput.addEventListener('change', e => {
 prevBtn.addEventListener('click', () => {
   if (currentPhaseIndex > 0) {
     currentPhaseIndex--;
-    displayPhase(currentPhaseIndex);
+    displayPhaseWithAnimation(currentPhaseIndex);
   }
 });
 nextBtn.addEventListener('click', () => {
   if (gameData && currentPhaseIndex < gameData.phases.length - 1) {
     currentPhaseIndex++;
-    displayPhase(currentPhaseIndex);
+    displayPhaseWithAnimation(currentPhaseIndex);
   }
 });
 
