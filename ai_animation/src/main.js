@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
 import { addMapMouseEvents } from "./map/mouseMovement"
+import { createLabel } from "./map/labels"
 import "./style.css"
 
 
@@ -293,38 +294,6 @@ function loadCoordinateData() {
   });
 }
 
-function createLabel(font, labelObj) {
-
-  const color = 0x006699;
-
-  const matDark = new THREE.LineBasicMaterial({
-    color: color,
-    side: THREE.DoubleSide
-  });
-
-  const matLite = new THREE.MeshBasicMaterial({
-    color: color,
-    transparent: true,
-    opacity: 0.7,
-    side: THREE.DoubleSide
-  });
-  const label = labelObj.label
-  const shapes = font.generateShapes(label, 20);
-
-  const geometry = new THREE.ShapeGeometry(shapes);
-
-  geometry.computeBoundingBox();
-  const xMid = - 0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
-  const yMid = - 0.5 * (geometry.boundingBox.max.y - geometry.boundingBox.min.y);
-
-  geometry.translate(labelObj.x + xMid, -labelObj.y + yMid, 0);
-  const text = new THREE.Mesh(geometry, matLite);
-  //text.rotation.x = (Math.PI / 2);
-  //text.rotation.x = (Math.PI / 2);
-  //text.scale.multiply(new THREE.Vector(1, -1, 1))
-  //text.scale.set(1, -1, 1)
-  return text
-}
 
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
 function createFallbackMap(ownershipMap = null) {
@@ -382,16 +351,10 @@ function createFallbackMap(ownershipMap = null) {
           // Load all the labels for each map position
           const fontLoader = new FontLoader();
           fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
-            fetch("assets/maps/standard/standard_labels.json")
-              .then(resp => resp.json())
-              .then(data => {
-                data.forEach(labelObj => {
-                  textGroup.add(createLabel(font, labelObj))
-                })
-              })
-              .catch(error => {
-                console.error('Error loading map labels:', error);
-              });
+            for (const [key, value] of Object.entries(coordinateData.provinces)) {
+
+              textGroup.add(createLabel(font, key, value))
+            }
           })
           // This rotates the SVG the "correct" way round, and scales it down
           group.scale.set(0.5, -0.5, 0.5)
