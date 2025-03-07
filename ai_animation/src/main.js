@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+import { addMapMouseEvents } from "./map/mouseMovement"
+import { createLabel } from "./map/labels"
 import "./style.css"
 
 
@@ -72,8 +74,7 @@ function initScene() {
     1,
     3000
   );
-  camera.position.set(0, 800, 800);
-  camera.lookAt(0, 0, 0);
+  camera.position.set(0, 800, 900); // MODIFIED: Increased z-value to account for map shift
 
   // Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -87,8 +88,9 @@ function initScene() {
   controls.dampingFactor = 0.05;
   controls.screenSpacePanning = true;
   controls.minDistance = 100;
-  controls.maxDistance = 1500;
+  controls.maxDistance = 2000;
   controls.maxPolarAngle = Math.PI / 2; // Limit so you don't flip under the map
+  controls.target.set(0, 0, 100); // ADDED: Set control target to new map center
 
   // Lighting (keep it simple)
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -98,33 +100,14 @@ function initScene() {
   dirLight.position.set(300, 400, 300);
   scene.add(dirLight);
 
-  // Territory type mapping (Water, Coast, Land)
-  // This data is from the standard Diplomacy board
-  const territoryTypes = {
-    'ADR': 'Water', 'AEG': 'Water', 'ALB': 'Coast', 'ANK': 'Coast', 'APU': 'Coast',
-    'ARM': 'Coast', 'BAL': 'Water', 'BAR': 'Water', 'BEL': 'Coast', 'BER': 'Coast',
-    'BLA': 'Water', 'BOH': 'Land', 'BRE': 'Coast', 'BUD': 'Land', 'BUL': 'Coast',
-    'BUR': 'Land', 'CLY': 'Coast', 'CON': 'Coast', 'DEN': 'Coast', 'EAS': 'Water',
-    'EDI': 'Coast', 'ENG': 'Water', 'FIN': 'Coast', 'GAL': 'Land', 'GAS': 'Coast',
-    'GRE': 'Coast', 'GOB': 'Water', 'GOL': 'Water', 'HEL': 'Water', 'HOL': 'Coast',
-    'ION': 'Water', 'IRI': 'Water', 'KIE': 'Coast', 'LVP': 'Coast', 'LVN': 'Coast',
-    'LON': 'Coast', 'MAR': 'Coast', 'MAO': 'Water', 'MOS': 'Land', 'MUN': 'Land',
-    'NAP': 'Coast', 'NAO': 'Water', 'NAF': 'Coast', 'NTH': 'Water', 'NWY': 'Coast',
-    'NWG': 'Water', 'PAR': 'Land', 'PIC': 'Coast', 'PIE': 'Coast', 'POR': 'Coast',
-    'PRU': 'Coast', 'ROM': 'Coast', 'RUH': 'Land', 'RUM': 'Coast', 'SER': 'Land',
-    'SEV': 'Coast', 'SIL': 'Land', 'SKA': 'Water', 'SMY': 'Coast', 'SPA': 'Coast',
-    'STP': 'Coast', 'SWE': 'Coast', 'SYR': 'Coast', 'TRI': 'Coast', 'TUN': 'Coast',
-    'TUS': 'Coast', 'TYR': 'Land', 'TYS': 'Water', 'UKR': 'Land', 'VEN': 'Coast',
-    'VIE': 'Land', 'WAL': 'Coast', 'WAR': 'Land', 'WES': 'Water', 'YOR': 'Coast'
-  };
 
-  // Add to global scope for use in other functions
-  window.territoryTypes = territoryTypes;
 
   // Load coordinate data, then build the fallback map
   loadCoordinateData()
     .then(() => {
       createFallbackMap();  // Create the map plane from the start
+      // target the center of the map
+      controls.target = new THREE.Vector3(800, 0, 800)
     })
     .catch(err => {
       console.error("Error loading coordinates:", err);
@@ -136,6 +119,8 @@ function initScene() {
 
   // Handle resizing
   window.addEventListener('resize', onWindowResize);
+  addMapMouseEvents(mapView, infoPanel)
+
 }
 
 // --- ANIMATION LOOP ---
@@ -144,20 +129,29 @@ function animate() {
 
   const currentTime = Date.now();
 
-  // >>> ADDED: Camera panning when in playback mode
   if (isPlaying) {
-    cameraPanTime += cameraPanSpeed; 
-    // Create a circular arc from SE to SW with vertical wave
-    const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;  // range ~0.3..2.1 rad
-    const radius = 1200;   // distance from center
+    // Pan camera slowly in playback mode
+    cameraPanTime += cameraPanSpeed;
+    const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;
+    const radius = 900;
     camera.position.set(
       radius * Math.cos(angle),
-      800 + 100 * Math.sin(cameraPanTime * 0.5),
-      radius * Math.sin(angle)
+      650 + 80 * Math.sin(cameraPanTime * 0.5),
+      100 + radius * Math.sin(angle)
     );
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(0, 0, 100);
+
+    // If messages are done playing but we haven't started unit animations yet
+    if (!messagesPlaying && unitAnimations.length === 0 && isPlaying) {
+      if (gameData && gameData.phases) {
+        const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : gameData.phases.length - 1;
+        animateUnitsForPhase(
+          gameData.phases[currentPhaseIndex],
+          gameData.phases[prevIndex]
+        );
+      }
+    }
   } else {
-    // Normal camera controls when not in playback
     controls.update();
   }
 
@@ -300,38 +294,6 @@ function loadCoordinateData() {
   });
 }
 
-function createLabel(font, labelObj) {
-
-  const color = 0x006699;
-
-  const matDark = new THREE.LineBasicMaterial({
-    color: color,
-    side: THREE.DoubleSide
-  });
-
-  const matLite = new THREE.MeshBasicMaterial({
-    color: color,
-    transparent: true,
-    opacity: 0.7,
-    side: THREE.DoubleSide
-  });
-  const label = labelObj.label
-  const shapes = font.generateShapes(label, 20);
-
-  const geometry = new THREE.ShapeGeometry(shapes);
-
-  geometry.computeBoundingBox();
-  const xMid = - 0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
-  const yMid = - 0.5 * (geometry.boundingBox.max.y - geometry.boundingBox.min.y);
-
-  geometry.translate(labelObj.x + xMid, -labelObj.y + yMid, 0);
-  const text = new THREE.Mesh(geometry, matLite);
-  //text.rotation.x = (Math.PI / 2);
-  //text.rotation.x = (Math.PI / 2);
-  //text.scale.multiply(new THREE.Vector(1, -1, 1))
-  //text.scale.set(1, -1, 1)
-  return text
-}
 
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
 function createFallbackMap(ownershipMap = null) {
@@ -389,22 +351,16 @@ function createFallbackMap(ownershipMap = null) {
           // Load all the labels for each map position
           const fontLoader = new FontLoader();
           fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
-            fetch("assets/maps/standard/standard_labels.json")
-              .then(resp => resp.json())
-              .then(data => {
-                data.forEach(labelObj => {
-                  textGroup.add(createLabel(font, labelObj))
-                })
-              })
-              .catch(error => {
-                console.error('Error loading map labels:', error);
-              });
+            for (const [key, value] of Object.entries(coordinateData.provinces)) {
+
+              textGroup.add(createLabel(font, key, value))
+            }
           })
           // This rotates the SVG the "correct" way round, and scales it down
-          group.scale.set(0.5, -0.5, 0.5)
-          // Don't need to flip the text
+          group.scale.set(1, -1, 1)
           textGroup.rotation.x = Math.PI / 2;
-          textGroup.scale.set(0.5, -0.5, 0.5)
+          textGroup.scale.set(1, -1, 1)
+
           // After adding all meshes to the group, update its matrix:
           group.updateMatrixWorld(true);
           textGroup.updateMatrixWorld(true);
@@ -414,12 +370,13 @@ function createFallbackMap(ownershipMap = null) {
           const center = new THREE.Vector3();
           box.getCenter(center);
 
-          // Offset the group's position by subtracting the center:
-          group.position.sub(center);
-          textGroup.position.sub(center);
 
           scene.add(group);
           scene.add(textGroup);
+
+          // Set the camera's target to the center of the map
+          controls.target = center
+          camera.position.set(center.x, 1400, 1100)
         })
         .catch(error => {
           console.error('Error loading map styles:', error);
@@ -428,7 +385,6 @@ function createFallbackMap(ownershipMap = null) {
     // Progress function
     undefined,
     function (error) { console.log(error) })
-
 
   return
 }
@@ -1360,16 +1316,22 @@ function getProvincePosition(loc) {
   const normalized = loc.toUpperCase().replace('/', '_');
   const base = normalized.split('_')[0];
 
-  if (coordinateData && coordinateData.coordinates) {
-    if (coordinateData.coordinates[normalized]) {
-      return coordinateData.coordinates[normalized];
+  if (coordinateData && coordinateData.provinces) {
+    if (coordinateData.provinces[normalized]) {
+      return {
+        "x": coordinateData.provinces[normalized].label.x,
+        "y": 10,
+        "z": coordinateData.provinces[normalized].label.y
+      };
     }
-    if (coordinateData.coordinates[base]) {
-      return coordinateData.coordinates[base];
+    if (coordinateData.provinces[base]) {
+      return coordinateData.provinces[base].label;
     }
   }
-  // Fallback if missing
-  return hashStringToPosition(loc);
+
+  // Fallback with offset
+  const pos = hashStringToPosition(loc);
+  return { x: pos.x, y: pos.y, z: pos.z + 100 };
 }
 
 function hashStringToPosition(str) {
@@ -1400,7 +1362,8 @@ function loadGame(file) {
         // Initialize chat windows
         createChatWindows();
 
-        displayPhase(currentPhaseIndex);
+        // Display initial phase but WITHOUT messages
+        displayInitialPhase(currentPhaseIndex);
       }
     } catch (err) {
       infoPanel.textContent = "Error parsing JSON: " + err.message;
@@ -1412,57 +1375,29 @@ function loadGame(file) {
   reader.readAsText(file);
 }
 
-function displayPhase(index) {
+// New function to display initial state without messages
+function displayInitialPhase(index) {
   if (!gameData || !gameData.phases || index < 0 || index >= gameData.phases.length) {
     infoPanel.textContent = "Invalid phase index.";
     return;
   }
 
-  // Clear old units
-  unitMeshes.forEach(m => scene.remove(m));
-  unitMeshes = [];
+  // Clear any existing units
+  const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
+  const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
+  oldUnits.forEach(m => scene.remove(m));
+  unitMeshes = supplyCenters;
 
   const phase = gameData.phases[index];
   phaseDisplay.textContent = `Era: ${phase.name || 'Unknown Era'} (${index + 1}/${gameData.phases.length})`;
 
-  // Build ownership map for territory coloring - IMPROVED TO INCLUDE BOTH UNITS AND CENTERS
-  const centers = phase.state?.centers || {};
-  const units = phase.state?.units || {};
-  const ownershipMap = {};
-
-  // First add supply centers to ownership map
-  for (const [power, provinces] of Object.entries(centers)) {
-    provinces.forEach(p => {
-      ownershipMap[p.toUpperCase()] = power.toUpperCase();
-    });
-  }
-
-  // Then add territories where units are located (if not already claimed by supply centers)
-  for (const [power, unitArray] of Object.entries(units)) {
-    unitArray.forEach(unitStr => {
-      const match = unitStr.match(/^([AF])\s+(.+)$/);
-      if (match) {
-        const location = match[2].toUpperCase().split('/')[0]; // Handle special coast cases like "SPA/SC"
-        // Only add if not already claimed as a supply center
-        if (!ownershipMap[location]) {
-          ownershipMap[location] = power.toUpperCase();
-        }
-      }
-    });
-  }
-
-  // Re-draw the fallback map with updated territory colors
-  //createFallbackMap(ownershipMap);
-
-  // 1) Show supply centers (3D approach)
+  // Show supply centers
   displaySupplyCenters();
-
-  // 2) If phase has supply center ownership data
   if (phase.state?.centers) {
     updateSupplyCenterOwnership(phase.state.centers);
   }
 
-  // 3) Show units
+  // Show units
   if (phase.state?.units) {
     for (const [power, unitArr] of Object.entries(phase.state.units)) {
       unitArr.forEach(unitStr => {
@@ -1478,16 +1413,11 @@ function displayPhase(index) {
     }
   }
 
-  // Update the leaderboard
   updateLeaderboard(phase);
 
-  // Update chat windows with messages from this phase
-  updateChatWindows(phase);
+  // DON'T show messages yet - skip updateChatWindows call
 
-  // Show some info in the panel
-  infoPanel.textContent = `Phase: ${phase.name}\nSupply centers: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'
-    }\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'
-    }`;
+  infoPanel.textContent = `Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`;
 }
 
 // --- LEADERBOARD FUNCTION ---
@@ -1527,7 +1457,7 @@ function updateLeaderboard(phase) {
   sortedPowers.forEach(power => {
     const centers = centerCounts[power] || 0;
     const units = unitCounts[power] || 0;
-    
+
     // Use CSS classes instead of inline styles for better contrast
     html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
           <span class="power-${power.toLowerCase()}">${power}</span>
@@ -1549,30 +1479,30 @@ function togglePlayback() {
   isPlaying = !isPlaying;
 
   if (isPlaying) {
-    // Update button text to show pause
     playBtn.textContent = "⏸ Pause";
-
-    // Disable manual navigation during playback
     prevBtn.disabled = true;
     nextBtn.disabled = true;
 
-    // Start playback with animation
-    displayPhaseWithAnimation(currentPhaseIndex);
-  } else {
-    // Update button text to show play
-    playBtn.textContent = "▶ Play";
+    // First, show the messages of the current phase if it's the initial playback
+    const phase = gameData.phases[currentPhaseIndex];
+    if (phase.messages && phase.messages.length) {
+      // Show messages with stepwise animation
+      updateChatWindows(phase, true);
 
-    // Clear any pending timers
+      // After all messages are shown, then the animate() function will handle
+      // starting unit animations since messagesPlaying will become false
+    } else {
+      // No messages, go straight to unit animations
+      displayPhaseWithAnimation(currentPhaseIndex);
+    }
+  } else {
+    playBtn.textContent = "▶ Play";
     if (playbackTimer) {
       clearTimeout(playbackTimer);
       playbackTimer = null;
     }
-
-    // Cancel any ongoing animations
     unitAnimations = [];
     messagesPlaying = false;
-
-    // Re-enable manual navigation
     prevBtn.disabled = false;
     nextBtn.disabled = false;
   }
@@ -1596,41 +1526,48 @@ function displayPhaseWithAnimation(index) {
     return;
   }
 
-  const previousIndex = index > 0 ? index - 1 : gameData.phases.length - 1;
+  const prevIndex = index > 0 ? index - 1 : gameData.phases.length - 1;
   const currentPhase = gameData.phases[index];
-  const previousPhase = gameData.phases[previousIndex];
+  const previousPhase = gameData.phases[prevIndex];
 
   phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameData.phases.length})`;
 
-  // Build ownership maps for territory coloring
-  const currentCenters = currentPhase.state?.centers || {};
-  const currentUnits = currentPhase.state?.units || {};
-  const previousCenters = previousPhase.state?.centers || {};
-  const previousUnits = previousPhase.state?.units || {};
-
-  const currentOwnershipMap = buildOwnershipMap(currentCenters, currentUnits);
-  const previousOwnershipMap = buildOwnershipMap(previousCenters, previousUnits);
-
-  // Update map with new territory colors (if needed)
-  createFallbackMap(currentOwnershipMap);
-
-  // Clear previous unit meshes (except supply centers)
+  // Rebuild supply centers, remove old units
   const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
   const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
-
   oldUnits.forEach(m => scene.remove(m));
-  unitMeshes = supplyCenters; // Keep supply centers
+  unitMeshes = supplyCenters;
 
-  // Update supply center ownership
+  // Ownership
   if (currentPhase.state?.centers) {
     updateSupplyCenterOwnership(currentPhase.state.centers);
   }
 
-  // Create unit position maps for animation
-  const previousUnitPositions = {};
-  const currentUnitPositions = {};
+  // Update leaderboard
+  updateLeaderboard(currentPhase);
 
-  // Map previous unit positions
+  // First show messages, THEN animate units after
+  if (currentPhase.messages && currentPhase.messages.length) {
+    // First show messages with stepwise animation
+    updateChatWindows(currentPhase, true);
+
+    // We'll animate units only after messages are done
+    // This happens in the animation loop when messagesPlaying becomes false
+  } else {
+    // No messages, animate units immediately
+    animateUnitsForPhase(currentPhase, previousPhase);
+  }
+
+  // Panel
+  infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
+    }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
+    }`;
+}
+
+// New helper function to animate units for a phase
+function animateUnitsForPhase(currentPhase, previousPhase) {
+  // Prepare unit position maps
+  const previousUnitPositions = {};
   if (previousPhase.state?.units) {
     for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
       unitArr.forEach(unitStr => {
@@ -1643,109 +1580,57 @@ function displayPhaseWithAnimation(index) {
     }
   }
 
-  // Create and position new units, with animation from previous positions if available
+  // Animate new units from old positions (or spawn from below)
+  unitAnimations = [];
   if (currentPhase.state?.units) {
     for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
       unitArr.forEach(unitStr => {
         const match = unitStr.match(/^([AF])\s+(.+)$/);
-        if (match) {
-          const unitType = match[1];
-          const location = match[2];
-          const key = `${power}-${unitType}-${location}`;
+        if (!match) return;
+        const unitType = match[1];
+        const location = match[2];
+        const key = `${power}-${unitType}-${location}`;
+        const unitMesh = createUnitMesh({
+          power: power.toUpperCase(),
+          type: unitType,
+          location
+        });
 
-          // Create the unit mesh
-          const unitMesh = createUnitMesh({
-            power: power.toUpperCase(),
-            type: unitType,
-            location: location,
-          });
+        // Current final
+        const currentPos = getProvincePosition(location);
 
-          // Get current position
-          const currentPos = getProvincePosition(location);
-          currentUnitPositions[key] = currentPos;
-
-          // Choose starting position
-          let startPos;
-
-          // Try to find a matching unit in the previous phase
-          let matchFound = false;
-          for (const prevKey in previousUnitPositions) {
-            // Check if same power and type (but possibly different location)
-            if (prevKey.startsWith(`${power}-${unitType}`)) {
-              startPos = previousUnitPositions[prevKey];
-              matchFound = true;
-              delete previousUnitPositions[prevKey]; // Mark as matched
-              break;
-            }
+        // Start pos
+        let startPos;
+        let matchFound = false;
+        for (const prevKey in previousUnitPositions) {
+          if (prevKey.startsWith(`${power}-${unitType}`)) {
+            startPos = previousUnitPositions[prevKey];
+            matchFound = true;
+            delete previousUnitPositions[prevKey];
+            break;
           }
-
-          if (!matchFound) {
-            // New unit - create with a "spawn" animation
-            startPos = {
-              x: currentPos.x,
-              y: -20, // Start below the map
-              z: currentPos.z
-            };
-          }
-
-          // Position at start position
-          unitMesh.position.set(startPos.x, 10, startPos.z);
-          scene.add(unitMesh);
-          unitMeshes.push(unitMesh);
-
-          // Add animation to move to final position
-          unitAnimations.push({
-            object: unitMesh,
-            startPos: startPos,
-            endPos: currentPos,
-            startTime: Date.now(),
-            duration: animationDuration
-          });
         }
+        if (!matchFound) {
+          // New spawn
+          startPos = { x: currentPos.x, y: -20, z: currentPos.z };
+        }
+
+        unitMesh.position.set(startPos.x, 10, startPos.z);
+        scene.add(unitMesh);
+        unitMeshes.push(unitMesh);
+
+        // Animate
+        unitAnimations.push({
+          object: unitMesh,
+          startPos,
+          endPos: currentPos,
+          startTime: Date.now(),
+          duration: animationDuration
+        });
       });
     }
   }
-
-  // Update the leaderboard
-  updateLeaderboard(currentPhase);
-
-  // Update chat windows with messages from this phase - in step mode for playback
-  updateChatWindows(currentPhase, true);
-
-  // Show phase info
-  infoPanel.textContent = `Phase: ${currentPhase.name}\nSupply centers: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
-    }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
-    }`;
 }
-
-// Helper function to create ownership map from centers and units
-function buildOwnershipMap(centers, units) {
-  const ownershipMap = {};
-
-  // First add supply centers
-  for (const [power, provinces] of Object.entries(centers)) {
-    provinces.forEach(p => {
-      ownershipMap[p.toUpperCase()] = power.toUpperCase();
-    });
-  }
-
-  // Then add territories with units
-  for (const [power, unitArray] of Object.entries(units)) {
-    unitArray.forEach(unitStr => {
-      const match = unitStr.match(/^([AF])\s+(.+)$/);
-      if (match) {
-        const location = match[2].toUpperCase().split('/')[0];
-        if (!ownershipMap[location]) {
-          ownershipMap[location] = power.toUpperCase();
-        }
-      }
-    });
-  }
-
-  return ownershipMap;
-}
-
-// Create a unit mesh (extracted from displayUnit for reuse)
 function createUnitMesh(unitData) {
   // Choose color by power
   const powerColors = {
@@ -1813,7 +1698,6 @@ function createUnitMesh(unitData) {
 
   return group;
 }
-
 // --- EVENT HANDLERS ---
 loadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => {
@@ -1826,13 +1710,13 @@ fileInput.addEventListener('change', e => {
 prevBtn.addEventListener('click', () => {
   if (currentPhaseIndex > 0) {
     currentPhaseIndex--;
-    displayPhase(currentPhaseIndex);
+    displayPhaseWithAnimation(currentPhaseIndex);
   }
 });
 nextBtn.addEventListener('click', () => {
   if (gameData && currentPhaseIndex < gameData.phases.length - 1) {
     currentPhaseIndex++;
-    displayPhase(currentPhaseIndex);
+    displayPhaseWithAnimation(currentPhaseIndex);
   }
 });
 
@@ -1963,15 +1847,19 @@ function createChatWindow(power, isGlobal = false) {
   const chatWindow = document.createElement('div');
   chatWindow.className = 'chat-window';
   chatWindow.id = `chat-${power}`;
+  chatWindow.style.position = 'relative'; // Add relative positioning for absolute child positioning
 
-  // Create header with appropriate styling
+  // Create a slimmer header with appropriate styling
   const header = document.createElement('div');
   header.className = 'chat-header';
-  
+
   // Adjust header to accommodate larger face icons
   header.style.display = 'flex';
   header.style.alignItems = 'center';
-  header.style.padding = '8px';
+  header.style.padding = '4px 8px'; // Reduced vertical padding
+  header.style.height = '24px'; // Explicit smaller height
+  header.style.backgroundColor = 'rgba(78, 62, 41, 0.7)'; // Semi-transparent background
+  header.style.borderBottom = '1px solid rgba(78, 62, 41, 1)'; // Solid bottom border
 
   // Create the title element
   const titleElement = document.createElement('span');
@@ -1982,52 +1870,63 @@ function createChatWindow(power, isGlobal = false) {
     titleElement.className = `power-${power.toLowerCase()}`;
     titleElement.textContent = power;
   }
+  titleElement.style.fontWeight = 'bold'; // Make text more prominent
+  titleElement.style.textShadow = '1px 1px 2px rgba(0,0,0,0.7)'; // Add text shadow for better readability
   header.appendChild(titleElement);
 
-  // Create container for 3D face icon - EVEN BIGGER NOW
+  // Create container for 3D face icon that floats over the header
   const faceHolder = document.createElement('div');
-  faceHolder.style.width = '64px'; // Increased from 48px to 64px
-  faceHolder.style.height = '64px'; // Increased from 48px to 64px
-  faceHolder.style.marginLeft = 'auto';
+  faceHolder.style.width = '64px';
+  faceHolder.style.height = '64px';
+  faceHolder.style.position = 'absolute'; // Position absolutely
+  faceHolder.style.right = '10px'; // From right edge
+  faceHolder.style.top = '0px'; // ADJUSTED: Moved lower to align with the header
   faceHolder.style.cursor = 'pointer';
-  faceHolder.style.borderRadius = '50%'; // Make it circular
-  faceHolder.style.overflow = 'hidden'; // Keep the image within the circle
-  faceHolder.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)'; // Add some depth
-  faceHolder.style.border = '2px solid #fff'; // White border for contrast
-  faceHolder.id = `face-${power}`; // Add ID for animation targeting
-  
-  // Generate the face icon and add it to the header
+  faceHolder.style.borderRadius = '50%';
+  faceHolder.style.overflow = 'hidden';
+  faceHolder.style.boxShadow = '0 2px 5px rgba(0,0,0,0.5)';
+  faceHolder.style.border = '2px solid #fff';
+  faceHolder.style.zIndex = '10'; // Ensure it's above other elements
+  faceHolder.id = `face-${power}`;
+
+  // Generate the face icon and add it to the chat window (not header)
   generateFaceIcon(power).then(dataURL => {
     const img = document.createElement('img');
     img.src = dataURL;
     img.style.width = '100%';
     img.style.height = '100%';
     img.id = `face-img-${power}`; // Add ID for animation targeting
-    
+
+    img.id = `face-img-${power}`; // Add ID for animation targeting
+
     // Add subtle idle animation
     setInterval(() => {
-      if (!img.dataset.animating && Math.random() < 0.1) { // Occasionally animate while idle
+      if (!img.dataset.animating && Math.random() < 0.1) {
         idleAnimation(img);
       }
     }, 3000);
-    
+
     faceHolder.appendChild(img);
   });
-  
+
+  // Create messages container with extra top padding to avoid overlap with floating head
+
   header.appendChild(faceHolder);
 
   // Create messages container
   const messagesContainer = document.createElement('div');
   messagesContainer.className = 'chat-messages';
   messagesContainer.id = `messages-${power}`;
+  messagesContainer.style.paddingTop = '8px'; // Add padding to prevent content being hidden under face
 
   // Add toggle functionality
   header.addEventListener('click', () => {
     chatWindow.classList.toggle('chat-collapsed');
   });
 
-  // Assemble chat window
+  // Assemble chat window - add faceHolder directly to chatWindow, not header
   chatWindow.appendChild(header);
+  chatWindow.appendChild(faceHolder);
   chatWindow.appendChild(messagesContainer);
 
   // Add to container
@@ -2038,63 +1937,66 @@ function createChatWindow(power, isGlobal = false) {
     element: chatWindow,
     messagesContainer: messagesContainer,
     isGlobal: isGlobal,
-    seenMessages: new Set() // Track which messages we've already shown
+    seenMessages: new Set()
   };
 }
 
-// Modified to accumulate messages instead of resetting
+// Modified to accumulate messages instead of resetting and only animate for new messages
 function updateChatWindows(phase, stepMessages = false) {
   if (!phase.messages || !phase.messages.length) {
     messagesPlaying = false;
     return;
   }
 
-  // DO NOT clear existing messages - we'll check if they're new before adding
-
-  // Filter messages relevant to the current power
   const relevantMessages = phase.messages.filter(msg => {
-    return (msg.sender === currentPower || 
-            msg.recipient === currentPower || 
-            msg.recipient === 'GLOBAL');
+    return (
+      msg.sender === currentPower ||
+      msg.recipient === currentPower ||
+      msg.recipient === 'GLOBAL'
+    );
   });
-
-  // Sort messages by time
   relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
 
   if (!stepMessages) {
-    // Normal mode: add all messages at once
+    // Normal: show all at once
     relevantMessages.forEach(msg => {
-      addMessageToChat(msg, phase.name);
+      const isNew = addMessageToChat(msg, phase.name);
+      if (isNew) {
+        animateHeadNod(msg);
+      }
     });
     messagesPlaying = false;
   } else {
-    // Stepwise playback: show one message at a time
+    // Stepwise
     messagesPlaying = true;
     let index = 0;
 
     const showNext = () => {
       if (index >= relevantMessages.length) {
-        // Done with messages, allow advancing to next phase
         messagesPlaying = false;
+        // If unit animations are also done, proceed
         if (unitAnimations.length === 0 && isPlaying) {
+          // Short delay then next
           playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
         }
         return;
       }
-      
       const msg = relevantMessages[index];
-      addMessageToChat(msg, phase.name);
-      animateHeadNod(msg);
+      const isNew = addMessageToChat(msg, phase.name);
+      if (isNew) {
+        animateHeadNod(msg);
+      }
       index++;
-      setTimeout(showNext, 1000); // Show next message after 1 second
+      // Increase the delay between messages - 3x the playback speed gives more spacing
+      setTimeout(showNext, playbackSpeed * 3);
     };
-    
+
     // Start the message sequence
     showNext();
   }
 }
 
-// Modified to check if message is already shown
+// Modified to return whether this was a new message
 function addMessageToChat(msg, phaseName) {
   // Determine which chat window to use
   let targetPower;
@@ -2103,20 +2005,19 @@ function addMessageToChat(msg, phaseName) {
   } else {
     targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
   }
-  
   if (!chatWindows[targetPower]) return;
-  
+
   // Create a unique ID for this message to avoid duplication
   const msgId = `${msg.sender}-${msg.recipient}-${msg.time_sent}-${msg.message}`;
-  
+
   // Skip if we've already shown this message
   if (chatWindows[targetPower].seenMessages.has(msgId)) {
-    return;
+    return false; // Not a new message
   }
-  
+
   // Mark as seen
   chatWindows[targetPower].seenMessages.add(msgId);
-  
+
   const messagesContainer = chatWindows[targetPower].messagesContainer;
   const messageElement = document.createElement('div');
 
@@ -2145,6 +2046,8 @@ function addMessageToChat(msg, phaseName) {
 
   // Scroll to bottom
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  return true; // This was a new message
 }
 
 // Animate a head nod when a message appears
@@ -2156,21 +2059,21 @@ function animateHeadNod(msg) {
   } else {
     targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
   }
-  
+
   const chatWindow = chatWindows[targetPower]?.element;
   if (!chatWindow) return;
 
   // Find the face image and animate it
   const img = chatWindow.querySelector(`#face-img-${targetPower}`);
   if (!img) return;
-  
+
   img.dataset.animating = 'true';
-  
+
   // Choose a random animation type for variety
   const animationType = Math.floor(Math.random() * 4);
-  
+
   let animation;
-  
+
   switch (animationType) {
     case 0: // Nod animation
       animation = img.animate([
@@ -2184,7 +2087,7 @@ function animateHeadNod(msg) {
         easing: 'ease-in-out'
       });
       break;
-      
+
     case 1: // Bounce animation
       animation = img.animate([
         { transform: 'translateY(0) scale(1)' },
@@ -2197,7 +2100,7 @@ function animateHeadNod(msg) {
         easing: 'ease-in-out'
       });
       break;
-      
+
     case 2: // Shake animation
       animation = img.animate([
         { transform: 'translate(0, 0) rotate(0deg)' },
@@ -2210,7 +2113,7 @@ function animateHeadNod(msg) {
         easing: 'ease-in-out'
       });
       break;
-      
+
     case 3: // Pulse animation
       animation = img.animate([
         { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(255,255,255,0.7)' },
@@ -2222,10 +2125,13 @@ function animateHeadNod(msg) {
       });
       break;
   }
-  
+
   animation.onfinish = () => {
     img.dataset.animating = 'false';
   };
+
+  // Trigger random snippet
+  playRandomSoundEffect();
 }
 
 // Generate a 3D face icon for chat windows with higher contrast
@@ -2233,7 +2139,7 @@ async function generateFaceIcon(power) {
   if (faceIconCache[power]) {
     return faceIconCache[power];
   }
-  
+
   // Even larger renderer size for better quality
   const offWidth = 192, offHeight = 192; // Increased from 128x128 to 192x192
   const offRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -2245,7 +2151,7 @@ async function generateFaceIcon(power) {
   offScene.background = null;
 
   // Camera
-  const offCamera = new THREE.PerspectiveCamera(45, offWidth/offHeight, 0.1, 1000);
+  const offCamera = new THREE.PerspectiveCamera(45, offWidth / offHeight, 0.1, 1000);
   offCamera.position.set(0, 0, 50);
 
   // Power-specific colors with higher contrast/saturation
@@ -2295,12 +2201,12 @@ async function generateFaceIcon(power) {
   const light = new THREE.DirectionalLight(0xffffff, 1.2); // Increased intensity
   light.position.set(0, 20, 30);
   offScene.add(light);
-  
+
   // Add more lights for better definition
   const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
   fillLight.position.set(-20, 0, 20);
   offScene.add(fillLight);
-  
+
   offScene.add(new THREE.AmbientLight(0xffffff, 0.4)); // Slightly brighter ambient
 
   // Slight head rotation
@@ -2322,7 +2228,7 @@ async function generateFaceIcon(power) {
   const ctx = canvas.getContext('2d');
   const imageData = ctx.createImageData(offWidth, offHeight);
   imageData.data.set(pixels);
-  
+
   // Flip image (WebGL coordinate system is inverted)
   flipImageDataVertically(imageData, offWidth, offHeight);
   ctx.putImageData(imageData, 0, 0);
@@ -2334,16 +2240,16 @@ async function generateFaceIcon(power) {
   // Cleanup
   offRenderer.dispose();
   renderTarget.dispose();
-  
+
   return dataURL;
 }
 
 // Add a subtle idle animation for faces
 function idleAnimation(img) {
   if (img.dataset.animating === 'true') return;
-  
+
   img.dataset.animating = 'true';
-  
+
   const animation = img.animate([
     { transform: 'rotate(0deg) scale(1)' },
     { transform: 'rotate(-2deg) scale(0.98)' },
@@ -2352,7 +2258,7 @@ function idleAnimation(img) {
     duration: 1500,
     easing: 'ease-in-out'
   });
-  
+
   animation.onfinish = () => {
     img.dataset.animating = 'false';
   };
@@ -2369,4 +2275,32 @@ function flipImageDataVertically(imageData, width, height) {
     imageData.data.set(imageData.data.slice(bottomOffset, bottomOffset + bytesPerRow), topOffset);
     imageData.data.set(temp, bottomOffset);
   }
+}
+
+// --- NEW: Function to play a random sound effect ---
+function playRandomSoundEffect() {
+  // List all the sound snippet filenames in assets/sounds
+  const soundEffects = [
+    'snippet_2.mp3',
+    'snippet_3.mp3',
+    'snippet_4.mp3',
+    'snippet_9.mp3',
+    'snippet_10.mp3',
+    'snippet_11.mp3',
+    'snippet_12.mp3',
+    'snippet_13.mp3',
+    'snippet_14.mp3',
+    'snippet_15.mp3',
+    'snippet_16.mp3',
+    'snippet_17.mp3',
+  ];
+  // Pick one at random
+  const chosen = soundEffects[Math.floor(Math.random() * soundEffects.length)];
+
+  // Create an <audio> and play
+  const audio = new Audio(`assets/sounds/${chosen}`);
+  audio.play().catch(err => {
+    // In case of browser auto-play restrictions, you may see warnings in console
+    console.warn("Audio play was interrupted:", err);
+  });
 }
