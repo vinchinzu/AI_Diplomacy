@@ -171,14 +171,14 @@
     transition: all 0.3s ease;
     
     /* Wider but less tall than previous suggestion */
-    width: 280px;
-    min-width: 280px;
-    height: 200px; /* Reduced height significantly */
+    width: 290px;
+    min-width: 290px;
+    height: 250px; /* Reduced height significantly */
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
     font-family: "Book Antiqua", Palatino, serif;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
   }
   
   .chat-header {
@@ -239,27 +239,64 @@
     max-height: 36px;
   }
   
-  /* Color-coded power classes */
+  /* Enhanced power color classes with better contrast and text shadows */
   .power-austria {
-    color: #c40000;
+    color: #ff1a1a; /* Brighter red */
+    text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.7);
+    font-weight: bold;
   }
+  
   .power-england {
-    color: #00008B;
+    color: #1a1aff; /* Brighter blue */
+    text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.7);
+    font-weight: bold;
   }
+  
   .power-france {
-    color: #0fa0d0;
+    color: #00bfff; /* Deeper sky blue */
+    text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.7);
+    font-weight: bold;
   }
+  
   .power-germany {
-    color: #444444;
+    color: #808080; /* Lighter gray for better contrast */
+    text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.7);
+    font-weight: bold;
   }
+  
   .power-italy {
-    color: #008000;
+    color: #00cc00; /* Brighter green */
+    text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.7);
+    font-weight: bold;
   }
+  
   .power-russia {
-    color: #cccccc;
+    color: #ffffff; /* Pure white instead of light gray */
+    text-shadow: 0px 0px 3px rgba(0, 0, 0, 0.8); /* Stronger shadow for white */
+    font-weight: bold;
   }
+  
   .power-turkey {
-    color: #e0c846;
+    color: #ffd700; /* More vibrant gold */
+    text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.7);
+    font-weight: bold;
+  }
+  
+  /* Add specific styling for power names in headers */
+  .chat-header .power-austria,
+  .chat-header .power-england,
+  .chat-header .power-france,
+  .chat-header .power-germany, 
+  .chat-header .power-italy,
+  .chat-header .power-russia,
+  .chat-header .power-turkey {
+    font-size: 1.1em;
+    letter-spacing: 1px;
+  }
+  
+  /* Add a fallback for any other elements that might use these colors */
+  [class^="power-"] {
+    font-weight: bold;
   }
   
   /* Order manipulation for U-shape */

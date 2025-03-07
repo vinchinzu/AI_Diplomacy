@@ -21,6 +21,12 @@ let territoryTransitions = []; // Track territory color transitions
 let chatWindows = {}; // Store chat window elements by power
 let currentPower = 'FRANCE'; // Default perspective is France
 
+// >>> ADDED: Camera pan and message playback variables
+let cameraPanTime = 0;   // Timer that drives the camera panning
+const cameraPanSpeed = 0.0005; // Smaller = slower
+let messagesPlaying = false;    // Lock to let messages animate before next phase
+let faceIconCache = {}; // Cache for generated face icons
+
 // --- DOM ELEMENTS ---
 const loadBtn = document.getElementById('load-btn');
 const fileInput = document.getElementById('file-input');
@@ -138,6 +144,23 @@ function animate() {
 
   const currentTime = Date.now();
 
+  // >>> ADDED: Camera panning when in playback mode
+  if (isPlaying) {
+    cameraPanTime += cameraPanSpeed; 
+    // Create a circular arc from SE to SW with vertical wave
+    const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;  // range ~0.3..2.1 rad
+    const radius = 1200;   // distance from center
+    camera.position.set(
+      radius * Math.cos(angle),
+      800 + 100 * Math.sin(cameraPanTime * 0.5),
+      radius * Math.sin(angle)
+    );
+    camera.lookAt(0, 0, 0);
+  } else {
+    // Normal camera controls when not in playback
+    controls.update();
+  }
+
   // Process unit movement animations
   if (unitAnimations.length > 0) {
     unitAnimations.forEach((anim, index) => {
@@ -177,8 +200,8 @@ function animate() {
           anim.object.rotation.x = 0;
         }
 
-        // If this was the last animation and playback is active, continue after delay
-        if (unitAnimations.length === 0 && isPlaying) {
+        // >>> MODIFIED: Check if messages are still playing before advancing
+        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying) {
           // Schedule next phase after a pause delay
           playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
         }
@@ -1499,15 +1522,15 @@ function updateLeaderboard(phase) {
   });
 
   // Build HTML for leaderboard
-  let html = `<strong>Council Standings</strong><br/>`;  // Changed from "Leaderboard"
+  let html = `<strong>Council Standings</strong><br/>`;
 
   sortedPowers.forEach(power => {
     const centers = centerCounts[power] || 0;
     const units = unitCounts[power] || 0;
-    const powerColor = getPowerHexColor(power);
-
+    
+    // Use CSS classes instead of inline styles for better contrast
     html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
-          <span style="color: ${powerColor}; font-weight: bold;">${power}</span>
+          <span class="power-${power.toLowerCase()}">${power}</span>
           <span>${centers} SCs, ${units} units</span>
         </div>`;
   });
@@ -1533,8 +1556,8 @@ function togglePlayback() {
     prevBtn.disabled = true;
     nextBtn.disabled = true;
 
-    // Start playback
-    advanceToNextPhase();
+    // Start playback with animation
+    displayPhaseWithAnimation(currentPhaseIndex);
   } else {
     // Update button text to show play
     playBtn.textContent = "▶ Play";
@@ -1547,6 +1570,7 @@ function togglePlayback() {
 
     // Cancel any ongoing animations
     unitAnimations = [];
+    messagesPlaying = false;
 
     // Re-enable manual navigation
     prevBtn.disabled = false;
@@ -1576,7 +1600,7 @@ function displayPhaseWithAnimation(index) {
   const currentPhase = gameData.phases[index];
   const previousPhase = gameData.phases[previousIndex];
 
-  phaseDisplay.textContent = `${currentPhase.name || 'Unknown Phase'} (${index + 1}/${gameData.phases.length})`;
+  phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameData.phases.length})`;
 
   // Build ownership maps for territory coloring
   const currentCenters = currentPhase.state?.centers || {};
@@ -1587,7 +1611,7 @@ function displayPhaseWithAnimation(index) {
   const currentOwnershipMap = buildOwnershipMap(currentCenters, currentUnits);
   const previousOwnershipMap = buildOwnershipMap(previousCenters, previousUnits);
 
-  // Update map with new territory colors
+  // Update map with new territory colors (if needed)
   createFallbackMap(currentOwnershipMap);
 
   // Clear previous unit meshes (except supply centers)
@@ -1685,8 +1709,8 @@ function displayPhaseWithAnimation(index) {
   // Update the leaderboard
   updateLeaderboard(currentPhase);
 
-  // Update chat windows with messages from this phase
-  updateChatWindows(currentPhase);
+  // Update chat windows with messages from this phase - in step mode for playback
+  updateChatWindows(currentPhase, true);
 
   // Show phase info
   infoPanel.textContent = `Phase: ${currentPhase.name}\nSupply centers: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
@@ -1931,126 +1955,189 @@ function createChatWindows() {
   otherPowers.forEach(power => {
     createChatWindow(power);
   });
-
-  // Helper function to create a chat window
-  function createChatWindow(power, isGlobal = false) {
-    const chatWindow = document.createElement('div');
-    chatWindow.className = 'chat-window';
-    chatWindow.id = `chat-${power}`;
-
-    // Create header with appropriate styling
-    const header = document.createElement('div');
-    header.className = 'chat-header';
-
-    // For global chat, use a different style
-    if (isGlobal) {
-      header.innerHTML = `<span style="color: #ffffff">GLOBAL</span><span class="toggle-chat">▼</span>`;
-    } else {
-      header.innerHTML = `<span class="power-${power.toLowerCase()}">${power}</span><span class="toggle-chat">▼</span>`;
-    }
-
-    // Create messages container
-    const messagesContainer = document.createElement('div');
-    messagesContainer.className = 'chat-messages';
-    messagesContainer.id = `messages-${power}`;
-
-    // Add toggle functionality
-    header.addEventListener('click', () => {
-      chatWindow.classList.toggle('chat-collapsed');
-      header.querySelector('.toggle-chat').textContent =
-        chatWindow.classList.contains('chat-collapsed') ? '▲' : '▼';
-    });
-
-    // Assemble chat window
-    chatWindow.appendChild(header);
-    chatWindow.appendChild(messagesContainer);
-
-    // Add to container
-    chatContainer.appendChild(chatWindow);
-
-    // Store reference
-    chatWindows[power] = {
-      element: chatWindow,
-      messagesContainer: messagesContainer,
-      isGlobal: isGlobal
-    };
-  }
 }
 
-function updateChatWindows(phase) {
-  // If no messages in the phase, do nothing
-  if (!phase.messages || !phase.messages.length) return;
+// Modified to use 3D face icons properly
+function createChatWindow(power, isGlobal = false) {
+  const chatContainer = document.getElementById('chat-container');
+  const chatWindow = document.createElement('div');
+  chatWindow.className = 'chat-window';
+  chatWindow.id = `chat-${power}`;
 
-  // Clear all message containers
-  Object.values(chatWindows).forEach(window => {
-    window.messagesContainer.innerHTML = '';
+  // Create header with appropriate styling
+  const header = document.createElement('div');
+  header.className = 'chat-header';
+  
+  // Adjust header to accommodate larger face icons
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.padding = '8px';
+
+  // Create the title element
+  const titleElement = document.createElement('span');
+  if (isGlobal) {
+    titleElement.style.color = '#ffffff';
+    titleElement.textContent = 'GLOBAL';
+  } else {
+    titleElement.className = `power-${power.toLowerCase()}`;
+    titleElement.textContent = power;
+  }
+  header.appendChild(titleElement);
+
+  // Create container for 3D face icon - EVEN BIGGER NOW
+  const faceHolder = document.createElement('div');
+  faceHolder.style.width = '64px'; // Increased from 48px to 64px
+  faceHolder.style.height = '64px'; // Increased from 48px to 64px
+  faceHolder.style.marginLeft = 'auto';
+  faceHolder.style.cursor = 'pointer';
+  faceHolder.style.borderRadius = '50%'; // Make it circular
+  faceHolder.style.overflow = 'hidden'; // Keep the image within the circle
+  faceHolder.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)'; // Add some depth
+  faceHolder.style.border = '2px solid #fff'; // White border for contrast
+  faceHolder.id = `face-${power}`; // Add ID for animation targeting
+  
+  // Generate the face icon and add it to the header
+  generateFaceIcon(power).then(dataURL => {
+    const img = document.createElement('img');
+    img.src = dataURL;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.id = `face-img-${power}`; // Add ID for animation targeting
+    
+    // Add subtle idle animation
+    setInterval(() => {
+      if (!img.dataset.animating && Math.random() < 0.1) { // Occasionally animate while idle
+        idleAnimation(img);
+      }
+    }, 3000);
+    
+    faceHolder.appendChild(img);
   });
+  
+  header.appendChild(faceHolder);
+
+  // Create messages container
+  const messagesContainer = document.createElement('div');
+  messagesContainer.className = 'chat-messages';
+  messagesContainer.id = `messages-${power}`;
+
+  // Add toggle functionality
+  header.addEventListener('click', () => {
+    chatWindow.classList.toggle('chat-collapsed');
+  });
+
+  // Assemble chat window
+  chatWindow.appendChild(header);
+  chatWindow.appendChild(messagesContainer);
+
+  // Add to container
+  chatContainer.appendChild(chatWindow);
+
+  // Store reference
+  chatWindows[power] = {
+    element: chatWindow,
+    messagesContainer: messagesContainer,
+    isGlobal: isGlobal,
+    seenMessages: new Set() // Track which messages we've already shown
+  };
+}
+
+// Modified to accumulate messages instead of resetting
+function updateChatWindows(phase, stepMessages = false) {
+  if (!phase.messages || !phase.messages.length) {
+    messagesPlaying = false;
+    return;
+  }
+
+  // DO NOT clear existing messages - we'll check if they're new before adding
 
   // Filter messages relevant to the current power
   const relevantMessages = phase.messages.filter(msg => {
-    return (msg.sender === currentPower || msg.recipient === currentPower || msg.recipient === 'GLOBAL');
+    return (msg.sender === currentPower || 
+            msg.recipient === currentPower || 
+            msg.recipient === 'GLOBAL');
   });
 
   // Sort messages by time
   relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
 
-  // Process each message
-  relevantMessages.forEach(msg => {
-    // Special handling for global messages
-    if (msg.recipient === 'GLOBAL') {
-      // Add to the global chat window
-      if (chatWindows['GLOBAL']) {
-        addMessageToChat('GLOBAL', msg, phase.name);
+  if (!stepMessages) {
+    // Normal mode: add all messages at once
+    relevantMessages.forEach(msg => {
+      addMessageToChat(msg, phase.name);
+    });
+    messagesPlaying = false;
+  } else {
+    // Stepwise playback: show one message at a time
+    messagesPlaying = true;
+    let index = 0;
+
+    const showNext = () => {
+      if (index >= relevantMessages.length) {
+        // Done with messages, allow advancing to next phase
+        messagesPlaying = false;
+        if (unitAnimations.length === 0 && isPlaying) {
+          playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+        }
+        return;
       }
-      return;
-    }
-
-    // Determine which chat window to use for private messages
-    let targetPower;
-
-    if (msg.sender === currentPower) {
-      // Outgoing message
-      targetPower = msg.recipient;
-    } else {
-      // Incoming message
-      targetPower = msg.sender;
-    }
-
-    // Add to appropriate chat window
-    if (chatWindows[targetPower]) {
-      addMessageToChat(targetPower, msg, phase.name);
-    }
-  });
+      
+      const msg = relevantMessages[index];
+      addMessageToChat(msg, phase.name);
+      animateHeadNod(msg);
+      index++;
+      setTimeout(showNext, 1000); // Show next message after 1 second
+    };
+    
+    // Start the message sequence
+    showNext();
+  }
 }
 
-function addMessageToChat(power, message, phaseName) {
-  if (!chatWindows[power]) return;
-
-  const messagesContainer = chatWindows[power].messagesContainer;
+// Modified to check if message is already shown
+function addMessageToChat(msg, phaseName) {
+  // Determine which chat window to use
+  let targetPower;
+  if (msg.recipient === 'GLOBAL') {
+    targetPower = 'GLOBAL';
+  } else {
+    targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
+  }
+  
+  if (!chatWindows[targetPower]) return;
+  
+  // Create a unique ID for this message to avoid duplication
+  const msgId = `${msg.sender}-${msg.recipient}-${msg.time_sent}-${msg.message}`;
+  
+  // Skip if we've already shown this message
+  if (chatWindows[targetPower].seenMessages.has(msgId)) {
+    return;
+  }
+  
+  // Mark as seen
+  chatWindows[targetPower].seenMessages.add(msgId);
+  
+  const messagesContainer = chatWindows[targetPower].messagesContainer;
   const messageElement = document.createElement('div');
 
-  // For global chat, display sender information
-  if (power === 'GLOBAL') {
-    const senderColor = message.sender.toLowerCase();
+  // Style based on sender/recipient
+  if (targetPower === 'GLOBAL') {
+    // Global chat shows sender info
+    const senderColor = msg.sender.toLowerCase();
     messageElement.className = 'chat-message message-incoming';
-
-    // Format the message content with sender info
     messageElement.innerHTML = `
-          <span style="font-weight: bold;" class="power-${senderColor}">${message.sender}:</span>
-          ${message.message}
-          <div class="message-time">${phaseName}</div>
-        `;
+      <span style="font-weight: bold;" class="power-${senderColor}">${msg.sender}:</span>
+      ${msg.message}
+      <div class="message-time">${phaseName}</div>
+    `;
   } else {
-    // Determine if this is an incoming or outgoing message
-    const isOutgoing = message.sender === currentPower;
-
+    // Private chat - outgoing or incoming style
+    const isOutgoing = msg.sender === currentPower;
     messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
-
-    // Format the message content
     messageElement.innerHTML = `
-          ${message.message}
-          <div class="message-time">${phaseName}</div>
-        `;
+      ${msg.message}
+      <div class="message-time">${phaseName}</div>
+    `;
   }
 
   // Add to container
@@ -2060,16 +2147,226 @@ function addMessageToChat(power, message, phaseName) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// 1. Ensure the load button correctly triggers the file input
-document.addEventListener('DOMContentLoaded', function() {
-  // Get references to the load button and file input
-  const loadBtn = document.getElementById('load-btn');
-  const fileInput = document.getElementById('file-input');
+// Animate a head nod when a message appears
+function animateHeadNod(msg) {
+  // Determine which chat window's head to animate
+  let targetPower;
+  if (msg.recipient === 'GLOBAL') {
+    targetPower = 'GLOBAL';
+  } else {
+    targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
+  }
   
-  // Add event listener to the load button
-  loadBtn.addEventListener('click', function() {
-    fileInput.click(); // This is the critical line - it programmatically clicks the hidden file input
+  const chatWindow = chatWindows[targetPower]?.element;
+  if (!chatWindow) return;
+
+  // Find the face image and animate it
+  const img = chatWindow.querySelector(`#face-img-${targetPower}`);
+  if (!img) return;
+  
+  img.dataset.animating = 'true';
+  
+  // Choose a random animation type for variety
+  const animationType = Math.floor(Math.random() * 4);
+  
+  let animation;
+  
+  switch (animationType) {
+    case 0: // Nod animation
+      animation = img.animate([
+        { transform: 'rotate(0deg) scale(1)' },
+        { transform: 'rotate(15deg) scale(1.1)' },
+        { transform: 'rotate(-10deg) scale(1.05)' },
+        { transform: 'rotate(5deg) scale(1.02)' },
+        { transform: 'rotate(0deg) scale(1)' }
+      ], {
+        duration: 600,
+        easing: 'ease-in-out'
+      });
+      break;
+      
+    case 1: // Bounce animation
+      animation = img.animate([
+        { transform: 'translateY(0) scale(1)' },
+        { transform: 'translateY(-8px) scale(1.15)' },
+        { transform: 'translateY(3px) scale(0.95)' },
+        { transform: 'translateY(-2px) scale(1.05)' },
+        { transform: 'translateY(0) scale(1)' }
+      ], {
+        duration: 700,
+        easing: 'ease-in-out'
+      });
+      break;
+      
+    case 2: // Shake animation
+      animation = img.animate([
+        { transform: 'translate(0, 0) rotate(0deg)' },
+        { transform: 'translate(-5px, -3px) rotate(-5deg)' },
+        { transform: 'translate(5px, 2px) rotate(5deg)' },
+        { transform: 'translate(-5px, 1px) rotate(-3deg)' },
+        { transform: 'translate(0, 0) rotate(0deg)' }
+      ], {
+        duration: 500,
+        easing: 'ease-in-out'
+      });
+      break;
+      
+    case 3: // Pulse animation
+      animation = img.animate([
+        { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(255,255,255,0.7)' },
+        { transform: 'scale(1.2)', boxShadow: '0 0 0 10px rgba(255,255,255,0)' },
+        { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(255,255,255,0)' }
+      ], {
+        duration: 800,
+        easing: 'ease-out'
+      });
+      break;
+  }
+  
+  animation.onfinish = () => {
+    img.dataset.animating = 'false';
+  };
+}
+
+// Generate a 3D face icon for chat windows with higher contrast
+async function generateFaceIcon(power) {
+  if (faceIconCache[power]) {
+    return faceIconCache[power];
+  }
+  
+  // Even larger renderer size for better quality
+  const offWidth = 192, offHeight = 192; // Increased from 128x128 to 192x192
+  const offRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  offRenderer.setSize(offWidth, offHeight);
+  offRenderer.setPixelRatio(1);
+
+  // Scene
+  const offScene = new THREE.Scene();
+  offScene.background = null;
+
+  // Camera
+  const offCamera = new THREE.PerspectiveCamera(45, offWidth/offHeight, 0.1, 1000);
+  offCamera.position.set(0, 0, 50);
+
+  // Power-specific colors with higher contrast/saturation
+  const colorMap = {
+    'GLOBAL': 0xf5f5f5, // Brighter white
+    'AUSTRIA': 0xff0000, // Brighter red
+    'ENGLAND': 0x0000ff, // Brighter blue
+    'FRANCE': 0x00bfff, // Brighter cyan
+    'GERMANY': 0x1a1a1a, // Darker gray for better contrast
+    'ITALY': 0x00cc00, // Brighter green
+    'RUSSIA': 0xe0e0e0, // Brighter gray
+    'TURKEY': 0xffcc00  // Brighter yellow
+  };
+  const headColor = colorMap[power] || 0x808080;
+
+  // Larger head geometry
+  const headGeom = new THREE.BoxGeometry(20, 20, 20); // Increased from 16x16x16
+  const headMat = new THREE.MeshStandardMaterial({ color: headColor });
+  const headMesh = new THREE.Mesh(headGeom, headMat);
+  offScene.add(headMesh);
+
+  // Create outline for better visibility (a slightly larger black box behind)
+  const outlineGeom = new THREE.BoxGeometry(22, 22, 19);
+  const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const outlineMesh = new THREE.Mesh(outlineGeom, outlineMat);
+  outlineMesh.position.z = -2; // Place it behind the head
+  offScene.add(outlineMesh);
+
+  // Larger eyes with better contrast
+  const eyeGeom = new THREE.BoxGeometry(3.5, 3.5, 3.5); // Increased from 2.5x2.5x2.5
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+  const leftEye = new THREE.Mesh(eyeGeom, eyeMat);
+  leftEye.position.set(-4.5, 2, 10); // Adjusted position
+  offScene.add(leftEye);
+  const rightEye = new THREE.Mesh(eyeGeom, eyeMat);
+  rightEye.position.set(4.5, 2, 10); // Adjusted position
+  offScene.add(rightEye);
+
+  // Add a simple mouth
+  const mouthGeom = new THREE.BoxGeometry(8, 1.5, 1);
+  const mouthMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const mouth = new THREE.Mesh(mouthGeom, mouthMat);
+  mouth.position.set(0, -3, 10);
+  offScene.add(mouth);
+
+  // Brighter lighting for better contrast
+  const light = new THREE.DirectionalLight(0xffffff, 1.2); // Increased intensity
+  light.position.set(0, 20, 30);
+  offScene.add(light);
+  
+  // Add more lights for better definition
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  fillLight.position.set(-20, 0, 20);
+  offScene.add(fillLight);
+  
+  offScene.add(new THREE.AmbientLight(0xffffff, 0.4)); // Slightly brighter ambient
+
+  // Slight head rotation
+  headMesh.rotation.y = Math.PI / 6; // More pronounced angle
+
+  // Render to a texture
+  const renderTarget = new THREE.WebGLRenderTarget(offWidth, offHeight);
+  offRenderer.setRenderTarget(renderTarget);
+  offRenderer.render(offScene, offCamera);
+
+  // Get pixels
+  const pixels = new Uint8Array(offWidth * offHeight * 4);
+  offRenderer.readRenderTargetPixels(renderTarget, 0, 0, offWidth, offHeight, pixels);
+
+  // Convert to canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = offWidth;
+  canvas.height = offHeight;
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.createImageData(offWidth, offHeight);
+  imageData.data.set(pixels);
+  
+  // Flip image (WebGL coordinate system is inverted)
+  flipImageDataVertically(imageData, offWidth, offHeight);
+  ctx.putImageData(imageData, 0, 0);
+
+  // Get data URL
+  const dataURL = canvas.toDataURL('image/png');
+  faceIconCache[power] = dataURL;
+
+  // Cleanup
+  offRenderer.dispose();
+  renderTarget.dispose();
+  
+  return dataURL;
+}
+
+// Add a subtle idle animation for faces
+function idleAnimation(img) {
+  if (img.dataset.animating === 'true') return;
+  
+  img.dataset.animating = 'true';
+  
+  const animation = img.animate([
+    { transform: 'rotate(0deg) scale(1)' },
+    { transform: 'rotate(-2deg) scale(0.98)' },
+    { transform: 'rotate(0deg) scale(1)' }
+  ], {
+    duration: 1500,
+    easing: 'ease-in-out'
   });
   
-  // ... rest of your initialization code ...
-});
+  animation.onfinish = () => {
+    img.dataset.animating = 'false';
+  };
+}
+
+// Helper to flip image data vertically
+function flipImageDataVertically(imageData, width, height) {
+  const bytesPerRow = width * 4;
+  const temp = new Uint8ClampedArray(bytesPerRow);
+  for (let y = 0; y < height / 2; y++) {
+    const topOffset = y * bytesPerRow;
+    const bottomOffset = (height - y - 1) * bytesPerRow;
+    temp.set(imageData.data.slice(topOffset, topOffset + bytesPerRow));
+    imageData.data.set(imageData.data.slice(bottomOffset, bottomOffset + bytesPerRow), topOffset);
+    imageData.data.set(temp, bottomOffset);
+  }
+}
