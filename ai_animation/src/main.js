@@ -6,6 +6,7 @@ import { addMapMouseEvents } from "./map/mouseMovement"
 import { createLabel } from "./map/labels"
 import "./style.css"
 
+const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 
 // --- CORE VARIABLES ---
 let scene, camera, renderer, controls;
@@ -114,12 +115,12 @@ function initScene() {
       infoPanel.textContent = `Error loading coords: ${err.message}`;
     });
 
-  // Kick off animation loop
-  animate();
-
   // Handle resizing
   window.addEventListener('resize', onWindowResize);
   addMapMouseEvents(mapView, infoPanel)
+  // Kick off animation loop
+  animate();
+
 
 }
 
@@ -294,7 +295,7 @@ function loadCoordinateData() {
 }
 
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
-function drawMap(ownershipMap = null) {
+function drawMap() {
   const loader = new SVGLoader();
   loader.load('assets/maps/standard/standard.svg',
     function (data) {
@@ -317,7 +318,6 @@ function drawMap(ownershipMap = null) {
               continue
             } else if (provinceKey && coordinateData.provinces[provinceKey] && coordinateData.provinces[provinceKey].owner) {
               fillColor = getPowerHexColor(coordinateData.provinces[provinceKey].owner)
-
             }
             else {
               fillColor = map_styles[path.userData.node.classList[0]].fill;
@@ -473,7 +473,6 @@ function updateSupplyCenterOwnership(centers) {
   // centers is typically { "AUSTRIA":["VIE","BUD"], "FRANCE":["PAR","MAR"], ... }
   for (const [power, provinces] of Object.entries(centers)) {
     provinces.forEach(p => {
-      coordinateData.provinces[p.toUpperCase()].owner = power.toUpperCase();
       // No messages, animate units immediately
       ownershipMap[p.toUpperCase()] = power.toUpperCase();
     });
@@ -674,6 +673,7 @@ function displayInitialPhase(index) {
   }
 
   updateLeaderboard(phase);
+  updateMapOwnership(phase)
 
   // DON'T show messages yet - skip updateChatWindows call
 
@@ -779,7 +779,6 @@ function advanceToNextPhase() {
 
   // Display the new phase with animation
   displayPhaseWithAnimation(currentPhaseIndex);
-  drawMap()
 }
 
 function displayPhaseWithAnimation(index) {
@@ -826,6 +825,7 @@ function displayPhaseWithAnimation(index) {
   infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
     }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
     }`;
+  drawMap()
 }
 
 function updateMapOwnership(currentPhase) {
@@ -1201,13 +1201,12 @@ function updateChatWindows(phase, stepMessages = false) {
       }
       const msg = relevantMessages[index];
       const isNew = addMessageToChat(msg, phase.name);
-      if (isNew) {
+      if (isNew && !isDebugMode) {
         animateHeadNod(msg);
       }
       index++;
       // Increase the delay between messages - 3x the playback speed gives more spacing
       // Remove the delay if we're developing
-      const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
       if (isDebugMode) {
         showNext()
       } else {
