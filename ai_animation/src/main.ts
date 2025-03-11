@@ -2,9 +2,11 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
-import { addMapMouseEvents } from "./map/mouseMovement"
 import { createLabel } from "./map/labels"
 import "./style.css"
+import { UnitMesh } from "./types/units";
+import { PowerENUM } from "./types/map";
+import Logger from "./logger";
 
 // --- NEW: ElevenLabs TTS helper function ---
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
@@ -55,7 +57,7 @@ async function speakSummary(summaryText) {
     // Convert response into a playable blob
     const audioBlob = await response.blob();
     const audioUrl = URL.createObjectURL(audioBlob);
-    
+
     // Play the audio, pause until finished
     return new Promise((resolve, reject) => {
       const audio = new Audio(audioUrl);
@@ -95,7 +97,7 @@ let scene, camera, renderer, controls;
 let gameData = null;
 let currentPhaseIndex = 0;
 let coordinateData = null;
-let unitMeshes = []; // To store references for units + supply center 3D objects
+let unitMeshes: UnitMesh[] = []; // To store references for units + supply center 3D objects
 let mapPlane = null; // The fallback map plane
 let isPlaying = false; // Track playback state
 let playbackSpeed = 500; // Default speed in ms
@@ -105,6 +107,7 @@ let unitAnimations = []; // Track ongoing unit animations
 let territoryTransitions = []; // Track territory color transitions
 let chatWindows = {}; // Store chat window elements by power
 let currentPower = getRandomPower(); // Now randomly selected
+let logger = new Logger()
 
 // >>> ADDED: Camera pan and message playback variables
 let cameraPanTime = 0;   // Timer that drives the camera panning
@@ -196,14 +199,19 @@ function initScene() {
       drawMap();  // Create the map plane from the start
       // target the center of the map
       controls.target = new THREE.Vector3(800, 0, 800)
+      // Load default game file if in debug mode
+      if (isDebugMode) {
+        loadDefaultGameFile();
+      }
+
     })
     .catch(err => {
       console.error("Error loading coordinates:", err);
+      logger.log(`Error loading coords: ${err.message}`)
     });
 
   // Handle resizing
   window.addEventListener('resize', onWindowResize);
-  addMapMouseEvents(mapView)
   // Kick off animation loop
   animate();
 
@@ -348,6 +356,31 @@ function onWindowResize() {
   renderer.setSize(mapView.clientWidth, mapView.clientHeight);
 }
 
+// Load a default game if we're running debug
+function loadDefaultGameFile() {
+  console.log("Loading default game file for debug mode...");
+
+  // Path to the default game file
+  const defaultGameFilePath = './assets/default_game.json';
+
+  fetch(defaultGameFilePath)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to load default game file: ${response.status}`);
+      }
+      return response.text();
+    })
+    .then(data => {
+      // Create a mock file object to pass to loadGame
+      const file = new File([data], "default_game.json", { type: "application/json" });
+      loadGame(file);
+      console.log("Default game file loaded successfully");
+    })
+    .catch(error => {
+      console.error("Error loading default game file:", error);
+      logger.log(`Error loading default game: ${error.message}`)
+    });
+}
 // --- LOAD COORDINATE DATA ---
 function loadCoordinateData() {
   return new Promise((resolve, reject) => {
@@ -367,6 +400,7 @@ function loadCoordinateData() {
       })
       .then(data => {
         coordinateData = data;
+        logger.log('Coordinate data loaded!')
         resolve(coordinateData);
       })
       .catch(error => {
@@ -692,6 +726,7 @@ function loadGame(file) {
   reader.onload = e => {
     try {
       gameData = JSON.parse(e.target.result);
+      logger.log(`Game data loaded: ${gameData.phases?.length || 0} phases found.`)
       currentPhaseIndex = 0;
       if (gameData.phases?.length) {
         prevBtn.disabled = false;
@@ -705,16 +740,15 @@ function loadGame(file) {
         // Display initial phase but WITHOUT messages
         displayInitialPhase(currentPhaseIndex);
       }
-      
+
       // Add: Update info panel
       updateInfoPanel();
     } catch (err) {
-      console.error("Error parsing JSON:", err);
-      infoPanel.textContent = "Error parsing JSON: " + err.message;
+      logger.log("Error parsing JSON: " + err.message)
     }
   };
   reader.onerror = () => {
-    infoPanel.textContent = "Error reading file.";
+    logger.log("Error reading file.")
   };
   reader.readAsText(file);
 }
@@ -722,7 +756,7 @@ function loadGame(file) {
 // New function to display initial state without messages
 function displayInitialPhase(index) {
   if (!gameData || !gameData.phases || index < 0 || index >= gameData.phases.length) {
-    infoPanel.textContent = "Invalid phase index.";
+    logger.log("Invalid phase index.")
     return;
   }
 
@@ -761,10 +795,15 @@ function displayInitialPhase(index) {
   updateMapOwnership(phase)
 
   // DON'T show messages yet - skip updateChatWindows call
+  if (isDebugMode) {
+    logger.log(JSON.stringify(phase.state.units))
+  } else {
+    logger.log(`Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`)
+  }
 
   // Add: Update info panel
   updateInfoPanel();
-  
+
   drawMap()
 }
 
@@ -865,7 +904,7 @@ async function advanceToNextPhase() {
     if (justEndedPhase.summary && justEndedPhase.summary.trim() !== '') {
       // UPDATED: First update the news banner with full summary
       addToNewsBanner(`(${justEndedPhase.name}) ${justEndedPhase.summary}`);
-      
+
       // Then speak the summary (will be truncated internally)
       await speakSummary(justEndedPhase.summary);
     }
@@ -884,7 +923,7 @@ async function advanceToNextPhase() {
 
 function displayPhaseWithAnimation(index) {
   if (!gameData || !gameData.phases || index < 0 || index >= gameData.phases.length) {
-    infoPanel.textContent = "Invalid phase index.";
+    logger.log("Invalid phase index.")
     return;
   }
 
@@ -918,16 +957,14 @@ function displayPhaseWithAnimation(index) {
     updateLeaderboard(currentPhase);
     updateMapOwnership(currentPhase)
 
-    // No messages, animate units immediately
     animateUnitsForPhase(currentPhase, previousPhase);
   }
-
+  let msg = `Phase: ${currentPhase.name}\nSCs: ${JSON.stringify(currentPhase.state.centers)} \nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'} `
   // Panel
-  // Remove: infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'}\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'}`;
-  
+
   // Add: Update info panel
   updateInfoPanel();
-  
+
   drawMap()
 }
 
@@ -964,7 +1001,7 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
       unitArr.forEach(unitStr => {
         const match = unitStr.match(/^([AF])\s+(.+)$/);
         if (match) {
-          const key = `${power}-${match[1]}-${match[2]}`;
+          const key = `${power} -${match[1]} -${match[2]} `;
           previousUnitPositions[key] = getProvincePosition(match[2]);
         }
       });
@@ -980,7 +1017,7 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
         if (!match) return;
         const unitType = match[1];
         const location = match[2];
-        const key = `${power}-${unitType}-${location}`;
+        const key = `${power} -${unitType} -${location} `;
         const unitMesh = createUnitMesh({
           power: power.toUpperCase(),
           type: unitType,
@@ -995,7 +1032,7 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
         let startPos;
         let matchFound = false;
         for (const prevKey in previousUnitPositions) {
-          if (prevKey.startsWith(`${power}-${unitType}`)) {
+          if (prevKey.startsWith(`${power} -${unitType} `)) {
             startPos = previousUnitPositions[prevKey];
             matchFound = true;
             delete previousUnitPositions[prevKey];
@@ -1003,6 +1040,8 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
           }
         }
         if (!matchFound) {
+          // TODO: Add a spawn animation?
+          //
           // New spawn
           startPos = { x: currentPos.x, y: -20, z: currentPos.z };
         }
@@ -1137,7 +1176,7 @@ function colorShift(hex, percent) {
   b = Math.min(255, Math.max(0, b + Math.floor(b * percent / 100)));
 
   // Convert back to hex
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')} `;
 }
 
 // --- CHAT WINDOW FUNCTIONS ---
@@ -1167,7 +1206,7 @@ function createChatWindow(power, isGlobal = false) {
   const chatContainer = document.getElementById('chat-container');
   const chatWindow = document.createElement('div');
   chatWindow.className = 'chat-window';
-  chatWindow.id = `chat-${power}`;
+  chatWindow.id = `chat - ${power} `;
   chatWindow.style.position = 'relative'; // Add relative positioning for absolute child positioning
 
   // Create a slimmer header with appropriate styling
@@ -1188,7 +1227,7 @@ function createChatWindow(power, isGlobal = false) {
     titleElement.style.color = '#ffffff';
     titleElement.textContent = 'GLOBAL';
   } else {
-    titleElement.className = `power-${power.toLowerCase()}`;
+    titleElement.className = `power - ${power.toLowerCase()} `;
     titleElement.textContent = power;
   }
   titleElement.style.fontWeight = 'bold'; // Make text more prominent
@@ -1208,7 +1247,7 @@ function createChatWindow(power, isGlobal = false) {
   faceHolder.style.boxShadow = '0 2px 5px rgba(0,0,0,0.5)';
   faceHolder.style.border = '2px solid #fff';
   faceHolder.style.zIndex = '10'; // Ensure it's above other elements
-  faceHolder.id = `face-${power}`;
+  faceHolder.id = `face - ${power} `;
 
   // Generate the face icon and add it to the chat window (not header)
   generateFaceIcon(power).then(dataURL => {
@@ -1216,9 +1255,9 @@ function createChatWindow(power, isGlobal = false) {
     img.src = dataURL;
     img.style.width = '100%';
     img.style.height = '100%';
-    img.id = `face-img-${power}`; // Add ID for animation targeting
+    img.id = `face - img - ${power} `; // Add ID for animation targeting
 
-    img.id = `face-img-${power}`; // Add ID for animation targeting
+    img.id = `face - img - ${power} `; // Add ID for animation targeting
 
     // Add subtle idle animation
     setInterval(() => {
@@ -1237,7 +1276,7 @@ function createChatWindow(power, isGlobal = false) {
   // Create messages container
   const messagesContainer = document.createElement('div');
   messagesContainer.className = 'chat-messages';
-  messagesContainer.id = `messages-${power}`;
+  messagesContainer.id = `messages - ${power} `;
   messagesContainer.style.paddingTop = '8px'; // Add padding to prevent content being hidden under face
 
   // Add toggle functionality
@@ -1304,16 +1343,16 @@ function updateChatWindows(phase, stepMessages = false) {
         }
         return;
       }
-      
+
       const msg = relevantMessages[index];
       index++; // Increment index before adding message so word animation knows the correct next message
-      
+
       const isNew = addMessageToChat(msg, phase.name, true, showNext); // Pass showNext as callback
-      
+
       if (isNew && !isDebugMode) {
         // Increment message counter
         messageCounter++;
-        
+
         // Only animate head and play sound for every third message
         animateHeadNod(msg, (messageCounter % 3 === 0));
       } else if (isDebugMode) {
@@ -1341,7 +1380,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
   if (!chatWindows[targetPower]) return false;
 
   // Create a unique ID for this message to avoid duplication
-  const msgId = `${msg.sender}-${msg.recipient}-${msg.time_sent}-${msg.message}`;
+  const msgId = `${msg.sender} -${msg.recipient} -${msg.time_sent} -${msg.message} `;
 
   // Skip if we've already shown this message
   if (chatWindows[targetPower].seenMessages.has(msgId)) {
@@ -1359,19 +1398,19 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
     // Global chat shows sender info
     const senderColor = msg.sender.toLowerCase();
     messageElement.className = 'chat-message message-incoming';
-    
+
     // Add the header with the sender name immediately
     const headerSpan = document.createElement('span');
     headerSpan.style.fontWeight = 'bold';
     headerSpan.className = `power-${senderColor}`;
     headerSpan.textContent = `${msg.sender}: `;
     messageElement.appendChild(headerSpan);
-    
+
     // Create a span for the message content that will be filled word by word
     const contentSpan = document.createElement('span');
     contentSpan.id = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
     messageElement.appendChild(contentSpan);
-    
+
     // Add timestamp
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
@@ -1381,12 +1420,12 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
     // Private chat - outgoing or incoming style
     const isOutgoing = msg.sender === currentPower;
     messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
-    
+
     // Create content span
     const contentSpan = document.createElement('span');
     contentSpan.id = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
     messageElement.appendChild(contentSpan);
-    
+
     // Add timestamp
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
@@ -1399,7 +1438,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
 
   // Scroll to bottom
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  
+
   if (animateWords) {
     // Start word-by-word animation
     const contentSpanId = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
@@ -1410,7 +1449,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
     if (contentSpan) {
       contentSpan.textContent = msg.message;
     }
-    
+
     // If there's a completion callback, call it immediately for non-animated messages
     if (onComplete) {
       onComplete();
@@ -1429,43 +1468,43 @@ function animateMessageWords(message, contentSpanId, targetPower, messagesContai
     if (onComplete) onComplete();
     return;
   }
-  
+
   // Clear any existing content
   contentSpan.textContent = '';
   let wordIndex = 0;
-  
+
   // Function to add the next word
   const addNextWord = () => {
     if (wordIndex >= words.length) {
       // All words added - keep messagesPlaying true until next message starts
-      
+
       // Add a slight delay after the last word for readability
       setTimeout(() => {
         if (onComplete) {
           onComplete(); // Call the completion callback
         }
       }, Math.min(playbackSpeed / 3, 150));
-      
+
       return;
     }
-    
+
     // Add space if not the first word
     if (wordIndex > 0) {
       contentSpan.textContent += ' ';
     }
-    
+
     // Add the next word
     contentSpan.textContent += words[wordIndex];
     wordIndex++;
-    
+
     // Schedule the next word with a delay based on word length and playback speed
-    const delay = Math.max(30, Math.min(120, playbackSpeed / 10 * (words[wordIndex-1].length / 4)));
+    const delay = Math.max(30, Math.min(120, playbackSpeed / 10 * (words[wordIndex - 1].length / 4)));
     setTimeout(addNextWord, delay);
-    
+
     // Scroll to ensure newest content is visible
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   };
-  
+
   // Start animation
   addNextWord();
 }
@@ -1484,7 +1523,7 @@ function animateHeadNod(msg, playSoundEffect = true) {
   if (!chatWindow) return;
 
   // Find the face image and animate it
-  const img = chatWindow.querySelector(`#face-img-${targetPower}`);
+  const img = chatWindow.querySelector(`#face - img - ${targetPower} `);
   if (!img) return;
 
   img.dataset.animating = 'true';
@@ -1720,7 +1759,7 @@ function playRandomSoundEffect() {
   const chosen = soundEffects[Math.floor(Math.random() * soundEffects.length)];
 
   // Create an <audio> and play
-  const audio = new Audio(`assets/sounds/${chosen}`);
+  const audio = new Audio(`assets / sounds / ${chosen} `);
   audio.play().catch(err => {
     // In case of browser auto-play restrictions, you may see warnings in console
     console.warn("Audio play was interrupted:", err);
