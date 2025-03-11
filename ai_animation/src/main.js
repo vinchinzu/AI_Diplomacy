@@ -351,18 +351,11 @@ function onWindowResize() {
 // --- LOAD COORDINATE DATA ---
 function loadCoordinateData() {
   return new Promise((resolve, reject) => {
-    fetch('./assets/maps/standard/standard_coords.json')
+    fetch('./assets/maps/standard/coords.json')
       .then(response => {
         if (!response.ok) {
           // Try an alternate path if desired
-          return fetch('../assets/maps/standard_coords.json');
-        }
-        return response;
-      })
-      .then(response => {
-        if (!response.ok) {
-          // Another fallback path
-          return fetch('/diplomacy/animation/assets/maps/standard_coords.json');
+          throw new Error("Something went wrong when fetching the coords.json")
         }
         return response;
       })
@@ -386,9 +379,9 @@ function loadCoordinateData() {
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
 function drawMap() {
   const loader = new SVGLoader();
-  loader.load('assets/maps/standard/standard.svg',
+  loader.load('assets/maps/standard/map.svg',
     function (data) {
-      fetch('assets/maps/standard/standard_styles.json')
+      fetch('assets/maps/standard/styles.json')
         .then(resp => resp.json())
         .then(map_styles => {
           const paths = data.paths;
@@ -902,20 +895,6 @@ function displayPhaseWithAnimation(index) {
   phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameData.phases.length})`;
 
   // Rebuild supply centers, remove old units
-  const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
-  const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
-  oldUnits.forEach(m => scene.remove(m));
-  unitMeshes = supplyCenters;
-
-  // Ownership
-  if (currentPhase.state?.centers) {
-    updateSupplyCenterOwnership(currentPhase.state.centers);
-  }
-
-  // Update leaderboard
-  updateLeaderboard(currentPhase);
-  updateMapOwnership(currentPhase)
-
 
   // First show messages, THEN animate units after
   if (currentPhase.messages && currentPhase.messages.length) {
@@ -925,6 +904,20 @@ function displayPhaseWithAnimation(index) {
     // We'll animate units only after messages are done
     // This happens in the animation loop when messagesPlaying becomes false
   } else {
+    const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
+    const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
+    oldUnits.forEach(m => scene.remove(m));
+    unitMeshes = supplyCenters;
+
+    // Ownership
+    if (currentPhase.state?.centers) {
+      updateSupplyCenterOwnership(currentPhase.state.centers);
+    }
+
+    // Update leaderboard
+    updateLeaderboard(currentPhase);
+    updateMapOwnership(currentPhase)
+
     // No messages, animate units immediately
     animateUnitsForPhase(currentPhase, previousPhase);
   }
