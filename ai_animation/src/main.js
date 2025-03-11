@@ -6,10 +6,8 @@ import { addMapMouseEvents } from "./map/mouseMovement"
 import { createLabel } from "./map/labels"
 import "./style.css"
 
-// Then refresh the page
 //const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = false;
-
 // --- CORE VARIABLES ---
 let scene, camera, renderer, controls;
 let gameData = null;
@@ -31,12 +29,6 @@ let cameraPanTime = 0;   // Timer that drives the camera panning
 const cameraPanSpeed = 0.0005; // Smaller = slower
 let messagesPlaying = false;    // Lock to let messages animate before next phase
 let faceIconCache = {}; // Cache for generated face icons
-
-// Add a new state variable to track the complete phase lifecycle
-let phaseInProgress = false; // Track when a phase is being processed (messages + animations)
-
-// Add a new variable to enforce a pause between phases
-let phaseTransitionPausing = false;
 
 // --- DOM ELEMENTS ---
 const loadBtn = document.getElementById('load-btn');
@@ -148,16 +140,24 @@ function animate() {
       650 + 80 * Math.sin(cameraPanTime * 0.5),
       100 + radius * Math.sin(angle)
     );
+
+    // If messages are done playing but we haven't started unit animations yet
+    if (!messagesPlaying && unitAnimations.length === 0 && isPlaying) {
+      if (gameData && gameData.phases) {
+        const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : gameData.phases.length - 1;
+        animateUnitsForPhase(
+          gameData.phases[currentPhaseIndex],
+          gameData.phases[prevIndex]
+        );
+      }
+    }
   } else {
     controls.update();
   }
 
   // Process unit movement animations
   if (unitAnimations.length > 0) {
-    // Use a reverse loop to safely remove items
-    for (let i = unitAnimations.length - 1; i >= 0; i--) {
-      const anim = unitAnimations[i];
-      
+    unitAnimations.forEach((anim, index) => {
       // Calculate progress (0 to 1)
       const elapsed = currentTime - anim.startTime;
       const progress = Math.min(1, elapsed / anim.duration);
@@ -181,7 +181,7 @@ function animate() {
         }
       } else {
         // Animation complete, remove from active animations
-        unitAnimations.splice(i, 1);
+        unitAnimations.splice(index, 1);
 
         // Set final position
         anim.object.position.x = anim.endPos.x;
@@ -193,15 +193,14 @@ function animate() {
           anim.object.rotation.z = 0;
           anim.object.rotation.x = 0;
         }
+
+        // >>> MODIFIED: Check if messages are still playing before advancing
+        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying) {
+          // Schedule next phase after a pause delay
+          playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+        }
       }
-    }
-    
-    // After processing all animations (outside the loop),
-    // check if all are done and we should proceed to completion
-    if (unitAnimations.length === 0 && isPlaying && !messagesPlaying && phaseInProgress) {
-      console.log("All unit animations complete, proceeding to phase completion");
-      handlePhaseCompletion();
-    }
+    });
   }
 
   // Process territory color transitions
@@ -678,13 +677,8 @@ function displayInitialPhase(index) {
 
   // DON'T show messages yet - skip updateChatWindows call
 
-  // Comment out the debug info that overwrote the info panel
-  // infoPanel.textContent = `Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`;
-  
-  // Set a default message for the first phase
-  infoPanel.textContent = "Beginning of game";
-  
-  drawMap();
+  infoPanel.textContent = `Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`;
+  drawMap()
 }
 
 // --- LEADERBOARD FUNCTION ---
@@ -746,75 +740,53 @@ function togglePlayback() {
   isPlaying = !isPlaying;
 
   if (isPlaying) {
-    console.log("Play pressed, starting phase:", currentPhaseIndex);
     playBtn.textContent = "⏸ Pause";
     prevBtn.disabled = true;
     nextBtn.disabled = true;
-    
-    // Reset ALL state flags to start fresh
-    phaseInProgress = false;
-    messagesPlaying = false;
-    phaseTransitionPausing = false;
-    
-    // Clear any pending timers
-    if (playbackTimer) {
-      clearTimeout(playbackTimer);
-      playbackTimer = null;
+
+    // First, show the messages of the current phase if it's the initial playback
+    const phase = gameData.phases[currentPhaseIndex];
+    if (phase.messages && phase.messages.length) {
+      // Show messages with stepwise animation
+      updateChatWindows(phase, true);
+
+      // After all messages are shown, then the animate() function will handle
+      // starting unit animations since messagesPlaying will become false
+    } else {
+      // No messages, go straight to unit animations
+      displayPhaseWithAnimation(currentPhaseIndex);
     }
-    
-    // Clear any existing animation state
-    unitAnimations = [];
-    territoryTransitions = [];
-    
-    // IMPORTANT FIX: Explicitly start displaying the current phase
-    // This ensures the play sequence begins immediately
-    console.log("Starting fresh display of current phase");
-    displayPhaseWithAnimation(currentPhaseIndex);
   } else {
-    console.log("Pause pressed, stopping playback");
     playBtn.textContent = "▶ Play";
-    
-    // Clear any pending timers
     if (playbackTimer) {
       clearTimeout(playbackTimer);
       playbackTimer = null;
     }
-    
-    // Reset all animation state
     unitAnimations = [];
     messagesPlaying = false;
-    phaseInProgress = false;
-    phaseTransitionPausing = false;
-    
-    // Enable navigation buttons
     prevBtn.disabled = false;
     nextBtn.disabled = false;
   }
 }
 
 function advanceToNextPhase() {
-  // Cancel any existing timers
-  if (playbackTimer) {
-    clearTimeout(playbackTimer);
-    playbackTimer = null;
+  // Only show a summary if we have at least started the first phase
+  // and only if the just-ended phase has a "summary" property.
+  if (gameData && gameData.phases && currentPhaseIndex >= 0) {
+    const justEndedPhase = gameData.phases[currentPhaseIndex];
+    if (justEndedPhase.summary && justEndedPhase.summary.trim() !== '') {
+      // e.g. add some label: "(S1901M) Army bounce in GAL ..."
+      addToNewsBanner(`(${justEndedPhase.name}) ${justEndedPhase.summary}`);
+    }
   }
-  
-  console.log("Advancing to next phase, current:", currentPhaseIndex);
-  
+
   // If we've reached the end, loop back to the beginning
   if (currentPhaseIndex >= gameData.phases.length - 1) {
     currentPhaseIndex = 0;
   } else {
     currentPhaseIndex++;
   }
-  
-  console.log("New phase index:", currentPhaseIndex);
-  
-  // Reset all state flags to ensure clean state for next phase
-  messagesPlaying = false; // No messages playing yet
-  phaseInProgress = false; // Starting fresh
-  phaseTransitionPausing = false; // Not pausing
-  
+
   // Display the new phase with animation
   displayPhaseWithAnimation(currentPhaseIndex);
 }
@@ -825,16 +797,9 @@ function displayPhaseWithAnimation(index) {
     return;
   }
 
-  const prevIndex = (index > 0) ? index - 1 : null;
-  const previousPhase = (prevIndex !== null) ? gameData.phases[prevIndex] : null;
+  const prevIndex = index > 0 ? index - 1 : gameData.phases.length - 1;
   const currentPhase = gameData.phases[index];
-  
-  console.log("Displaying phase:", currentPhase.name, "Index:", index);
-  if (previousPhase) {
-    console.log("Previous phase:", previousPhase.name, "Index:", prevIndex);
-  } else {
-    console.log("No previous phase for index 0.");
-  }
+  const previousPhase = gameData.phases[prevIndex];
 
   phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameData.phases.length})`;
 
@@ -851,50 +816,26 @@ function displayPhaseWithAnimation(index) {
 
   // Update leaderboard
   updateLeaderboard(currentPhase);
-  updateMapOwnership(currentPhase);
+  updateMapOwnership(currentPhase)
 
-  // Set the phase in progress flag
-  phaseInProgress = true;
-  
-  // Special case for first phase (index 0) - just show the board, no messages or animations
-  if (index === 0) {
-    // For phase 0, just place the units without animation
-    if (currentPhase.state?.units) {
-      for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
-        unitArr.forEach(unitStr => {
-          const match = unitStr.match(/^([AF])\s+(.+)$/);
-          if (match) {
-            displayUnit({
-              power: power.toUpperCase(),
-              type: match[1],
-              location: match[2],
-            });
-          }
-        });
-      }
-    }
-    
-    infoPanel.textContent = "Beginning of game";
-    phaseInProgress = false; // Release the lock
-    drawMap();
-    return;
-  }
-  
-  // For all other phases, follow the sequence: messages → animations → summary → next phase
-  // Check if there are messages and the messages array exists
-  if (currentPhase.messages && Array.isArray(currentPhase.messages) && currentPhase.messages.length > 0) {
+
+  // First show messages, THEN animate units after
+  if (currentPhase.messages && currentPhase.messages.length) {
     // First show messages with stepwise animation
-    console.log("Showing messages with animation before units");
     updateChatWindows(currentPhase, true);
-    // The updateChatWindows function will handle the next steps via callbacks
+
+    // We'll animate units only after messages are done
+    // This happens in the animation loop when messagesPlaying becomes false
   } else {
     // No messages, animate units immediately
-    console.log("No messages array or it's empty, animating units immediately");
-    animateUnitsForPhase(currentPhase, previousPhase, true);
-    // The animateUnitsForPhase function will handle the next steps
+    animateUnitsForPhase(currentPhase, previousPhase);
   }
-  
-  drawMap();
+
+  // Panel
+  infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
+    }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
+    }`;
+  drawMap()
 }
 
 function updateMapOwnership(currentPhase) {
@@ -922,120 +863,49 @@ function updateMapOwnership(currentPhase) {
 }
 
 // New helper function to animate units for a phase
-function animateUnitsForPhase(currentPhase, previousPhase, updateBanner = true) {
-  console.log("Animating units for phase:", currentPhase?.name);
-  
-  // Only update the panel and banner if we have a previous phase
-  if (previousPhase) {
-    const summaryText = getPhaseSummary(previousPhase);
-    
-    if (summaryText) {
-      // Update the info panel
-      infoPanel.textContent = summaryText;
-      infoPanel.style.fontSize = "14px"; 
-      infoPanel.style.padding = "8px";
-      
-      // Only update the banner if the flag is true
-      if (updateBanner) {
-        updateNewsBanner(summaryText);
-        console.log("Updated news banner with summary from animateUnitsForPhase");
-      }
-    } else {
-      // Fallback if no summary is available
-      infoPanel.textContent = `Phase: ${previousPhase.name} (completed)`;
-      if (updateBanner) {
-        updateNewsBanner(`Phase: ${previousPhase.name} (completed)`);
-      }
-    }
-  } else {
-    // First phase doesn't have a previous phase
-    infoPanel.textContent = "Beginning of game";
-    if (updateBanner) {
-      updateNewsBanner("The Great War begins! Diplomatic negotiations are underway...");
-    }
-  }
-
+function animateUnitsForPhase(currentPhase, previousPhase) {
   // Prepare unit position maps
   const previousUnitPositions = {};
-  
-  // Make sure previousPhase exists before trying to access it
-  if (previousPhase && previousPhase.state?.units) {
-    console.log("Getting unit positions from previous phase:", previousPhase.name);
+  if (previousPhase.state?.units) {
     for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
       unitArr.forEach(unitStr => {
-        // For modern JSON format where units are objects
-        if (typeof unitStr === 'object') {
-          if (unitStr.type && unitStr.location && unitStr.power) {
-            const key = `${unitStr.power}-${unitStr.type}-${unitStr.location}`;
-            previousUnitPositions[key] = getProvincePosition(unitStr.location);
-          }
-        } 
-        // For legacy string format "A LON"
-        else if (typeof unitStr === 'string') {
-          const match = unitStr.match(/^([AF])\s+(.+)$/);
-          if (match) {
-            const key = `${power}-${match[1]}-${match[2]}`;
-            previousUnitPositions[key] = getProvincePosition(match[2]);
-          }
+        const match = unitStr.match(/^([AF])\s+(.+)$/);
+        if (match) {
+          const key = `${power}-${match[1]}-${match[2]}`;
+          previousUnitPositions[key] = getProvincePosition(match[2]);
         }
       });
     }
-    console.log(`Found ${Object.keys(previousUnitPositions).length} unit positions from previous phase`);
-  } else {
-    console.log("No previous phase or no units in previous phase");
   }
 
-  // Clear any existing animations to avoid double animations
+  // Animate new units from old positions (or spawn from below)
   unitAnimations = [];
-  
   if (currentPhase.state?.units) {
     for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
-      unitArr.forEach(unitData => {
-        let unitType, location, unitPower;
-        
-        // Handle both object and string formats
-        if (typeof unitData === 'object') {
-          // Object format: {type: "A", power: "ENGLAND", location: "LON"}
-          unitType = unitData.type;
-          location = unitData.location;
-          unitPower = unitData.power;
-        } else if (typeof unitData === 'string') {
-          // String format: "A LON"
-          const match = unitData.match(/^([AF])\s+(.+)$/);
-          if (!match) {
-            console.log("Couldn't parse unit data:", unitData);
-            return;
-          }
-          unitType = match[1];
-          location = match[2];
-          unitPower = power;
-        } else {
-          console.log("Unknown unit data format:", unitData);
-          return;
-        }
-        
-        const key = `${unitPower}-${unitType}-${location}`;
-        console.log(`Creating unit: ${key}`);
-        
+      unitArr.forEach(unitStr => {
+        const match = unitStr.match(/^([AF])\s+(.+)$/);
+        if (!match) return;
+        const unitType = match[1];
+        const location = match[2];
+        const key = `${power}-${unitType}-${location}`;
         const unitMesh = createUnitMesh({
-          power: unitPower.toUpperCase(),
+          power: power.toUpperCase(),
           type: unitType,
           location
         });
 
-        // Current final position
+
+        // Current final
         const currentPos = getProvincePosition(location);
 
-        // Start position
+        // Start pos
         let startPos;
         let matchFound = false;
-        
-        // Find matching unit from previous phase
         for (const prevKey in previousUnitPositions) {
           if (prevKey.startsWith(`${power}-${unitType}`)) {
             startPos = previousUnitPositions[prevKey];
             matchFound = true;
-            delete previousUnitPositions[prevKey]; // Remove so it's not reused
+            delete previousUnitPositions[prevKey];
             break;
           }
         }
@@ -1048,74 +918,18 @@ function animateUnitsForPhase(currentPhase, previousPhase, updateBanner = true) 
         scene.add(unitMesh);
         unitMeshes.push(unitMesh);
 
-        // Only add to animations if actually moving (avoid unnecessary animations)
-        if (startPos.x !== currentPos.x || startPos.z !== currentPos.z || startPos.y !== 10) {
-          unitAnimations.push({
-            object: unitMesh,
-            startPos,
-            endPos: currentPos,
-            startTime: Date.now(),
-            duration: animationDuration
-          });
-        }
+        // Animate
+        unitAnimations.push({
+          object: unitMesh,
+          startPos,
+          endPos: currentPos,
+          startTime: Date.now(),
+          duration: animationDuration
+        });
       });
     }
   }
-  
-  // If no animations were created, we need to proceed to the next phase
-  if (unitAnimations.length === 0) {
-    console.log("No unit animations needed, proceeding to phase completion");
-    handlePhaseCompletion();
-  } else {
-    console.log(`Created ${unitAnimations.length} unit animations`);
-    // Otherwise, the animation completion will be handled in the animate() function
-  }
 }
-
-// New helper function to handle phase completion
-function handlePhaseCompletion() {
-  // Show the summary for the current phase
-  const currentPhase = gameData.phases[currentPhaseIndex];
-  const summaryText = getPhaseSummary(currentPhase);
-  
-  if (summaryText) {
-    updateNewsBanner(summaryText);
-    console.log("Updated news banner with current phase summary after animations");
-  }
-  
-  // Set a pause flag to prevent immediate next phase
-  phaseTransitionPausing = true;
-  // Release the phase lock
-  phaseInProgress = false;
-  
-  console.log("Phase complete, pausing before next phase");
-  
-  // Cancel any existing timer to avoid race conditions
-  if (playbackTimer) {
-    clearTimeout(playbackTimer);
-    playbackTimer = null;
-  }
-  
-  // Schedule next phase after a pause delay
-  if (isPlaying) {
-    console.log(`Scheduling next phase after ${playbackSpeed * 4}ms pause`);
-    playbackTimer = setTimeout(() => {
-      if (isPlaying) {
-        console.log("Pause complete, advancing to next phase");
-        phaseTransitionPausing = false; // Release the pause lock
-        advanceToNextPhase();
-      } else {
-        // If we stopped playing during the pause
-        console.log("Playback stopped during pause, canceling advancement");
-        phaseTransitionPausing = false;
-      }
-    }, playbackSpeed * 4); // Use a longer pause between phases
-  } else {
-    console.log("Not playing, not scheduling next phase");
-    phaseTransitionPausing = false;
-  }
-}
-
 function createUnitMesh(unitData) {
   const color = getPowerHexColor(unitData.power);
 
@@ -1207,11 +1021,7 @@ speedSelector.addEventListener('change', e => {
 });
 
 // --- BOOTSTRAP ON PAGE LOAD ---
-window.addEventListener('load', () => {
-  initScene();
-  // Initialize news banner with default text
-  updateNewsBanner("Welcome to the Diplomacy Game Visualization. Load a game file to begin.");
-});
+window.addEventListener('load', initScene);
 
 // Utility functions for color manipulation
 function lightenColor(hex, percent) {
@@ -1361,26 +1171,8 @@ function createChatWindow(power, isGlobal = false) {
 
 // Modified to accumulate messages instead of resetting and only animate for new messages
 function updateChatWindows(phase, stepMessages = false) {
-  console.log("Updating chat windows for phase:", phase.name, "stepMessages:", stepMessages);
-  
-  // Check if messages array exists and has items
-  if (!phase.messages || !Array.isArray(phase.messages) || phase.messages.length === 0) {
-    console.log("No messages array or it's empty for this phase");
+  if (!phase.messages || !phase.messages.length) {
     messagesPlaying = false;
-    
-    // If no messages, proceed directly to unit animations
-    if (phaseInProgress && isPlaying) {
-      // Fix: Use proper previous phase calculation
-      const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : null;
-      const previousPhase = prevIndex !== null ? gameData.phases[prevIndex] : null;
-      
-      console.log("No messages, proceeding to animate units");
-      animateUnitsForPhase(
-        gameData.phases[currentPhaseIndex],
-        previousPhase,
-        true
-      );
-    }
     return;
   }
 
@@ -1391,13 +1183,10 @@ function updateChatWindows(phase, stepMessages = false) {
       msg.recipient === 'GLOBAL'
     );
   });
-  
-  console.log(`Found ${relevantMessages.length} relevant messages for phase ${phase.name}`);
   relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
 
   if (!stepMessages) {
     // Normal: show all at once
-    console.log("Showing all messages at once");
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew) {
@@ -1405,85 +1194,33 @@ function updateChatWindows(phase, stepMessages = false) {
       }
     });
     messagesPlaying = false;
-    
-    // If not stepping messages, proceed to unit animations
-    if (phaseInProgress && isPlaying) {
-      // Fix: Use proper previous phase calculation
-      const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : null;
-      const previousPhase = prevIndex !== null ? gameData.phases[prevIndex] : null;
-      
-      console.log("All messages shown at once, proceeding to animate units");
-      // Wait a short delay before moving to unit animations
-      setTimeout(() => {
-        if (isPlaying && phaseInProgress) {
-          animateUnitsForPhase(
-            gameData.phases[currentPhaseIndex],
-            previousPhase,
-            true
-          );
-        }
-      }, 500);
-    }
   } else {
     // Stepwise
-    console.log("Showing messages stepwise");
     messagesPlaying = true;
-    phaseInProgress = true; // Mark that we're in an active phase
     let index = 0;
 
     const showNext = () => {
       if (index >= relevantMessages.length) {
-        console.log("All stepwise messages shown, proceeding to animate units");
         messagesPlaying = false;
-        
-        // All messages shown, now proceed to unit animations
-        if (isPlaying) {
-          // Fix: Use proper previous phase calculation
-          const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : null;
-          const previousPhase = prevIndex !== null ? gameData.phases[prevIndex] : null;
-          
-          // Short delay before starting unit animations
-          setTimeout(() => {
-            if (isPlaying && phaseInProgress) {
-              // Start unit animations but DON'T update the banner again
-              console.log("Starting unit animations after messages");
-              animateUnitsForPhase(
-                gameData.phases[currentPhaseIndex],
-                previousPhase,
-                false // Don't update banner again
-              );
-            } else {
-              // If we've stopped playing, reset the phase progress
-              phaseInProgress = false;
-            }
-          }, 500); // Short delay before units move
-        } else {
-          phaseInProgress = false;
+        // If unit animations are also done, proceed
+        if (unitAnimations.length === 0 && isPlaying) {
+          // Short delay then next
+          playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
         }
-        
         return;
       }
-      
       const msg = relevantMessages[index];
-      console.log(`Showing message ${index+1}/${relevantMessages.length}: ${msg.message.substring(0, 30)}...`);
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew && !isDebugMode) {
         animateHeadNod(msg);
       }
       index++;
-      
-      // Only continue if we're still in playing mode
-      if (isPlaying) {
-        // Increase the delay between messages
-        if (isDebugMode) {
-          showNext();
-        } else {
-          setTimeout(showNext, playbackSpeed * 3);
-        }
+      // Increase the delay between messages - 3x the playback speed gives more spacing
+      // Remove the delay if we're developing
+      if (isDebugMode) {
+        showNext()
       } else {
-        // If playback was stopped, reset phase flags
-        messagesPlaying = false;
-        phaseInProgress = false;
+        setTimeout(showNext, playbackSpeed * 3);
       }
     };
 
@@ -1801,120 +1538,23 @@ function playRandomSoundEffect() {
   });
 }
 
-// Helper function to extract summaries from the correct location
-function getPhaseSummary(phase) {
-  console.log("Getting summary for phase:", phase?.name);
-  
-  if (!phase) {
-    console.log("No phase provided");
-    return "";
-  }
-  
-  // Look for summary directly in the phase object
-  const rawSummary = phase.summary;
-  console.log("Raw summary:", rawSummary);
-  
-  if (!rawSummary) {
-    // If no summary found, generate a fallback summary
-    const fallbackSummary = generateFallbackSummary(phase);
-    return fallbackSummary;
-  }
-  
-  try {
-    // Parse the JSON-encoded summary string
-    const parsed = JSON.parse(rawSummary);
-    console.log("Parsed summary:", parsed);
-    const summaryText = parsed.summary || "";
-    console.log("Final summary text:", summaryText);
-    return summaryText;
-  } catch (err) {
-    console.warn("Error parsing summary JSON:", err);
-    return rawSummary; // Return raw text if parsing fails
-  }
-}
+/**
+ * Appends text to the scrolling news banner.
+ * If the banner is at its default text or empty, replace it entirely.
+ * Otherwise, just append " | " + newText.
+ */
+function addToNewsBanner(newText) {
+  const bannerEl = document.getElementById('news-banner-content');
+  if (!bannerEl) return;
 
-// Generate a simple summary when none is provided in the game data
-function generateFallbackSummary(phase) {
-  if (!phase) return "";
-  
-  let summary = "";
-  
-  // Add phase name
-  if (phase.name) {
-    // Parse phase name like "S1901M" or "F1901M"
-    const seasonMap = { "S": "Spring", "F": "Fall", "W": "Winter" };
-    const typeMap = { "M": "Movement", "R": "Retreat", "A": "Adjustment" };
-    
-    const seasonMatch = phase.name.match(/^([SFW])(\d+)([MRA])$/);
-    if (seasonMatch) {
-      const [_, season, year, type] = seasonMatch;
-      summary += `${seasonMap[season] || season} ${year} ${typeMap[type] || type}`;
-    } else {
-      summary += phase.name;
-    }
-  }
-  
-  // Add info about orders if available
-  if (phase.orders && Object.keys(phase.orders).length > 0) {
-    summary += "\n\nOrders were given for the following powers: ";
-    summary += Object.keys(phase.orders).join(", ");
-  }
-  
-  // Add info about units if available
-  if (phase.state?.units) {
-    const unitCounts = {};
-    let totalUnits = 0;
-    
-    for (const [power, units] of Object.entries(phase.state.units)) {
-      unitCounts[power] = units.length;
-      totalUnits += units.length;
-    }
-    
-    summary += `\n\nThere are ${totalUnits} units on the board across ${Object.keys(unitCounts).length} powers.`;
-  }
-  
-  // Add info about supply centers
-  if (phase.state?.centers) {
-    const scCounts = {};
-    let totalSCs = 0;
-    
-    for (const [power, centers] of Object.entries(phase.state.centers)) {
-      scCounts[power] = centers.length;
-      totalSCs += centers.length;
-    }
-    
-    // Find powers with most supply centers
-    const powers = Object.entries(scCounts).sort((a, b) => b[1] - a[1]);
-    const leadingPower = powers[0];
-    
-    if (leadingPower) {
-      summary += `\n\n${leadingPower[0]} is leading with ${leadingPower[1]} supply centers.`;
-      
-      // Check if someone is close to winning (18 supply centers)
-      if (leadingPower[1] >= 15) {
-        summary += ` They are approaching the 18 supply centers needed for victory!`;
-      }
-    }
-  }
-  
-  return summary;
-}
-
-// Add this function to update the news banner with a summary
-function updateNewsBanner(summaryText) {
-  const bannerContent = document.getElementById('news-banner-content');
-  
-  if (bannerContent) {
-    // Restart the animation by cloning and replacing the element
-    const newContent = bannerContent.cloneNode(true);
-    newContent.textContent = summaryText || "Diplomatic actions unfolding...";
-    
-    // Calculate appropriate animation duration based on text length
-    const textLength = summaryText.length;
-    const duration = Math.max(60, Math.min(100, textLength / 5)); // between 20-60s
-    newContent.style.animationDuration = `${duration}s`;
-    
-    // Replace the old content with the new one
-    bannerContent.parentNode.replaceChild(newContent, bannerContent);
+  // If the banner only has the default text or is empty, replace it
+  if (
+    bannerEl.textContent.trim() === 'Diplomatic actions unfolding...' ||
+    bannerEl.textContent.trim() === ''
+  ) {
+    bannerEl.textContent = newText;
+  } else {
+    // Otherwise append with a separator
+    bannerEl.textContent += '  |  ' + newText;
   }
 }

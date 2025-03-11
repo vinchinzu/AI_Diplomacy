@@ -324,9 +324,9 @@
     height: 32px;
     background-color: rgba(0, 0, 0, 0.8);
     color: white;
-    overflow: hidden;
     display: flex;
     align-items: center;
+    overflow: hidden;
     z-index: 1000;
     padding: 0;
   }
@@ -334,13 +334,13 @@
   #news-banner-content {
     white-space: nowrap;
     padding-left: 100%;
-    animation: scroll-left 30s linear infinite;
+    animation: scroll-left 1000s linear infinite;
     font-size: 14px;
     font-family: 'Courier New', monospace;
     font-weight: bold;
   }
 
   @keyframes scroll-left {
-    0% { transform: translateX(0); }
+    0%   { transform: translateX(0); }
     100% { transform: translateX(-100%); }
   }
