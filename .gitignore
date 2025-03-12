@@ -141,3 +141,4 @@ game.json
 # Node MOdules
 diplomacy/animation/node_modules
 diplomacy/animation/dist
+ai_animation/src/elevenlabskey.txt

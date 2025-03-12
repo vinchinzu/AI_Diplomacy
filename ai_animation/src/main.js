@@ -6,7 +6,89 @@ import { addMapMouseEvents } from "./map/mouseMovement"
 import { createLabel } from "./map/labels"
 import "./style.css"
 
-const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
+// --- NEW: ElevenLabs TTS helper function ---
+const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
+const VOICE_ID = "onwK4e9ZLuTAKqWW03F9";
+const MODEL_ID = "eleven_multilingual_v2";
+
+/**
+ * Call ElevenLabs TTS to speak out loud. Returns a promise that
+ * resolves only after the audio finishes playing (or fails).
+ * Now accepts only the first 100 characters for brevity.
+ */
+async function speakSummary(summaryText) {
+  if (!ELEVENLABS_API_KEY) {
+    console.warn("No ElevenLabs API key found. Skipping TTS.");
+    return;
+  }
+
+  // Set the speaking flag to block other animations/transitions
+  isSpeaking = true;
+
+  try {
+    // Truncate text to first 100 characters for ElevenLabs
+    const truncatedText = summaryText.substring(0, 100);
+    if (truncatedText.length < summaryText.length) {
+      console.log(`TTS text truncated from ${summaryText.length} to 100 characters`);
+    }
+
+    // Hit ElevenLabs TTS endpoint with the truncated text
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg"
+      },
+      body: JSON.stringify({
+        text: truncatedText,
+        model_id: MODEL_ID,
+        // Optional fine-tuning parameters
+        // voice_settings: { stability: 0.3, similarity_boost: 0.8 },
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`ElevenLabs TTS error: ${response.statusText}`);
+    }
+
+    // Convert response into a playable blob
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    
+    // Play the audio, pause until finished
+    return new Promise((resolve, reject) => {
+      const audio = new Audio(audioUrl);
+      audio.play().then(() => {
+        audio.onended = () => {
+          // Clear the speaking flag when audio finishes
+          isSpeaking = false;
+          resolve();
+        };
+      }).catch(err => {
+        console.error("Audio playback error", err);
+        // Make sure to clear the flag even if there's an error
+        isSpeaking = false;
+        reject(err);
+      });
+    });
+
+  } catch (err) {
+    console.error("Failed to generate TTS from ElevenLabs:", err);
+    // Make sure to clear the flag if there's any exception
+    isSpeaking = false;
+  }
+}
+
+//const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
+const isDebugMode = false;
+
+// Move these definitions BEFORE they're used
+const ALL_POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
+function getRandomPower() {
+  const idx = Math.floor(Math.random() * ALL_POWERS.length);
+  return ALL_POWERS[idx];
+}
 
 // --- CORE VARIABLES ---
 let scene, camera, renderer, controls;
@@ -22,13 +104,18 @@ let animationDuration = 1500; // Duration of unit movement animation in ms
 let unitAnimations = []; // Track ongoing unit animations
 let territoryTransitions = []; // Track territory color transitions
 let chatWindows = {}; // Store chat window elements by power
-let currentPower = 'FRANCE'; // Default perspective is France
+let currentPower = getRandomPower(); // Now randomly selected
 
 // >>> ADDED: Camera pan and message playback variables
 let cameraPanTime = 0;   // Timer that drives the camera panning
 const cameraPanSpeed = 0.0005; // Smaller = slower
 let messagesPlaying = false;    // Lock to let messages animate before next phase
 let faceIconCache = {}; // Cache for generated face icons
+// NEW: Add a lock for text-to-speech
+let isSpeaking = false;   // Lock to pause game flow while TTS is active
+
+// Add a message counter to track sound effect frequency
+let messageCounter = 0;
 
 // --- DOM ELEMENTS ---
 const loadBtn = document.getElementById('load-btn');
@@ -112,16 +199,16 @@ function initScene() {
     })
     .catch(err => {
       console.error("Error loading coordinates:", err);
-      infoPanel.textContent = `Error loading coords: ${err.message}`;
     });
 
   // Handle resizing
   window.addEventListener('resize', onWindowResize);
-  addMapMouseEvents(mapView, infoPanel)
+  addMapMouseEvents(mapView)
   // Kick off animation loop
   animate();
 
-
+  // Initialize info panel
+  updateInfoPanel();
 }
 
 // --- ANIMATION LOOP ---
@@ -142,7 +229,7 @@ function animate() {
     );
 
     // If messages are done playing but we haven't started unit animations yet
-    if (!messagesPlaying && unitAnimations.length === 0 && isPlaying) {
+    if (!messagesPlaying && !isSpeaking && unitAnimations.length === 0 && isPlaying) {
       if (gameData && gameData.phases) {
         const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : gameData.phases.length - 1;
         animateUnitsForPhase(
@@ -195,9 +282,12 @@ function animate() {
         }
 
         // >>> MODIFIED: Check if messages are still playing before advancing
-        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying) {
+        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying && !isSpeaking) {
           // Schedule next phase after a pause delay
-          playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+          playbackTimer = setTimeout(() => {
+            // Call the async function without awaiting it here
+            advanceToNextPhase();
+          }, playbackSpeed);
         }
       }
     });
@@ -284,7 +374,6 @@ function loadCoordinateData() {
       })
       .then(data => {
         coordinateData = data;
-        infoPanel.textContent = 'Coordinate data loaded!';
         resolve(coordinateData);
       })
       .catch(error => {
@@ -610,7 +699,6 @@ function loadGame(file) {
   reader.onload = e => {
     try {
       gameData = JSON.parse(e.target.result);
-      infoPanel.textContent = `Game data loaded: ${gameData.phases?.length || 0} phases found.`;
       currentPhaseIndex = 0;
       if (gameData.phases?.length) {
         prevBtn.disabled = false;
@@ -624,7 +712,11 @@ function loadGame(file) {
         // Display initial phase but WITHOUT messages
         displayInitialPhase(currentPhaseIndex);
       }
+      
+      // Add: Update info panel
+      updateInfoPanel();
     } catch (err) {
+      console.error("Error parsing JSON:", err);
       infoPanel.textContent = "Error parsing JSON: " + err.message;
     }
   };
@@ -677,7 +769,9 @@ function displayInitialPhase(index) {
 
   // DON'T show messages yet - skip updateChatWindows call
 
-  infoPanel.textContent = `Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`;
+  // Add: Update info panel
+  updateInfoPanel();
+  
   drawMap()
 }
 
@@ -737,6 +831,9 @@ function updateLeaderboard(phase) {
 function togglePlayback() {
   if (!gameData || gameData.phases.length <= 1) return;
 
+  // NEW: If we're speaking, don't allow toggling playback
+  if (isSpeaking) return;
+
   isPlaying = !isPlaying;
 
   if (isPlaying) {
@@ -749,9 +846,6 @@ function togglePlayback() {
     if (phase.messages && phase.messages.length) {
       // Show messages with stepwise animation
       updateChatWindows(phase, true);
-
-      // After all messages are shown, then the animate() function will handle
-      // starting unit animations since messagesPlaying will become false
     } else {
       // No messages, go straight to unit animations
       displayPhaseWithAnimation(currentPhaseIndex);
@@ -769,7 +863,21 @@ function togglePlayback() {
   }
 }
 
-function advanceToNextPhase() {
+// --- MODIFIED: Update news banner before TTS ---
+async function advanceToNextPhase() {
+  // Only show a summary if we have at least started the first phase
+  // and only if the just-ended phase has a "summary" property.
+  if (gameData && gameData.phases && currentPhaseIndex >= 0) {
+    const justEndedPhase = gameData.phases[currentPhaseIndex];
+    if (justEndedPhase.summary && justEndedPhase.summary.trim() !== '') {
+      // UPDATED: First update the news banner with full summary
+      addToNewsBanner(`(${justEndedPhase.name}) ${justEndedPhase.summary}`);
+      
+      // Then speak the summary (will be truncated internally)
+      await speakSummary(justEndedPhase.summary);
+    }
+  }
+
   // If we've reached the end, loop back to the beginning
   if (currentPhaseIndex >= gameData.phases.length - 1) {
     currentPhaseIndex = 0;
@@ -822,9 +930,11 @@ function displayPhaseWithAnimation(index) {
   }
 
   // Panel
-  infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
-    }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
-    }`;
+  // Remove: infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'}\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'}`;
+  
+  // Add: Update info panel
+  updateInfoPanel();
+  
   drawMap()
 }
 
@@ -1045,15 +1155,15 @@ function createChatWindows() {
   chatWindows = {};
 
   // Create a chat window for each power (except the current power)
-  const powers = ['AUSTRIA', 'ENGLAND', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
+  const powers = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
 
-  // Filter out the current power
+  // Filter out the current power for chat windows
   const otherPowers = powers.filter(power => power !== currentPower);
 
   // Add a GLOBAL chat window first
   createChatWindow('GLOBAL', true);
 
-  // Create chat windows for each power
+  // Create chat windows for each power except the current one
   otherPowers.forEach(power => {
     createChatWindow(power);
   });
@@ -1180,7 +1290,9 @@ function updateChatWindows(phase, stepMessages = false) {
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew) {
-        animateHeadNod(msg);
+        // Increment message counter and play sound on every third message
+        messageCounter++;
+        animateHeadNod(msg, (messageCounter % 3 === 0));
       }
     });
     messagesPlaying = false;
@@ -1189,26 +1301,31 @@ function updateChatWindows(phase, stepMessages = false) {
     messagesPlaying = true;
     let index = 0;
 
+    // Define the showNext function that will be called after each message animation completes
     const showNext = () => {
       if (index >= relevantMessages.length) {
         messagesPlaying = false;
-        // If unit animations are also done, proceed
-        if (unitAnimations.length === 0 && isPlaying) {
-          // Short delay then next
+        if (unitAnimations.length === 0 && isPlaying && !isSpeaking) {
+          // Call the async function without awaiting it here
           playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
         }
         return;
       }
+      
       const msg = relevantMessages[index];
-      const isNew = addMessageToChat(msg, phase.name);
+      index++; // Increment index before adding message so word animation knows the correct next message
+      
+      const isNew = addMessageToChat(msg, phase.name, true, showNext); // Pass showNext as callback
+      
       if (isNew && !isDebugMode) {
-        animateHeadNod(msg);
-      }
-      index++;
-      // Increase the delay between messages - 3x the playback speed gives more spacing
-      // Remove the delay if we're developing
-      if (isDebugMode) {
-        showNext()
+        // Increment message counter
+        messageCounter++;
+        
+        // Only animate head and play sound for every third message
+        animateHeadNod(msg, (messageCounter % 3 === 0));
+      } else if (isDebugMode) {
+        // In debug mode, immediately call showNext to skip waiting for animation
+        showNext();
       } else {
         setTimeout(showNext, playbackSpeed * 3);
       }
@@ -1219,8 +1336,8 @@ function updateChatWindows(phase, stepMessages = false) {
   }
 }
 
-// Modified to return whether this was a new message
-function addMessageToChat(msg, phaseName) {
+// Modified to support word-by-word animation and callback
+function addMessageToChat(msg, phaseName, animateWords = false, onComplete = null) {
   // Determine which chat window to use
   let targetPower;
   if (msg.recipient === 'GLOBAL') {
@@ -1228,7 +1345,7 @@ function addMessageToChat(msg, phaseName) {
   } else {
     targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
   }
-  if (!chatWindows[targetPower]) return;
+  if (!chatWindows[targetPower]) return false;
 
   // Create a unique ID for this message to avoid duplication
   const msgId = `${msg.sender}-${msg.recipient}-${msg.time_sent}-${msg.message}`;
@@ -1249,19 +1366,39 @@ function addMessageToChat(msg, phaseName) {
     // Global chat shows sender info
     const senderColor = msg.sender.toLowerCase();
     messageElement.className = 'chat-message message-incoming';
-    messageElement.innerHTML = `
-      <span style="font-weight: bold;" class="power-${senderColor}">${msg.sender}:</span>
-      ${msg.message}
-      <div class="message-time">${phaseName}</div>
-    `;
+    
+    // Add the header with the sender name immediately
+    const headerSpan = document.createElement('span');
+    headerSpan.style.fontWeight = 'bold';
+    headerSpan.className = `power-${senderColor}`;
+    headerSpan.textContent = `${msg.sender}: `;
+    messageElement.appendChild(headerSpan);
+    
+    // Create a span for the message content that will be filled word by word
+    const contentSpan = document.createElement('span');
+    contentSpan.id = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    messageElement.appendChild(contentSpan);
+    
+    // Add timestamp
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = phaseName;
+    messageElement.appendChild(timeDiv);
   } else {
     // Private chat - outgoing or incoming style
     const isOutgoing = msg.sender === currentPower;
     messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
-    messageElement.innerHTML = `
-      ${msg.message}
-      <div class="message-time">${phaseName}</div>
-    `;
+    
+    // Create content span
+    const contentSpan = document.createElement('span');
+    contentSpan.id = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    messageElement.appendChild(contentSpan);
+    
+    // Add timestamp
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = phaseName;
+    messageElement.appendChild(timeDiv);
   }
 
   // Add to container
@@ -1269,12 +1406,79 @@ function addMessageToChat(msg, phaseName) {
 
   // Scroll to bottom
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  
+  if (animateWords) {
+    // Start word-by-word animation
+    const contentSpanId = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    animateMessageWords(msg.message, contentSpanId, targetPower, messagesContainer, onComplete);
+  } else {
+    // Show entire message at once
+    const contentSpan = messageElement.querySelector(`#msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`);
+    if (contentSpan) {
+      contentSpan.textContent = msg.message;
+    }
+    
+    // If there's a completion callback, call it immediately for non-animated messages
+    if (onComplete) {
+      onComplete();
+    }
+  }
 
   return true; // This was a new message
 }
 
-// Animate a head nod when a message appears
-function animateHeadNod(msg) {
+// New function to animate message words one at a time
+function animateMessageWords(message, contentSpanId, targetPower, messagesContainer, onComplete) {
+  const words = message.split(/\s+/);
+  const contentSpan = document.getElementById(contentSpanId);
+  if (!contentSpan) {
+    // If span not found, still call onComplete to avoid breaking the game flow
+    if (onComplete) onComplete();
+    return;
+  }
+  
+  // Clear any existing content
+  contentSpan.textContent = '';
+  let wordIndex = 0;
+  
+  // Function to add the next word
+  const addNextWord = () => {
+    if (wordIndex >= words.length) {
+      // All words added - keep messagesPlaying true until next message starts
+      
+      // Add a slight delay after the last word for readability
+      setTimeout(() => {
+        if (onComplete) {
+          onComplete(); // Call the completion callback
+        }
+      }, Math.min(playbackSpeed / 3, 150));
+      
+      return;
+    }
+    
+    // Add space if not the first word
+    if (wordIndex > 0) {
+      contentSpan.textContent += ' ';
+    }
+    
+    // Add the next word
+    contentSpan.textContent += words[wordIndex];
+    wordIndex++;
+    
+    // Schedule the next word with a delay based on word length and playback speed
+    const delay = Math.max(30, Math.min(120, playbackSpeed / 10 * (words[wordIndex-1].length / 4)));
+    setTimeout(addNextWord, delay);
+    
+    // Scroll to ensure newest content is visible
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  };
+  
+  // Start animation
+  addNextWord();
+}
+
+// Modified to support conditional sound effects
+function animateHeadNod(msg, playSoundEffect = true) {
   // Determine which chat window's head to animate
   let targetPower;
   if (msg.recipient === 'GLOBAL') {
@@ -1353,8 +1557,10 @@ function animateHeadNod(msg) {
     img.dataset.animating = 'false';
   };
 
-  // Trigger random snippet
-  playRandomSoundEffect();
+  // Trigger random snippet only if playSoundEffect is true
+  if (playSoundEffect) {
+    playRandomSoundEffect();
+  }
 }
 
 // Generate a 3D face icon for chat windows with higher contrast
@@ -1526,4 +1732,48 @@ function playRandomSoundEffect() {
     // In case of browser auto-play restrictions, you may see warnings in console
     console.warn("Audio play was interrupted:", err);
   });
+}
+
+/**
+ * Appends text to the scrolling news banner.
+ * If the banner is at its default text or empty, replace it entirely.
+ * Otherwise, just append " | " + newText.
+ */
+function addToNewsBanner(newText) {
+  const bannerEl = document.getElementById('news-banner-content');
+  if (!bannerEl) return;
+
+  // If the banner only has the default text or is empty, replace it
+  if (
+    bannerEl.textContent.trim() === 'Diplomatic actions unfolding...' ||
+    bannerEl.textContent.trim() === ''
+  ) {
+    bannerEl.textContent = newText;
+  } else {
+    // Otherwise append with a separator
+    bannerEl.textContent += '  |  ' + newText;
+  }
+}
+
+// New function to update info panel with useful information
+function updateInfoPanel() {
+  const totalPhases = gameData?.phases?.length || 0;
+  const currentPhaseNumber = currentPhaseIndex + 1;
+  const phaseName = gameData?.phases?.[currentPhaseIndex]?.name || 'Unknown';
+
+  infoPanel.innerHTML = `
+    <div><strong>Power:</strong> <span class="power-${currentPower.toLowerCase()}">${currentPower}</span></div>
+    <div><strong>Current Phase:</strong> ${phaseName} (${currentPhaseNumber}/${totalPhases})</div>
+    <hr/>
+    <h4>All-Time Leaderboard</h4>
+    <ul style="list-style:none;padding-left:0;margin:0;">
+      <li>Austria: 0</li>
+      <li>England: 0</li>
+      <li>France: 0</li>
+      <li>Germany: 0</li>
+      <li>Italy: 0</li>
+      <li>Russia: 0</li>
+      <li>Turkey: 0</li>
+    </ul>
+  `;
 }

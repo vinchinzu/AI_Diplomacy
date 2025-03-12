@@ -110,6 +110,7 @@
     
     box-shadow: 0 0 10px rgba(0,0,0,0.4);
     color: #2f260b;
+    margin-bottom: 13px; /* Add bottom margin to raise info panel above banner */
   }
   
   /* -----------------
@@ -135,6 +136,7 @@
     
     box-shadow: 0 0 10px rgba(0,0,0,0.4);
     color: #3b2c02;
+    margin-bottom: 13px; /* Add bottom margin to raise leaderboard above banner */
   }
   
   /* Make the power names stand out */
@@ -311,4 +313,34 @@
   .chat-window:nth-child(1),
   .chat-window:nth-child(7) {
     order: 2; /* First and last windows go on bottom row */
+  }
+
+  /* News Banner */
+  #news-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    z-index: 1000;
+    padding: 0;
+  }
+
+  #news-banner-content {
+    white-space: nowrap;
+    padding-left: 100%;
+    animation: scroll-left 1000s linear infinite;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+  }
+
+  @keyframes scroll-left {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
   }
