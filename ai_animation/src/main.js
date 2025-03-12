@@ -114,6 +114,9 @@ let faceIconCache = {}; // Cache for generated face icons
 // NEW: Add a lock for text-to-speech
 let isSpeaking = false;   // Lock to pause game flow while TTS is active
 
+// Add a message counter to track sound effect frequency
+let messageCounter = 0;
+
 // --- DOM ELEMENTS ---
 const loadBtn = document.getElementById('load-btn');
 const fileInput = document.getElementById('file-input');
@@ -1287,7 +1290,9 @@ function updateChatWindows(phase, stepMessages = false) {
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew) {
-        animateHeadNod(msg);
+        // Increment message counter and play sound on every third message
+        messageCounter++;
+        animateHeadNod(msg, (messageCounter % 3 === 0));
       }
     });
     messagesPlaying = false;
@@ -1296,6 +1301,7 @@ function updateChatWindows(phase, stepMessages = false) {
     messagesPlaying = true;
     let index = 0;
 
+    // Define the showNext function that will be called after each message animation completes
     const showNext = () => {
       if (index >= relevantMessages.length) {
         messagesPlaying = false;
@@ -1305,16 +1311,21 @@ function updateChatWindows(phase, stepMessages = false) {
         }
         return;
       }
+      
       const msg = relevantMessages[index];
-      const isNew = addMessageToChat(msg, phase.name);
+      index++; // Increment index before adding message so word animation knows the correct next message
+      
+      const isNew = addMessageToChat(msg, phase.name, true, showNext); // Pass showNext as callback
+      
       if (isNew && !isDebugMode) {
-        animateHeadNod(msg);
-      }
-      index++;
-      // Increase the delay between messages - 3x the playback speed gives more spacing
-      // Remove the delay if we're developing
-      if (isDebugMode) {
-        showNext()
+        // Increment message counter
+        messageCounter++;
+        
+        // Only animate head and play sound for every third message
+        animateHeadNod(msg, (messageCounter % 3 === 0));
+      } else if (isDebugMode) {
+        // In debug mode, immediately call showNext to skip waiting for animation
+        showNext();
       } else {
         setTimeout(showNext, playbackSpeed * 3);
       }
@@ -1325,8 +1336,8 @@ function updateChatWindows(phase, stepMessages = false) {
   }
 }
 
-// Modified to return whether this was a new message
-function addMessageToChat(msg, phaseName) {
+// Modified to support word-by-word animation and callback
+function addMessageToChat(msg, phaseName, animateWords = false, onComplete = null) {
   // Determine which chat window to use
   let targetPower;
   if (msg.recipient === 'GLOBAL') {
@@ -1334,7 +1345,7 @@ function addMessageToChat(msg, phaseName) {
   } else {
     targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
   }
-  if (!chatWindows[targetPower]) return;
+  if (!chatWindows[targetPower]) return false;
 
   // Create a unique ID for this message to avoid duplication
   const msgId = `${msg.sender}-${msg.recipient}-${msg.time_sent}-${msg.message}`;
@@ -1355,19 +1366,39 @@ function addMessageToChat(msg, phaseName) {
     // Global chat shows sender info
     const senderColor = msg.sender.toLowerCase();
     messageElement.className = 'chat-message message-incoming';
-    messageElement.innerHTML = `
-      <span style="font-weight: bold;" class="power-${senderColor}">${msg.sender}:</span>
-      ${msg.message}
-      <div class="message-time">${phaseName}</div>
-    `;
+    
+    // Add the header with the sender name immediately
+    const headerSpan = document.createElement('span');
+    headerSpan.style.fontWeight = 'bold';
+    headerSpan.className = `power-${senderColor}`;
+    headerSpan.textContent = `${msg.sender}: `;
+    messageElement.appendChild(headerSpan);
+    
+    // Create a span for the message content that will be filled word by word
+    const contentSpan = document.createElement('span');
+    contentSpan.id = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    messageElement.appendChild(contentSpan);
+    
+    // Add timestamp
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = phaseName;
+    messageElement.appendChild(timeDiv);
   } else {
     // Private chat - outgoing or incoming style
     const isOutgoing = msg.sender === currentPower;
     messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
-    messageElement.innerHTML = `
-      ${msg.message}
-      <div class="message-time">${phaseName}</div>
-    `;
+    
+    // Create content span
+    const contentSpan = document.createElement('span');
+    contentSpan.id = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    messageElement.appendChild(contentSpan);
+    
+    // Add timestamp
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = phaseName;
+    messageElement.appendChild(timeDiv);
   }
 
   // Add to container
@@ -1375,12 +1406,79 @@ function addMessageToChat(msg, phaseName) {
 
   // Scroll to bottom
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  
+  if (animateWords) {
+    // Start word-by-word animation
+    const contentSpanId = `msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    animateMessageWords(msg.message, contentSpanId, targetPower, messagesContainer, onComplete);
+  } else {
+    // Show entire message at once
+    const contentSpan = messageElement.querySelector(`#msg-content-${msgId.replace(/[^a-zA-Z0-9]/g, '-')}`);
+    if (contentSpan) {
+      contentSpan.textContent = msg.message;
+    }
+    
+    // If there's a completion callback, call it immediately for non-animated messages
+    if (onComplete) {
+      onComplete();
+    }
+  }
 
   return true; // This was a new message
 }
 
-// Animate a head nod when a message appears
-function animateHeadNod(msg) {
+// New function to animate message words one at a time
+function animateMessageWords(message, contentSpanId, targetPower, messagesContainer, onComplete) {
+  const words = message.split(/\s+/);
+  const contentSpan = document.getElementById(contentSpanId);
+  if (!contentSpan) {
+    // If span not found, still call onComplete to avoid breaking the game flow
+    if (onComplete) onComplete();
+    return;
+  }
+  
+  // Clear any existing content
+  contentSpan.textContent = '';
+  let wordIndex = 0;
+  
+  // Function to add the next word
+  const addNextWord = () => {
+    if (wordIndex >= words.length) {
+      // All words added - keep messagesPlaying true until next message starts
+      
+      // Add a slight delay after the last word for readability
+      setTimeout(() => {
+        if (onComplete) {
+          onComplete(); // Call the completion callback
+        }
+      }, Math.min(playbackSpeed / 3, 150));
+      
+      return;
+    }
+    
+    // Add space if not the first word
+    if (wordIndex > 0) {
+      contentSpan.textContent += ' ';
+    }
+    
+    // Add the next word
+    contentSpan.textContent += words[wordIndex];
+    wordIndex++;
+    
+    // Schedule the next word with a delay based on word length and playback speed
+    const delay = Math.max(30, Math.min(120, playbackSpeed / 10 * (words[wordIndex-1].length / 4)));
+    setTimeout(addNextWord, delay);
+    
+    // Scroll to ensure newest content is visible
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  };
+  
+  // Start animation
+  addNextWord();
+}
+
+// Modified to support conditional sound effects
+function animateHeadNod(msg, playSoundEffect = true) {
   // Determine which chat window's head to animate
   let targetPower;
   if (msg.recipient === 'GLOBAL') {
@@ -1459,8 +1557,10 @@ function animateHeadNod(msg) {
     img.dataset.animating = 'false';
   };
 
-  // Trigger random snippet
-  playRandomSoundEffect();
+  // Trigger random snippet only if playSoundEffect is true
+  if (playSoundEffect) {
+    playRandomSoundEffect();
+  }
 }
 
 // Generate a 3D face icon for chat windows with higher contrast
