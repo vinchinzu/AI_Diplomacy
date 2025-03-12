@@ -1,8 +1,10 @@
+import * as THREE from "three";
 import type { GamePhase } from "../types/gameState";
 import { createUnitMesh } from "./create";
 import { UnitMesh } from "../types/units";
 import { getProvincePosition } from "../map/utils";
 import { coordinateData } from "../gameState";
+import { Tween } from "@tweenjs/tween.js";
 
 //FIXME: Move this to a file with all the constants
 let animationDuration = 1500; // Duration of unit movement animation in ms
@@ -12,9 +14,88 @@ enum AnimationTypeENUM {
   DELETE,
 }
 export type UnitAnimation = {
-  animationType: AnimationTypeENUM
+  duration: number
+  endPos: any
+  startPos: any
+  object: THREE.Group
+  startTime: number
+  animationType?: AnimationTypeENUM
 }
 
+
+
+export function createTweenAnimations(unitMeshes: UnitMesh[], currentPhase: GamePhase, previousPhase: GamePhase | null): Tween[] {
+
+
+  let unitAnimations: Tween[] = []
+
+  for (const [power, orders] of Object.entries(currentPhase.orders)) {
+    for (const order in parseOrders(orders)) {
+
+    }
+
+  }
+
+
+  // Prepare unit position maps
+  const previousUnitPositions = {};
+  if (previousPhase.state?.units) {
+    for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
+      unitArr.forEach(unitStr => {
+        const match = unitStr.match(/^([AF])\s+(.+)$/);
+        if (match) {
+          const key = `${power}-${match[1]}-${match[2]}`;
+          previousUnitPositions[key] = getProvincePosition(coordinateData, match[2]);
+        }
+      });
+    }
+  }
+
+  // Animate new units from old positions (or spawn from below)
+  if (currentPhase.state?.units) {
+    for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
+      unitArr.forEach(unitStr => {
+        // Check if is fleet or army order
+        const armyOrFleetOrder = unitStr.match(/^([AF])\s+(.+)$/);
+        if (!armyOrFleetOrder) return;
+        const unitType = armyOrFleetOrder[1];
+        const location = armyOrFleetOrder[2];
+
+        // Current final
+        const currentPos = getProvincePosition(coordinateData, location);
+
+        let startPos;
+        let matchFound = false;
+        for (const prevKey in previousUnitPositions) {
+          if (prevKey.startsWith(`${power}-${unitType}`)) {
+            startPos = previousUnitPositions[prevKey];
+            matchFound = true;
+            delete previousUnitPositions[prevKey];
+            break;
+          }
+        }
+        if (!matchFound) {
+          // TODO: Add a spawn animation?
+          //
+          // New spawn
+          startPos = { x: currentPos.x, y: -20, z: currentPos.z };
+        }
+
+        const unitMesh = createUnitMesh({
+          power: power,
+          province: location,
+          type: unitType,
+        });
+        unitMesh.position.set(startPos.x, 10, startPos.z);
+        let tween = new Tween(unitMesh.position).to(currentPos, 1500).start()
+
+        // Animate
+        unitAnimations.push(tween);
+      });
+    }
+  }
+  return unitAnimations
+}
 export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], currentPhase: GamePhase, previousPhase: GamePhase | null): UnitAnimation[] {
   let unitAnimations: UnitAnimation[] = []
   // Prepare unit position maps
@@ -87,7 +168,11 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-export function processUnitAnimation(anim: UnitAnimation) {
+export function proccessUnitAnimationWithTween(anim: Tween) {
+  anim.update()
+}
+
+export function processUnitAnimation(anim: UnitAnimation): boolean {
 
   const currentTime = Date.now();
   const elapsed = currentTime - anim.startTime;
@@ -111,8 +196,12 @@ export function processUnitAnimation(anim: UnitAnimation) {
       anim.object.rotation.z = Math.sin(progress * Math.PI * 3) * 0.05;
       anim.object.rotation.x = Math.sin(progress * Math.PI * 2) * 0.05;
     }
+    if (anim.object.position.x == anim.startPos.x) {
+      console.log("We ain't moving")
+    }
+    anim.object.updateMatrix()
+    return false
   } else {
-
     // Set final position
     anim.object.position.x = anim.endPos.x;
     anim.object.position.z = anim.endPos.z;
@@ -123,5 +212,6 @@ export function processUnitAnimation(anim: UnitAnimation) {
       anim.object.rotation.z = 0;
       anim.object.rotation.x = 0;
     }
+    return true
   }
 }

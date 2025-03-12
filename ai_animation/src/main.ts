@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Tween } from '@tweenjs/tween.js'
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import "./style.css"
 import { UnitMesh } from "./types/units";
@@ -6,11 +7,11 @@ import { CoordinateData, PowerENUM } from "./types/map";
 import { createUnitMesh, getPowerHexColor } from "./units/create";
 import { initMap } from "./map/create";
 import { getProvincePosition } from "./map/utils";
-import { createAnimationsForPhaseTransition, processUnitAnimation } from "./units/animate";
+import { createAnimationsForPhaseTransition, createTweenAnimations, proccessUnitAnimationWithTween, processUnitAnimation } from "./units/animate";
 import type { UnitAnimation } from "./units/animate";
 import { loadCoordinateData, coordinateData } from "./gameState";
 import Logger from "./logger";
-import { GamePhase } from "./types/gameState";
+import { GamePhase, GameSchema } from "./types/gameState";
 
 // --- NEW: ElevenLabs TTS helper function ---
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
@@ -217,6 +218,7 @@ function initScene() {
 
   // Initialize info panel
   updateInfoPanel();
+
 }
 
 // --- ANIMATION LOOP ---
@@ -239,7 +241,7 @@ function animate() {
     if (!messagesPlaying && !isSpeaking && unitAnimations.length === 0 && isPlaying) {
       if (gameData && gameData.phases) {
         const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : gameData.phases.length - 1;
-        unitAnimations = createAnimationsForPhaseTransition(
+        unitAnimations = createTweenAnimations(
           unitMeshes,
           gameData.phases[currentPhaseIndex],
           gameData.phases[prevIndex]
@@ -252,10 +254,14 @@ function animate() {
 
   // Process unit movement animations
   if (unitAnimations && unitAnimations.length > 0) {
+
     unitAnimations.forEach((anim: UnitAnimation, index) => {
-      processUnitAnimation(anim)
+      let isFinished = proccessUnitAnimationWithTween(anim)
       // Animation complete, remove from active animations
-      unitAnimations.splice(index, 1);
+      if (isFinished) {
+        unitAnimations.splice(index, 1);
+      }
+
     });
     // >>> MODIFIED: Check if messages are still playing before advancing
     if (unitAnimations.length === 0 && isPlaying && !messagesPlaying) {
@@ -486,27 +492,20 @@ function displayUnit(unitData) {
 function loadGame(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    try {
-      gameData = JSON.parse(e.target.result);
-      logger.log(`Game data loaded: ${gameData.phases?.length || 0} phases found.`)
-      currentPhaseIndex = 0;
-      if (gameData.phases?.length) {
-        prevBtn.disabled = false;
-        nextBtn.disabled = false;
-        playBtn.disabled = false;
-        speedSelector.disabled = false;
+    gameData = GameSchema.parse(JSON.parse(e.target.result));
+    logger.log(`Game data loaded: ${gameData.phases?.length || 0} phases found.`)
+    currentPhaseIndex = 0;
+    if (gameData.phases?.length) {
+      prevBtn.disabled = false;
+      nextBtn.disabled = false;
+      playBtn.disabled = false;
+      speedSelector.disabled = false;
 
-        // Initialize chat windows
-        createChatWindows();
+      // Initialize chat windows
+      createChatWindows();
 
-        // Display initial phase but WITHOUT messages
-        displayInitialPhase(currentPhaseIndex);
-      }
-
-      // Add: Update info panel
-      updateInfoPanel();
-    } catch (err) {
-      logger.log("Error parsing JSON: " + err.message)
+      // Display initial phase but WITHOUT messages
+      displayInitialPhase(currentPhaseIndex);
     }
   };
   reader.onerror = () => {
@@ -710,7 +709,7 @@ function displayPhaseWithAnimation(index) {
   updateLeaderboard(currentPhase);
   updateMapOwnership(currentPhase)
 
-  unitAnimations = createAnimationsForPhaseTransition(unitMeshes, currentPhase, previousPhase);
+  unitAnimations = createTweenAnimations(unitMeshes, currentPhase, previousPhase);
   let msg = `Phase: ${currentPhase.name}\nSCs: ${JSON.stringify(currentPhase.state.centers)} \nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'} `
   // Panel
 
@@ -720,6 +719,7 @@ function displayPhaseWithAnimation(index) {
 }
 
 function updateMapOwnership(currentPhase: GamePhase) {
+  //FIXME: This only works in the forward direction, we currently don't update ownership correctly when going to previous phase
 
   for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
     unitArr.forEach(unitStr => {
@@ -736,12 +736,12 @@ function updateMapOwnership(currentPhase: GamePhase) {
     })
   }
   for (const [key, value] of Object.entries(coordinateData.provinces)) {
-    let power = coordinateData.provinces[key].owner
-    let powerColor: string
-    powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
-    let powerColorHex = parseInt(powerColor.substring(1), 16);
-    coordinateData.provinces[key].mesh?.material.color.setHex(powerColorHex)
-
+    // Update the color of the provinces if needed
+    if (coordinateData.provinces[key].owner) {
+      let powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
+      let powerColorHex = parseInt(powerColor.substring(1), 16);
+      coordinateData.provinces[key].mesh?.material.color.setHex(powerColorHex)
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { PowerENUM } from './map';
+import { PowerENUM, PowerSchema } from './map';
+import { OrderFromString } from './unitOrders';
 
 const UnitSchema = z.object({
   type: z.enum(["A", "F"]),
@@ -12,23 +13,12 @@ const OrderSchema = z.object({
   power: z.string(),
   region: z.string(),
 });
-const OrderFromString = z.union([
-  OrderSchema,
-  z.string().transform((val) => {
-    // val should be like "F BUD D"
-    const parts = val.split(" ");
-    return {
-      text: val,
-      power: parts[0],
-      region: parts[1]
-    }
-  })
-])
+
 const PhaseSchema = z.object({
   messages: z.array(z.any()),
   name: z.string(),
-  orders: z.array(OrderSchema),
-  results: z.record(z.nativeEnum(PowerENUM), OrderSchema),
+  orders: z.record(PowerSchema, z.array(OrderFromString)),
+  results: z.record(PowerSchema, OrderSchema),
   state: z.object({
     units: z.record(z.nativeEnum(PowerENUM), z.array(z.string()))
   }),

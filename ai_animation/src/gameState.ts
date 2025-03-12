@@ -19,7 +19,8 @@ export function loadCoordinateData() {
         return response.json()
       })
       .then(data => {
-        coordinateData = data;
+        coordinateData = CoordinateDataSchema.parse(data)
+        //coordinateData = data;
         logger.log('Coordinate data loaded!')
         resolve(coordinateData);
       })

@@ -18,22 +18,22 @@ export function initMap(scene,) {
           let fillColor;
 
           for (let i = 0; i < paths.length; i++) {
-            fillColor = "#ddd2af";
+            fillColor = "";
             const path = paths[i];
             // The "standard" map has keys like _mos, so remove that then send them to caps
             let provinceKey = path.userData.node.id.substring(1).toUpperCase();
+            let nodeClass = path.userData.node.classList[0]
 
+            switch (nodeClass) {
+              case undefined:
+                continue
+              case "water":
+                fillColor = "#c5dfea"
+                break
+              case "nopower":
+                fillColor = getPowerHexColor(undefined)
+            }
 
-            if (map_styles[path.userData.node.classList[0]] === undefined) {
-              // If there is no style in the map_styles, skip drawing the shape
-              // This is a bandaid for using an svg with extraneous shapes
-              continue
-            } else if (provinceKey && coordinateData.provinces[provinceKey]) {
-              fillColor = getPowerHexColor(coordinateData.provinces[provinceKey].owner)
-            }
-            else {
-              fillColor = map_styles[path.userData.node.classList[0]].fill;
-            }
 
             const material = new THREE.MeshBasicMaterial({
               color: fillColor,

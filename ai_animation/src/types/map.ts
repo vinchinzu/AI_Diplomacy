@@ -4,6 +4,7 @@ export enum ProvTypeENUM {
   WATER = "Water",
   COAST = "Coast",
   LAND = "Land",
+  INPASSABLE = "Inpassable",
 }
 
 export enum PowerENUM {
@@ -16,7 +17,7 @@ export enum PowerENUM {
 }
 
 export const ProvTypeSchema = z.nativeEnum(ProvTypeENUM);
-export const PowerSchema = z.nativeEnum(PowerENUM);
+export const PowerSchema = z.nativeEnum(PowerENUM).transform((val) => (val.charAt(0).toUpperCase() + val.slice(1).toLowerCase()));
 
 export const LabelSchema = z.object({
   x: z.number(),
@@ -36,7 +37,7 @@ export const ProvinceSchema = z.object({
 });
 
 export const CoordinateDataSchema = z.object({
-  provinces: z.array(ProvinceSchema),
+  provinces: z.record(z.string(), ProvinceSchema),
 });
 
 export type Province = z.infer<typeof ProvinceSchema>;
