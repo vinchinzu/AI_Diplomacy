@@ -16,13 +16,7 @@ export function loadCoordinateData() {
           // Try an alternate path if desired
           throw new Error("Something went wrong when fetching the coords.json")
         }
-        return response;
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`Failed to load coordinates: ${response.status}`);
-        }
-        return response.json();
+        return response.json()
       })
       .then(data => {
         coordinateData = data;

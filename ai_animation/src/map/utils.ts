@@ -9,6 +9,7 @@ function hashStringToPosition(str) {
   const z = ((hash >> 8) % 800) - 400;
   return { x, y: 0, z };
 }
+
 //TODO: Make coordinateData come from gameState
 export function getProvincePosition(coordinateData, loc) {
   // Convert e.g. "Spa/sc" to "SPA_SC" if needed

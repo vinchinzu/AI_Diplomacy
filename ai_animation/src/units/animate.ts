@@ -11,12 +11,12 @@ enum AnimationTypeENUM {
   MOVE,
   DELETE,
 }
-type unitAnimation = {
+export type UnitAnimation = {
   animationType: AnimationTypeENUM
 }
 
-export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], currentPhase: GamePhase, previousPhase: GamePhase | null): unitAnimation[] {
-  let unitAnimations: unitAnimation[] = []
+export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], currentPhase: GamePhase, previousPhase: GamePhase | null): UnitAnimation[] {
+  let unitAnimations: UnitAnimation[] = []
   // Prepare unit position maps
   const previousUnitPositions = {};
   if (previousPhase.state?.units) {
@@ -81,4 +81,47 @@ export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], curre
     }
   }
   return unitAnimations
+}
+// Easing function for smooth animations
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+export function processUnitAnimation(anim: UnitAnimation) {
+
+  const currentTime = Date.now();
+  const elapsed = currentTime - anim.startTime;
+  // Calculate progress (0 to 1)
+  const progress = Math.min(1, elapsed / anim.duration);
+
+  // Apply movement
+  if (progress < 1) {
+    // Apply easing for more natural movement - ease in and out
+    const easedProgress = easeInOutCubic(progress);
+
+    // Update position
+    anim.object.position.x = anim.startPos.x + (anim.endPos.x - anim.startPos.x) * easedProgress;
+    anim.object.position.z = anim.startPos.z + (anim.endPos.z - anim.startPos.z) * easedProgress;
+
+    // Subtle bobbing up and down during movement
+    anim.object.position.y = 10 + Math.sin(progress * Math.PI * 2) * 5;
+
+    // For fleets (ships), add a gentle rocking motion
+    if (anim.object.userData.type === 'F') {
+      anim.object.rotation.z = Math.sin(progress * Math.PI * 3) * 0.05;
+      anim.object.rotation.x = Math.sin(progress * Math.PI * 2) * 0.05;
+    }
+  } else {
+
+    // Set final position
+    anim.object.position.x = anim.endPos.x;
+    anim.object.position.z = anim.endPos.z;
+    anim.object.position.y = 10; // Reset height
+
+    // Reset rotation for ships
+    if (anim.object.userData.type === 'F') {
+      anim.object.rotation.z = 0;
+      anim.object.rotation.x = 0;
+    }
+  }
 }

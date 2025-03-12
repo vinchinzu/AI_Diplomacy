@@ -1,14 +1,13 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
-import { createLabel } from "./map/labels"
 import "./style.css"
 import { UnitMesh } from "./types/units";
 import { CoordinateData, PowerENUM } from "./types/map";
 import { createUnitMesh, getPowerHexColor } from "./units/create";
+import { initMap } from "./map/create";
 import { getProvincePosition } from "./map/utils";
-import { createAnimationsForPhaseTransition } from "./units/animate";
+import { createAnimationsForPhaseTransition, processUnitAnimation } from "./units/animate";
+import type { UnitAnimation } from "./units/animate";
 import { loadCoordinateData, coordinateData } from "./gameState";
 import Logger from "./logger";
 import { GamePhase } from "./types/gameState";
@@ -105,7 +104,7 @@ let unitMeshes: UnitMesh[] = []; // To store references for units + supply cente
 let isPlaying = false; // Track playback state
 let playbackSpeed = 500; // Default speed in ms
 let playbackTimer = null; // Timer reference for playback
-let unitAnimations = []; // Track ongoing unit animations
+let unitAnimations: UnitAnimation[] = []; // Track ongoing unit animations
 let chatWindows = {}; // Store chat window elements by power
 let currentPower = getRandomPower(); // Now randomly selected
 let logger = new Logger()
@@ -195,10 +194,11 @@ function initScene() {
 
   // Load coordinate data, then build the fallback map
   loadCoordinateData()
-    .then(() => {
-      drawMap();  // Create the map plane from the start
+    .then((coordinateData) => {
+      initMap(scene, coordinateData)
+      // Create the map plane from the start
       // target the center of the map
-      controls.target = new THREE.Vector3(800, 0, 800)
+      // Set the camera's target to the center of the map
       // Load default game file if in debug mode
       if (isDebugMode) {
         loadDefaultGameFile();
@@ -223,7 +223,6 @@ function initScene() {
 function animate() {
   requestAnimationFrame(animate);
 
-  const currentTime = Date.now();
 
   if (isPlaying) {
     // Pan camera slowly in playback mode
@@ -252,54 +251,17 @@ function animate() {
   }
 
   // Process unit movement animations
-  if (unitAnimations.length > 0) {
-    unitAnimations.forEach((anim, index) => {
-      // Calculate progress (0 to 1)
-      const elapsed = currentTime - anim.startTime;
-      const progress = Math.min(1, elapsed / anim.duration);
-
-      // Apply movement
-      if (progress < 1) {
-        // Apply easing for more natural movement - ease in and out
-        const easedProgress = easeInOutCubic(progress);
-
-        // Update position
-        anim.object.position.x = anim.startPos.x + (anim.endPos.x - anim.startPos.x) * easedProgress;
-        anim.object.position.z = anim.startPos.z + (anim.endPos.z - anim.startPos.z) * easedProgress;
-
-        // Subtle bobbing up and down during movement
-        anim.object.position.y = 10 + Math.sin(progress * Math.PI * 2) * 5;
-
-        // For fleets (ships), add a gentle rocking motion
-        if (anim.object.userData.type === 'F') {
-          anim.object.rotation.z = Math.sin(progress * Math.PI * 3) * 0.05;
-          anim.object.rotation.x = Math.sin(progress * Math.PI * 2) * 0.05;
-        }
-      } else {
-        // Animation complete, remove from active animations
-        unitAnimations.splice(index, 1);
-
-        // Set final position
-        anim.object.position.x = anim.endPos.x;
-        anim.object.position.z = anim.endPos.z;
-        anim.object.position.y = 10; // Reset height
-
-        // Reset rotation for ships
-        if (anim.object.userData.type === 'F') {
-          anim.object.rotation.z = 0;
-          anim.object.rotation.x = 0;
-        }
-
-        // >>> MODIFIED: Check if messages are still playing before advancing
-        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying && !isSpeaking) {
-          // Schedule next phase after a pause delay
-          playbackTimer = setTimeout(() => {
-            // Call the async function without awaiting it here
-            advanceToNextPhase();
-          }, playbackSpeed);
-        }
-      }
+  if (unitAnimations && unitAnimations.length > 0) {
+    unitAnimations.forEach((anim: UnitAnimation, index) => {
+      processUnitAnimation(anim)
+      // Animation complete, remove from active animations
+      unitAnimations.splice(index, 1);
     });
+    // >>> MODIFIED: Check if messages are still playing before advancing
+    if (unitAnimations.length === 0 && isPlaying && !messagesPlaying) {
+      // Schedule next phase after a pause delay
+      playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+    }
   }
 
   // Update any pulsing or wave animations on supply centers or units
@@ -327,10 +289,6 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// Easing function for smooth animations
-function easeInOutCubic(t) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
 
 // --- RESIZE HANDLER ---
 function onWindowResize() {
@@ -364,109 +322,6 @@ function loadDefaultGameFile() {
       logger.log(`Error loading default game: ${error.message}`)
     });
 }
-
-// --- CREATE THE FALLBACK MAP AS A PLANE ---
-function drawMap() {
-  const loader = new SVGLoader();
-  loader.load('assets/maps/standard/map.svg',
-    function (data) {
-      fetch('assets/maps/standard/styles.json')
-        .then(resp => resp.json())
-        .then(map_styles => {
-          const paths = data.paths;
-          const group = new THREE.Group();
-          const textGroup = new THREE.Group();
-
-          for (let i = 0; i < paths.length; i++) {
-            let fillColor = ""
-            const path = paths[i];
-            // The "standard" map has keys like _mos, so remove that then send them to caps
-            let provinceKey = path.userData.node.id.substring(1).toUpperCase();
-
-
-            if (map_styles[path.userData.node.classList[0]] === undefined) {
-              // If there is no style in the map_styles, skip drawing the shape
-              continue
-            } else if (provinceKey && coordinateData.provinces[provinceKey] && coordinateData.provinces[provinceKey].owner) {
-              fillColor = getPowerHexColor(coordinateData.provinces[provinceKey].owner)
-            }
-            else {
-              fillColor = map_styles[path.userData.node.classList[0]].fill;
-            }
-
-            const material = new THREE.MeshBasicMaterial({
-              color: fillColor,
-              side: THREE.DoubleSide,
-              depthWrite: false
-            });
-
-            const shapes = SVGLoader.createShapes(path);
-
-            for (let j = 0; j < shapes.length; j++) {
-
-              const shape = shapes[j];
-              const geometry = new THREE.ShapeGeometry(shape);
-              const mesh = new THREE.Mesh(geometry, material);
-
-              mesh.rotation.x = Math.PI / 2;
-              if (provinceKey && coordinateData.provinces[provinceKey] && coordinateData.provinces[provinceKey].owner) {
-                coordinateData.provinces[provinceKey].mesh = mesh
-              }
-              group.add(mesh);
-
-
-              // Create an edges geometry from the shape geometry.
-              const edges = new THREE.EdgesGeometry(geometry);
-              // Create a line material with black color for the border.
-              const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
-              // Create the line segments object to display the border.
-              const line = new THREE.LineSegments(edges, lineMaterial);
-              // Add the border as a child of the mesh.
-              mesh.add(line);
-            }
-          }
-
-          // Load all the labels for each map position
-          const fontLoader = new FontLoader();
-          fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
-            for (const [key, value] of Object.entries(coordinateData.provinces)) {
-
-              textGroup.add(createLabel(font, key, value))
-            }
-          })
-          // This rotates the SVG the "correct" way round, and scales it down
-          group.scale.set(1, -1, 1)
-          textGroup.rotation.x = Math.PI / 2;
-          textGroup.scale.set(1, -1, 1)
-
-          // After adding all meshes to the group, update its matrix:
-          group.updateMatrixWorld(true);
-          textGroup.updateMatrixWorld(true);
-
-          // Compute the bounding box of the group:
-          const box = new THREE.Box3().setFromObject(group);
-          const center = new THREE.Vector3();
-          box.getCenter(center);
-
-
-          scene.add(group);
-          scene.add(textGroup);
-
-          // Set the camera's target to the center of the map
-          controls.target = center
-          camera.position.set(center.x, 1400, 1100)
-        })
-        .catch(error => {
-          console.error('Error loading map styles:', error);
-        });
-    },
-    // Progress function
-    undefined,
-    function (error) { console.log(error) })
-
-  return
-}
-
 
 // --- 3D SUPPLY CENTERS ---
 function displaySupplyCenters() {
@@ -711,7 +566,6 @@ function displayInitialPhase(index) {
   // Add: Update info panel
   updateInfoPanel();
 
-  drawMap()
 }
 
 // --- LEADERBOARD FUNCTION ---
@@ -843,36 +697,26 @@ function displayPhaseWithAnimation(index) {
   // Rebuild supply centers, remove old units
 
   // First show messages, THEN animate units after
-  if (currentPhase.messages && currentPhase.messages.length) {
-    // First show messages with stepwise animation
-    updateChatWindows(currentPhase, true);
+  // First show messages with stepwise animation
+  updateChatWindows(currentPhase, true);
 
-    // We'll animate units only after messages are done
-    // This happens in the animation loop when messagesPlaying becomes false
-  } else {
-    const supplyCenters = unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
-    const oldUnits = unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
-    oldUnits.forEach(m => scene.remove(m));
-    unitMeshes = supplyCenters;
 
-    // Ownership
-    if (currentPhase.state?.centers) {
-      updateSupplyCenterOwnership(currentPhase.state.centers);
-    }
-
-    // Update leaderboard
-    updateLeaderboard(currentPhase);
-    updateMapOwnership(currentPhase)
-
-    unitAnimations = createAnimationsForPhaseTransition(unitMeshes, currentPhase, previousPhase);
+  // Ownership
+  if (currentPhase.state?.centers) {
+    updateSupplyCenterOwnership(currentPhase.state.centers);
   }
+
+  // Update leaderboard
+  updateLeaderboard(currentPhase);
+  updateMapOwnership(currentPhase)
+
+  unitAnimations = createAnimationsForPhaseTransition(unitMeshes, currentPhase, previousPhase);
   let msg = `Phase: ${currentPhase.name}\nSCs: ${JSON.stringify(currentPhase.state.centers)} \nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'} `
   // Panel
 
   // Add: Update info panel
   updateInfoPanel();
 
-  drawMap()
 }
 
 function updateMapOwnership(currentPhase: GamePhase) {
@@ -894,11 +738,7 @@ function updateMapOwnership(currentPhase: GamePhase) {
   for (const [key, value] of Object.entries(coordinateData.provinces)) {
     let power = coordinateData.provinces[key].owner
     let powerColor: string
-    if (!power) {
-      powerColor = '#000000'
-    } else {
-      powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
-    }
+    powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
     let powerColorHex = parseInt(powerColor.substring(1), 16);
     coordinateData.provinces[key].mesh?.material.color.setHex(powerColorHex)
 

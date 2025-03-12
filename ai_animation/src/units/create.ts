@@ -4,8 +4,8 @@ import { PowerENUM } from "../types/map";
 
 // Get color for a power
 export function getPowerHexColor(power: PowerENUM) {
-  if (!power) throw new Error("Cannot pass undefined to getPowerHexColor")
-  let powerString = power.toUpperCase()
+  let defaultColor = '#ddd2af'
+  if (power === undefined) return defaultColor
   const powerColors = {
     'AUSTRIA': '#c40000',
     'ENGLAND': '#00008B',
@@ -15,7 +15,7 @@ export function getPowerHexColor(power: PowerENUM) {
     'RUSSIA': '#cccccc',
     'TURKEY': '#e0c846',
   };
-  return powerColors[powerString] || '#b19b69'; // fallback to neutral
+  return powerColors[power] || defaultColor; // fallback to neutral
 }
 
 function createArmy(color: string): THREE.Group {
