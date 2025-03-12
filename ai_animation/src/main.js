@@ -6,6 +6,80 @@ import { addMapMouseEvents } from "./map/mouseMovement"
 import { createLabel } from "./map/labels"
 import "./style.css"
 
+// --- NEW: ElevenLabs TTS helper function ---
+const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
+const VOICE_ID = "onwK4e9ZLuTAKqWW03F9";
+const MODEL_ID = "eleven_multilingual_v2";
+
+/**
+ * Call ElevenLabs TTS to speak out loud. Returns a promise that
+ * resolves only after the audio finishes playing (or fails).
+ * Now accepts only the first 100 characters for brevity.
+ */
+async function speakSummary(summaryText) {
+  if (!ELEVENLABS_API_KEY) {
+    console.warn("No ElevenLabs API key found. Skipping TTS.");
+    return;
+  }
+
+  // Set the speaking flag to block other animations/transitions
+  isSpeaking = true;
+
+  try {
+    // Truncate text to first 100 characters for ElevenLabs
+    const truncatedText = summaryText.substring(0, 100);
+    if (truncatedText.length < summaryText.length) {
+      console.log(`TTS text truncated from ${summaryText.length} to 100 characters`);
+    }
+
+    // Hit ElevenLabs TTS endpoint with the truncated text
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg"
+      },
+      body: JSON.stringify({
+        text: truncatedText,
+        model_id: MODEL_ID,
+        // Optional fine-tuning parameters
+        // voice_settings: { stability: 0.3, similarity_boost: 0.8 },
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`ElevenLabs TTS error: ${response.statusText}`);
+    }
+
+    // Convert response into a playable blob
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    
+    // Play the audio, pause until finished
+    return new Promise((resolve, reject) => {
+      const audio = new Audio(audioUrl);
+      audio.play().then(() => {
+        audio.onended = () => {
+          // Clear the speaking flag when audio finishes
+          isSpeaking = false;
+          resolve();
+        };
+      }).catch(err => {
+        console.error("Audio playback error", err);
+        // Make sure to clear the flag even if there's an error
+        isSpeaking = false;
+        reject(err);
+      });
+    });
+
+  } catch (err) {
+    console.error("Failed to generate TTS from ElevenLabs:", err);
+    // Make sure to clear the flag if there's any exception
+    isSpeaking = false;
+  }
+}
+
 //const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = false;
 
@@ -37,6 +111,8 @@ let cameraPanTime = 0;   // Timer that drives the camera panning
 const cameraPanSpeed = 0.0005; // Smaller = slower
 let messagesPlaying = false;    // Lock to let messages animate before next phase
 let faceIconCache = {}; // Cache for generated face icons
+// NEW: Add a lock for text-to-speech
+let isSpeaking = false;   // Lock to pause game flow while TTS is active
 
 // --- DOM ELEMENTS ---
 const loadBtn = document.getElementById('load-btn');
@@ -150,7 +226,7 @@ function animate() {
     );
 
     // If messages are done playing but we haven't started unit animations yet
-    if (!messagesPlaying && unitAnimations.length === 0 && isPlaying) {
+    if (!messagesPlaying && !isSpeaking && unitAnimations.length === 0 && isPlaying) {
       if (gameData && gameData.phases) {
         const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : gameData.phases.length - 1;
         animateUnitsForPhase(
@@ -203,9 +279,12 @@ function animate() {
         }
 
         // >>> MODIFIED: Check if messages are still playing before advancing
-        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying) {
+        if (unitAnimations.length === 0 && isPlaying && !messagesPlaying && !isSpeaking) {
           // Schedule next phase after a pause delay
-          playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+          playbackTimer = setTimeout(() => {
+            // Call the async function without awaiting it here
+            advanceToNextPhase();
+          }, playbackSpeed);
         }
       }
     });
@@ -749,6 +828,9 @@ function updateLeaderboard(phase) {
 function togglePlayback() {
   if (!gameData || gameData.phases.length <= 1) return;
 
+  // NEW: If we're speaking, don't allow toggling playback
+  if (isSpeaking) return;
+
   isPlaying = !isPlaying;
 
   if (isPlaying) {
@@ -761,9 +843,6 @@ function togglePlayback() {
     if (phase.messages && phase.messages.length) {
       // Show messages with stepwise animation
       updateChatWindows(phase, true);
-
-      // After all messages are shown, then the animate() function will handle
-      // starting unit animations since messagesPlaying will become false
     } else {
       // No messages, go straight to unit animations
       displayPhaseWithAnimation(currentPhaseIndex);
@@ -781,14 +860,18 @@ function togglePlayback() {
   }
 }
 
-function advanceToNextPhase() {
+// --- MODIFIED: Update news banner before TTS ---
+async function advanceToNextPhase() {
   // Only show a summary if we have at least started the first phase
   // and only if the just-ended phase has a "summary" property.
   if (gameData && gameData.phases && currentPhaseIndex >= 0) {
     const justEndedPhase = gameData.phases[currentPhaseIndex];
     if (justEndedPhase.summary && justEndedPhase.summary.trim() !== '') {
-      // e.g. add some label: "(S1901M) Army bounce in GAL ..."
+      // UPDATED: First update the news banner with full summary
       addToNewsBanner(`(${justEndedPhase.name}) ${justEndedPhase.summary}`);
+      
+      // Then speak the summary (will be truncated internally)
+      await speakSummary(justEndedPhase.summary);
     }
   }
 
@@ -1216,9 +1299,8 @@ function updateChatWindows(phase, stepMessages = false) {
     const showNext = () => {
       if (index >= relevantMessages.length) {
         messagesPlaying = false;
-        // If unit animations are also done, proceed
-        if (unitAnimations.length === 0 && isPlaying) {
-          // Short delay then next
+        if (unitAnimations.length === 0 && isPlaying && !isSpeaking) {
+          // Call the async function without awaiting it here
           playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
         }
         return;
