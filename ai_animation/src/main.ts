@@ -5,7 +5,9 @@ import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
 import { createLabel } from "./map/labels"
 import "./style.css"
 import { UnitMesh } from "./types/units";
-import { PowerENUM } from "./types/map";
+import { CoordinateData, PowerENUM } from "./types/map";
+import type { GamePhase } from "./types/gameState";
+import { createUnitMesh, getPowerHexColor } from "./units/create";
 import Logger from "./logger";
 
 // --- NEW: ElevenLabs TTS helper function ---
@@ -96,7 +98,7 @@ function getRandomPower() {
 let scene, camera, renderer, controls;
 let gameData = null;
 let currentPhaseIndex = 0;
-let coordinateData = null;
+let coordinateData: CoordinateData | null = null;
 let unitMeshes: UnitMesh[] = []; // To store references for units + supply center 3D objects
 let mapPlane = null; // The fallback map plane
 let isPlaying = false; // Track playback state
@@ -128,7 +130,6 @@ const nextBtn = document.getElementById('next-btn');
 const playBtn = document.getElementById('play-btn');
 const speedSelector = document.getElementById('speed-selector');
 const phaseDisplay = document.getElementById('phase-display');
-const infoPanel = document.getElementById('info-panel');
 const mapView = document.getElementById('map-view');
 const leaderboard = document.getElementById('leaderboard');
 
@@ -510,22 +511,6 @@ function drawMap() {
     function (error) { console.log(error) })
 
   return
-}
-
-
-
-// Get color for a power
-function getPowerHexColor(power) {
-  const powerColors = {
-    'AUSTRIA': '#c40000',
-    'ENGLAND': '#00008B',
-    'FRANCE': '#0fa0d0',
-    'GERMANY': '#444444',
-    'ITALY': '#008000',
-    'RUSSIA': '#cccccc',
-    'TURKEY': '#e0c846'
-  };
-  return powerColors[power] || '#b19b69'; // fallback to neutral
 }
 
 
@@ -985,15 +970,21 @@ function updateMapOwnership(currentPhase) {
     })
   }
   for (const [key, value] of Object.entries(coordinateData.provinces)) {
-    let powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
-    powerColor = parseInt(powerColor.substring(1), 16);
-    coordinateData.provinces[key].mesh?.material.color.setHex(powerColor)
+    let power = coordinateData.provinces[key].owner
+    let powerColor: string
+    if (!power) {
+      powerColor = '#000000'
+    } else {
+      powerColor = getPowerHexColor(coordinateData.provinces[key].owner)
+    }
+    let powerColorHex = parseInt(powerColor.substring(1), 16);
+    coordinateData.provinces[key].mesh?.material.color.setHex(powerColorHex)
 
   }
 }
 
 // New helper function to animate units for a phase
-function animateUnitsForPhase(currentPhase, previousPhase) {
+function animateUnitsForPhase(currentPhase: GamePhase, previousPhase: GamePhase) {
   // Prepare unit position maps
   const previousUnitPositions = {};
   if (previousPhase.state?.units) {
@@ -1013,22 +1004,17 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
   if (currentPhase.state?.units) {
     for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
       unitArr.forEach(unitStr => {
+        // For each unit, create a new mesh
         const match = unitStr.match(/^([AF])\s+(.+)$/);
         if (!match) return;
         const unitType = match[1];
         const location = match[2];
         const key = `${power} -${unitType} -${location} `;
-        const unitMesh = createUnitMesh({
-          power: power.toUpperCase(),
-          type: unitType,
-          location
-        });
 
 
         // Current final
         const currentPos = getProvincePosition(location);
 
-        // Start pos
         let startPos;
         let matchFound = false;
         for (const prevKey in previousUnitPositions) {
@@ -1046,6 +1032,11 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
           startPos = { x: currentPos.x, y: -20, z: currentPos.z };
         }
 
+        const unitMesh = createUnitMesh({
+          power: power,
+          province: location,
+          type: unitType,
+        });
         unitMesh.position.set(startPos.x, 10, startPos.z);
         scene.add(unitMesh);
         unitMeshes.push(unitMesh);
@@ -1061,63 +1052,6 @@ function animateUnitsForPhase(currentPhase, previousPhase) {
       });
     }
   }
-}
-function createUnitMesh(unitData) {
-  const color = getPowerHexColor(unitData.power);
-
-  let group = new THREE.Group();
-  // Minimal shape difference for armies vs fleets
-  if (unitData.type === 'A') {
-    // Army: a block + small head for soldier-like appearance
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(15, 20, 10),
-      new THREE.MeshStandardMaterial({ color })
-    );
-    body.position.y = 10;
-    group.add(body);
-
-    // Head
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(4, 12, 12),
-      new THREE.MeshStandardMaterial({ color })
-    );
-    head.position.set(0, 24, 0);
-    group.add(head);
-  } else {
-    // Fleet: a rectangle + a mast and sail
-    const hull = new THREE.Mesh(
-      new THREE.BoxGeometry(30, 8, 15),
-      new THREE.MeshStandardMaterial({ color: 0x8B4513 })
-    );
-    hull.position.y = 4;
-    group.add(hull);
-
-    // Mast
-    const mast = new THREE.Mesh(
-      new THREE.CylinderGeometry(1, 1, 30, 8),
-      new THREE.MeshStandardMaterial({ color: 0x000000 })
-    );
-    mast.position.y = 15;
-    group.add(mast);
-
-    // Sail
-    const sail = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 15),
-      new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide })
-    );
-    sail.rotation.y = Math.PI / 2;
-    sail.position.set(0, 15, 0);
-    group.add(sail);
-  }
-
-  // Store metadata
-  group.userData = {
-    power: unitData.power,
-    type: unitData.type,
-    location: unitData.location
-  };
-
-  return group;
 }
 // --- EVENT HANDLERS ---
 loadBtn.addEventListener('click', () => fileInput.click());
