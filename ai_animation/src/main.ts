@@ -6,9 +6,12 @@ import { createLabel } from "./map/labels"
 import "./style.css"
 import { UnitMesh } from "./types/units";
 import { CoordinateData, PowerENUM } from "./types/map";
-import type { GamePhase } from "./types/gameState";
 import { createUnitMesh, getPowerHexColor } from "./units/create";
+import { getProvincePosition } from "./map/utils";
+import { createAnimationsForPhaseTransition } from "./units/animate";
+import { loadCoordinateData, coordinateData } from "./gameState";
 import Logger from "./logger";
+import { GamePhase } from "./types/gameState";
 
 // --- NEW: ElevenLabs TTS helper function ---
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
@@ -98,15 +101,11 @@ function getRandomPower() {
 let scene, camera, renderer, controls;
 let gameData = null;
 let currentPhaseIndex = 0;
-let coordinateData: CoordinateData | null = null;
 let unitMeshes: UnitMesh[] = []; // To store references for units + supply center 3D objects
-let mapPlane = null; // The fallback map plane
 let isPlaying = false; // Track playback state
 let playbackSpeed = 500; // Default speed in ms
 let playbackTimer = null; // Timer reference for playback
-let animationDuration = 1500; // Duration of unit movement animation in ms
 let unitAnimations = []; // Track ongoing unit animations
-let territoryTransitions = []; // Track territory color transitions
 let chatWindows = {}; // Store chat window elements by power
 let currentPower = getRandomPower(); // Now randomly selected
 let logger = new Logger()
@@ -241,7 +240,8 @@ function animate() {
     if (!messagesPlaying && !isSpeaking && unitAnimations.length === 0 && isPlaying) {
       if (gameData && gameData.phases) {
         const prevIndex = currentPhaseIndex > 0 ? currentPhaseIndex - 1 : gameData.phases.length - 1;
-        animateUnitsForPhase(
+        unitAnimations = createAnimationsForPhaseTransition(
+          unitMeshes,
           gameData.phases[currentPhaseIndex],
           gameData.phases[prevIndex]
         );
@@ -298,24 +298,6 @@ function animate() {
             advanceToNextPhase();
           }, playbackSpeed);
         }
-      }
-    });
-  }
-
-  // Process territory color transitions
-  if (territoryTransitions.length > 0) {
-    territoryTransitions.forEach((transition, index) => {
-      const elapsed = currentTime - transition.startTime;
-      const progress = Math.min(1, elapsed / transition.duration);
-
-      if (progress < 1) {
-        // Interpolate colors
-        const easedProgress = easeInOutCubic(progress);
-        transition.canvas.style.opacity = easedProgress;
-      } else {
-        // Transition complete
-        territoryTransitions.splice(index, 1);
-        transition.canvas.style.opacity = 1;
       }
     });
   }
@@ -381,34 +363,6 @@ function loadDefaultGameFile() {
       console.error("Error loading default game file:", error);
       logger.log(`Error loading default game: ${error.message}`)
     });
-}
-// --- LOAD COORDINATE DATA ---
-function loadCoordinateData() {
-  return new Promise((resolve, reject) => {
-    fetch('./assets/maps/standard/coords.json')
-      .then(response => {
-        if (!response.ok) {
-          // Try an alternate path if desired
-          throw new Error("Something went wrong when fetching the coords.json")
-        }
-        return response;
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`Failed to load coordinates: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        coordinateData = data;
-        logger.log('Coordinate data loaded!')
-        resolve(coordinateData);
-      })
-      .catch(error => {
-        console.error(error);
-        reject(error);
-      });
-  });
 }
 
 // --- CREATE THE FALLBACK MAP AS A PLANE ---
@@ -519,7 +473,7 @@ function displaySupplyCenters() {
   if (!coordinateData || !coordinateData.provinces) return;
   for (const [province, data] of Object.entries(coordinateData.provinces)) {
     if (data.isSupplyCenter && coordinateData.provinces[province]) {
-      const pos = getProvincePosition(province);
+      const pos = getProvincePosition(coordinateData, province);
 
       // Build a small pillar + star in 3D
       const scGroup = new THREE.Group();
@@ -657,7 +611,7 @@ function displayUnit(unitData) {
   }
 
   // Position
-  const pos = getProvincePosition(unitData.location);
+  const pos = getProvincePosition(coordinateData, unitData.location);
   group.position.set(pos.x, 10, pos.z);
 
   // Store meta
@@ -671,39 +625,7 @@ function displayUnit(unitData) {
   unitMeshes.push(group);
 }
 
-function getProvincePosition(loc) {
-  // Convert e.g. "Spa/sc" to "SPA_SC" if needed
-  const normalized = loc.toUpperCase().replace('/', '_');
-  const base = normalized.split('_')[0];
 
-  if (coordinateData && coordinateData.provinces) {
-    if (coordinateData.provinces[normalized]) {
-      return {
-        "x": coordinateData.provinces[normalized].label.x,
-        "y": 10,
-        "z": coordinateData.provinces[normalized].label.y
-      };
-    }
-    if (coordinateData.provinces[base]) {
-      return coordinateData.provinces[base].label;
-    }
-  }
-
-  // Fallback with offset
-  const pos = hashStringToPosition(loc);
-  return { x: pos.x, y: pos.y, z: pos.z + 100 };
-}
-
-function hashStringToPosition(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  const x = (hash % 800) - 400;
-  const z = ((hash >> 8) % 800) - 400;
-  return { x, y: 0, z };
-}
 
 // --- LOADING & DISPLAYING GAME PHASES ---
 function loadGame(file) {
@@ -942,7 +864,7 @@ function displayPhaseWithAnimation(index) {
     updateLeaderboard(currentPhase);
     updateMapOwnership(currentPhase)
 
-    animateUnitsForPhase(currentPhase, previousPhase);
+    unitAnimations = createAnimationsForPhaseTransition(unitMeshes, currentPhase, previousPhase);
   }
   let msg = `Phase: ${currentPhase.name}\nSCs: ${JSON.stringify(currentPhase.state.centers)} \nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'} `
   // Panel
@@ -953,7 +875,7 @@ function displayPhaseWithAnimation(index) {
   drawMap()
 }
 
-function updateMapOwnership(currentPhase) {
+function updateMapOwnership(currentPhase: GamePhase) {
 
   for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
     unitArr.forEach(unitStr => {
@@ -983,76 +905,6 @@ function updateMapOwnership(currentPhase) {
   }
 }
 
-// New helper function to animate units for a phase
-function animateUnitsForPhase(currentPhase: GamePhase, previousPhase: GamePhase) {
-  // Prepare unit position maps
-  const previousUnitPositions = {};
-  if (previousPhase.state?.units) {
-    for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
-      unitArr.forEach(unitStr => {
-        const match = unitStr.match(/^([AF])\s+(.+)$/);
-        if (match) {
-          const key = `${power} -${match[1]} -${match[2]} `;
-          previousUnitPositions[key] = getProvincePosition(match[2]);
-        }
-      });
-    }
-  }
-
-  // Animate new units from old positions (or spawn from below)
-  unitAnimations = [];
-  if (currentPhase.state?.units) {
-    for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
-      unitArr.forEach(unitStr => {
-        // For each unit, create a new mesh
-        const match = unitStr.match(/^([AF])\s+(.+)$/);
-        if (!match) return;
-        const unitType = match[1];
-        const location = match[2];
-        const key = `${power} -${unitType} -${location} `;
-
-
-        // Current final
-        const currentPos = getProvincePosition(location);
-
-        let startPos;
-        let matchFound = false;
-        for (const prevKey in previousUnitPositions) {
-          if (prevKey.startsWith(`${power} -${unitType} `)) {
-            startPos = previousUnitPositions[prevKey];
-            matchFound = true;
-            delete previousUnitPositions[prevKey];
-            break;
-          }
-        }
-        if (!matchFound) {
-          // TODO: Add a spawn animation?
-          //
-          // New spawn
-          startPos = { x: currentPos.x, y: -20, z: currentPos.z };
-        }
-
-        const unitMesh = createUnitMesh({
-          power: power,
-          province: location,
-          type: unitType,
-        });
-        unitMesh.position.set(startPos.x, 10, startPos.z);
-        scene.add(unitMesh);
-        unitMeshes.push(unitMesh);
-
-        // Animate
-        unitAnimations.push({
-          object: unitMesh,
-          startPos,
-          endPos: currentPos,
-          startTime: Date.now(),
-          duration: animationDuration
-        });
-      });
-    }
-  }
-}
 // --- EVENT HANDLERS ---
 loadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => {
