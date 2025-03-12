@@ -8,6 +8,14 @@ import "./style.css"
 
 //const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = false;
+
+// Move these definitions BEFORE they're used
+const ALL_POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
+function getRandomPower() {
+  const idx = Math.floor(Math.random() * ALL_POWERS.length);
+  return ALL_POWERS[idx];
+}
+
 // --- CORE VARIABLES ---
 let scene, camera, renderer, controls;
 let gameData = null;
@@ -22,7 +30,7 @@ let animationDuration = 1500; // Duration of unit movement animation in ms
 let unitAnimations = []; // Track ongoing unit animations
 let territoryTransitions = []; // Track territory color transitions
 let chatWindows = {}; // Store chat window elements by power
-let currentPower = 'FRANCE'; // Default perspective is France
+let currentPower = getRandomPower(); // Now randomly selected
 
 // >>> ADDED: Camera pan and message playback variables
 let cameraPanTime = 0;   // Timer that drives the camera panning
@@ -112,16 +120,16 @@ function initScene() {
     })
     .catch(err => {
       console.error("Error loading coordinates:", err);
-      infoPanel.textContent = `Error loading coords: ${err.message}`;
     });
 
   // Handle resizing
   window.addEventListener('resize', onWindowResize);
-  addMapMouseEvents(mapView, infoPanel)
+  addMapMouseEvents(mapView)
   // Kick off animation loop
   animate();
 
-
+  // Initialize info panel
+  updateInfoPanel();
 }
 
 // --- ANIMATION LOOP ---
@@ -284,7 +292,6 @@ function loadCoordinateData() {
       })
       .then(data => {
         coordinateData = data;
-        infoPanel.textContent = 'Coordinate data loaded!';
         resolve(coordinateData);
       })
       .catch(error => {
@@ -610,7 +617,6 @@ function loadGame(file) {
   reader.onload = e => {
     try {
       gameData = JSON.parse(e.target.result);
-      infoPanel.textContent = `Game data loaded: ${gameData.phases?.length || 0} phases found.`;
       currentPhaseIndex = 0;
       if (gameData.phases?.length) {
         prevBtn.disabled = false;
@@ -624,7 +630,11 @@ function loadGame(file) {
         // Display initial phase but WITHOUT messages
         displayInitialPhase(currentPhaseIndex);
       }
+      
+      // Add: Update info panel
+      updateInfoPanel();
     } catch (err) {
+      console.error("Error parsing JSON:", err);
       infoPanel.textContent = "Error parsing JSON: " + err.message;
     }
   };
@@ -677,7 +687,9 @@ function displayInitialPhase(index) {
 
   // DON'T show messages yet - skip updateChatWindows call
 
-  infoPanel.textContent = `Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`;
+  // Add: Update info panel
+  updateInfoPanel();
+  
   drawMap()
 }
 
@@ -832,9 +844,11 @@ function displayPhaseWithAnimation(index) {
   }
 
   // Panel
-  infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'
-    }\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'
-    }`;
+  // Remove: infoPanel.textContent = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'}\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'}`;
+  
+  // Add: Update info panel
+  updateInfoPanel();
+  
   drawMap()
 }
 
@@ -1055,15 +1069,15 @@ function createChatWindows() {
   chatWindows = {};
 
   // Create a chat window for each power (except the current power)
-  const powers = ['AUSTRIA', 'ENGLAND', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
+  const powers = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
 
-  // Filter out the current power
+  // Filter out the current power for chat windows
   const otherPowers = powers.filter(power => power !== currentPower);
 
   // Add a GLOBAL chat window first
   createChatWindow('GLOBAL', true);
 
-  // Create chat windows for each power
+  // Create chat windows for each power except the current one
   otherPowers.forEach(power => {
     createChatWindow(power);
   });
@@ -1557,4 +1571,27 @@ function addToNewsBanner(newText) {
     // Otherwise append with a separator
     bannerEl.textContent += '  |  ' + newText;
   }
+}
+
+// New function to update info panel with useful information
+function updateInfoPanel() {
+  const totalPhases = gameData?.phases?.length || 0;
+  const currentPhaseNumber = currentPhaseIndex + 1;
+  const phaseName = gameData?.phases?.[currentPhaseIndex]?.name || 'Unknown';
+
+  infoPanel.innerHTML = `
+    <div><strong>Power:</strong> <span class="power-${currentPower.toLowerCase()}">${currentPower}</span></div>
+    <div><strong>Current Phase:</strong> ${phaseName} (${currentPhaseNumber}/${totalPhases})</div>
+    <hr/>
+    <h4>All-Time Leaderboard</h4>
+    <ul style="list-style:none;padding-left:0;margin:0;">
+      <li>Austria: 0</li>
+      <li>England: 0</li>
+      <li>France: 0</li>
+      <li>Germany: 0</li>
+      <li>Italy: 0</li>
+      <li>Russia: 0</li>
+      <li>Turkey: 0</li>
+    </ul>
+  `;
 }
