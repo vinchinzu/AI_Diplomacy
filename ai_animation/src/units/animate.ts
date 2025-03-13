@@ -3,8 +3,8 @@ import type { GamePhase } from "../types/gameState";
 import { createUnitMesh } from "./create";
 import { UnitMesh } from "../types/units";
 import { getProvincePosition } from "../map/utils";
-import { coordinateData } from "../gameState";
 import { Tween } from "@tweenjs/tween.js";
+import { gameState } from "../gameState";
 
 //FIXME: Move this to a file with all the constants
 let animationDuration = 1500; // Duration of unit movement animation in ms
@@ -45,7 +45,7 @@ export function createTweenAnimations(unitMeshes: UnitMesh[], currentPhase: Game
         const match = unitStr.match(/^([AF])\s+(.+)$/);
         if (match) {
           const key = `${power}-${match[1]}-${match[2]}`;
-          previousUnitPositions[key] = getProvincePosition(coordinateData, match[2]);
+          previousUnitPositions[key] = getProvincePosition(gameState.boardState, match[2]);
         }
       });
     }
@@ -62,7 +62,7 @@ export function createTweenAnimations(unitMeshes: UnitMesh[], currentPhase: Game
         const location = armyOrFleetOrder[2];
 
         // Current final
-        const currentPos = getProvincePosition(coordinateData, location);
+        const currentPos = getProvincePosition(gameState.boardState, location);
 
         let startPos;
         let matchFound = false;
@@ -106,7 +106,7 @@ export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], curre
         const match = unitStr.match(/^([AF])\s+(.+)$/);
         if (match) {
           const key = `${power} -${match[1]} -${match[2]} `;
-          previousUnitPositions[key] = getProvincePosition(coordinateData, match[2]);
+          previousUnitPositions[key] = getProvincePosition(gameState.boardState, match[2]);
         }
       });
     }
@@ -124,7 +124,7 @@ export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], curre
 
 
         // Current final
-        const currentPos = getProvincePosition(coordinateData, location);
+        const currentPos = getProvincePosition(gameState.boardState, location);
 
         let startPos;
         let matchFound = false;

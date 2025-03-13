@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { UnitData, UnitMesh } from "../types/units";
 import { PowerENUM } from "../types/map";
+import { gameState } from "../gameState";
+import { getProvincePosition } from "../map/utils";
 
 // Get color for a power
 export function getPowerHexColor(power: PowerENUM) {
@@ -67,6 +69,60 @@ function createFleet(color: string): THREE.Group {
   group.add(sail);
   return group
 }
+
+export function createSupplyCenters(): THREE.Group[] {
+  let supplyCenterMeshes: THREE.Group[] = [];
+  if (!gameState.boardState || !gameState.boardState.provinces) throw new Error("Game not initialized, cannot create SCs");
+  for (const [province, data] of Object.entries(gameState.boardState.provinces)) {
+    if (data.isSupplyCenter && gameState.boardState.provinces[province]) {
+
+      // Build a small pillar + star in 3D
+      const scGroup = new THREE.Group();
+
+      const baseGeom = new THREE.CylinderGeometry(12, 12, 3, 16);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+      const base = new THREE.Mesh(baseGeom, baseMat);
+      base.position.y = 1.5;
+      scGroup.add(base);
+
+      const pillarGeom = new THREE.CylinderGeometry(2.5, 2.5, 12, 8);
+      const pillarMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+      const pillar = new THREE.Mesh(pillarGeom, pillarMat);
+      pillar.position.y = 7.5;
+      scGroup.add(pillar);
+
+      // We'll just do a cone star for simplicity
+      const starGeom = new THREE.ConeGeometry(6, 10, 5);
+      const starMat = new THREE.MeshStandardMaterial({ color: 0xFFD700 });
+      const starMesh = new THREE.Mesh(starGeom, starMat);
+      starMesh.rotation.x = Math.PI; // point upwards
+      starMesh.position.y = 14;
+      scGroup.add(starMesh);
+
+      // Optionally add a glow disc
+      const glowGeom = new THREE.CircleGeometry(15, 32);
+      const glowMat = new THREE.MeshBasicMaterial({ color: 0xFFFFAA, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+      const glowMesh = new THREE.Mesh(glowGeom, glowMat);
+      glowMesh.rotation.x = -Math.PI / 2;
+      glowMesh.position.y = 2;
+      scGroup.add(glowMesh);
+
+      // Store userData for ownership changes
+      scGroup.userData = {
+        province,
+        isSupplyCenter: true,
+        owner: null,
+        starMesh,
+        glowMesh
+      };
+
+      const pos = getProvincePosition(gameState.boardState, province);
+      scGroup.position.set(pos.x, 2, pos.z);
+      supplyCenterMeshes.push(scGroup)
+    }
+  }
+  return supplyCenterMeshes
+}
 export function createUnitMesh(unitData: UnitData): UnitMesh {
   const color = getPowerHexColor(unitData.power);
   let group: THREE.Group | null;
@@ -77,6 +133,8 @@ export function createUnitMesh(unitData: UnitData): UnitMesh {
   } else {
     group = createFleet(color)
   }
+  let pos = getProvincePosition(gameState.boardState, unitData.province)
+  group.position.set(pos.x, pos.y, pos.z)
 
   // Store metadata
   group.userData = {

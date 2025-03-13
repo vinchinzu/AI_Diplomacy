@@ -1,35 +1,26 @@
 import { z } from 'zod';
-import { PowerENUM, PowerSchema } from './map';
+import { PowerENUMSchema } from './map';
 import { OrderFromString } from './unitOrders';
+import { ProvinceENUMSchema } from './map';
 
-const UnitSchema = z.object({
-  type: z.enum(["A", "F"]),
-  power: z.string(),
-  location: z.string(),
-});
-
-const OrderSchema = z.object({
-  text: z.string(),
-  power: z.string(),
-  region: z.string(),
-});
 
 const PhaseSchema = z.object({
   messages: z.array(z.any()),
   name: z.string(),
-  orders: z.record(PowerSchema, z.array(OrderFromString)),
-  results: z.record(PowerSchema, OrderSchema),
+  orders: z.record(PowerENUMSchema, z.array(OrderFromString).nullable()),
+  results: z.record(z.string(), z.array(z.any())),
   state: z.object({
-    units: z.record(z.nativeEnum(PowerENUM), z.array(z.string()))
+    units: z.record(PowerENUMSchema, z.array(z.string())),
+    centers: z.record(PowerENUMSchema, z.array(ProvinceENUMSchema))
   }),
-  year: z.number(),
-  units: z.array(UnitSchema),
+  year: z.number().optional(),
 });
 
 export const GameSchema = z.object({
-  map_name: z.string(),
-  game_id: z.string(),
+  map: z.string(),
+  id: z.string(),
   phases: z.array(PhaseSchema),
 });
 
 export type GamePhase = z.infer<typeof PhaseSchema>;
+export type GameSchemaType = z.infer<typeof GameSchema>;
