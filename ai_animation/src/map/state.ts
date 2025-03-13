@@ -101,7 +101,6 @@ export function updateMapOwnership(currentPhase: GamePhase) {
     unitArr.forEach(unitStr => {
       const match = unitStr.match(/^([AF])\s+(.+)$/);
       if (!match) return;
-      const unitType = match[1];
       const location = match[2];
       const normalized = location.toUpperCase().replace('/', '_');
       const base = normalized.split('_')[0];

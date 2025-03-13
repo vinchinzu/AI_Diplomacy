@@ -17,7 +17,7 @@ export function getPowerHexColor(power: PowerENUM) {
     'RUSSIA': '#cccccc',
     'TURKEY': '#e0c846',
   };
-  return powerColors[power] || defaultColor; // fallback to neutral
+  return powerColors[power.toUpperCase()] || defaultColor; // fallback to neutral
 }
 
 function createArmy(color: string): THREE.Group {
