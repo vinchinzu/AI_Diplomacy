@@ -2,6 +2,7 @@ import { getPowerHexColor } from "../units/create";
 import { gameState } from "../gameState";
 import { leaderboard } from "../domElements";
 import type { GamePhase } from "../types/gameState";
+import { ProvTypeENUM } from "../types/map";
 
 
 export function updateSupplyCenterOwnership(centers) {
@@ -112,7 +113,7 @@ export function updateMapOwnership(currentPhase: GamePhase) {
   }
   for (const [key, value] of Object.entries(gameState.boardState.provinces)) {
     // Update the color of the provinces if needed
-    if (gameState.boardState.provinces[key].owner) {
+    if (gameState.boardState.provinces[key].owner && gameState.boardState?.provinces[key].type != ProvTypeENUM.WATER) {
       let powerColor = getPowerHexColor(gameState.boardState.provinces[key].owner)
       let powerColorHex = parseInt(powerColor.substring(1), 16);
       gameState.boardState.provinces[key].mesh?.material.color.setHex(powerColorHex)

@@ -89,6 +89,8 @@ export function initMap(scene): Promise<void> {
             const box = new THREE.Box3().setFromObject(group);
             const center = new THREE.Vector3();
             box.getCenter(center);
+            gameState.camera.position.set(center.x, center.y + 1100, 1600)
+            gameState.camControls.target = center
 
 
             scene.add(group);

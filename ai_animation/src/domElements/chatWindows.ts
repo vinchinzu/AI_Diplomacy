@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { currentPower } from "../gameState";
+import { currentPower, gameState } from "../gameState";
+import { config } from "../config";
 
 let faceIconCache = {}; // Cache for generated face icons
 
@@ -128,9 +129,9 @@ function createChatWindow(power, isGlobal = false) {
 }
 
 // Modified to accumulate messages instead of resetting and only animate for new messages
-function updateChatWindows(phase, stepMessages = false) {
+export function updateChatWindows(phase, stepMessages = false) {
   if (!phase.messages || !phase.messages.length) {
-    messagesPlaying = false;
+    gameState.messagesPlaying = false;
     return;
   }
 
@@ -153,19 +154,19 @@ function updateChatWindows(phase, stepMessages = false) {
         animateHeadNod(msg, (messageCounter % 3 === 0));
       }
     });
-    messagesPlaying = false;
+    gameState.messagesPlaying = false;
   } else {
     // Stepwise
-    messagesPlaying = true;
+    gameState.messagesPlaying = true;
     let index = 0;
 
     // Define the showNext function that will be called after each message animation completes
     const showNext = () => {
       if (index >= relevantMessages.length) {
-        messagesPlaying = false;
-        if (unitAnimations.length === 0 && isPlaying && !isSpeaking) {
+        gameState.messagesPlaying = false;
+        if (gameState.isAnimating && gameState.isPlaying && !gameState.isSpeaking) {
           // Call the async function without awaiting it here
-          playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+          gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
         }
         return;
       }
@@ -175,13 +176,13 @@ function updateChatWindows(phase, stepMessages = false) {
 
       const isNew = addMessageToChat(msg, phase.name, true, showNext); // Pass showNext as callback
 
-      if (isNew && !isDebugMode) {
+      if (isNew && !config.isDebugMode) {
         // Increment message counter
         messageCounter++;
 
         // Only animate head and play sound for every third message
         animateHeadNod(msg, (messageCounter % 3 === 0));
-      } else if (isDebugMode) {
+      } else if (config.isDebugMode) {
         // In debug mode, immediately call showNext to skip waiting for animation
         showNext();
       } else {
@@ -309,7 +310,7 @@ function animateMessageWords(message, contentSpanId, targetPower, messagesContai
         if (onComplete) {
           onComplete(); // Call the completion callback
         }
-      }, Math.min(playbackSpeed / 3, 150));
+      }, Math.min(config.playbackSpeed / 3, 150));
 
       return;
     }
@@ -324,7 +325,7 @@ function animateMessageWords(message, contentSpanId, targetPower, messagesContai
     wordIndex++;
 
     // Schedule the next word with a delay based on word length and playback speed
-    const delay = Math.max(30, Math.min(120, playbackSpeed / 10 * (words[wordIndex - 1].length / 4)));
+    const delay = Math.max(30, Math.min(120, config.playbackSpeed / 10 * (words[wordIndex - 1].length / 4)));
     setTimeout(addNextWord, delay);
 
     // Scroll to ensure newest content is visible

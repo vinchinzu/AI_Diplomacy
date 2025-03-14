@@ -3,8 +3,9 @@ import type { GamePhase } from "../types/gameState";
 import { createUnitMesh } from "./create";
 import { UnitMesh } from "../types/units";
 import { getProvincePosition } from "../map/utils";
-import { Tween } from "@tweenjs/tween.js";
+import * as TWEEN from "@tweenjs/tween.js";
 import { gameState } from "../gameState";
+import type { UnitOrder } from "../types/unitOrders";
 
 //FIXME: Move this to a file with all the constants
 let animationDuration = 1500; // Duration of unit movement animation in ms
@@ -22,79 +23,71 @@ export type UnitAnimation = {
   animationType?: AnimationTypeENUM
 }
 
+function getUnit(unitOrder: UnitOrder) {
+  let posUnits = gameState.unitMeshes.filter((unit) => {
+    return (unit.userData.province === unitOrder.unit.origin && unit.userData.type === unitOrder.unit.type)
+  })
+  // TODO: Need to do something here if we get multiple results
+  return gameState.unitMeshes.indexOf(posUnits[0])
+
+}
 
 
-export function createTweenAnimations(unitMeshes: UnitMesh[], currentPhase: GamePhase, previousPhase: GamePhase | null): Tween[] {
+export function createTweenAnimations(currentPhase: GamePhase, previousPhase: GamePhase | null) {
+  for (const [power, orders] of Object.entries(previousPhase.orders)) {
+    for (const order of orders) {
+      let unitIndex = getUnit(order);
+      if (unitIndex === -1) continue; // Skip if unit not found
 
+      switch (order.type) {
+        case "move":
+          let destinationVector = getProvincePosition(gameState.boardState, order.destination);
+          if (!destinationVector) continue; // Skip if destination not found
 
-  let unitAnimations: Tween[] = []
+          // Create a tween for smooth movement
+          let anim = new TWEEN.Tween(gameState.unitMeshes[unitIndex].position)
+            .to({
+              x: destinationVector.x,
+              y: 10, // Keep consistent height
+              z: destinationVector.z
+            }, 1500)
+            .easing(TWEEN.Easing.Quadratic.InOut) // Add easing for smoother motion
+            .onUpdate(() => {
+              // Add a slight bobbing effect during movement
+              gameState.unitMeshes[unitIndex].position.y = 10 + Math.sin(Date.now() * 0.05) * 2;
 
-  for (const [power, orders] of Object.entries(currentPhase.orders)) {
-    for (const order in parseOrders(orders)) {
+              // For fleets, add a gentle rocking motion
+              if (gameState.unitMeshes[unitIndex].userData.type === 'F') {
+                gameState.unitMeshes[unitIndex].rotation.z = Math.sin(Date.now() * 0.03) * 0.1;
+                gameState.unitMeshes[unitIndex].rotation.x = Math.sin(Date.now() * 0.02) * 0.1;
+              }
+            })
+            .onComplete(() => {
+              // Update the unit's province data when animation completes
 
-    }
+              // Reset height and rotation
+              gameState.unitMeshes[unitIndex].position.y = 10;
+              if (gameState.unitMeshes[unitIndex].userData.type === 'F') {
+                gameState.unitMeshes[unitIndex].rotation.z = 0;
+                gameState.unitMeshes[unitIndex].rotation.x = 0;
+              }
+            })
+            .start();
 
-  }
+          gameState.unitMeshes[unitIndex].userData.province = order.destination;
+          gameState.unitAnimations.push(anim);
+          break;
 
-
-  // Prepare unit position maps
-  const previousUnitPositions = {};
-  if (previousPhase.state?.units) {
-    for (const [power, unitArr] of Object.entries(previousPhase.state.units)) {
-      unitArr.forEach(unitStr => {
-        const match = unitStr.match(/^([AF])\s+(.+)$/);
-        if (match) {
-          const key = `${power}-${match[1]}-${match[2]}`;
-          previousUnitPositions[key] = getProvincePosition(gameState.boardState, match[2]);
-        }
-      });
-    }
-  }
-
-  // Animate new units from old positions (or spawn from below)
-  if (currentPhase.state?.units) {
-    for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
-      unitArr.forEach(unitStr => {
-        // Check if is fleet or army order
-        const armyOrFleetOrder = unitStr.match(/^([AF])\s+(.+)$/);
-        if (!armyOrFleetOrder) return;
-        const unitType = armyOrFleetOrder[1];
-        const location = armyOrFleetOrder[2];
-
-        // Current final
-        const currentPos = getProvincePosition(gameState.boardState, location);
-
-        let startPos;
-        let matchFound = false;
-        for (const prevKey in previousUnitPositions) {
-          if (prevKey.startsWith(`${power}-${unitType}`)) {
-            startPos = previousUnitPositions[prevKey];
-            matchFound = true;
-            delete previousUnitPositions[prevKey];
-            break;
-          }
-        }
-        if (!matchFound) {
-          // TODO: Add a spawn animation?
-          //
-          // New spawn
-          startPos = { x: currentPos.x, y: -20, z: currentPos.z };
-        }
-
-        const unitMesh = createUnitMesh({
-          power: power,
-          province: location,
-          type: unitType,
-        });
-        unitMesh.position.set(startPos.x, 10, startPos.z);
-        let tween = new Tween(unitMesh.position).to(currentPos, 1500).start()
-
-        // Animate
-        unitAnimations.push(tween);
-      });
+        case "disband":
+          gameState.scene.remove(gameState.unitMeshes[unitIndex]);
+          // Remove from unitMeshes array
+          gameState.unitMeshes.splice(unitIndex, 1);
+          break;
+        case "bounce":
+          break;
+      }
     }
   }
-  return unitAnimations
 }
 export function createAnimationsForPhaseTransition(unitMeshes: UnitMesh[], currentPhase: GamePhase, previousPhase: GamePhase | null): UnitAnimation[] {
   let unitAnimations: UnitAnimation[] = []

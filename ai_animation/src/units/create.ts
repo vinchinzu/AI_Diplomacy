@@ -123,7 +123,7 @@ export function createSupplyCenters(): THREE.Group[] {
   }
   return supplyCenterMeshes
 }
-export function createUnitMesh(unitData: UnitData): UnitMesh {
+export function createUnitMesh(unitData: UnitData): THREE.Group {
   const color = getPowerHexColor(unitData.power);
   let group: THREE.Group | null;
 
@@ -140,7 +140,7 @@ export function createUnitMesh(unitData: UnitData): UnitMesh {
   group.userData = {
     power: unitData.power,
     type: unitData.type,
-    location: unitData.province
+    province: unitData.province
   };
 
   return group;

@@ -79,3 +79,4 @@ export const OrderFromString = z.string().transform((orderStr) => {
     throw new Error(`Order format not recognized: ${orderStr}`);
   }
 });
+export type UnitOrder = z.infer<typeof OrderFromString>

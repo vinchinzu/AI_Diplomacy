@@ -7,6 +7,7 @@ import { createChatWindows } from "./domElements/chatWindows";
 import { logger } from "./logger";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
+import * as TWEEN from "@tweenjs/tween.js";
 
 //FIXME: This whole file is a mess. Need to organize and format
 //
@@ -27,13 +28,16 @@ export const currentPower = getRandomPower();
 
 
 class GameState {
-  boardState: CoordinateData | null
+  boardState: CoordinateData
   gameData: GameSchemaType | null
   phaseIndex: number
   boardName: string
-  isSpeaking: boolean
+
+  // state locks
   messagesPlaying: boolean
   isPlaying: boolean
+  isSpeaking: boolean
+  isAnimating: boolean
 
   //Scene for three.js
   scene: THREE.Scene
@@ -43,19 +47,26 @@ class GameState {
   camera: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
 
-  //Unit Meshes 
   unitMeshes: THREE.Group[]
 
+  // Animations needed for this turn
+  unitAnimations: TWEEN.Tween[]
+
+  //
+  playbackTimer: number
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
-    this.boardState = null
     this.gameData = null
     this.boardName = boardName
+    // State locks
     this.isSpeaking = false
     this.isPlaying = false
+    this.isAnimating = false
     this.messagesPlaying = false
+
     this.scene = new THREE.Scene()
     this.unitMeshes = []
+    this.unitAnimations = []
   }
 
   loadGameData = (gameDataString: string): Promise<void> => {

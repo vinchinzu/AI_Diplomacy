@@ -1,25 +1,22 @@
 import * as THREE from "three";
 import "./style.css"
-import { UnitMesh } from "./types/units";
 import { initMap } from "./map/create";
-import { createTweenAnimations, proccessUnitAnimationWithTween } from "./units/animate";
-import type { UnitAnimation } from "./units/animate";
+import { createTweenAnimations } from "./units/animate";
+import * as TWEEN from "@tweenjs/tween.js";
 import { gameState } from "./gameState";
 import { logger } from "./logger";
-import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction, phaseDisplay } from "./domElements";
-import { updateLeaderboard, updateMapOwnership, updateSupplyCenterOwnership } from "./map/state";
+import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
+import { updateChatWindows } from "./domElements/chatWindows";
+import { displayPhaseWithAnimation } from "./phase";
+import { config } from "./config";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
 
 //const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
-const isDebugMode = true;
+const isDebugMode = config.isDebugMode;
 
 // --- CORE VARIABLES ---
-let unitMeshes: UnitMesh[] = []; // To store references for units + supply center 3D objects
-let playbackSpeed = 500; // Default speed in ms
-let playbackTimer = null; // Timer reference for playback
-let unitAnimations: UnitAnimation[] = []; // Track ongoing unit animations
 
 let cameraPanTime = 0;   // Timer that drives the camera panning
 const cameraPanSpeed = 0.0005; // Smaller = slower
@@ -36,9 +33,7 @@ function initScene() {
   dirLight.position.set(300, 400, 300);
   gameState.scene.add(dirLight);
 
-
-
-  // Load coordinate data, then build the fallback map
+  // Load coordinate data, then build the map
   gameState.loadBoardState().then(() => {
     initMap(gameState.scene).then(() => {
       // Load default game file if in debug mode
@@ -65,7 +60,6 @@ function initScene() {
 function animate() {
   requestAnimationFrame(animate);
 
-
   if (gameState.isPlaying) {
     // Pan camera slowly in playback mode
     cameraPanTime += cameraPanSpeed;
@@ -78,11 +72,10 @@ function animate() {
     );
 
     // If messages are done playing but we haven't started unit animations yet
-    if (!gameState.messagesPlaying && !gameState.isSpeaking && unitAnimations.length === 0 && gameState.isPlaying) {
+    if (!gameState.messagesPlaying && !gameState.isSpeaking && gameState.unitAnimations.length === 0 && gameState.isPlaying) {
       if (gameState.gameData && gameState.gameData.phases) {
         const prevIndex = gameState.phaseIndex > 0 ? gameState.phaseIndex - 1 : gameState.gameData.phases.length - 1;
-        unitAnimations = createTweenAnimations(
-          unitMeshes,
+        createTweenAnimations(
           gameState.gameData.phases[gameState.phaseIndex],
           gameState.gameData.phases[prevIndex]
         );
@@ -92,21 +85,18 @@ function animate() {
     gameState.camControls.update();
   }
 
-  // Process unit movement animations
-  if (unitAnimations && unitAnimations.length > 0) {
+  // Process unit movement animations using TWEEN.js update
 
-    unitAnimations.forEach((anim: UnitAnimation, index) => {
-      let isFinished = proccessUnitAnimationWithTween(anim)
-      // Animation complete, remove from active animations
-      if (isFinished) {
-        unitAnimations.splice(index, 1);
-      }
+  // Check if all animations are complete
+  if (gameState.unitAnimations.length > 0) {
+    // Filter out completed animations
+    gameState.unitAnimations = gameState.unitAnimations.filter(anim => anim.isPlaying());
+    gameState.unitAnimations.forEach((anim) => anim.update())
 
-    });
-    // >>> MODIFIED: Check if messages are still playing before advancing
-    if (unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying) {
+    // If all animations are complete and we're in playback mode
+    if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying) {
       // Schedule next phase after a pause delay
-      playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+      gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
     }
   }
 
@@ -173,11 +163,11 @@ function togglePlayback() {
   if (!gameState.gameData || gameState.gameData.phases.length <= 1) return;
 
   // NEW: If we're speaking, don't allow toggling playback
-  if (isSpeaking) return;
+  if (gameState.isSpeaking) return;
 
-  isPlaying = !isPlaying;
+  gameState.isPlaying = !gameState.isPlaying;
 
-  if (isPlaying) {
+  if (gameState.isPlaying) {
     playBtn.textContent = "⏸ Pause";
     prevBtn.disabled = true;
     nextBtn.disabled = true;
@@ -193,79 +183,17 @@ function togglePlayback() {
     }
   } else {
     playBtn.textContent = "▶ Play";
-    if (playbackTimer) {
-      clearTimeout(playbackTimer);
-      playbackTimer = null;
+    if (gameState.playbackTimer) {
+      clearTimeout(gameState.playbackTimer);
+      gameState.playbackTimer = null;
     }
-    unitAnimations = [];
-    messagesPlaying = false;
+    gameState.messagesPlaying = false;
     prevBtn.disabled = false;
     nextBtn.disabled = false;
   }
 }
 
-// --- MODIFIED: Update news banner before TTS ---
-async function advanceToNextPhase() {
-  // Only show a summary if we have at least started the first phase
-  // and only if the just-ended phase has a "summary" property.
-  if (gameState.gameData && gameState.gameData.phases && gameState.phaseIndex >= 0) {
-    const justEndedPhase = gameState.gameData.phases[gameState.phaseIndex];
-    if (justEndedPhase.summary && justEndedPhase.summary.trim() !== '') {
-      // UPDATED: First update the news banner with full summary
-      addToNewsBanner(`(${justEndedPhase.name}) ${justEndedPhase.summary}`);
 
-      // Then speak the summary (will be truncated internally)
-      await speakSummary(justEndedPhase.summary);
-    }
-  }
-
-  // If we've reached the end, loop back to the beginning
-  if (gameState.phaseIndex >= gameState.gameData.phases.length - 1) {
-    gameState.phaseIndex = 0;
-  } else {
-    gameState.phaseIndex++;
-  }
-
-  // Display the new phase with animation
-  displayPhaseWithAnimation(gameState.phaseIndex);
-}
-
-function displayPhaseWithAnimation(index) {
-  if (!gameState.gameData || !gameState.gameData.phases || index < 0 || index >= gameState.gameData.phases.length) {
-    logger.log("Invalid phase index.")
-    return;
-  }
-
-  const prevIndex = index > 0 ? index - 1 : gameState.gameData.phases.length - 1;
-  const currentPhase = gameState.gameData.phases[index];
-  const previousPhase = gameState.gameData.phases[prevIndex];
-
-  phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameState.gameData.phases.length})`;
-
-  // Rebuild supply centers, remove old units
-
-  // First show messages, THEN animate units after
-  // First show messages with stepwise animation
-  updateChatWindows(currentPhase, true);
-
-
-  // Ownership
-  if (currentPhase.state?.centers) {
-    updateSupplyCenterOwnership(currentPhase.state.centers);
-  }
-
-  // Update leaderboard
-  updateLeaderboard(currentPhase);
-  updateMapOwnership(currentPhase)
-
-  unitAnimations = createTweenAnimations(unitMeshes, currentPhase, previousPhase);
-  let msg = `Phase: ${currentPhase.name}\nSCs: ${JSON.stringify(currentPhase.state.centers)} \nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'} `
-  // Panel
-
-  // Add: Update info panel
-  logger.updateInfoPanel();
-
-}
 
 // --- EVENT HANDLERS ---
 loadBtn.addEventListener('click', () => fileInput.click());
@@ -292,40 +220,16 @@ nextBtn.addEventListener('click', () => {
 playBtn.addEventListener('click', togglePlayback);
 
 speedSelector.addEventListener('change', e => {
-  playbackSpeed = parseInt(e.target.value);
+  config.playbackSpeed = parseInt(e.target.value);
   // If we're currently playing, restart the timer with the new speed
-  if (gameState.isPlaying && playbackTimer) {
-    clearTimeout(playbackTimer);
-    playbackTimer = setTimeout(() => advanceToNextPhase(), playbackSpeed);
+  if (gameState.isPlaying && gameState.playbackTimer) {
+    clearTimeout(gameState.playbackTimer);
+    gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
   }
 });
 
 // --- BOOTSTRAP ON PAGE LOAD ---
 window.addEventListener('load', initScene);
-
-// Utility functions for color manipulation
-function lightenColor(hex, percent) {
-  return colorShift(hex, percent);
-}
-
-function darkenColor(hex, percent) {
-  return colorShift(hex, -percent);
-}
-
-function colorShift(hex, percent) {
-  // Convert hex to RGB
-  let r = parseInt(hex.substr(1, 2), 16);
-  let g = parseInt(hex.substr(3, 2), 16);
-  let b = parseInt(hex.substr(5, 2), 16);
-
-  // Shift color by percentage
-  r = Math.min(255, Math.max(0, r + Math.floor(r * percent / 100)));
-  g = Math.min(255, Math.max(0, g + Math.floor(g * percent / 100)));
-  b = Math.min(255, Math.max(0, b + Math.floor(b * percent / 100)));
-
-  // Convert back to hex
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')} `;
-}
 
 
 
