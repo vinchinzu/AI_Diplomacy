@@ -43,6 +43,7 @@ class GameState {
   isPlaying: boolean
   isSpeaking: boolean
   isAnimating: boolean
+  nextPhaseScheduled: boolean // Flag to prevent multiple phase transitions being scheduled
 
   //Scene for three.js
   scene: THREE.Scene
@@ -59,8 +60,6 @@ class GameState {
 
   //
   playbackTimer: number
-  animationAttempted: boolean
-
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
     this.gameData = null
@@ -70,7 +69,7 @@ class GameState {
     this.isPlaying = false
     this.isAnimating = false
     this.messagesPlaying = false
-    this.animationAttempted = false
+    this.nextPhaseScheduled = false
 
     this.scene = new THREE.Scene()
     this.unitMeshes = []

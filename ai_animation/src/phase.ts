@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { phaseDisplay } from "./domElements";
@@ -9,110 +8,121 @@ import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
 import { createTweenAnimations } from "./units/animate";
 import { speakSummary } from "./speech";
 import { config } from "./config";
-import { getProvincePosition } from "./map/utils";
 
-// New function to display initial state without messages
-export function displayInitialPhase() {
-  let index = 0
-  if (!gameState.gameData || !gameState.gameData.phases || index < 0 || index >= gameState.gameData.phases.length) {
-    logger.log("Invalid phase index.")
+/**
+ * Unified function to display a phase with proper transitions
+ * Handles both initial display and animated transitions between phases
+ * @param index The index of the phase to display
+ * @param skipMessages Whether to skip message animations (used for initial load)
+ */
+export function displayPhase(index, skipMessages = false) {
+  if (!gameState.gameData || !gameState.gameData.phases || 
+      index < 0 || index >= gameState.gameData.phases.length) {
+    logger.log("Invalid phase index.");
     return;
   }
-
-  // Clear any existing units
-  const supplyCenters = gameState.unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
-  const oldUnits = gameState.unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
-  oldUnits.forEach(m => gameState.scene.remove(m));
-  gameState.unitMeshes = supplyCenters;
-
-  const phase = gameState.gameData.phases[index];
-  phaseDisplay.textContent = `Era: ${phase.name || 'Unknown Era'} (${index + 1}/${gameState.gameData.phases.length})`;
-
-  // Show supply centers
-  let newSCs = createSupplyCenters();
-  newSCs.forEach((sc) => gameState.scene.add(sc))
-  if (phase.state?.centers) {
-    updateSupplyCenterOwnership(phase.state.centers);
-  }
-
-  // Show units
-  if (phase.state?.units) {
-    for (const [power, unitArr] of Object.entries(phase.state.units)) {
-      unitArr.forEach(unitStr => {
-        const match = unitStr.match(/^([AF])\s+(.+)$/);
-        if (match) {
-          let newUnit = createUnitMesh({
-            power: power.toUpperCase(),
-            type: match[1],
-            province: match[2],
-          });
-          gameState.scene.add(newUnit)
-          gameState.unitMeshes.push(newUnit)
-        }
-      });
-    }
-  }
-
-  updateLeaderboard(phase);
-  updateMapOwnership(phase)
-
-  logger.log(`Phase: ${phase.name}\nSCs: ${phase.state?.centers ? JSON.stringify(phase.state.centers) : 'None'}\nUnits: ${phase.state?.units ? JSON.stringify(phase.state.units) : 'None'}`)
-
-  // Add: Update info panel
-  logger.updateInfoPanel();
-
-}
-
-export function displayPhaseWithAnimation(index) {
-  if (!gameState.gameData || !gameState.gameData.phases || index < 0 || index >= gameState.gameData.phases.length) {
-    logger.log("Invalid phase index.")
-    return;
-  }
-
-  // Reset animation attempted flag for the new phase
-  gameState.animationAttempted = false;
 
   // Handle the special case for the first phase (index 0)
   const isFirstPhase = index === 0;
   const currentPhase = gameState.gameData.phases[index];
   
   // Only get previous phase if not the first phase
-  const prevIndex = isFirstPhase ? null : (index > 0 ? index - 1 : gameState.gameData.phases.length - 1);
-  const previousPhase = isFirstPhase ? null : gameState.gameData.phases[prevIndex];
+  const prevIndex = isFirstPhase ? null : (index > 0 ? index - 1 : null);
+  const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
 
-  phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameState.gameData.phases.length})`;
+  // Update phase display with smooth transition
+  if (phaseDisplay) {
+    // Add fade-out effect
+    phaseDisplay.style.transition = 'opacity 0.3s ease-out';
+    phaseDisplay.style.opacity = '0';
+    
+    // Update text after fade-out
+    setTimeout(() => {
+      phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameState.gameData.phases.length})`;
+      // Fade back in
+      phaseDisplay.style.opacity = '1';
+    }, 300);
+  }
 
-  // Rebuild supply centers, remove old units
+  // Clear existing units except supply centers
+  const supplyCenters = gameState.unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
+  const oldUnits = gameState.unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
+  oldUnits.forEach(m => gameState.scene.remove(m));
+  gameState.unitMeshes = supplyCenters;
 
-  // First show messages, THEN animate units after
-  // First show messages with stepwise animation
-  updateChatWindows(currentPhase, true);
-
-  // Ownership
+  // Update supply centers
   if (currentPhase.state?.centers) {
     updateSupplyCenterOwnership(currentPhase.state.centers);
   }
 
-  // Update leaderboard
-  updateLeaderboard(currentPhase);
-  updateMapOwnership(currentPhase)
+  // Add units for the current phase
+  if (currentPhase.state?.units) {
+    for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
+      unitArr.forEach(unitStr => {
+        const match = unitStr.match(/^([AF])\s+(.+)$/);
+        if (match) {
+          try {
+            let newUnit = createUnitMesh({
+              power: power.toUpperCase(),
+              type: match[1],
+              province: match[2],
+            });
+            gameState.scene.add(newUnit);
+            gameState.unitMeshes.push(newUnit);
+          } catch (error) {
+            logger.log(`Error creating unit: ${error.message}`);
+          }
+        }
+      });
+    }
+  }
 
-  // Only animate if not the first phase
-  if (!isFirstPhase) {
-    createTweenAnimations(currentPhase, previousPhase);
+  // Update UI elements with smooth transitions
+  updateLeaderboard(currentPhase);
+  updateMapOwnership(currentPhase);
+  
+  // Add phase info to news banner if not already there
+  const phaseBannerText = `Phase: ${currentPhase.name}`;
+  addToNewsBanner(phaseBannerText);
+  
+  // Update info panel with current phase details
+  const phaseInfo = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'}\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'}`;
+  logger.log(phaseInfo);
+  logger.updateInfoPanel();
+
+  // Show messages with animation or immediately based on skipMessages flag
+  if (!skipMessages) {
+    updateChatWindows(currentPhase, true);
   } else {
-    logger.log("First phase - no previous phase to animate from");
-    // Since we're not animating, mark messages as done
     gameState.messagesPlaying = false;
   }
-  
-  let msg = `Phase: ${currentPhase.name}\nSCs: ${JSON.stringify(currentPhase.state.centers)} \nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'} `
-  // Panel
 
-  // Add: Update info panel
-  logger.updateInfoPanel();
+  // Only animate if not the first phase and animations are requested
+  if (!isFirstPhase && !skipMessages) {
+    if (previousPhase) {
+      createTweenAnimations(currentPhase, previousPhase);
+    }
+  } else {
+    logger.log("No animations for this phase transition");
+    gameState.messagesPlaying = false;
+  }
 }
 
+/**
+ * Display the initial phase without animations
+ * Used when first loading a game
+ */
+export function displayInitialPhase() {
+  displayPhase(0, true);
+}
+
+/**
+ * Display a phase with animations
+ * Used during normal gameplay
+ */
+export function displayPhaseWithAnimation(index) {
+  displayPhase(index, false);
+}
 
 /**
  * Advances to the next phase in the game sequence
@@ -124,15 +134,15 @@ export function advanceToNextPhase() {
     return;
   }
 
+  // Reset the nextPhaseScheduled flag to allow scheduling the next phase
+  gameState.nextPhaseScheduled = false;
+
   // Get current phase
   const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
   
   if (config.isDebugMode) {
     console.log(`Processing phase transition for ${currentPhase.name}`);
   }
-
-  // Reset animation attempted flag for the next phase
-  gameState.animationAttempted = false;
 
   // First show summary if available
   if (currentPhase.summary && currentPhase.summary.trim() !== '') {
@@ -164,18 +174,25 @@ function moveToNextPhase() {
   // Clear any existing animations to prevent overlap
   if (gameState.playbackTimer) {
     clearTimeout(gameState.playbackTimer);
+    gameState.playbackTimer = 0;
   }
+  
+  // Clear any existing animations
   gameState.unitAnimations = [];
+  
+  // Reset animation state
+  gameState.isAnimating = false;
+  gameState.messagesPlaying = false;
 
   // Advance the phase index
-  if (gameState.phaseIndex >= gameState.gameData.phases.length - 1) {
+  if (gameState.gameData && gameState.phaseIndex >= gameState.gameData.phases.length - 1) {
     gameState.phaseIndex = 0;
     logger.log("Reached end of game, looping back to start");
   } else {
     gameState.phaseIndex++;
   }
 
-  if (config.isDebugMode) {
+  if (config.isDebugMode && gameState.gameData) {
     console.log(`Moving to phase ${gameState.gameData.phases[gameState.phaseIndex].name}`);
   }
 

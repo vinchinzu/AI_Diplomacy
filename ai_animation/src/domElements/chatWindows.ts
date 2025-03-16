@@ -213,23 +213,42 @@ export function updateChatWindows(phase: any, stepMessages = false) {
             const prevIndex = gameState.phaseIndex > 0 ? gameState.phaseIndex - 1 : null;
             const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
 
-            // Show animations for current phase's orders
-            if (previousPhase) {
-              if (config.isDebugMode) {
-                console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
-              }
-              createTweenAnimations(currentPhase, previousPhase);
-            }
-
-            // After animations complete, advance to next phase
-            gameState.playbackTimer = setTimeout(() => {
-              if (gameState.isPlaying) {
+            // Only schedule next phase if not already scheduled
+            if (!gameState.nextPhaseScheduled) {
+              gameState.nextPhaseScheduled = true;
+              
+              // Show animations for current phase's orders
+              if (previousPhase) {
                 if (config.isDebugMode) {
-                  console.log(`Animations complete, advancing from ${currentPhase.name}`);
+                  console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
                 }
-                advanceToNextPhase();
+                createTweenAnimations(currentPhase, previousPhase);
+                
+                // After animations complete, advance to next phase with longer delay
+                gameState.playbackTimer = setTimeout(() => {
+                  if (gameState.isPlaying) {
+                    if (config.isDebugMode) {
+                      console.log(`Animations complete, advancing from ${currentPhase.name}`);
+                    }
+                    advanceToNextPhase();
+                  }
+                }, config.playbackSpeed + config.animationDuration); // Wait for both summary and animations
+              } else {
+                // For first phase, use shorter delay since there are no animations
+                if (config.isDebugMode) {
+                  console.log(`First phase ${currentPhase.name} - no animations to wait for`);
+                }
+                
+                gameState.playbackTimer = setTimeout(() => {
+                  if (gameState.isPlaying) {
+                    if (config.isDebugMode) {
+                      console.log(`Advancing from first phase ${currentPhase.name}`);
+                    }
+                    advanceToNextPhase();
+                  }
+                }, config.playbackSpeed); // Only wait for summary, no animation delay
               }
-            }, config.playbackSpeed + config.animationDuration); // Wait for both summary and animations
+            }
           }
         }
         return;
@@ -692,16 +711,27 @@ export function addToNewsBanner(newText: string): void {
     return;
   }
 
-  console.log(`Adding to news banner: "${newText}"`); 
-
-  // If the banner only has the default text or is empty, replace it
-  if (
-    bannerEl.textContent.trim() === 'Diplomatic actions unfolding...' ||
-    bannerEl.textContent.trim() === ''
-  ) {
-    bannerEl.textContent = newText;
-  } else {
-    // Otherwise append with a separator
-    bannerEl.textContent += '  |  ' + newText;
+  if (config.isDebugMode) {
+    console.log(`Adding to news banner: "${newText}"`);
   }
+
+  // Add a fade-out transition
+  bannerEl.style.transition = 'opacity 0.3s ease-out';
+  bannerEl.style.opacity = '0';
+  
+  setTimeout(() => {
+    // If the banner only has the default text or is empty, replace it
+    if (
+      bannerEl.textContent?.trim() === 'Diplomatic actions unfolding...' ||
+      bannerEl.textContent?.trim() === ''
+    ) {
+      bannerEl.textContent = newText;
+    } else {
+      // Otherwise append with a separator
+      bannerEl.textContent += '  |  ' + newText;
+    }
+    
+    // Fade back in
+    bannerEl.style.opacity = '1';
+  }, 300);
 }

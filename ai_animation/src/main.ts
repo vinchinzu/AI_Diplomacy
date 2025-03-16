@@ -79,23 +79,24 @@ function animate() {
 
     // If messages are done playing but we haven't started unit animations yet
     if (!gameState.messagesPlaying && !gameState.isSpeaking && 
-        gameState.unitAnimations.length === 0 && gameState.isPlaying &&
-        !gameState.animationAttempted) {
+        gameState.unitAnimations.length === 0 && gameState.isPlaying) {
       if (gameState.gameData && gameState.gameData.phases) {
-        // Log that we're transitioning to animations
-        console.log("Messages complete, starting unit animations");
-        
-        // Mark that we've attempted animation for this phase
-        gameState.animationAttempted = true;
-        
+        // Get previous phase index
         const prevIndex = gameState.phaseIndex > 0 ? 
                           gameState.phaseIndex - 1 : null;
         
-        // Create animations for unit movements based on orders
-        createTweenAnimations(
-          gameState.gameData.phases[gameState.phaseIndex],
-          prevIndex !== null ? gameState.gameData.phases[prevIndex] : null
-        );
+        // Only attempt animations if we have a previous phase and we're not in the first phase
+        // Note: We're removing the scheduling logic from here since it's handled in chatWindows.ts
+        if (prevIndex !== null && !gameState.nextPhaseScheduled) {
+          // Log that we're transitioning to animations
+          console.log("Messages complete, starting unit animations");
+          
+          // Create animations for unit movements based on orders
+          createTweenAnimations(
+            gameState.gameData.phases[gameState.phaseIndex],
+            gameState.gameData.phases[prevIndex]
+          );
+        }
       }
     }
   } else {
