@@ -96,27 +96,73 @@ export function updateLeaderboard(phase) {
 }
 
 export function updateMapOwnership(currentPhase: GamePhase) {
-  //FIXME: This only works in the forward direction, we currently don't update ownership correctly when going to previous phase
+  // Clear existing ownership to avoid stale data
+  for (const key in gameState.boardState.provinces) {
+    if (gameState.boardState.provinces[key].owner) {
+      gameState.boardState.provinces[key].owner = undefined;
+    }
+  }
 
-  for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
-    unitArr.forEach(unitStr => {
-      const match = unitStr.match(/^([AF])\s+(.+)$/);
-      if (!match) return;
-      const location = match[2];
+  // Use the units array directly if available
+  if (currentPhase.units && currentPhase.units.length > 0) {
+    // Log for debugging
+    console.log(`Updating map ownership using ${currentPhase.units.length} units from phase ${currentPhase.name}`);
+    
+    currentPhase.units.forEach(unit => {
+      if (!unit.location || !unit.power) {
+        console.warn("Unit missing location or power:", unit);
+        return;
+      }
+      
+      const location = unit.location;
       const normalized = location.toUpperCase().replace('/', '_');
       const base = normalized.split('_')[0];
+      
       if (gameState.boardState.provinces[base] === undefined) {
-        console.log(base)
+        console.warn(`Province not found: ${base}`);
+        return;
       }
-      gameState.boardState.provinces[base].owner = power
-    })
+      
+      gameState.boardState.provinces[base].owner = unit.power;
+    });
+  } 
+  // Fallback to state.units if units array is not available
+  else if (currentPhase.state?.units && Object.keys(currentPhase.state.units).length > 0) {
+    console.log(`Updating map ownership using state.units from phase ${currentPhase.name}`);
+    
+    for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
+      unitArr.forEach(unitStr => {
+        const match = unitStr.match(/^([AF])\s+(.+)$/);
+        if (!match) {
+          console.warn(`Could not parse unit string: ${unitStr}`);
+          return;
+        }
+        
+        const location = match[2];
+        const normalized = location.toUpperCase().replace('/', '_');
+        const base = normalized.split('_')[0];
+        
+        if (gameState.boardState.provinces[base] === undefined) {
+          console.warn(`Province not found: ${base}`);
+          return;
+        }
+        
+        gameState.boardState.provinces[base].owner = power;
+      });
+    }
+  } else {
+    console.warn(`No unit data found in phase ${currentPhase.name} to update map ownership`);
   }
-  for (const [key, value] of Object.entries(gameState.boardState.provinces)) {
+
+  // Update province colors based on ownership
+  for (const key in gameState.boardState.provinces) {
+    const province = gameState.boardState.provinces[key];
+    
     // Update the color of the provinces if needed
-    if (gameState.boardState.provinces[key].owner && gameState.boardState?.provinces[key].type != ProvTypeENUM.WATER) {
-      let powerColor = getPowerHexColor(gameState.boardState.provinces[key].owner)
+    if (province.owner && province.type != ProvTypeENUM.WATER) {
+      let powerColor = getPowerHexColor(province.owner);
       let powerColorHex = parseInt(powerColor.substring(1), 16);
-      gameState.boardState.provinces[key].mesh?.material.color.setHex(powerColorHex)
+      province.mesh?.material.color.setHex(powerColorHex);
     }
   }
 }

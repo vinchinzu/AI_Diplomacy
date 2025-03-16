@@ -1,14 +1,19 @@
 
-// --- NEW: ElevenLabs TTS helper function ---
+import { isSpeaking } from "./gameState";
+
+// --- ElevenLabs Text-to-Speech configuration ---
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
 const VOICE_ID = "onwK4e9ZLuTAKqWW03F9";
 const MODEL_ID = "eleven_multilingual_v2";
+
 /**
- * Call ElevenLabs TTS to speak out loud. Returns a promise that
- * resolves only after the audio finishes playing (or fails).
- * Now accepts only the first 100 characters for brevity.
+ * Call ElevenLabs TTS to speak the summary out loud.
+ * Returns a promise that resolves only after the audio finishes playing (or fails).
+ * Truncates text to first 100 characters for brevity and API limitations.
+ * @param summaryText The text to be spoken
+ * @returns Promise that resolves when audio completes or rejects on error
  */
-async function speakSummary(summaryText) {
+export async function speakSummary(summaryText: string): Promise<void> {
   if (!ELEVENLABS_API_KEY) {
     console.warn("No ElevenLabs API key found. Skipping TTS.");
     return;

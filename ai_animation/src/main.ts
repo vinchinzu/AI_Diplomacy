@@ -7,7 +7,9 @@ import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
-import { displayPhaseWithAnimation } from "./phase";
+import { displayPhaseWithAnimation, advanceToNextPhase } from "./phase";
+import { speakSummary } from "./speech";
+import { addToNewsBanner } from "./domElements/chatWindows";
 import { config } from "./config";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
@@ -57,6 +59,10 @@ function initScene() {
 }
 
 // --- ANIMATION LOOP ---
+/**
+ * Main animation loop that runs continuously
+ * Handles camera movement, animations, and game state transitions
+ */
 function animate() {
   requestAnimationFrame(animate);
 
@@ -72,30 +78,52 @@ function animate() {
     );
 
     // If messages are done playing but we haven't started unit animations yet
-    if (!gameState.messagesPlaying && !gameState.isSpeaking && gameState.unitAnimations.length === 0 && gameState.isPlaying) {
+    if (!gameState.messagesPlaying && !gameState.isSpeaking && 
+        gameState.unitAnimations.length === 0 && gameState.isPlaying &&
+        !gameState.animationAttempted) {
       if (gameState.gameData && gameState.gameData.phases) {
-        const prevIndex = gameState.phaseIndex > 0 ? gameState.phaseIndex - 1 : gameState.gameData.phases.length - 1;
+        // Log that we're transitioning to animations
+        console.log("Messages complete, starting unit animations");
+        
+        // Mark that we've attempted animation for this phase
+        gameState.animationAttempted = true;
+        
+        const prevIndex = gameState.phaseIndex > 0 ? 
+                          gameState.phaseIndex - 1 : null;
+        
+        // Create animations for unit movements based on orders
         createTweenAnimations(
           gameState.gameData.phases[gameState.phaseIndex],
-          gameState.gameData.phases[prevIndex]
+          prevIndex !== null ? gameState.gameData.phases[prevIndex] : null
         );
       }
     }
   } else {
+    // Manual camera controls when not in playback mode
     gameState.camControls.update();
   }
 
   // Process unit movement animations using TWEEN.js update
+  TWEEN.update(); // Add explicit TWEEN update call
 
   // Check if all animations are complete
   if (gameState.unitAnimations.length > 0) {
     // Filter out completed animations
+    const previousCount = gameState.unitAnimations.length;
     gameState.unitAnimations = gameState.unitAnimations.filter(anim => anim.isPlaying());
+    
+    // Log when animations complete
+    if (previousCount > 0 && gameState.unitAnimations.length === 0) {
+      console.log("All unit animations have completed");
+    }
+    
+    // Call update on each active animation
     gameState.unitAnimations.forEach((anim) => anim.update())
 
     // If all animations are complete and we're in playback mode
     if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying) {
       // Schedule next phase after a pause delay
+      console.log(`Scheduling next phase in ${config.playbackSpeed}ms`);
       gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
     }
   }
@@ -138,22 +166,40 @@ function loadDefaultGameFile() {
   console.log("Loading default game file for debug mode...");
 
   // Path to the default game file
-  const defaultGameFilePath = './assets/default_game.json';
+  const defaultGameFilePath = './assets/test-game.json';
 
   fetch(defaultGameFilePath)
     .then(response => {
       if (!response.ok) {
         throw new Error(`Failed to load default game file: ${response.status}`);
       }
+      
+      // Check content type to avoid HTML errors
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error('Received HTML instead of JSON. Check the file path.');
+      }
+      
       return response.text();
     })
     .then(data => {
-      gameState.loadGameData(data);
-      console.log("Default game file loaded successfully");
+      // Check for HTML content as a fallback
+      if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+        throw new Error('Received HTML instead of JSON. Check the file path.');
+      }
+      
+      console.log("Loaded game file, attempting to parse...");
+      return gameState.loadGameData(data);
+    })
+    .then(() => {
+      console.log("Default game file loaded and parsed successfully");
     })
     .catch(error => {
       console.error("Error loading default game file:", error);
-      logger.log(`Error loading default game: ${error.message}`)
+      logger.log(`Error loading default game: ${error.message}`);
+      
+      // Fallback - tell user to drag & drop a file
+      logger.log('Please load a game file using the "Load Game" button.');
     });
 }
 
@@ -171,14 +217,17 @@ function togglePlayback() {
     playBtn.textContent = "⏸ Pause";
     prevBtn.disabled = true;
     nextBtn.disabled = true;
+    logger.log("Starting playback...");
 
     // First, show the messages of the current phase if it's the initial playback
     const phase = gameState.gameData.phases[gameState.phaseIndex];
     if (phase.messages && phase.messages.length) {
       // Show messages with stepwise animation
+      logger.log(`Playing ${phase.messages.length} messages from phase ${gameState.phaseIndex+1}/${gameState.gameData.phases.length}`);
       updateChatWindows(phase, true);
     } else {
       // No messages, go straight to unit animations
+      logger.log("No messages for this phase, proceeding to animations");
       displayPhaseWithAnimation(gameState.phaseIndex);
     }
   } else {

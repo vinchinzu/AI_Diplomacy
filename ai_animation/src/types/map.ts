@@ -8,22 +8,20 @@ export enum ProvTypeENUM {
 }
 
 export enum PowerENUM {
-  ENGLAND = "England",
-  FRANCE = "France",
-  TURKEY = "Turkey",
-  AUSTRIA = "Austria",
-  GERMANY = "Germany",
-  ITALY = "Italy",
-  RUSSIA = "Russia",
+  AUSTRIA = "AUSTRIA",
+  ENGLAND = "ENGLAND",
+  FRANCE = "FRANCE",
+  GERMANY = "GERMANY",
+  ITALY = "ITALY",
+  RUSSIA = "RUSSIA",
+  TURKEY = "TURKEY",
 }
-
-
 
 export const ProvTypeSchema = z.nativeEnum(ProvTypeENUM);
 export const PowerENUMSchema = z.preprocess((arg) => {
   if (typeof arg === "string") {
-    // Normalize the string: "austria" or "AUSTRIA" becomes "Austria"
-    return arg.charAt(0).toUpperCase() + arg.slice(1).toLowerCase();
+    // Convert to uppercase to ensure consistent power representation
+    return arg.toUpperCase();
   }
   return arg;
 }, z.nativeEnum(PowerENUM));

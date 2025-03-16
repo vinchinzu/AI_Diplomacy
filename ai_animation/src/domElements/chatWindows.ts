@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { currentPower, gameState } from "../gameState";
 import { config } from "../config";
+import { createTweenAnimations } from "../units/animate";
+import { advanceToNextPhase } from "../phase";
 
 let faceIconCache = {}; // Cache for generated face icons
 
@@ -33,7 +35,7 @@ function createChatWindow(power, isGlobal = false) {
   const chatContainer = document.getElementById('chat-container');
   const chatWindow = document.createElement('div');
   chatWindow.className = 'chat-window';
-  chatWindow.id = `chat - ${power} `;
+  chatWindow.id = `chat-${power}`;
   chatWindow.style.position = 'relative'; // Add relative positioning for absolute child positioning
 
   // Create a slimmer header with appropriate styling
@@ -54,7 +56,7 @@ function createChatWindow(power, isGlobal = false) {
     titleElement.style.color = '#ffffff';
     titleElement.textContent = 'GLOBAL';
   } else {
-    titleElement.className = `power - ${power.toLowerCase()} `;
+    titleElement.className = `power-${power.toLowerCase()}`;
     titleElement.textContent = power;
   }
   titleElement.style.fontWeight = 'bold'; // Make text more prominent
@@ -74,7 +76,7 @@ function createChatWindow(power, isGlobal = false) {
   faceHolder.style.boxShadow = '0 2px 5px rgba(0,0,0,0.5)';
   faceHolder.style.border = '2px solid #fff';
   faceHolder.style.zIndex = '10'; // Ensure it's above other elements
-  faceHolder.id = `face - ${power} `;
+  faceHolder.id = `face-${power}`;
 
   // Generate the face icon and add it to the chat window (not header)
   generateFaceIcon(power).then(dataURL => {
@@ -82,9 +84,7 @@ function createChatWindow(power, isGlobal = false) {
     img.src = dataURL;
     img.style.width = '100%';
     img.style.height = '100%';
-    img.id = `face - img - ${power} `; // Add ID for animation targeting
-
-    img.id = `face - img - ${power} `; // Add ID for animation targeting
+    img.id = `face-img-${power}`; // Add ID for animation targeting
 
     // Add subtle idle animation
     setInterval(() => {
@@ -103,7 +103,7 @@ function createChatWindow(power, isGlobal = false) {
   // Create messages container
   const messagesContainer = document.createElement('div');
   messagesContainer.className = 'chat-messages';
-  messagesContainer.id = `messages - ${power} `;
+  messagesContainer.id = `messages-${power}`;
   messagesContainer.style.paddingTop = '8px'; // Add padding to prevent content being hidden under face
 
   // Add toggle functionality
@@ -129,12 +129,20 @@ function createChatWindow(power, isGlobal = false) {
 }
 
 // Modified to accumulate messages instead of resetting and only animate for new messages
-export function updateChatWindows(phase, stepMessages = false) {
+/**
+ * Updates chat windows with messages for the current phase
+ * @param phase The current game phase containing messages
+ * @param stepMessages Whether to animate messages one-by-word (true) or show all at once (false)
+ */
+export function updateChatWindows(phase: any, stepMessages = false) {
+  // Exit early if no messages
   if (!phase.messages || !phase.messages.length) {
+    console.log("No messages to display for this phase");
     gameState.messagesPlaying = false;
     return;
   }
 
+  // Only show messages relevant to the current player (sent by them, to them, or global)
   const relevantMessages = phase.messages.filter(msg => {
     return (
       msg.sender === currentPower ||
@@ -142,56 +150,122 @@ export function updateChatWindows(phase, stepMessages = false) {
       msg.recipient === 'GLOBAL'
     );
   });
+  
+  // Sort messages by time sent
   relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
+  
+  // Log message count but only in debug mode to reduce noise
+  if (config.isDebugMode) {
+    console.log(`Found ${relevantMessages.length} messages for player ${currentPower} in phase ${phase.name}`);
+  }
 
   if (!stepMessages) {
-    // Normal: show all at once
+    // Normal mode: show all messages at once
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew) {
         // Increment message counter and play sound on every third message
         messageCounter++;
-        animateHeadNod(msg, (messageCounter % 3 === 0));
+        animateHeadNod(msg, (messageCounter % config.soundEffectFrequency === 0));
       }
     });
     gameState.messagesPlaying = false;
   } else {
-    // Stepwise
+    // Stepwise mode: show one message at a time, animating word-by-word
     gameState.messagesPlaying = true;
     let index = 0;
+    
+    // Store the start time for debugging
+    const messageStartTime = Date.now();
 
-    // Define the showNext function that will be called after each message animation completes
+    // Function to process the next message
     const showNext = () => {
-      if (index >= relevantMessages.length) {
+      // If we're not playing or user has manually advanced, stop message animation
+      if (!gameState.isPlaying && !config.isDebugMode) {
+        console.log("Playback stopped, halting message animations");
         gameState.messagesPlaying = false;
-        if (gameState.isAnimating && gameState.isPlaying && !gameState.isSpeaking) {
-          // Call the async function without awaiting it here
-          gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
+        return;
+      }
+
+      // All messages have been displayed
+      if (index >= relevantMessages.length) {
+        if (config.isDebugMode) {
+          console.log(`All messages displayed in ${Date.now() - messageStartTime}ms`);
+        }
+        
+        gameState.messagesPlaying = false;
+        
+        // Only proceed if we're in playback mode and not speaking
+        if (gameState.isPlaying && !gameState.isSpeaking) {
+          if (gameState.gameData && gameState.gameData.phases) {
+            const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
+            
+            if (config.isDebugMode) {
+              console.log(`Processing end of phase ${currentPhase.name}`);
+            }
+
+            // Show summary first if available
+            if (currentPhase.summary?.trim()) {
+              addToNewsBanner(`(${currentPhase.name}) ${currentPhase.summary}`);
+            }
+
+            // Get previous phase for animations
+            const prevIndex = gameState.phaseIndex > 0 ? gameState.phaseIndex - 1 : null;
+            const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
+
+            // Show animations for current phase's orders
+            if (previousPhase) {
+              if (config.isDebugMode) {
+                console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
+              }
+              createTweenAnimations(currentPhase, previousPhase);
+            }
+
+            // After animations complete, advance to next phase
+            gameState.playbackTimer = setTimeout(() => {
+              if (gameState.isPlaying) {
+                if (config.isDebugMode) {
+                  console.log(`Animations complete, advancing from ${currentPhase.name}`);
+                }
+                advanceToNextPhase();
+              }
+            }, config.playbackSpeed + config.animationDuration); // Wait for both summary and animations
+          }
         }
         return;
       }
 
+      // Get the next message
       const msg = relevantMessages[index];
-      index++; // Increment index before adding message so word animation knows the correct next message
+      
+      // Only log in debug mode to reduce console noise
+      if (config.isDebugMode) {
+        console.log(`Displaying message ${index + 1}/${relevantMessages.length}: ${msg.sender} to ${msg.recipient}`);
+      }
 
-      const isNew = addMessageToChat(msg, phase.name, true, showNext); // Pass showNext as callback
+      // Function to call after message animation completes
+      const onMessageComplete = () => {
+        index++; // Only increment after animation completes
+        
+        // Schedule next message with proper delay
+        setTimeout(showNext, config.playbackSpeed / 2);
+      };
 
-      if (isNew && !config.isDebugMode) {
-        // Increment message counter
+      // Add the message with word animation
+      const isNew = addMessageToChat(msg, phase.name, true, onMessageComplete);
+
+      // Handle non-new messages
+      if (!isNew) {
+        onMessageComplete(); // Skip animation for already seen messages
+      } else if (!config.isDebugMode) {
+        // Animate head and play sound for new messages
         messageCounter++;
-
-        // Only animate head and play sound for every third message
-        animateHeadNod(msg, (messageCounter % 3 === 0));
-      } else if (config.isDebugMode) {
-        // In debug mode, immediately call showNext to skip waiting for animation
-        showNext();
-      } else {
-        setTimeout(showNext, playbackSpeed * 3);
+        animateHeadNod(msg, (messageCounter % config.soundEffectFrequency === 0));
       }
     };
 
-    // Start the message sequence
-    showNext();
+    // Start the message sequence with initial delay
+    setTimeout(showNext, 50);
   }
 }
 
@@ -207,7 +281,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
   if (!chatWindows[targetPower]) return false;
 
   // Create a unique ID for this message to avoid duplication
-  const msgId = `${msg.sender} -${msg.recipient} -${msg.time_sent} -${msg.message} `;
+  const msgId = `${msg.sender}-${msg.recipient}-${msg.time_sent}-${msg.message}`;
 
   // Skip if we've already shown this message
   if (chatWindows[targetPower].seenMessages.has(msgId)) {
@@ -287,7 +361,16 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
 }
 
 // New function to animate message words one at a time
-function animateMessageWords(message, contentSpanId, targetPower, messagesContainer, onComplete) {
+/**
+ * Animates message text one word at a time
+ * @param message The full message text to animate
+ * @param contentSpanId The ID of the span element to animate within
+ * @param targetPower The power the message is displayed for
+ * @param messagesContainer The container holding the messages
+ * @param onComplete Callback function to run when animation completes
+ */
+function animateMessageWords(message: string, contentSpanId: string, targetPower: string, 
+                             messagesContainer: HTMLElement, onComplete: (() => void) | null) {
   const words = message.split(/\s+/);
   const contentSpan = document.getElementById(contentSpanId);
   if (!contentSpan) {
@@ -303,8 +386,9 @@ function animateMessageWords(message, contentSpanId, targetPower, messagesContai
   // Function to add the next word
   const addNextWord = () => {
     if (wordIndex >= words.length) {
-      // All words added - keep messagesPlaying true until next message starts
-
+      // All words added - message is complete
+      console.log(`Finished animating message with ${words.length} words in ${targetPower} chat`);
+      
       // Add a slight delay after the last word for readability
       setTimeout(() => {
         if (onComplete) {
@@ -324,8 +408,10 @@ function animateMessageWords(message, contentSpanId, targetPower, messagesContai
     contentSpan.textContent += words[wordIndex];
     wordIndex++;
 
-    // Schedule the next word with a delay based on word length and playback speed
-    const delay = Math.max(30, Math.min(120, config.playbackSpeed / 10 * (words[wordIndex - 1].length / 4)));
+    // Calculate delay based on word length and playback speed
+    // Longer words get slightly longer display time
+    const wordLength = words[wordIndex - 1].length;
+    const delay = Math.max(30, Math.min(120, config.playbackSpeed / 10 * (wordLength / 4)));
     setTimeout(addNextWord, delay);
 
     // Scroll to ensure newest content is visible
@@ -350,7 +436,7 @@ function animateHeadNod(msg, playSoundEffect = true) {
   if (!chatWindow) return;
 
   // Find the face image and animate it
-  const img = chatWindow.querySelector(`#face - img - ${targetPower} `);
+  const img = chatWindow.querySelector(`#face-img-${targetPower}`);
   if (!img) return;
 
   img.dataset.animating = 'true';
@@ -586,7 +672,7 @@ function playRandomSoundEffect() {
   const chosen = soundEffects[Math.floor(Math.random() * soundEffects.length)];
 
   // Create an <audio> and play
-  const audio = new Audio(`assets / sounds / ${chosen} `);
+  const audio = new Audio(`assets/sounds/${chosen}`);
   audio.play().catch(err => {
     // In case of browser auto-play restrictions, you may see warnings in console
     console.warn("Audio play was interrupted:", err);
@@ -597,10 +683,16 @@ function playRandomSoundEffect() {
  * Appends text to the scrolling news banner.
  * If the banner is at its default text or empty, replace it entirely.
  * Otherwise, just append " | " + newText.
+ * @param newText Text to add to the news banner
  */
-function addToNewsBanner(newText) {
+export function addToNewsBanner(newText: string): void {
   const bannerEl = document.getElementById('news-banner-content');
-  if (!bannerEl) return;
+  if (!bannerEl) {
+    console.warn("News banner element not found");
+    return;
+  }
+
+  console.log(`Adding to news banner: "${newText}"`); 
 
   // If the banner only has the default text or is empty, replace it
   if (
@@ -613,4 +705,3 @@ function addToNewsBanner(newText) {
     bannerEl.textContent += '  |  ' + newText;
   }
 }
-

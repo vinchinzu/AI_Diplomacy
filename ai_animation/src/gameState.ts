@@ -12,19 +12,24 @@ import * as TWEEN from "@tweenjs/tween.js";
 //FIXME: This whole file is a mess. Need to organize and format
 //
 // NEW: Add a lock for text-to-speech
-export let isSpeaking = false;   // Lock to pause game flow while TTS is active
-export let currentPhaseIndex = 0;
 enum AvailableMaps {
   STANDARD = "standard"
 }
-// Move these definitions BEFORE they're used
-function getRandomPower(): PowerENUM {
-  const values = Object.values(PowerENUM)
 
+/**
+ * Return a random power from the PowerENUM for the player to control
+ */
+function getRandomPower(): PowerENUM {
+  const values = Object.values(PowerENUM);
   const idx = Math.floor(Math.random() * values.length);
   return values[idx];
 }
-export const currentPower = getRandomPower();
+
+// Export these variables to be used throughout the application
+export let isSpeaking = false;   // Lock to pause game flow while TTS is active
+export let currentPhaseIndex = 0; // Track the current phase index
+export const currentPower = getRandomPower(); // Randomly selected power for the player
+export const currentPowerUpper = currentPower.toUpperCase();
 
 
 class GameState {
@@ -54,6 +59,8 @@ class GameState {
 
   //
   playbackTimer: number
+  animationAttempted: boolean
+
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
     this.gameData = null
@@ -63,29 +70,79 @@ class GameState {
     this.isPlaying = false
     this.isAnimating = false
     this.messagesPlaying = false
+    this.animationAttempted = false
 
     this.scene = new THREE.Scene()
     this.unitMeshes = []
     this.unitAnimations = []
   }
 
+  /**
+   * Load game data from a JSON string and initialize the game state
+   * @param gameDataString JSON string containing game data
+   * @returns Promise that resolves when game is initialized or rejects if data is invalid
+   */
   loadGameData = (gameDataString: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      this.gameData = GameSchema.parse(JSON.parse(gameDataString));
-      logger.log(`Game data loaded: ${this.gameData.phases?.length || 0} phases found.`)
-      this.phaseIndex = 0;
-      if (this.gameData.phases?.length) {
-        prevBtn.disabled = false;
-        nextBtn.disabled = false;
-        playBtn.disabled = false;
-        speedSelector.disabled = false;
+      try {
+        // First parse the raw JSON
+        const rawData = JSON.parse(gameDataString);
+        
+        // Log data structure for debugging
+        console.log("Loading game data with structure:", 
+          `${rawData.phases?.length || 0} phases, ` +
+          `orders format: ${rawData.phases?.[0]?.orders ? (Array.isArray(rawData.phases[0].orders) ? 'array' : 'object') : 'none'}`
+        );
+        
+        // Show a sample of the first phase for diagnostic purposes
+        if (rawData.phases && rawData.phases.length > 0) {
+          console.log("First phase sample:", {
+            name: rawData.phases[0].name,
+            ordersCount: rawData.phases[0].orders ? 
+              (Array.isArray(rawData.phases[0].orders) ? 
+                rawData.phases[0].orders.length : 
+                Object.keys(rawData.phases[0].orders).length) : 0,
+            ordersType: rawData.phases[0].orders ? typeof rawData.phases[0].orders : 'none',
+            unitsCount: rawData.phases[0].units ? rawData.phases[0].units.length : 0
+          });
+        }
+        
+        // Parse the game data using Zod schema
+        this.gameData = GameSchema.parse(rawData);
+        logger.log(`Game data loaded: ${this.gameData.phases?.length || 0} phases found.`)
+        
+        // Reset phase index to beginning
+        this.phaseIndex = 0;
+        
+        if (this.gameData.phases?.length) {
+          // Enable UI controls
+          prevBtn.disabled = false;
+          nextBtn.disabled = false;
+          playBtn.disabled = false;
+          speedSelector.disabled = false;
 
-        // Initialize chat windows
-        createChatWindows();
-        displayInitialPhase()
-        resolve()
-      } else {
-        reject()
+          // Initialize chat windows for all powers
+          createChatWindows();
+          
+          // Display the initial phase
+          displayInitialPhase()
+          resolve()
+        } else {
+          logger.log("Error: No phases found in game data");
+          reject(new Error("No phases found in game data"))
+        }
+      } catch (error) {
+        console.error("Error parsing game data:", error);
+        if (error.errors) {
+          // Format Zod validation errors more clearly
+          const formattedErrors = error.errors.map(err => 
+            `- Path ${err.path.join('.')}: ${err.message} (got ${err.received})`
+          ).join('\n');
+          logger.log(`Game data validation failed:\n${formattedErrors}`);
+        } else {
+          logger.log(`Error parsing game data: ${error.message}`);
+        }
+        reject(error);
       }
     })
   }
