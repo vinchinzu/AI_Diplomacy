@@ -11,9 +11,8 @@ fi
 /twitch-streamer/pulse-virtual-audio.sh &
 
 # Start Xvfb (the in-memory X server) in the background
-Xvfb $DISPLAY -screen 0 $SCREEN_GEOMETRY &
+Xvfb $DISPLAY -screen 0 1920x1080x24 &
 echo "Display is ${DISPLAY}"
-XVFB_PID=$!
 
 # Give Xvfb a moment to start
 sleep 2
@@ -25,14 +24,15 @@ mkdir -p /home/chrome
 #   --no-sandbox / --disable-gpu often needed in Docker
 #   --use-fake-device-for-media-stream / etc. if you need to simulate mic/cam
 DISPLAY=$DISPLAY google-chrome \
-  --start-fullscreen \
   --disable-gpu \
+  --disable-dev-shm-usage \
   --no-first-run \
-  --diable-infobars \
+  --disable-infobars \
   --user-data-dir=/home/chrome/chrome-data \
-  --app="http://diplomacy:4173" &
+  --window-size=1920,1080 --window-position=0,0 \
+  --kiosk \
+  "http://diplomacy:4173" &
 
-CHROME_PID=$!
 sleep 5 # let the page load or animations start
 
 # Start streaming with FFmpeg.

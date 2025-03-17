@@ -6,7 +6,6 @@ services:
       - SYS_ADMIN
     environment:
       - DISPLAY=:99
-      - SCREEN_GEOMETRY=1920x1080x24
 
   diplomacy:
     build: ai_animation

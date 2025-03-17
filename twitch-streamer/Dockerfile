@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   fonts-liberation \
   pulseaudio \
+  fluxbox \
   dbus dbus-x11 \
   && rm -rf /var/lib/apt/lists/*
 
@@ -31,7 +32,7 @@ RUN groupadd --system chrome \
 
 # Environment variables for the virtual display
 ENV DISPLAY=:1
-ENV SCREEN_GEOMETRY=1920x1280x30
+ENV SCREEN_GEOMETRY=1920x1080x24
 
 # Copy PulseAudio and entrypoint scripts
 RUN mkdir /twitch-streamer/
