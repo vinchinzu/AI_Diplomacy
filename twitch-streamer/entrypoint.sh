@@ -24,6 +24,7 @@ mkdir -p /home/chrome
 #   --no-sandbox / --disable-gpu often needed in Docker
 #   --use-fake-device-for-media-stream / etc. if you need to simulate mic/cam
 DISPLAY=$DISPLAY google-chrome \
+  --remote-debugging-port=9222 \
   --disable-gpu \
   --disable-dev-shm-usage \
   --no-first-run \

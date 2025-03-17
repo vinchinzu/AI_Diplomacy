@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # Build the production-ready files (dist/)
-#RUN npm run build
+RUN npm run build
 
 # Expose the port that `npm run preview` uses (default is 4173)
 EXPOSE 4173

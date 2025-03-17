@@ -86,33 +86,33 @@ class GameState {
       try {
         // First parse the raw JSON
         const rawData = JSON.parse(gameDataString);
-        
+
         // Log data structure for debugging
-        console.log("Loading game data with structure:", 
+        console.log("Loading game data with structure:",
           `${rawData.phases?.length || 0} phases, ` +
           `orders format: ${rawData.phases?.[0]?.orders ? (Array.isArray(rawData.phases[0].orders) ? 'array' : 'object') : 'none'}`
         );
-        
+
         // Show a sample of the first phase for diagnostic purposes
         if (rawData.phases && rawData.phases.length > 0) {
           console.log("First phase sample:", {
             name: rawData.phases[0].name,
-            ordersCount: rawData.phases[0].orders ? 
-              (Array.isArray(rawData.phases[0].orders) ? 
-                rawData.phases[0].orders.length : 
+            ordersCount: rawData.phases[0].orders ?
+              (Array.isArray(rawData.phases[0].orders) ?
+                rawData.phases[0].orders.length :
                 Object.keys(rawData.phases[0].orders).length) : 0,
             ordersType: rawData.phases[0].orders ? typeof rawData.phases[0].orders : 'none',
             unitsCount: rawData.phases[0].units ? rawData.phases[0].units.length : 0
           });
         }
-        
+
         // Parse the game data using Zod schema
         this.gameData = GameSchema.parse(rawData);
         logger.log(`Game data loaded: ${this.gameData.phases?.length || 0} phases found.`)
-        
+
         // Reset phase index to beginning
         this.phaseIndex = 0;
-        
+
         if (this.gameData.phases?.length) {
           // Enable UI controls
           prevBtn.disabled = false;
@@ -122,7 +122,7 @@ class GameState {
 
           // Initialize chat windows for all powers
           createChatWindows();
-          
+
           // Display the initial phase
           displayInitialPhase()
           resolve()
@@ -134,7 +134,7 @@ class GameState {
         console.error("Error parsing game data:", error);
         if (error.errors) {
           // Format Zod validation errors more clearly
-          const formattedErrors = error.errors.map(err => 
+          const formattedErrors = error.errors.map(err =>
             `- Path ${err.path.join('.')}: ${err.message} (got ${err.received})`
           ).join('\n');
           logger.log(`Game data validation failed:\n${formattedErrors}`);
@@ -148,7 +148,7 @@ class GameState {
 
   loadBoardState = (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      fetch(`./assets/maps/${this.boardName}/coords.json`)
+      fetch(`./maps/${this.boardName}/coords.json`)
         .then(response => {
           if (!response.ok) {
             throw new Error(`Failed to load coordinates: ${response.status}`);

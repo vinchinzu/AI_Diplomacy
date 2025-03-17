@@ -78,19 +78,19 @@ function animate() {
     );
 
     // If messages are done playing but we haven't started unit animations yet
-    if (!gameState.messagesPlaying && !gameState.isSpeaking && 
-        gameState.unitAnimations.length === 0 && gameState.isPlaying) {
+    if (!gameState.messagesPlaying && !gameState.isSpeaking &&
+      gameState.unitAnimations.length === 0 && gameState.isPlaying) {
       if (gameState.gameData && gameState.gameData.phases) {
         // Get previous phase index
-        const prevIndex = gameState.phaseIndex > 0 ? 
-                          gameState.phaseIndex - 1 : null;
-        
+        const prevIndex = gameState.phaseIndex > 0 ?
+          gameState.phaseIndex - 1 : null;
+
         // Only attempt animations if we have a previous phase and we're not in the first phase
         // Note: We're removing the scheduling logic from here since it's handled in chatWindows.ts
         if (prevIndex !== null && !gameState.nextPhaseScheduled) {
           // Log that we're transitioning to animations
           console.log("Messages complete, starting unit animations");
-          
+
           // Create animations for unit movements based on orders
           createTweenAnimations(
             gameState.gameData.phases[gameState.phaseIndex],
@@ -112,12 +112,12 @@ function animate() {
     // Filter out completed animations
     const previousCount = gameState.unitAnimations.length;
     gameState.unitAnimations = gameState.unitAnimations.filter(anim => anim.isPlaying());
-    
+
     // Log when animations complete
     if (previousCount > 0 && gameState.unitAnimations.length === 0) {
       console.log("All unit animations have completed");
     }
-    
+
     // Call update on each active animation
     gameState.unitAnimations.forEach((anim) => anim.update())
 
@@ -167,20 +167,20 @@ function loadDefaultGameFile() {
   console.log("Loading default game file for debug mode...");
 
   // Path to the default game file
-  const defaultGameFilePath = './assets/test-game.json';
+  const defaultGameFilePath = './test-game.json';
 
   fetch(defaultGameFilePath)
     .then(response => {
       if (!response.ok) {
         throw new Error(`Failed to load default game file: ${response.status}`);
       }
-      
+
       // Check content type to avoid HTML errors
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
         throw new Error('Received HTML instead of JSON. Check the file path.');
       }
-      
+
       return response.text();
     })
     .then(data => {
@@ -188,7 +188,7 @@ function loadDefaultGameFile() {
       if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
         throw new Error('Received HTML instead of JSON. Check the file path.');
       }
-      
+
       console.log("Loaded game file, attempting to parse...");
       return gameState.loadGameData(data);
     })
@@ -198,7 +198,7 @@ function loadDefaultGameFile() {
     .catch(error => {
       console.error("Error loading default game file:", error);
       logger.log(`Error loading default game: ${error.message}`);
-      
+
       // Fallback - tell user to drag & drop a file
       logger.log('Please load a game file using the "Load Game" button.');
     });
@@ -224,7 +224,7 @@ function togglePlayback() {
     const phase = gameState.gameData.phases[gameState.phaseIndex];
     if (phase.messages && phase.messages.length) {
       // Show messages with stepwise animation
-      logger.log(`Playing ${phase.messages.length} messages from phase ${gameState.phaseIndex+1}/${gameState.gameData.phases.length}`);
+      logger.log(`Playing ${phase.messages.length} messages from phase ${gameState.phaseIndex + 1}/${gameState.gameData.phases.length}`);
       updateChatWindows(phase, true);
     } else {
       // No messages, go straight to unit animations
