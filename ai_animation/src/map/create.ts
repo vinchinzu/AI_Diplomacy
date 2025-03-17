@@ -8,9 +8,9 @@ import { getPowerHexColor } from "../units/create";
 export function initMap(scene): Promise<void> {
   return new Promise((resolve, reject) => {
     const loader = new SVGLoader();
-    loader.load('assets/maps/standard/map.svg',
+    loader.load('./maps/standard/map.svg',
       function (data) {
-        fetch('assets/maps/standard/styles.json')
+        fetch('./maps/standard/styles.json')
           .then(resp => resp.json())
           .then(map_styles => {
             const paths = data.paths;
@@ -70,7 +70,7 @@ export function initMap(scene): Promise<void> {
 
             // Load all the labels for each map position
             const fontLoader = new FontLoader();
-            fontLoader.load('assets/fonts/helvetiker_regular.typeface.json', function (font) {
+            fontLoader.load('./fonts/helvetiker_regular.typeface.json', function (font) {
               for (const [key, value] of Object.entries(gameState.boardState.provinces)) {
 
                 textGroup.add(createLabel(font, key, value))

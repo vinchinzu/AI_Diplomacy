@@ -150,10 +150,10 @@ export function updateChatWindows(phase: any, stepMessages = false) {
       msg.recipient === 'GLOBAL'
     );
   });
-  
+
   // Sort messages by time sent
   relevantMessages.sort((a, b) => a.time_sent - b.time_sent);
-  
+
   // Log message count but only in debug mode to reduce noise
   if (config.isDebugMode) {
     console.log(`Found ${relevantMessages.length} messages for player ${currentPower} in phase ${phase.name}`);
@@ -174,7 +174,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
     // Stepwise mode: show one message at a time, animating word-by-word
     gameState.messagesPlaying = true;
     let index = 0;
-    
+
     // Store the start time for debugging
     const messageStartTime = Date.now();
 
@@ -192,14 +192,14 @@ export function updateChatWindows(phase: any, stepMessages = false) {
         if (config.isDebugMode) {
           console.log(`All messages displayed in ${Date.now() - messageStartTime}ms`);
         }
-        
+
         gameState.messagesPlaying = false;
-        
+
         // Only proceed if we're in playback mode and not speaking
         if (gameState.isPlaying && !gameState.isSpeaking) {
           if (gameState.gameData && gameState.gameData.phases) {
             const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
-            
+
             if (config.isDebugMode) {
               console.log(`Processing end of phase ${currentPhase.name}`);
             }
@@ -216,14 +216,14 @@ export function updateChatWindows(phase: any, stepMessages = false) {
             // Only schedule next phase if not already scheduled
             if (!gameState.nextPhaseScheduled) {
               gameState.nextPhaseScheduled = true;
-              
+
               // Show animations for current phase's orders
               if (previousPhase) {
                 if (config.isDebugMode) {
                   console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
                 }
                 createTweenAnimations(currentPhase, previousPhase);
-                
+
                 // After animations complete, advance to next phase with longer delay
                 gameState.playbackTimer = setTimeout(() => {
                   if (gameState.isPlaying) {
@@ -238,7 +238,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
                 if (config.isDebugMode) {
                   console.log(`First phase ${currentPhase.name} - no animations to wait for`);
                 }
-                
+
                 gameState.playbackTimer = setTimeout(() => {
                   if (gameState.isPlaying) {
                     if (config.isDebugMode) {
@@ -256,7 +256,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
 
       // Get the next message
       const msg = relevantMessages[index];
-      
+
       // Only log in debug mode to reduce console noise
       if (config.isDebugMode) {
         console.log(`Displaying message ${index + 1}/${relevantMessages.length}: ${msg.sender} to ${msg.recipient}`);
@@ -265,7 +265,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
       // Function to call after message animation completes
       const onMessageComplete = () => {
         index++; // Only increment after animation completes
-        
+
         // Schedule next message with proper delay
         setTimeout(showNext, config.playbackSpeed / 2);
       };
@@ -388,8 +388,8 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
  * @param messagesContainer The container holding the messages
  * @param onComplete Callback function to run when animation completes
  */
-function animateMessageWords(message: string, contentSpanId: string, targetPower: string, 
-                             messagesContainer: HTMLElement, onComplete: (() => void) | null) {
+function animateMessageWords(message: string, contentSpanId: string, targetPower: string,
+  messagesContainer: HTMLElement, onComplete: (() => void) | null) {
   const words = message.split(/\s+/);
   const contentSpan = document.getElementById(contentSpanId);
   if (!contentSpan) {
@@ -407,7 +407,7 @@ function animateMessageWords(message: string, contentSpanId: string, targetPower
     if (wordIndex >= words.length) {
       // All words added - message is complete
       console.log(`Finished animating message with ${words.length} words in ${targetPower} chat`);
-      
+
       // Add a slight delay after the last word for readability
       setTimeout(() => {
         if (onComplete) {
@@ -691,7 +691,7 @@ function playRandomSoundEffect() {
   const chosen = soundEffects[Math.floor(Math.random() * soundEffects.length)];
 
   // Create an <audio> and play
-  const audio = new Audio(`assets/sounds/${chosen}`);
+  const audio = new Audio(`./sounds/${chosen}`);
   audio.play().catch(err => {
     // In case of browser auto-play restrictions, you may see warnings in console
     console.warn("Audio play was interrupted:", err);
@@ -718,7 +718,7 @@ export function addToNewsBanner(newText: string): void {
   // Add a fade-out transition
   bannerEl.style.transition = 'opacity 0.3s ease-out';
   bannerEl.style.opacity = '0';
-  
+
   setTimeout(() => {
     // If the banner only has the default text or is empty, replace it
     if (
@@ -730,7 +730,7 @@ export function addToNewsBanner(newText: string): void {
       // Otherwise append with a separator
       bannerEl.textContent += '  |  ' + newText;
     }
-    
+
     // Fade back in
     bannerEl.style.opacity = '1';
   }, 300);

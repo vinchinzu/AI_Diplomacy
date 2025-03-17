@@ -1,5 +1,4 @@
-
-import { isSpeaking } from "./gameState";
+import { gameState } from "./gameState";
 
 // --- ElevenLabs Text-to-Speech configuration ---
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
@@ -20,7 +19,7 @@ export async function speakSummary(summaryText: string): Promise<void> {
   }
 
   // Set the speaking flag to block other animations/transitions
-  isSpeaking = true;
+  gameState.isSpeaking = true;
 
   try {
     // Truncate text to first 100 characters for ElevenLabs
@@ -59,13 +58,13 @@ export async function speakSummary(summaryText: string): Promise<void> {
       audio.play().then(() => {
         audio.onended = () => {
           // Clear the speaking flag when audio finishes
-          isSpeaking = false;
+          gameState.isSpeaking = false;
           resolve();
         };
       }).catch(err => {
         console.error("Audio playback error", err);
         // Make sure to clear the flag even if there's an error
-        isSpeaking = false;
+        gameState.isSpeaking = false;
         reject(err);
       });
     });
@@ -73,6 +72,6 @@ export async function speakSummary(summaryText: string): Promise<void> {
   } catch (err) {
     console.error("Failed to generate TTS from ElevenLabs:", err);
     // Make sure to clear the flag if there's any exception
-    isSpeaking = false;
+    gameState.isSpeaking = false;
   }
 }
