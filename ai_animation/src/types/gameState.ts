@@ -14,6 +14,7 @@ const PhaseSchema = z.object({
     centers: z.record(PowerENUMSchema, z.array(ProvinceENUMSchema))
   }),
   year: z.number().optional(),
+  summary: z.string().optional(),
 });
 
 export const GameSchema = z.object({

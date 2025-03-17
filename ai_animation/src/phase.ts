@@ -85,9 +85,11 @@ export function displayPhase(index, skipMessages = false) {
   const phaseBannerText = `Phase: ${currentPhase.name}`;
   addToNewsBanner(phaseBannerText);
   
-  // Update info panel with current phase details
+  // Log phase details to console only, don't update info panel with this
   const phaseInfo = `Phase: ${currentPhase.name}\nSCs: ${currentPhase.state?.centers ? JSON.stringify(currentPhase.state.centers) : 'None'}\nUnits: ${currentPhase.state?.units ? JSON.stringify(currentPhase.state.units) : 'None'}`;
-  logger.log(phaseInfo);
+  console.log(phaseInfo); // Use console.log instead of logger.log
+  
+  // Update info panel with power information
   logger.updateInfoPanel();
 
   // Show messages with animation or immediately based on skipMessages flag
@@ -129,6 +131,8 @@ export function displayPhaseWithAnimation(index) {
  * Handles speaking summaries and transitioning to the next phase
  */
 export function advanceToNextPhase() {
+  console.log("advanceToNextPhase called");
+  
   if (!gameState.gameData || !gameState.gameData.phases || gameState.phaseIndex < 0) {
     logger.log("Cannot advance phase: invalid game state");
     return;
@@ -140,6 +144,11 @@ export function advanceToNextPhase() {
   // Get current phase
   const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
   
+  console.log(`Current phase: ${currentPhase.name}, Has summary: ${Boolean(currentPhase.summary)}`);
+  if (currentPhase.summary) {
+    console.log(`Summary preview: "${currentPhase.summary.substring(0, 50)}..."`);
+  }
+  
   if (config.isDebugMode) {
     console.log(`Processing phase transition for ${currentPhase.name}`);
   }
@@ -148,20 +157,24 @@ export function advanceToNextPhase() {
   if (currentPhase.summary && currentPhase.summary.trim() !== '') {
     // Update the news banner with full summary
     addToNewsBanner(`(${currentPhase.name}) ${currentPhase.summary}`);
+    console.log("Added summary to news banner, preparing to call speakSummary");
 
     // Speak the summary and advance after
     speakSummary(currentPhase.summary)
       .then(() => {
+        console.log("Speech completed successfully");
         if (gameState.isPlaying) {
           moveToNextPhase();
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Speech failed with error:", error);
         if (gameState.isPlaying) {
           moveToNextPhase();
         }
       });
   } else {
+    console.log("No summary available, skipping speech");
     // No summary to speak, advance immediately
     moveToNextPhase();
   }

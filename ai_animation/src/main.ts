@@ -38,6 +38,9 @@ function initScene() {
   // Load coordinate data, then build the map
   gameState.loadBoardState().then(() => {
     initMap(gameState.scene).then(() => {
+      // Update info panel with initial power information
+      logger.updateInfoPanel();
+      
       // Load default game file if in debug mode
       if (isDebugMode) {
         loadDefaultGameFile();
@@ -45,7 +48,8 @@ function initScene() {
     })
   }).catch(err => {
     console.error("Error loading coordinates:", err);
-    logger.log(`Error loading coords: ${err.message}`)
+    // Use console.error instead of logger.log to avoid updating the info panel
+    console.error(`Error loading coords: ${err.message}`);
   });
 
   // Handle resizing
@@ -55,7 +59,6 @@ function initScene() {
 
   // Initialize info panel
   logger.updateInfoPanel();
-
 }
 
 // --- ANIMATION LOOP ---
@@ -78,8 +81,12 @@ function animate() {
     );
 
     // If messages are done playing but we haven't started unit animations yet
+    // AND we're not currently speaking, create animations
     if (!gameState.messagesPlaying && !gameState.isSpeaking &&
       gameState.unitAnimations.length === 0 && gameState.isPlaying) {
+
+      console.log("Animation check: messages done, not speaking, no animations running");
+      
       if (gameState.gameData && gameState.gameData.phases) {
         // Get previous phase index
         const prevIndex = gameState.phaseIndex > 0 ?
@@ -197,10 +204,11 @@ function loadDefaultGameFile() {
     })
     .catch(error => {
       console.error("Error loading default game file:", error);
-      logger.log(`Error loading default game: ${error.message}`);
+      // Use console.error instead of logger.log to avoid updating the info panel
+      console.error(`Error loading default game: ${error.message}`);
 
-      // Fallback - tell user to drag & drop a file
-      logger.log('Please load a game file using the "Load Game" button.');
+      // Fallback - tell user to drag & drop a file but don't update the info panel
+      console.log('Please load a game file using the "Load Game" button.');
     });
 }
 

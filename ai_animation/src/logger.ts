@@ -9,14 +9,16 @@ class Logger {
     }
     return _panel
   }
+  
+  // Modified to only log to console without updating the info panel
   log = (msg: string) => {
     if (typeof msg !== "string") {
       throw new Error(`Logger messages must be strings, you passed a ${typeof msg}`)
     }
-    this.infoPanel.textContent = msg;
-
+    // Remove the update to infoPanel.textContent
     console.log(msg)
   }
+  
   // Updated function to update info panel with useful information and smooth transitions
   updateInfoPanel = () => {
     const totalPhases = gameState.gameData?.phases?.length || 0;
