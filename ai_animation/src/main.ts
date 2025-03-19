@@ -17,6 +17,7 @@ import { config } from "./config";
 
 //const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = config.isDebugMode;
+const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
 
 // --- CORE VARIABLES ---
 
@@ -40,10 +41,15 @@ function initScene() {
     initMap(gameState.scene).then(() => {
       // Update info panel with initial power information
       logger.updateInfoPanel();
-      
+
       // Load default game file if in debug mode
-      if (isDebugMode) {
+      if (isDebugMode || isStreamingMode) {
         loadDefaultGameFile();
+      }
+      if (isStreamingMode) {
+        setTimeout(() => {
+          togglePlayback()
+        }, 2000)
       }
     })
   }).catch(err => {
@@ -86,7 +92,7 @@ function animate() {
       gameState.unitAnimations.length === 0 && gameState.isPlaying) {
 
       console.log("Animation check: messages done, not speaking, no animations running");
-      
+
       if (gameState.gameData && gameState.gameData.phases) {
         // Get previous phase index
         const prevIndex = gameState.phaseIndex > 0 ?
@@ -174,7 +180,7 @@ function loadDefaultGameFile() {
   console.log("Loading default game file for debug mode...");
 
   // Path to the default game file
-  const defaultGameFilePath = './test-game.json';
+  const defaultGameFilePath = './default_game.json';
 
   fetch(defaultGameFilePath)
     .then(response => {
