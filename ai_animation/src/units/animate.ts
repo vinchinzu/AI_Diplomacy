@@ -25,29 +25,20 @@ export type UnitAnimation = {
   animationType?: AnimationTypeENUM
 }
 
-// Helper function to parse order string into UnitOrder object
-function parseOrderString(orderText: string): UnitOrder | null {
-  try {
-    return OrderFromString.parse(orderText);
-  } catch (error) {
-    logger.log(`Failed to parse order: ${orderText}`);
-    return null;
-  }
-}
-
 function getUnit(unitOrder: UnitOrder, power: string) {
+  if (power === undefined) throw new Error("Must pass the power argument, cannot be undefined")
   let posUnits = gameState.unitMeshes.filter((unit) => {
     return (
-      unit.userData.province === unitOrder.unit.origin && 
+      unit.userData.province === unitOrder.unit.origin &&
       unit.userData.type === unitOrder.unit.type &&
       unit.userData.power === power
     );
   });
-  
+
   if (posUnits.length === 0) {
     return -1;
   }
-  
+
   // Return the first matching unit
   return gameState.unitMeshes.indexOf(posUnits[0]);
 }
@@ -56,72 +47,43 @@ function getUnit(unitOrder: UnitOrder, power: string) {
  * Creates animations for unit movements based on orders from the previous phase
  * @param currentPhase The current game phase
  * @param previousPhase The previous game phase containing orders to process
- */
+ *
+**/
 export function createTweenAnimations(currentPhase: GamePhase, previousPhase: GamePhase | null) {
   // Safety check - if no previous phase or no orders, return
   if (!previousPhase) {
     logger.log("No previous phase to animate");
     return;
   }
-
-  // Debug log the phase transition
-  if (config.isDebugMode) {
-    console.log(`Animating transition from ${previousPhase.name} to ${currentPhase.name}`);
-  }
-  
-  // Ensure orders is treated as an array
-  const orders = previousPhase.orders;
-  if (!orders) {
-    logger.log(`Phase ${previousPhase.name}: No orders found`);
-    return;
-  }
-
-  // Convert orders to array if it's an object
-  const ordersArray = Array.isArray(orders) ? orders : Object.values(orders);
-  if (ordersArray.length === 0) {
-    logger.log(`Phase ${previousPhase.name}: No orders to animate`);
-    return;
-  }
-
-  // Clear any existing animations to prevent loops
-  gameState.unitAnimations = [];
-  
-  // Log once with meaningful information
-  logger.log(`Creating animations for ${ordersArray.length} orders from phase ${previousPhase.name}`);
-
-  // Process each order in the array
-  for (const orderObj of ordersArray) {
-    try {
-      // Parse the order text into a structured UnitOrder
-      const order = parseOrderString(orderObj.text);
-      if (!order) {
-        if (config.isDebugMode) {
-          console.log(`Could not parse order: ${orderObj.text}`);
-        }
-        continue;
+  for (const [power, orders] of Object.entries(previousPhase.orders)) {
+    for (const order of orders) {
+      // Check if unit bounced
+      let lastPhaseResultMatches = Object.entries(previousPhase.results).filter(([key, value]) => {
+        return key.split(" ")[1] == order.unit.origin
+      }).map(val => {
+        // in the form "A BER" (unitType origin)
+        let orderSplit = val[0].split(" ")
+        return { origin: orderSplit[1], unitType: orderSplit[0], result: val[1][0] }
+      })
+      // This should always exist. If we don't have a match here, that means something went wrong with our order parsing
+      if (!lastPhaseResultMatches) {
+        throw new Error("No result present in current phase for previous phase order. Cannot continue")
+      }
+      if (lastPhaseResultMatches.length > 1) {
+        throw new Error("Multiple matching results from last phase. Should only ever be 1.")
+      }
+      if (lastPhaseResultMatches[0].result === "bounce") {
+        order.type = "bounce"
       }
 
-      // Find the unit that matches this order's power and origin
-      const unitIndex = getUnit(order, orderObj.power);
-      if (unitIndex === -1) {
-        if (config.isDebugMode) {
-          console.log(`Unit not found for order: ${orderObj.text} (power: ${orderObj.power})`);
-        }
-        continue;
-      }
-
-      if (config.isDebugMode) {
-        console.log(`Processing ${order.type} order for ${orderObj.power}: ${orderObj.text}`);
-      }
-
+      let unitIndex = getUnit(order, power);
+      if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
       switch (order.type) {
         case "move":
           let destinationVector = getProvincePosition(gameState.boardState, order.destination);
           if (!destinationVector) {
-            console.log(`Destination province not found: ${order.destination}`);
-            continue;
+            throw new Error("Unable to find the vector for province with name " + order.destination)
           }
-          
           // Create a tween for smooth movement
           let anim = new TWEEN.Tween(gameState.unitMeshes[unitIndex].position)
             .to({
@@ -142,7 +104,7 @@ export function createTweenAnimations(currentPhase: GamePhase, previousPhase: Ga
               if (config.isDebugMode) {
                 console.log(`Unit ${orderObj.power} ${gameState.unitMeshes[unitIndex].userData.type} moved: ${order.unit.origin} -> ${order.destination}`);
               }
-              
+
               gameState.unitMeshes[unitIndex].position.y = 10;
               if (gameState.unitMeshes[unitIndex].userData.type === 'F') {
                 gameState.unitMeshes[unitIndex].rotation.z = 0;
@@ -150,7 +112,6 @@ export function createTweenAnimations(currentPhase: GamePhase, previousPhase: Ga
               }
             })
             .start();
-
           gameState.unitAnimations.push(anim);
           break;
 
@@ -161,17 +122,16 @@ export function createTweenAnimations(currentPhase: GamePhase, previousPhase: Ga
           gameState.scene.remove(gameState.unitMeshes[unitIndex]);
           gameState.unitMeshes.splice(unitIndex, 1);
           break;
-          
+
+        case "bounce":
+          // TODO: implement bounce animation
+          break;
+
         default:
           if (config.isDebugMode) {
             console.log(`Skipping order type: ${order.type} for ${orderObj.text}`);
           }
           break;
-      }
-    } catch (error) {
-      logger.log(`Error processing order: ${error.message}`);
-      if (config.isDebugMode) {
-        console.error("Full error:", error);
       }
     }
   }
