@@ -43,10 +43,6 @@ export function displayPhase(skipMessages = false) {
     }, 300);
   }
 
-  // Clear existing units except supply centers
-  const supplyCenters = gameState.unitMeshes.filter(m => m.userData && m.userData.isSupplyCenter);
-  const oldUnits = gameState.unitMeshes.filter(m => m.userData && !m.userData.isSupplyCenter);
-
   // Update supply centers
   if (currentPhase.state?.centers) {
     updateSupplyCenterOwnership(currentPhase.state.centers);
@@ -188,5 +184,5 @@ function moveToNextPhase() {
   }
 
   // Display the next phase and start showing its messages
-  displayPhaseWithAnimation(gameState.phaseIndex);
+  displayPhaseWithAnimation();
 }
