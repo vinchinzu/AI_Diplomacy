@@ -20,6 +20,7 @@ export const speedSelector = document.getElementById('speed-selector');
 export const phaseDisplay = document.getElementById('phase-display');
 export const mapView = document.getElementById('map-view');
 export const leaderboard = document.getElementById('leaderboard');
+export const standingsBtn = document.getElementById('standings-btn');
 
 // Add roundRect polyfill for browsers that don't support it
 if (!CanvasRenderingContext2D.prototype.roundRect) {

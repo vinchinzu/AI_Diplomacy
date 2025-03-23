@@ -344,3 +344,278 @@
     0%   { transform: translateX(0); }
     100% { transform: translateX(-100%); }
   }
+
+  /* -----------------
+     Standings Board
+     ----------------- */
+
+  .standings-board-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    font-family: "Book Antiqua", Palatino, serif;
+  }
+
+  .standings-board-container.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .standings-header {
+    width: 90%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 10px 20px;
+    background: linear-gradient(90deg, #5a3e2b 0%, #382519 100%);
+    border: 2px solid #2e1c10;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  }
+
+  .standings-header h2 {
+    margin: 0;
+    color: #f0e6d2;
+    font-size: 28px;
+    text-shadow: 1px 1px 2px #000;
+    letter-spacing: 1px;
+  }
+
+  #standings-close-btn {
+    background-color: transparent;
+    color: #f0e6d2;
+    font-size: 24px;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  #standings-close-btn:hover {
+    color: #ff9e54;
+  }
+
+  .standings-table-container {
+    width: 90%;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: radial-gradient(ellipse at center, #f7ecd1 0%, #dbc08c 100%);
+    border: 3px solid #4f3b16;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+  }
+
+  .standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 16px;
+    color: #2f260b;
+  }
+
+  .standings-table thead {
+    position: sticky;
+    top: 0;
+    background: linear-gradient(180deg, #e6d5a9 0%, #c9b887 100%);
+    z-index: 10;
+  }
+
+  .standings-table th {
+    padding: 12px 10px;
+    text-align: center;
+    border: 1px solid #4f3b16;
+    cursor: pointer;
+    font-variant: small-caps;
+    font-size: 18px;
+    position: relative;
+    transition: background-color 0.2s;
+  }
+
+  .standings-table th:hover {
+    background-color: #e0cdad;
+  }
+
+  .standings-table th.sort-asc::after {
+    content: "▲";
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+  }
+
+  .standings-table th.sort-desc::after {
+    content: "▼";
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+  }
+
+  .standings-table td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid #b39c74;
+  }
+
+  .standings-table tr:nth-child(even) {
+    background-color: rgba(211, 191, 150, 0.3);
+  }
+
+  .standings-table tr:hover {
+    background-color: rgba(211, 191, 150, 0.6);
+  }
+
+  .model-cell {
+    text-align: left;
+    font-weight: bold;
+    min-width: 120px;
+  }
+
+  .power-cell {
+    font-weight: bold;
+    min-width: 60px;
+  }
+
+  .has-wins {
+    background-color: rgba(255, 255, 200, 0.3);
+  }
+
+  .high-wins {
+    background-color: rgba(255, 215, 0, 0.4);
+    font-weight: bold;
+    color: #703800;
+  }
+
+  .top-wins {
+    background-color: rgba(255, 165, 0, 0.5);
+    color: #5d2e00;
+    font-weight: bold;
+    font-size: 18px;
+    text-shadow: 1px 1px 1px rgba(255, 255, 255, 0.5);
+  }
+
+  .total-cell {
+    font-weight: bold;
+    background-color: rgba(210, 180, 140, 0.3);
+  }
+
+  /* Power-specific color accents */
+  .power-austria {
+    border-left: 4px solid #f08080;
+  }
+
+  .power-turkey {
+    border-left: 4px solid #f08080;
+  }
+
+  .power-england {
+    border-left: 4px solid #6495ed;
+  }
+
+  .power-france {
+    border-left: 4px solid #6495ed;
+  }
+
+  .power-italy {
+    border-left: 4px solid #90ee90;
+  }
+
+  .power-russia {
+    border-left: 4px solid #90ee90;
+  }
+
+  .power-germany {
+    border-left: 4px solid #dda0dd;
+  }
+
+  .power-header {
+    text-transform: uppercase;
+  }
+
+  .power-header.power-austria,
+  .power-header.power-turkey {
+    background-color: rgba(240, 128, 128, 0.2);
+  }
+
+  .power-header.power-england,
+  .power-header.power-france {
+    background-color: rgba(100, 149, 237, 0.2);
+  }
+
+  .power-header.power-italy,
+  .power-header.power-russia {
+    background-color: rgba(144, 238, 144, 0.2);
+  }
+
+  .power-header.power-germany {
+    background-color: rgba(221, 160, 221, 0.2);
+  }
+
+  .standings-legend {
+    width: 90%;
+    text-align: center;
+    color: #dbc08c;
+    margin-top: 20px;
+    font-size: 14px;
+    opacity: 0.8;
+  }
+
+  /* Mobile responsive styles */
+  @media (max-width: 900px) {
+    .standings-table-container {
+      width: 95%;
+    }
+    
+    .standings-table {
+      font-size: 14px;
+    }
+    
+    .standings-header h2 {
+      font-size: 22px;
+    }
+    
+    .model-cell {
+      min-width: 80px;
+    }
+    
+    .power-cell {
+      min-width: 40px;
+    }
+  }
+
+  /* Standings button styling */
+  #standings-btn {
+    background-color: #8d5a2b;
+    color: #f0e6d2;
+    border: 2px solid #2e1c10;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: "Book Antiqua", Palatino, serif;
+    transition: background-color 0.2s;
+  }
+
+  #standings-btn:hover {
+    background-color: #a4703a;
+  }
+
+  /* Media query for mobile devices */
+  @media (max-width: 768px) {
+    #standings-btn {
+      margin-top: 5px;
+    }
+  }

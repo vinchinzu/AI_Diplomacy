@@ -7,6 +7,7 @@ import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
+import { initStandingsBoard, updateStandingsBoardVisibility, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
 import { displayPhaseWithAnimation, advanceToNextPhase } from "./phase";
 import { speakSummary } from "./speech";
 import { addToNewsBanner } from "./domElements/chatWindows";
@@ -36,11 +37,19 @@ function initScene() {
   dirLight.position.set(300, 400, 300);
   gameState.scene.add(dirLight);
 
+  // Initialize standings board
+  initStandingsBoard();
+
   // Load coordinate data, then build the map
   gameState.loadBoardState().then(() => {
     initMap(gameState.scene).then(() => {
       // Update info panel with initial power information
       logger.updateInfoPanel();
+
+      // Only show standings board at startup if no game is loaded
+      if (!gameState.gameData || !gameState.gameData.phases || gameState.gameData.phases.length === 0) {
+        showStandingsBoard();
+      }
 
       // Load default game file if in debug mode
       if (isDebugMode || isStreamingMode) {
@@ -207,6 +216,8 @@ function loadDefaultGameFile() {
     })
     .then(() => {
       console.log("Default game file loaded and parsed successfully");
+      // Explicitly hide standings board after loading game
+      hideStandingsBoard();
     })
     .catch(error => {
       console.error("Error loading default game file:", error);
@@ -233,6 +244,9 @@ function togglePlayback() {
     prevBtn.disabled = true;
     nextBtn.disabled = true;
     logger.log("Starting playback...");
+
+    // Hide standings board when playback starts
+    hideStandingsBoard();
 
     // First, show the messages of the current phase if it's the initial playback
     const phase = gameState.gameData.phases[gameState.phaseIndex];
@@ -265,6 +279,8 @@ fileInput.addEventListener('change', e => {
   const file = e.target.files[0];
   if (file) {
     loadGameBtnFunction(file);
+    // Explicitly hide standings board after loading game
+    hideStandingsBoard();
   }
 });
 
