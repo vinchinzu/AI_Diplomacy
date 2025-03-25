@@ -5,7 +5,7 @@ import { gameState } from "../gameState";
 import { getProvincePosition } from "../map/utils";
 
 // Get color for a power
-export function getPowerHexColor(power: PowerENUM) {
+export function getPowerHexColor(power: PowerENUM | undefined): string {
   let defaultColor = '#ddd2af'
   if (power === undefined) return defaultColor
   const powerColors = {
@@ -71,7 +71,6 @@ function createFleet(color: string): THREE.Group {
 }
 
 export function createSupplyCenters() {
-  let supplyCenterMeshes: THREE.Group[] = [];
   if (!gameState.boardState || !gameState.boardState.provinces) throw new Error("Game not initialized, cannot create SCs");
   for (const [province, data] of Object.entries(gameState.boardState.provinces)) {
     if (data.isSupplyCenter && gameState.boardState.provinces[province]) {
@@ -146,10 +145,10 @@ export function createUnitMesh(unitData: UnitData): THREE.Group {
 }
 
 
+// Creates the units for the current gameState.phaseIndex.
 export function initUnits() {
-
   createSupplyCenters()
-  for (const [power, unitArr] of Object.entries(gameState.gameData.phases[0].state.units)) {
+  for (const [power, unitArr] of Object.entries(gameState.gameData.phases[gameState.phaseIndex].state.units)) {
     unitArr.forEach(unitStr => {
       const match = unitStr.match(/^([AF])\s+(.+)$/);
       if (match) {

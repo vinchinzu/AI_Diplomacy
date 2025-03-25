@@ -1,18 +1,15 @@
 import * as THREE from "three";
 import "./style.css"
 import { initMap } from "./map/create";
-import { initUnits } from "./units/create";
-import { createTweenAnimations } from "./units/animate";
-import * as TWEEN from "@tweenjs/tween.js";
+import { createAnimationsForNextPhase as createAnimationsForNextPhase } from "./units/animate";
 import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
-import { initStandingsBoard, updateStandingsBoardVisibility, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
-import { displayPhaseWithAnimation, advanceToNextPhase } from "./phase";
-import { speakSummary } from "./speech";
-import { addToNewsBanner } from "./domElements/chatWindows";
+import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
+import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase } from "./phase";
 import { config } from "./config";
+import { Tween, Group } from "@tweenjs/tween.js";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -59,6 +56,7 @@ function initScene() {
       if (isStreamingMode) {
         setTimeout(() => {
           togglePlayback()
+          gameState.cameraPanAnim = createCameraPan()
         }, 2000)
       }
     })
@@ -78,8 +76,36 @@ function initScene() {
   logger.updateInfoPanel();
 }
 
+function createCameraPan() {
+  // Move from the starting camera position to the left side of the map
+  let moveToStartSweepAnim = new Tween(gameState.camera.position).to({
+    x: -100,
+    y: 650,
+    z: 1000,
+  }, 8000).onUpdate((posVector) => {
+    gameState.camera.position.set(posVector.x, posVector.y, posVector.z)
+  })
+  let cameraSweepOperation = new Tween({ angle: 0 }).to({
+    x: 2000,
+    y: 650,
+    z: 1000
+  }, 20000)
+    .onUpdate((tweenObj) => {
+      let radius = 2000
+      gameState.camera.position.set(
+        radius * -Math.cos(tweenObj.angle),
+        650 + 80 * Math.sin(cameraPanTime * 0.5),
+        1000 + 1000 * Math.sin(tweenObj.angle)
+      );
+    }).yoyo(true).repeat(Infinity)
+
+  moveToStartSweepAnim.chain(cameraSweepOperation)
+  moveToStartSweepAnim.start()
+  return new Group(moveToStartSweepAnim, cameraSweepOperation)
+}
+
 // --- ANIMATION LOOP ---
-/**
+/*
  * Main animation loop that runs continuously
  * Handles camera movement, animations, and game state transitions
  */
@@ -87,16 +113,16 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (gameState.isPlaying) {
+    // FIXME: Doing panning this way is causing stuttering as other operations take time in the main thread. 
+    //
+
+    // TODO: Fix this panning so that it is just a small arc across the "front" of the board.
     // Pan camera slowly in playback mode
     cameraPanTime += cameraPanSpeed;
-    const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;
-    const radius = 1000;
-    gameState.camera.position.set(
-      radius * Math.cos(angle),
-      650 + 80 * Math.sin(cameraPanTime * 0.5),
-      100 + radius * Math.sin(angle)
-    );
-
+    gameState.cameraPanAnim.update()
+    // const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;
+    // const radius = 2000;
+    //
     // If messages are done playing but we haven't started unit animations yet
     // AND we're not currently speaking, create animations
     if (!gameState.messagesPlaying && !gameState.isSpeaking &&
@@ -116,10 +142,7 @@ function animate() {
           console.log("Messages complete, starting unit animations");
 
           // Create animations for unit movements based on orders
-          createTweenAnimations(
-            gameState.gameData.phases[gameState.phaseIndex],
-            gameState.gameData.phases[prevIndex]
-          );
+          createAnimationsForNextPhase();
         }
       }
     }
@@ -236,6 +259,9 @@ function togglePlayback() {
   // NEW: If we're speaking, don't allow toggling playback
   if (gameState.isSpeaking) return;
 
+  // Pause the camera animation
+  if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll().map(anim => anim.pause())
+
   gameState.isPlaying = !gameState.isPlaying;
 
   if (gameState.isPlaying) {
@@ -285,15 +311,11 @@ fileInput.addEventListener('change', e => {
 
 prevBtn.addEventListener('click', () => {
   if (gameState.phaseIndex > 0) {
-    gameState.phaseIndex--;
-    displayPhaseWithAnimation(gameState.phaseIndex);
+    resetToPhase(gameState.phaseIndex - 1)
   }
 });
 nextBtn.addEventListener('click', () => {
-  if (gameState.gameData && gameState.phaseIndex < gameState.gameData.phases.length - 1) {
-    gameState.phaseIndex++;
-    displayPhaseWithAnimation(gameState.phaseIndex);
-  }
+  advanceToNextPhase()
 });
 
 playBtn.addEventListener('click', togglePlayback);

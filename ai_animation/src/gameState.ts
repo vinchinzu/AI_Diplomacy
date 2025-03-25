@@ -7,7 +7,7 @@ import { createChatWindows } from "./domElements/chatWindows";
 import { logger } from "./logger";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
-import * as TWEEN from "@tweenjs/tween.js";
+import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 
 //FIXME: This whole file is a mess. Need to organize and format
 //
@@ -56,10 +56,14 @@ class GameState {
   unitMeshes: THREE.Group[]
 
   // Animations needed for this turn
-  unitAnimations: TWEEN.Tween[]
+  unitAnimations: Tween[]
 
   //
   playbackTimer: number
+
+  // Camera Animation during playing
+  cameraPanAnim: TweenGroup | undefined
+
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
     this.gameData = null

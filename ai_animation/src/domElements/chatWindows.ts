@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { currentPower, gameState } from "../gameState";
 import { config } from "../config";
-import { createTweenAnimations } from "../units/animate";
 import { advanceToNextPhase } from "../phase";
 
 let faceIconCache = {}; // Cache for generated face icons
@@ -222,7 +221,6 @@ export function updateChatWindows(phase: any, stepMessages = false) {
                 if (config.isDebugMode) {
                   console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
                 }
-                createTweenAnimations(currentPhase, previousPhase);
 
                 // After animations complete, advance to next phase with longer delay
                 gameState.playbackTimer = setTimeout(() => {
