@@ -80,7 +80,7 @@ export function createAnimationsForNextPhase() {
       if (order.type != "build" && unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
       switch (order.type) {
         case "move":
-          let destinationVector = getProvincePosition(gameState.boardState, order.destination);
+          let destinationVector = getProvincePosition(order.destination);
           if (!destinationVector) {
             throw new Error("Unable to find the vector for province with name " + order.destination)
           }

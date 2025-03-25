@@ -115,7 +115,7 @@ export function createSupplyCenters() {
         glowMesh
       };
 
-      const pos = getProvincePosition(gameState.boardState, province);
+      const pos = getProvincePosition(province);
       scGroup.position.set(pos.x, 2, pos.z);
       gameState.scene.add(scGroup)
     }
@@ -131,7 +131,7 @@ export function createUnitMesh(unitData: UnitData): THREE.Group {
   } else {
     group = createFleet(color)
   }
-  let pos = getProvincePosition(gameState.boardState, unitData.province)
+  let pos = getProvincePosition(unitData.province)
   group.position.set(pos.x, pos.y, pos.z)
 
   // Store metadata

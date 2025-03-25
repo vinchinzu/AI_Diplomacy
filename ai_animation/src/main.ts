@@ -9,7 +9,7 @@ import { updateChatWindows } from "./domElements/chatWindows";
 import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
 import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase } from "./phase";
 import { config } from "./config";
-import { Tween, Group } from "@tweenjs/tween.js";
+import { Tween, Group, Easing } from "@tweenjs/tween.js";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -18,10 +18,6 @@ import { Tween, Group } from "@tweenjs/tween.js";
 const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
 
-// --- CORE VARIABLES ---
-
-let cameraPanTime = 0;   // Timer that drives the camera panning
-const cameraPanSpeed = 0.0005; // Smaller = slower
 
 // --- INITIALIZE SCENE ---
 function initScene() {
@@ -79,25 +75,23 @@ function initScene() {
 function createCameraPan() {
   // Move from the starting camera position to the left side of the map
   let moveToStartSweepAnim = new Tween(gameState.camera.position).to({
-    x: -100,
-    y: 650,
-    z: 1000,
+    x: -400,
+    y: 500,
+    z: 1000
   }, 8000).onUpdate((posVector) => {
     gameState.camera.position.set(posVector.x, posVector.y, posVector.z)
   })
-  let cameraSweepOperation = new Tween({ angle: 0 }).to({
-    x: 2000,
-    y: 650,
-    z: 1000
+  let cameraSweepOperation = new Tween({ timeStep: 0 }).to({
+    timeStep: Math.PI
   }, 20000)
     .onUpdate((tweenObj) => {
-      let radius = 2000
+      let radius = 2200
       gameState.camera.position.set(
-        radius * -Math.cos(tweenObj.angle),
-        650 + 80 * Math.sin(cameraPanTime * 0.5),
-        1000 + 1000 * Math.sin(tweenObj.angle)
+        radius * Math.sin(tweenObj.timeStep / 2) - 400,
+        500 + 200 * Math.sin(tweenObj.timeStep),
+        1000 + 900 * Math.sin(tweenObj.timeStep)
       );
-    }).yoyo(true).repeat(Infinity)
+    }).easing(Easing.Quadratic.InOut).yoyo(true).repeat(Infinity)
 
   moveToStartSweepAnim.chain(cameraSweepOperation)
   moveToStartSweepAnim.start()
@@ -113,12 +107,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (gameState.isPlaying) {
-    // FIXME: Doing panning this way is causing stuttering as other operations take time in the main thread. 
-    //
 
-    // TODO: Fix this panning so that it is just a small arc across the "front" of the board.
-    // Pan camera slowly in playback mode
-    cameraPanTime += cameraPanSpeed;
     gameState.cameraPanAnim.update()
     // const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;
     // const radius = 2000;
