@@ -29,8 +29,8 @@ export function displayPhase(skipMessages = false) {
   // Only get previous phase if not the first phase
   const prevIndex = isFirstPhase ? null : (index > 0 ? index - 1 : null);
   const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
-
   updatePhaseDisplay()
+
 
 
   // Update supply centers

@@ -48,6 +48,7 @@ function getUnit(unitOrder: UnitOrder, power: string) {
 **/
 export function createAnimationsForNextPhase() {
   let previousPhase = gameState.gameData?.phases[gameState.phaseIndex == 0 ? 0 : gameState.phaseIndex - 1]
+
   // Safety check - if no previous phase or no orders, return
   if (!previousPhase) {
     logger.log("No previous phase to animate");
