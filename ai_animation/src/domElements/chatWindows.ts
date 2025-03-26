@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { currentPower, gameState } from "../gameState";
+import { gameState } from "../gameState";
 import { config } from "../config";
 import { advanceToNextPhase } from "../phase";
 
@@ -12,6 +12,9 @@ let chatWindows = {}; // Store chat window elements by power
 export function createChatWindows() {
   // Clear existing chat windows
   const chatContainer = document.getElementById('chat-container');
+  if (!chatContainer) {
+    throw new Error("Could not get element with ID 'chat-container'")
+  }
   chatContainer.innerHTML = '';
   chatWindows = {};
 

@@ -9,7 +9,7 @@ try {
   if (import.meta.env.VITE_ELEVENLABS_API_KEY) {
     ELEVENLABS_API_KEY = String(import.meta.env.VITE_ELEVENLABS_API_KEY).trim();
     // Simplified logging
-  } 
+  }
   // Fallback to the direct env variable (for dev environments)
   else if (import.meta.env.ELEVENLABS_API_KEY) {
     ELEVENLABS_API_KEY = String(import.meta.env.ELEVENLABS_API_KEY).trim();
@@ -37,7 +37,7 @@ async function testElevenLabsKey() {
     console.warn("Cannot test API key - none provided");
     return;
   }
-  
+
   try {
     const response = await fetch('https://api.elevenlabs.io/v1/voices', {
       method: 'GET',
@@ -45,11 +45,10 @@ async function testElevenLabsKey() {
         'xi-api-key': ELEVENLABS_API_KEY
       }
     });
-    
+
     if (response.ok) {
       console.log("✅ ElevenLabs API key is valid and ready for TTS");
     } else {
-      const errorText = await response.text().catch(() => 'No error details available');
       console.error(`❌ ElevenLabs API key invalid: ${response.status}`);
     }
   } catch (error) {
@@ -69,7 +68,7 @@ export async function speakSummary(summaryText: string): Promise<void> {
     console.warn("No summary text provided to speakSummary function");
     return;
   }
-  
+
   // Check if the summary is in JSON format and extract the actual summary text
   let textToSpeak = summaryText;
   try {
@@ -85,7 +84,7 @@ export async function speakSummary(summaryText: string): Promise<void> {
   } catch (error) {
     console.warn("Failed to parse summary as JSON");
   }
-  
+
   if (!ELEVENLABS_API_KEY) {
     console.warn("No ElevenLabs API key found. Skipping TTS.");
     return;
@@ -97,14 +96,14 @@ export async function speakSummary(summaryText: string): Promise<void> {
   try {
     // Truncate text to first 100 characters for ElevenLabs
     const truncatedText = textToSpeak.substring(0, 100);
-    
+
     // Hit ElevenLabs TTS endpoint with the truncated text
     const headers = {
       "xi-api-key": ELEVENLABS_API_KEY,
       "Content-Type": "application/json",
       "Accept": "audio/mpeg"
     };
-    
+
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
       method: "POST",
       headers: headers,

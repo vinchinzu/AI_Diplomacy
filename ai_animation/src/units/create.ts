@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { UnitData, UnitMesh } from "../types/units";
+import { UnitData, UnitTypeENUM } from "../types/units";
 import { PowerENUM } from "../types/map";
 import { gameState } from "../gameState";
 import { getProvincePosition } from "../map/utils";
@@ -17,7 +17,7 @@ export function getPowerHexColor(power: PowerENUM | undefined): string {
     'RUSSIA': '#cccccc',
     'TURKEY': '#e0c846',
   };
-  return powerColors[power.toUpperCase()] || defaultColor; // fallback to neutral
+  return powerColors[power.toUpperCase() as keyof typeof PowerENUM] || defaultColor; // fallback to neutral
 }
 
 function createArmy(color: string): THREE.Group {
@@ -153,8 +153,8 @@ export function initUnits() {
       const match = unitStr.match(/^([AF])\s+(.+)$/);
       if (match) {
         let newUnit = createUnitMesh({
-          power: power.toUpperCase(),
-          type: match[1],
+          power: PowerENUM[power.toUpperCase() as keyof typeof PowerENUM],
+          type: UnitTypeENUM[match[1] as keyof typeof UnitTypeENUM],
           province: match[2],
         });
         gameState.scene.add(newUnit);

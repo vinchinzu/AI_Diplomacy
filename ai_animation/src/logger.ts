@@ -71,7 +71,7 @@ class Logger {
 
     if (centers) {
       // Count supply centers for each power
-      Object.entries(centers).forEach(([center, power]) => {
+      Object.entries(centers).forEach(([_, power]) => {
         if (power && typeof power === 'string' && power in counts) {
           counts[power as keyof typeof counts]++;
         }

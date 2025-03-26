@@ -1,6 +1,6 @@
 import { gameState } from "../gameState";
 
-export function getProvincePosition(loc) {
+export function getProvincePosition(loc: string) {
   // Convert e.g. "Spa/sc" to "SPA_SC" if needed
   const normalized = loc.toUpperCase().replace('/', '_');
   const base = normalized.split('_')[0];
