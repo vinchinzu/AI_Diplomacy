@@ -1,5 +1,20 @@
 import { gameState } from "./gameState";
 import { logger } from "./logger";
+
+
+export function updatePhaseDisplay() {
+  const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
+  // Add fade-out effect
+  phaseDisplay.style.transition = 'opacity 0.3s ease-out';
+  phaseDisplay.style.opacity = '0';
+
+  // Update text after fade-out
+  setTimeout(() => {
+    phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${gameState.phaseIndex + 1}/${gameState.gameData.phases.length})`;
+    // Fade back in
+    phaseDisplay.style.opacity = '1';
+  }, 300);
+}
 // --- LOADING & DISPLAYING GAME PHASES ---
 export function loadGameBtnFunction(file) {
   const reader = new FileReader();

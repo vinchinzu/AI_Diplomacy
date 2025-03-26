@@ -1,4 +1,5 @@
 import { z } from "zod";
+import * as THREE from "three";
 
 export enum ProvTypeENUM {
   WATER = "Water",
@@ -43,7 +44,8 @@ export const ProvinceSchema = z.object({
   type: ProvTypeSchema,
   unit: UnitSchema.optional(),
   owner: PowerENUMSchema.optional(),
-  isSupplyCenter: z.boolean().optional()
+  isSupplyCenter: z.boolean().optional(),
+  mesh: z.instanceof(THREE.Mesh).optional()
 });
 
 export const CoordinateDataSchema = z.object({

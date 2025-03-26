@@ -1,8 +1,7 @@
 import { getPowerHexColor } from "../units/create";
 import { gameState } from "../gameState";
 import { leaderboard } from "../domElements";
-import type { GamePhase } from "../types/gameState";
-import { ProvTypeENUM } from "../types/map";
+import { ProvTypeENUM, PowerENUM } from "../types/map";
 
 
 export function updateSupplyCenterOwnership(centers) {
@@ -95,7 +94,12 @@ export function updateLeaderboard(phase) {
   leaderboard.innerHTML = html;
 }
 
-export function updateMapOwnership(currentPhase: GamePhase) {
+export function updateMapOwnership() {
+  let currentPhase = gameState.gameData?.phases[gameState.phaseIndex]
+  if (currentPhase === undefined) {
+    throw "Currentphase is undefined for index " + gameState.phaseIndex;
+
+  }
   // Clear existing ownership to avoid stale data
   for (const key in gameState.boardState.provinces) {
     if (gameState.boardState.provinces[key].owner) {
@@ -103,66 +107,25 @@ export function updateMapOwnership(currentPhase: GamePhase) {
     }
   }
 
-  // Use the units array directly if available
-  if (currentPhase.units && currentPhase.units.length > 0) {
-    // Log for debugging
-    console.log(`Updating map ownership using ${currentPhase.units.length} units from phase ${currentPhase.name}`);
-    
-    currentPhase.units.forEach(unit => {
-      if (!unit.location || !unit.power) {
-        console.warn("Unit missing location or power:", unit);
-        return;
-      }
-      
-      const location = unit.location;
-      const normalized = location.toUpperCase().replace('/', '_');
-      const base = normalized.split('_')[0];
-      
-      if (gameState.boardState.provinces[base] === undefined) {
-        console.warn(`Province not found: ${base}`);
-        return;
-      }
-      
-      gameState.boardState.provinces[base].owner = unit.power;
-    });
-  } 
-  // Fallback to state.units if units array is not available
-  else if (currentPhase.state?.units && Object.keys(currentPhase.state.units).length > 0) {
-    console.log(`Updating map ownership using state.units from phase ${currentPhase.name}`);
-    
-    for (const [power, unitArr] of Object.entries(currentPhase.state.units)) {
-      unitArr.forEach(unitStr => {
-        const match = unitStr.match(/^([AF])\s+(.+)$/);
-        if (!match) {
-          console.warn(`Could not parse unit string: ${unitStr}`);
-          return;
-        }
-        
-        const location = match[2];
-        const normalized = location.toUpperCase().replace('/', '_');
-        const base = normalized.split('_')[0];
-        
-        if (gameState.boardState.provinces[base] === undefined) {
-          console.warn(`Province not found: ${base}`);
-          return;
-        }
-        
-        gameState.boardState.provinces[base].owner = power;
-      });
-    }
-  } else {
-    console.warn(`No unit data found in phase ${currentPhase.name} to update map ownership`);
-  }
+  for (let powerKey of Object.keys(currentPhase.state.influence)) {
+    for (let provKey of currentPhase.state.influence[powerKey]) {
 
-  // Update province colors based on ownership
-  for (const key in gameState.boardState.provinces) {
-    const province = gameState.boardState.provinces[key];
-    
-    // Update the color of the provinces if needed
-    if (province.owner && province.type != ProvTypeENUM.WATER) {
-      let powerColor = getPowerHexColor(province.owner);
-      let powerColorHex = parseInt(powerColor.substring(1), 16);
-      province.mesh?.material.color.setHex(powerColorHex);
+      const province = gameState.boardState.provinces[provKey];
+      province.owner = PowerENUM[powerKey as keyof typeof PowerENUM]
+
+      // Update the color of the provinces if needed, you can only own coast and land
+      if ([ProvTypeENUM.COAST, ProvTypeENUM.LAND].indexOf(province.type) >= 0) {
+        if (province.owner) {
+          let powerColor = getPowerHexColor(province.owner);
+          let powerColorHex = parseInt(powerColor.substring(1), 16);
+          province.mesh?.material.color.setHex(powerColorHex);
+        } else if (province.owner === undefined && province.mesh !== undefined) {
+          let powerColor = getPowerHexColor(undefined);
+          let powerColorHex = parseInt(powerColor.substring(1), 16);
+          province.mesh.material.color.setHex(powerColorHex)
+        }
+      }
     }
   }
 }
+

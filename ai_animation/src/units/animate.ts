@@ -1,12 +1,9 @@
 import * as THREE from "three";
-import type { GamePhase } from "../types/gameState";
 import { createUnitMesh } from "./create";
-import { UnitMesh } from "../types/units";
 import { getProvincePosition } from "../map/utils";
 import * as TWEEN from "@tweenjs/tween.js";
 import { gameState } from "../gameState";
 import type { UnitOrder } from "../types/unitOrders";
-import { OrderFromString } from "../types/unitOrders";
 import { logger } from "../logger";
 import { config } from "../config"; // Assuming config is defined in a separate file
 
@@ -49,7 +46,9 @@ function getUnit(unitOrder: UnitOrder, power: string) {
  * @param previousPhase The previous game phase containing orders to process
  *
 **/
-export function createTweenAnimations(currentPhase: GamePhase, previousPhase: GamePhase | null) {
+export function createAnimationsForNextPhase() {
+  let previousPhase = gameState.gameData?.phases[gameState.phaseIndex == 0 ? 0 : gameState.phaseIndex - 1]
+
   // Safety check - if no previous phase or no orders, return
   if (!previousPhase) {
     logger.log("No previous phase to animate");
@@ -82,7 +81,7 @@ export function createTweenAnimations(currentPhase: GamePhase, previousPhase: Ga
       if (order.type != "build" && unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
       switch (order.type) {
         case "move":
-          let destinationVector = getProvincePosition(gameState.boardState, order.destination);
+          let destinationVector = getProvincePosition(order.destination);
           if (!destinationVector) {
             throw new Error("Unable to find the vector for province with name " + order.destination)
           }

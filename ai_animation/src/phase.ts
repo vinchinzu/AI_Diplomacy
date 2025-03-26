@@ -1,12 +1,13 @@
 import { gameState } from "./gameState";
 import { logger } from "./logger";
-import { phaseDisplay } from "./domElements";
+import { updatePhaseDisplay } from "./domElements";
 import { createSupplyCenters, createUnitMesh, initUnits } from "./units/create";
 import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
-import { createTweenAnimations } from "./units/animate";
+import { createAnimationsForNextPhase } from "./units/animate";
 import { speakSummary } from "./speech";
 import { config } from "./config";
+
 
 /**
  * Unified function to display a phase with proper transitions
@@ -28,20 +29,9 @@ export function displayPhase(skipMessages = false) {
   // Only get previous phase if not the first phase
   const prevIndex = isFirstPhase ? null : (index > 0 ? index - 1 : null);
   const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
+  updatePhaseDisplay()
 
-  // Update phase display with smooth transition
-  if (phaseDisplay) {
-    // Add fade-out effect
-    phaseDisplay.style.transition = 'opacity 0.3s ease-out';
-    phaseDisplay.style.opacity = '0';
 
-    // Update text after fade-out
-    setTimeout(() => {
-      phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${index + 1}/${gameState.gameData.phases.length})`;
-      // Fade back in
-      phaseDisplay.style.opacity = '1';
-    }, 300);
-  }
 
   // Update supply centers
   if (currentPhase.state?.centers) {
@@ -51,7 +41,7 @@ export function displayPhase(skipMessages = false) {
 
   // Update UI elements with smooth transitions
   updateLeaderboard(currentPhase);
-  updateMapOwnership(currentPhase);
+  updateMapOwnership();
 
   // Add phase info to news banner if not already there
   const phaseBannerText = `Phase: ${currentPhase.name}`;
@@ -74,7 +64,7 @@ export function displayPhase(skipMessages = false) {
   // Only animate if not the first phase and animations are requested
   if (!isFirstPhase && !skipMessages) {
     if (previousPhase) {
-      createTweenAnimations(currentPhase, previousPhase);
+      createAnimationsForNextPhase();
     }
   } else {
     logger.log("No animations for this phase transition");
@@ -100,18 +90,33 @@ export function displayPhaseWithAnimation() {
   displayPhase(false);
 }
 
+// Explicityly sets the phase to a given index,
+// Removes and recreates all units.
+export function resetToPhase(index: number) {
+  gameState.phaseIndex = index
+  gameState.unitAnimations = [];
+  gameState.unitMeshes.map(unitMesh => gameState.scene.remove(unitMesh))
+
+  updateMapOwnership()
+  initUnits()
+
+}
+
 /**
  * Advances to the next phase in the game sequence
  * Handles speaking summaries and transitioning to the next phase
  */
 export function advanceToNextPhase() {
+  // If we're not "playing" through the game, just skipping phases, move everything along
+  if (!gameState.isPlaying) {
+    moveToNextPhase()
+  }
   console.log("advanceToNextPhase called");
 
   if (!gameState.gameData || !gameState.gameData.phases || gameState.phaseIndex < 0) {
     logger.log("Cannot advance phase: invalid game state");
     return;
   }
-
   // Reset the nextPhaseScheduled flag to allow scheduling the next phase
   gameState.nextPhaseScheduled = false;
 
@@ -178,11 +183,9 @@ function moveToNextPhase() {
   } else {
     gameState.phaseIndex++;
   }
-
   if (config.isDebugMode && gameState.gameData) {
     console.log(`Moving to phase ${gameState.gameData.phases[gameState.phaseIndex].name}`);
   }
-
   // Display the next phase and start showing its messages
   displayPhaseWithAnimation();
 }
