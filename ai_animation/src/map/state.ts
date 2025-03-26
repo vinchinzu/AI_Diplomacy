@@ -2,6 +2,7 @@ import { getPowerHexColor } from "../units/create";
 import { gameState } from "../gameState";
 import { leaderboard } from "../domElements";
 import { ProvTypeENUM, PowerENUM } from "../types/map";
+import { MeshBasicMaterial } from "three";
 
 
 export function updateSupplyCenterOwnership(centers) {
@@ -98,8 +99,8 @@ export function updateMapOwnership() {
   let currentPhase = gameState.gameData?.phases[gameState.phaseIndex]
   if (currentPhase === undefined) {
     throw "Currentphase is undefined for index " + gameState.phaseIndex;
-
   }
+
   // Clear existing ownership to avoid stale data
   for (const key in gameState.boardState.provinces) {
     if (gameState.boardState.provinces[key].owner) {
@@ -107,7 +108,7 @@ export function updateMapOwnership() {
     }
   }
 
-  for (let powerKey of Object.keys(currentPhase.state.influence)) {
+  for (let powerKey of Object.keys(currentPhase.state.influence) as Array<keyof typeof PowerENUM>) {
     for (let provKey of currentPhase.state.influence[powerKey]) {
 
       const province = gameState.boardState.provinces[provKey];
@@ -118,11 +119,11 @@ export function updateMapOwnership() {
         if (province.owner) {
           let powerColor = getPowerHexColor(province.owner);
           let powerColorHex = parseInt(powerColor.substring(1), 16);
-          province.mesh?.material.color.setHex(powerColorHex);
+          (province.mesh?.material as MeshBasicMaterial).color.setHex(powerColorHex);
         } else if (province.owner === undefined && province.mesh !== undefined) {
           let powerColor = getPowerHexColor(undefined);
           let powerColorHex = parseInt(powerColor.substring(1), 16);
-          province.mesh.material.color.setHex(powerColorHex)
+          (province.mesh.material as MeshBasicMaterial).color.setHex(powerColorHex)
         }
       }
     }

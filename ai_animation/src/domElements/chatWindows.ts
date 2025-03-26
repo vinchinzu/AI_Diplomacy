@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { currentPower, gameState } from "../gameState";
+import { gameState } from "../gameState";
 import { config } from "../config";
 import { advanceToNextPhase } from "../phase";
 
@@ -12,6 +12,9 @@ let chatWindows = {}; // Store chat window elements by power
 export function createChatWindows() {
   // Clear existing chat windows
   const chatContainer = document.getElementById('chat-container');
+  if (!chatContainer) {
+    throw new Error("Could not get element with ID 'chat-container'")
+  }
   chatContainer.innerHTML = '';
   chatWindows = {};
 
@@ -19,7 +22,7 @@ export function createChatWindows() {
   const powers = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
 
   // Filter out the current power for chat windows
-  const otherPowers = powers.filter(power => power !== currentPower);
+  const otherPowers = powers.filter(power => power !== gameState.currentPower);
 
   // Add a GLOBAL chat window first
   createChatWindow('GLOBAL', true);
@@ -144,8 +147,8 @@ export function updateChatWindows(phase: any, stepMessages = false) {
   // Only show messages relevant to the current player (sent by them, to them, or global)
   const relevantMessages = phase.messages.filter(msg => {
     return (
-      msg.sender === currentPower ||
-      msg.recipient === currentPower ||
+      msg.sender === gameState.currentPower ||
+      msg.recipient === gameState.currentPower ||
       msg.recipient === 'GLOBAL'
     );
   });
@@ -155,7 +158,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
 
   // Log message count but only in debug mode to reduce noise
   if (config.isDebugMode) {
-    console.log(`Found ${relevantMessages.length} messages for player ${currentPower} in phase ${phase.name}`);
+    console.log(`Found ${relevantMessages.length} messages for player ${gameState.currentPower} in phase ${phase.name}`);
   }
 
   if (!stepMessages) {
@@ -293,7 +296,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
   if (msg.recipient === 'GLOBAL') {
     targetPower = 'GLOBAL';
   } else {
-    targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
+    targetPower = msg.sender === gameState.currentPower ? msg.recipient : msg.sender;
   }
   if (!chatWindows[targetPower]) return false;
 
@@ -336,7 +339,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
     messageElement.appendChild(timeDiv);
   } else {
     // Private chat - outgoing or incoming style
-    const isOutgoing = msg.sender === currentPower;
+    const isOutgoing = msg.sender === gameState.currentPower;
     messageElement.className = `chat-message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
 
     // Create content span
@@ -446,7 +449,7 @@ function animateHeadNod(msg, playSoundEffect = true) {
   if (msg.recipient === 'GLOBAL') {
     targetPower = 'GLOBAL';
   } else {
-    targetPower = msg.sender === currentPower ? msg.recipient : msg.sender;
+    targetPower = msg.sender === gameState.currentPower ? msg.recipient : msg.sender;
   }
 
   const chatWindow = chatWindows[targetPower]?.element;

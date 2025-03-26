@@ -58,7 +58,7 @@ export const OrderFromString = z.string().transform((orderStr) => {
     return {
       type: "retreat",
       unit: { type: unitType, origin },
-      destination: tokens[-1],
+      destination: tokens.at(-1),
       raw: orderStr
     }
   }

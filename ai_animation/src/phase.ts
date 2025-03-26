@@ -1,7 +1,7 @@
 import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { updatePhaseDisplay } from "./domElements";
-import { createSupplyCenters, createUnitMesh, initUnits } from "./units/create";
+import { initUnits } from "./units/create";
 import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
 import { createAnimationsForNextPhase } from "./units/animate";

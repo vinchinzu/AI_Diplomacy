@@ -1,11 +1,13 @@
 import * as THREE from "three";
+import { Tween, Easing } from "@tweenjs/tween.js";
 import { createUnitMesh } from "./create";
 import { getProvincePosition } from "../map/utils";
-import * as TWEEN from "@tweenjs/tween.js";
 import { gameState } from "../gameState";
 import type { UnitOrder } from "../types/unitOrders";
 import { logger } from "../logger";
 import { config } from "../config"; // Assuming config is defined in a separate file
+import { PowerENUM, ProvinceENUM, ProvTypeENUM } from "../types/map";
+import { UnitTypeENUM } from "../types/units";
 
 //FIXME: Move this to a file with all the constants
 enum AnimationTypeENUM {
@@ -40,10 +42,54 @@ function getUnit(unitOrder: UnitOrder, power: string) {
   return gameState.unitMeshes.indexOf(posUnits[0]);
 }
 
+/* Return a tween animation for the spawning of a unit.
+ *  Intended to be invoked before the unit is added to the scene
+*/
+function createSpawnAnimation(newUnitMesh: THREE.Group): Tween {
+  // Start the unit really high, and lower it to the board.
+  newUnitMesh.position.setY(1000)
+  return new Tween({ y: 1000 })
+    .to({ y: 10 }, 1000)
+    .easing(Easing.Quadratic.Out)
+    .onUpdate((object) => {
+      newUnitMesh.position.setY(object.y)
+    }).start()
+}
+
+function createMoveAnimation(unitMesh: THREE.Group, orderDestination: ProvinceENUM): Tween {
+  let destinationVector = getProvincePosition(orderDestination);
+  if (!destinationVector) {
+    throw new Error("Unable to find the vector for province with name " + orderDestination)
+  }
+  let anim = new Tween(unitMesh.position)
+    .to({
+      x: destinationVector.x,
+      y: 10,
+      z: destinationVector.z
+    }, config.animationDuration)
+    .easing(Easing.Quadratic.InOut)
+    .onUpdate(() => {
+      unitMesh.position.y = 10 + Math.sin(Date.now() * 0.05) * 2;
+      if (unitMesh.userData.type === 'F') {
+        unitMesh.rotation.z = Math.sin(Date.now() * 0.03) * 0.1;
+        unitMesh.rotation.x = Math.sin(Date.now() * 0.02) * 0.1;
+      }
+    })
+    .onComplete(() => {
+      unitMesh.userData.province = orderDestination;
+      unitMesh.position.y = 10;
+      if (unitMesh.userData.type === 'F') {
+        unitMesh.rotation.z = 0;
+        unitMesh.rotation.x = 0;
+      }
+    })
+    .start();
+  gameState.unitAnimations.push(anim);
+  return anim
+}
+
 /**
  * Creates animations for unit movements based on orders from the previous phase
- * @param currentPhase The current game phase
- * @param previousPhase The previous game phase containing orders to process
  *
 **/
 export function createAnimationsForNextPhase() {
@@ -55,9 +101,12 @@ export function createAnimationsForNextPhase() {
     return;
   }
   for (const [power, orders] of Object.entries(previousPhase.orders)) {
+    if (orders === null) {
+      continue
+    }
     for (const order of orders) {
       // Check if unit bounced
-      let lastPhaseResultMatches = Object.entries(previousPhase.results).filter(([key, value]) => {
+      let lastPhaseResultMatches = Object.entries(previousPhase.results).filter(([key, _]) => {
         return key.split(" ")[1] == order.unit.origin
       }).map(val => {
         // in the form "A BER" (unitType origin)
@@ -81,45 +130,13 @@ export function createAnimationsForNextPhase() {
       if (order.type != "build" && unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
       switch (order.type) {
         case "move":
-          let destinationVector = getProvincePosition(order.destination);
-          if (!destinationVector) {
-            throw new Error("Unable to find the vector for province with name " + order.destination)
-          }
+          if (!order.destination) throw new Error("Move order with no destination, cannot complete move.")
           // Create a tween for smooth movement
-          let anim = new TWEEN.Tween(gameState.unitMeshes[unitIndex].position)
-            .to({
-              x: destinationVector.x,
-              y: 10,
-              z: destinationVector.z
-            }, config.animationDuration)
-            .easing(TWEEN.Easing.Quadratic.InOut)
-            .onUpdate(() => {
-              gameState.unitMeshes[unitIndex].position.y = 10 + Math.sin(Date.now() * 0.05) * 2;
-              if (gameState.unitMeshes[unitIndex].userData.type === 'F') {
-                gameState.unitMeshes[unitIndex].rotation.z = Math.sin(Date.now() * 0.03) * 0.1;
-                gameState.unitMeshes[unitIndex].rotation.x = Math.sin(Date.now() * 0.02) * 0.1;
-              }
-            })
-            .onComplete(() => {
-              gameState.unitMeshes[unitIndex].userData.province = order.destination;
-              if (config.isDebugMode) {
-                console.log(`Unit ${orderObj.power} ${gameState.unitMeshes[unitIndex].userData.type} moved: ${order.unit.origin} -> ${order.destination}`);
-              }
-
-              gameState.unitMeshes[unitIndex].position.y = 10;
-              if (gameState.unitMeshes[unitIndex].userData.type === 'F') {
-                gameState.unitMeshes[unitIndex].rotation.z = 0;
-                gameState.unitMeshes[unitIndex].rotation.x = 0;
-              }
-            })
-            .start();
-          gameState.unitAnimations.push(anim);
+          createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
           break;
 
         case "disband":
-          if (config.isDebugMode) {
-            console.log(`Disbanding unit ${orderObj.power} ${gameState.unitMeshes[unitIndex].userData.type} in ${gameState.unitMeshes[unitIndex].userData.province}`);
-          }
+          // TODO: Death animation
           gameState.scene.remove(gameState.unitMeshes[unitIndex]);
           gameState.unitMeshes.splice(unitIndex, 1);
           break;
@@ -127,10 +144,11 @@ export function createAnimationsForNextPhase() {
         case "build":
           // TODO: Spawn animation?
           let newUnit = createUnitMesh({
-            power: power,
-            type: order.unit.type,
+            power: PowerENUM[power as keyof typeof PowerENUM],
+            type: UnitTypeENUM[order.unit.type as keyof typeof UnitTypeENUM],
             province: order.unit.origin
           })
+          gameState.unitAnimations.push(createSpawnAnimation(newUnit))
           gameState.scene.add(newUnit)
           gameState.unitMeshes.push(newUnit)
           break;
@@ -138,11 +156,19 @@ export function createAnimationsForNextPhase() {
         case "bounce":
           // TODO: implement bounce animation
           break;
+        case "hold":
+          //TODO: Hold animation, maybe a sheild or something?
+          break;
+
+        case "retreat":
+          createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
+          break;
+
+        case "support":
+          break
+
 
         default:
-          if (config.isDebugMode) {
-            console.log(`Skipping order type: ${order.type} for ${orderObj.text}`);
-          }
           break;
       }
     }

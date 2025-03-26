@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import { type Province, type CoordinateData, CoordinateDataSchema, PowerENUM } from "./types/map"
+import { type CoordinateData, CoordinateDataSchema, PowerENUM } from "./types/map"
 import type { GameSchemaType } from "./types/gameState";
 import { GameSchema } from "./types/gameState";
 import { prevBtn, nextBtn, playBtn, speedSelector, mapView } from "./domElements";
@@ -10,8 +10,7 @@ import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 
 //FIXME: This whole file is a mess. Need to organize and format
-//
-// NEW: Add a lock for text-to-speech
+
 enum AvailableMaps {
   STANDARD = "standard"
 }
@@ -25,18 +24,14 @@ function getRandomPower(): PowerENUM {
   return values[idx];
 }
 
-// Export these variables to be used throughout the application
-export let isSpeaking = false;   // Lock to pause game flow while TTS is active
-export let currentPhaseIndex = 0; // Track the current phase index
-export const currentPower = getRandomPower(); // Randomly selected power for the player
-export const currentPowerUpper = currentPower.toUpperCase();
 
 
 class GameState {
   boardState: CoordinateData
-  gameData: GameSchemaType | null
+  gameData: GameSchemaType
   phaseIndex: number
   boardName: string
+  currentPower: PowerENUM
 
   // state locks
   messagesPlaying: boolean
@@ -66,8 +61,8 @@ class GameState {
 
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
-    this.gameData = null
     this.boardName = boardName
+    this.currentPower = getRandomPower()
     // State locks
     this.isSpeaking = false
     this.isPlaying = false
@@ -78,6 +73,7 @@ class GameState {
     this.scene = new THREE.Scene()
     this.unitMeshes = []
     this.unitAnimations = []
+    this.loadBoardState()
   }
 
   /**

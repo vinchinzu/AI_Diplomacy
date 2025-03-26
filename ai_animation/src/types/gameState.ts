@@ -18,7 +18,7 @@ const PhaseSchema = z.object({
     units: z.record(PowerENUMSchema, z.array(z.string())),
     centers: z.record(PowerENUMSchema, z.array(ProvinceENUMSchema)),
     homes: z.record(PowerENUMSchema, z.array(z.string())),
-    influence: z.record(PowerENUMSchema, z.array(z.string())),
+    influence: z.record(PowerENUMSchema, z.array(ProvinceENUMSchema)),
   }),
   year: z.number().optional(),
   summary: z.string().optional(),

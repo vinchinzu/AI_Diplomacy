@@ -54,7 +54,7 @@ export const CoordinateDataSchema = z.object({
 
 export type Province = z.infer<typeof ProvinceSchema>;
 export type CoordinateData = z.infer<typeof CoordinateDataSchema>;
-enum ProvinceENUM {
+export enum ProvinceENUM {
   ANK = "ANK",
   ARM = "ARM",
   CON = "CON",
@@ -131,6 +131,10 @@ enum ProvinceENUM {
   AEG = "AEG",
   EAS = "EAS",
   BLA = "BLA",
+  NAO = "NAO",
+  MAO = "MAO",
+  TYS = "TYS"
+
 }
 
 export const ProvinceENUMSchema = z.nativeEnum(ProvinceENUM)

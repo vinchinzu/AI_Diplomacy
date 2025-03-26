@@ -4,7 +4,7 @@ import { PowerENUM } from "./map"
 
 export enum UnitTypeENUM {
   A = "A",
-  F = "Fleet"
+  F = "F"
 }
 
 export type UnitData = {
