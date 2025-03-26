@@ -1,5 +1,4 @@
-import { gameState, currentPower } from "./gameState";
-import { currentPhaseIndex } from "./gameState";
+import { gameState } from "./gameState";
 
 class Logger {
   get infoPanel() {
@@ -9,7 +8,7 @@ class Logger {
     }
     return _panel
   }
-  
+
   // Modified to only log to console without updating the info panel
   log = (msg: string) => {
     if (typeof msg !== "string") {
@@ -18,24 +17,24 @@ class Logger {
     // Remove the update to infoPanel.textContent
     console.log(msg)
   }
-  
+
   // Updated function to update info panel with useful information and smooth transitions
   updateInfoPanel = () => {
     const totalPhases = gameState.gameData?.phases?.length || 0;
     const currentPhaseNumber = gameState.phaseIndex + 1;
     const phaseName = gameState.gameData?.phases?.[gameState.phaseIndex]?.name || 'Unknown';
-    
+
     // Add fade-out transition
     this.infoPanel.style.transition = 'opacity 0.3s ease-out';
     this.infoPanel.style.opacity = '0';
-    
+
     // Update content after fade-out
     setTimeout(() => {
       // Get supply center counts for the current phase
       const scCounts = this.getSupplyCenterCounts();
-      
+
       this.infoPanel.innerHTML = `
-        <div><strong>Power:</strong> <span class="power-${currentPower.toLowerCase()}">${currentPower}</span></div>
+        <div><strong>Power:</strong> <span class="power-${gameState.currentPower.toLowerCase()}">${gameState.currentPower}</span></div>
         <div><strong>Current Phase:</strong> ${phaseName} (${currentPhaseNumber}/${totalPhases})</div>
         <hr/>
         <h4>Supply Center Counts</h4>
@@ -49,12 +48,12 @@ class Logger {
           <li><span class="power-turkey">Turkey:</span> ${scCounts.TURKEY || 0}</li>
         </ul>
       `;
-      
+
       // Fade back in
       this.infoPanel.style.opacity = '1';
     }, 300);
   }
-  
+
   // Helper function to count supply centers for each power
   getSupplyCenterCounts = () => {
     const counts = {
@@ -66,10 +65,10 @@ class Logger {
       RUSSIA: 0,
       TURKEY: 0
     };
-    
+
     // Get current phase's supply center data
     const centers = gameState.gameData?.phases?.[gameState.phaseIndex]?.state?.centers;
-    
+
     if (centers) {
       // Count supply centers for each power
       Object.entries(centers).forEach(([center, power]) => {
@@ -78,7 +77,7 @@ class Logger {
         }
       });
     }
-    
+
     return counts;
   }
 }

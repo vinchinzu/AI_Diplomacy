@@ -1,17 +1,5 @@
 import { gameState } from "../gameState";
 
-function hashStringToPosition(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  const x = (hash % 800) - 400;
-  const z = ((hash >> 8) % 800) - 400;
-  return { x, y: 0, z };
-}
-
-//TODO: Make coordinateData come from gameState
 export function getProvincePosition(loc) {
   // Convert e.g. "Spa/sc" to "SPA_SC" if needed
   const normalized = loc.toUpperCase().replace('/', '_');
