@@ -107,34 +107,8 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (gameState.isPlaying) {
-
+    // Update the camera angle
     gameState.cameraPanAnim.update()
-    // const angle = 0.9 * Math.sin(cameraPanTime) + 1.2;
-    // const radius = 2000;
-    //
-    // If messages are done playing but we haven't started unit animations yet
-    // AND we're not currently speaking, create animations
-    if (!gameState.messagesPlaying && !gameState.isSpeaking &&
-      gameState.unitAnimations.length === 0 && gameState.isPlaying) {
-
-      console.log("Animation check: messages done, not speaking, no animations running");
-
-      if (gameState.gameData && gameState.gameData.phases) {
-        // Get previous phase index
-        const prevIndex = gameState.phaseIndex > 0 ?
-          gameState.phaseIndex - 1 : null;
-
-        // Only attempt animations if we have a previous phase and we're not in the first phase
-        // Note: We're removing the scheduling logic from here since it's handled in chatWindows.ts
-        if (prevIndex !== null && !gameState.nextPhaseScheduled) {
-          // Log that we're transitioning to animations
-          console.log("Messages complete, starting unit animations");
-
-          // Create animations for unit movements based on orders
-          createAnimationsForNextPhase();
-        }
-      }
-    }
   } else {
     // Manual camera controls when not in playback mode
     gameState.camControls.update();
@@ -271,7 +245,7 @@ function togglePlayback() {
     } else {
       // No messages, go straight to unit animations
       logger.log("No messages for this phase, proceeding to animations");
-      advanceToNextPhase()
+      displayPhaseWithAnimation();
     }
   } else {
     playBtn.textContent = "▶ Play";

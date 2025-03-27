@@ -111,7 +111,6 @@ export function advanceToNextPhase() {
   if (!gameState.isPlaying) {
     moveToNextPhase()
   }
-  console.log("advanceToNextPhase called");
 
   if (!gameState.gameData || !gameState.gameData.phases || gameState.phaseIndex < 0) {
     logger.log("Cannot advance phase: invalid game state");
