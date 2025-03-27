@@ -169,9 +169,6 @@ function moveToNextPhase() {
     gameState.playbackTimer = 0;
   }
 
-  // Clear any existing animations
-  gameState.unitAnimations = [];
-
   // Reset animation state
   gameState.isAnimating = false;
   gameState.messagesPlaying = false;

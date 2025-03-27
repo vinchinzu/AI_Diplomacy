@@ -271,7 +271,7 @@ function togglePlayback() {
     } else {
       // No messages, go straight to unit animations
       logger.log("No messages for this phase, proceeding to animations");
-      displayPhaseWithAnimation(gameState.phaseIndex);
+      advanceToNextPhase()
     }
   } else {
     playBtn.textContent = "▶ Play";
