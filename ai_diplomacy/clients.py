@@ -5,7 +5,7 @@ import re
 import logging
 import ast
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from dotenv import load_dotenv
 
 import anthropic
@@ -20,6 +20,7 @@ from google import genai
 from diplomacy.engine.message import GLOBAL
 
 from .game_history import GameHistory
+from .utils import load_prompt
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -43,7 +44,13 @@ class BaseModelClient:
 
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self.system_prompt = load_prompt("system_prompt.txt")
+        # Load a default initially, can be overwritten by set_system_prompt
+        self.system_prompt = load_prompt("system_prompt.txt") 
+
+    def set_system_prompt(self, content: str):
+        """Allows updating the system prompt after initialization."""
+        self.system_prompt = content
+        logger.info(f"[{self.model_name}] System prompt updated.")
 
     def generate_response(self, prompt: str) -> str:
         """
@@ -59,9 +66,17 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
-        include_plans: bool = True
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
         context = load_prompt("context_prompt.txt")
+
+        # === Agent State Debug Logging ===
+        if agent_goals:
+            logger.debug(f"[{self.model_name}] Using goals for {power_name}: {agent_goals}")
+        if agent_relationships:
+            logger.debug(f"[{self.model_name}] Using relationships for {power_name}: {agent_relationships}")
+        # ================================
 
         # Get our units and centers
         units_info = board_state["units"].get(power_name, [])
@@ -84,34 +99,25 @@ class BaseModelClient:
         for loc, orders in possible_orders.items():
             possible_orders_str += f"  {loc}: {orders}\n"
 
-        # Convoy paths
-        all_convoy_paths_possible = game.convoy_paths_possible
-        convoy_paths_possible = {}
-        for start_loc, fleets_req, end_loc in all_convoy_paths_possible:
-            for fleet in fleets_req:
-                if fleet in units_info_set:
-                    convoy_paths_possible.append((start_loc, fleets_req, end_loc))
 
-        conversation_text = game_history.get_game_history(power_name, include_plans=include_plans)
+        conversation_text = game_history.get_game_history(power_name)
         if not conversation_text:
             conversation_text = "\n(No game history yet)\n"
 
         # Load in current context values
+        # Simplified map representation based on DiploBench approach
+        units_repr = "\n".join([f"  {p}: {u}" for p, u in board_state["units"].items()])
+        centers_repr = "\n".join([f"  {p}: {c}" for p, c in board_state["centers"].items()])
+
         context = context.format(
             power_name=power_name,
             current_phase=year_phase,
-            game_map_loc_name=game.map.loc_name,
-            game_map_loc_type=game.map.loc_type,
-            map_as_adjacency_list=game.map.loc_abut,
-            possible_coasts=game.map.loc_coasts,
-            game_map_scs=game.map.scs,
+            all_unit_locations=units_repr, 
+            all_supply_centers=centers_repr, 
             game_history=conversation_text,
-            enemy_units=enemy_units,
-            enemy_centers=enemy_centers,
-            units_info=units_info,
-            centers_info=centers_info,
             possible_orders=possible_orders_str,
-            convoy_paths_possible=convoy_paths_possible,
+            agent_goals="\n".join(f"- {g}" for g in agent_goals) if agent_goals else "None specified",
+            agent_relationships="\n".join(f"- {p}: {s}" for p, s in agent_relationships.items()) if agent_relationships else "None specified",
         )
 
         return context
@@ -123,6 +129,8 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
@@ -138,9 +146,12 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
         )
 
-        return context + "\n\n" + instructions
+        # Prepend the system prompt!
+        return self.system_prompt + "\n\n" + context + "\n\n" + instructions
 
     def get_orders(
         self,
@@ -149,7 +160,9 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         conversation_text: str,
-        model_error_stats=None,  # New optional param
+        model_error_stats: dict,
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
     ) -> List[str]:
         """
         1) Builds the prompt with conversation context if available
@@ -162,13 +175,15 @@ class BaseModelClient:
             power_name,
             possible_orders,
             conversation_text,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
         )
 
         raw_response = ""
 
         try:
             raw_response = self.generate_response(prompt)
-            logger.info(
+            logger.debug(
                 f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
             )
 
@@ -184,6 +199,7 @@ class BaseModelClient:
                 return self.fallback_orders(possible_orders)
             # Validate or fallback
             validated_moves = self._validate_orders(move_list, possible_orders)
+            logger.debug(f"[{self.model_name}] Validated moves for {power_name}: {validated_moves}")
             return validated_moves
 
         except Exception as e:
@@ -312,7 +328,6 @@ class BaseModelClient:
             logger.warning(f"[{self.model_name}] All moves invalid, fallback.")
             return self.fallback_orders(possible_orders)
 
-        logger.debug(f"[{self.model_name}] Validated moves: {validated}")
         return validated
 
     def fallback_orders(self, possible_orders: Dict[str, List[str]]) -> List[str]:
@@ -334,6 +349,8 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
         
         instructions = load_prompt("planning_instructions.txt")
@@ -344,7 +361,8 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
-            include_plans=False
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
         )
 
         return context + "\n\n" + instructions
@@ -357,6 +375,8 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
         instructions = load_prompt("conversation_instructions.txt")
 
@@ -366,6 +386,8 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
         )
 
         return context + "\n\n" + instructions
@@ -378,7 +400,8 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
-        active_powers: Optional[List[str]] = None,
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
         
         prompt = self.build_planning_prompt(
@@ -388,9 +411,12 @@ class BaseModelClient:
             possible_orders,
             game_history,
             game_phase,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
         )
 
         raw_response = self.generate_response(prompt)
+        logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}")
         return raw_response
     
     def get_conversation_reply(
@@ -402,8 +428,28 @@ class BaseModelClient:
         game_history: GameHistory,
         game_phase: str,
         active_powers: Optional[List[str]] = None,
-    ) -> str:
-        
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
+    ) -> List[Dict[str, str]]:
+        """
+        Generates a negotiation message, considering agent state.
+
+        Args:
+            game: The Diplomacy game instance.
+            board_state: Current state dictionary.
+            power_name: The negotiating power.
+            possible_orders: Dictionary of possible orders.
+            game_history: The GameHistory object.
+            game_phase: The current phase string.
+            active_powers: List of powers still active.
+            agent_goals: The agent's goals.
+            agent_relationships: The agent's relationships.
+
+        Returns:
+            List[Dict[str, str]]: Parsed JSON messages from the LLM response.
+        """
+
+        # Call build_conversation_prompt and pass agent state
         prompt = self.build_conversation_prompt(
             game,
             board_state,
@@ -411,93 +457,134 @@ class BaseModelClient:
             possible_orders,
             game_history,
             game_phase,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
         )
 
+        logger.debug(f"[{self.model_name}] Conversation prompt for {power_name}:\n{prompt}")
+
         try:
-            raw_response = self.generate_response(prompt)
-            messages = []
+            response = self.generate_response(prompt)
+            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{response}")
             
-            if raw_response:
-                try:
-                    # Find the JSON block between double curly braces
-                    json_matches = re.findall(r"\{\{(.*?)\}\}", raw_response, re.DOTALL)
-
-                    if not json_matches:
-                        # try normal
-                        logger.debug(
-                            f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying double braces."
-                        )
-                        json_matches = re.findall(
-                            r"PARSABLE OUTPUT:\s*\{(.*?)\}", raw_response, re.DOTALL
-                        )
-
-                    if not json_matches:
-                        # try backtick fences
-                        logger.debug(
-                            f"[{self.model_name}] No JSON block found in LLM response for {power_name}. Trying backtick fences."
-                        )
-                        json_matches = re.findall(
-                            r"```json\n(.*?)\n```", raw_response, re.DOTALL
-                        )
-
-                    for match in json_matches:
-                        try:
-                            if match.strip().startswith(r"{"):
-                                message_data = json.loads(match.strip())
-                            else:
-                                message_data = json.loads(f"{{{match}}}")
-
-                            # Extract message details
-                            message_type = message_data.get("message_type", "global")
-                            content = message_data.get("content", "").strip()
-                            recipient = message_data.get("recipient", GLOBAL)
-
-                            # Validate recipient if private message
-                            if message_type == "private" and recipient not in active_powers:
-                                logger.warning(
-                                    f"Invalid recipient {recipient} for private message, defaulting to GLOBAL"
-                                )
-                                recipient = GLOBAL
-
-                            # For private messages, ensure recipient is specified
-                            if message_type == "private" and recipient == GLOBAL:
-                                logger.warning(
-                                    "Private message without recipient specified, defaulting to GLOBAL"
-                                )
-
-                            # Log for debugging
-                            logger.info(
-                                f"Power {power_name} sends {message_type} message to {recipient}"
-                            )
-
-                            # Keep local record for building future conversation context
-                            message = {
-                                "sender": power_name,
-                                "recipient": recipient,
-                                "content": content,
-                            }
-
-                            messages.append(message)
-
-                        except (json.JSONDecodeError, AttributeError) as e:
-                            logger.error(f"Error parsing message JSON for {power_name}: {str(e)}")
-                            continue
-
-                    # Deduplicate messages
-                    messages = list(set([json.dumps(m) for m in messages]))
-                    messages = [json.loads(m) for m in messages]
-                    
-                    return messages
-
-                except Exception as e:
-                    logger.error(f"Error parsing model response for {power_name}: {str(e)}")
-                    return []
+            messages = []
+            # Extract JSON blocks from the response
+            json_blocks = []
+            
+            # First try to find {{ ... }} blocks (common in Claude responses)
+            double_brace_blocks = re.findall(r'\{\{(.*?)\}\}', response, re.DOTALL)
+            if double_brace_blocks:
+                json_blocks.extend(['{' + block.strip() + '}' for block in double_brace_blocks])
             else:
-                logger.warning(f"Empty response from model for {power_name}")
+                 # Fallback: try finding JSON within ```json ... ``` blocks, like in get_orders
+                 code_block_match = re.search(r"```json\n(.*?)\n```", response, re.DOTALL)
+                 if code_block_match:
+                     potential_json = code_block_match.group(1).strip()
+                     # Sometimes the LLM might put multiple JSONs in one block
+                     json_blocks = re.findall(r'\{.*?\}', potential_json, re.DOTALL)
+                 else:
+                     # Final fallback: try finding any {...} block
+                     json_blocks = re.findall(r'\{.*?\}', response, re.DOTALL)
+
+            if not json_blocks:
+                logger.warning(f"[{self.model_name}] No JSON message blocks found in response for {power_name}. Raw response:\n{response}")
                 return []
+
+            for block in json_blocks:
+                try:
+                    # Clean the block and ensure it's valid JSON
+                    cleaned_block = block.strip()
+                    
+                    # Attempt to parse the individual JSON block
+                    parsed_message = json.loads(cleaned_block)
+                    
+                    # Basic validation (can be expanded)
+                    if isinstance(parsed_message, dict) and "message_type" in parsed_message and "content" in parsed_message:
+                         messages.append(parsed_message)
+                    else:
+                         logger.warning(f"[{self.model_name}] Invalid message structure in block for {power_name}: {cleaned_block}")
+                         
+                except json.JSONDecodeError:
+                    logger.warning(f"[{self.model_name}] Failed to decode JSON block for {power_name}. Block content:\n{block}")
+                    # Continue to next block if one fails
+
+            if not messages:
+                 logger.warning(f"[{self.model_name}] No valid messages extracted after parsing blocks for {power_name}. Raw response:\n{response}")
+
+            logger.debug(f"[{self.model_name}] Validated conversation replies for {power_name}: {messages}")
+            return messages
+            
         except Exception as e:
-            logger.error(f"Error getting model response for {power_name}: {str(e)}")
+            # Catch any other exceptions during generation or processing
+            logger.error(f"[{self.model_name}] Error in get_conversation_reply for {power_name}: {e}")
             return []
+
+    def get_plan(
+        self,
+        game,
+        board_state,
+        power_name: str,
+        possible_orders: Dict[str, List[str]],
+        game_history: GameHistory,
+        agent_goals: Optional[List[str]] = None,
+        agent_relationships: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """
+        Generates a strategic plan for the given power based on the current state.
+
+        Args:
+            game: The current Diplomacy game object.
+            board_state: The current board state dictionary.
+            power_name: The name of the power for which to generate a plan.
+            game_history: The history of the game.
+            agent_goals: The agent's goals.
+            agent_relationships: The agent's relationships.
+
+        Returns:
+            A string containing the generated strategic plan.
+        """
+        logger.info(f"Generating strategic plan for {power_name}...")
+        
+        # 1. Load the specific planning instructions
+        planning_instructions = load_prompt("planning_instructions.txt")
+        if not planning_instructions:
+            logger.error("Could not load planning_instructions.txt! Cannot generate plan.")
+            return "Error: Planning instructions not found."
+
+        # 2. Build the context prompt (reusing the existing method)
+        # We don't need possible_orders for planning instructions, but build_context_prompt needs it.
+        # Pass an empty dict or calculate it if context depends heavily on it.
+        # For simplicity, let's assume context building doesn't strictly require possible_orders
+        # or can handle it being empty/None for planning purposes.
+        # If necessary, calculate possible_orders here: 
+        # possible_orders = game.get_all_possible_orders()
+        possible_orders = {} # Pass empty for planning context
+        context_prompt = self.build_context_prompt(
+            game,
+            board_state,
+            power_name,
+            possible_orders,
+            game_history,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
+        )
+
+        # 3. Combine context and planning instructions into the final prompt
+        # Ensure the system prompt is prepended if it exists
+        full_prompt = f"{context_prompt}\n\n{planning_instructions}"
+        if self.system_prompt:
+            full_prompt = f"{self.system_prompt}\n\n{full_prompt}"
+
+        # 4. Generate the response from the LLM
+        try:
+            raw_plan = self.generate_response(full_prompt)
+            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_plan}")
+            logger.info(f"[{self.model_name}] Validated plan for {power_name}: {raw_plan}")
+            # No parsing needed for the plan, return the raw string
+            return raw_plan.strip()
+        except Exception as e:
+            logger.error(f"Failed to generate plan for {power_name}: {e}")
+            return f"Error: Failed to generate plan due to exception: {e}"
 
 
 ##############################################################################
@@ -670,6 +757,59 @@ class DeepSeekClient(BaseModelClient):
             return ""
 
 
+class OpenRouterClient(BaseModelClient):
+    """
+    For OpenRouter models, with default being 'openrouter/quasar-alpha'
+    """
+
+    def __init__(self, model_name: str = "openrouter/quasar-alpha"):
+        # Allow specifying just the model identifier or the full path
+        if not model_name.startswith("openrouter/") and "/" not in model_name:
+            model_name = f"openrouter/{model_name}"
+            
+        super().__init__(model_name)
+        self.api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not self.api_key:
+            raise ValueError("OPENROUTER_API_KEY environment variable is required")
+            
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=self.api_key
+        )
+        
+        logger.debug(f"[{self.model_name}] Initialized OpenRouter client")
+
+    def generate_response(self, prompt: str) -> str:
+        """Generate a response using OpenRouter."""
+        try:
+            # Prepare standard OpenAI-compatible request
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,  # Lower temperature for more deterministic responses
+                max_tokens=2048,  # Reasonable default, adjust as needed
+            )
+            
+            if not response.choices:
+                logger.warning(f"[{self.model_name}] OpenRouter returned no choices")
+                return ""
+                
+            content = response.choices[0].message.content.strip()
+            if not content:
+                logger.warning(f"[{self.model_name}] OpenRouter returned empty content")
+                return ""
+                
+            # Parse or return the raw content
+            return content
+            
+        except Exception as e:
+            logger.error(f"[{self.model_name}] Error in OpenRouter generate_response: {e}")
+            return ""
+
+
 ##############################################################################
 # 3) Factory to Load Model Client
 ##############################################################################
@@ -689,6 +829,8 @@ def load_model_client(model_id: str) -> BaseModelClient:
         return GeminiClient(model_id)
     elif "deepseek" in lower_id:
         return DeepSeekClient(model_id)
+    elif "openrouter" in lower_id or "quasar" in lower_id:
+        return OpenRouterClient(model_id)
     else:
         # Default to OpenAI
         return OpenAIClient(model_id)
@@ -762,9 +904,3 @@ def get_visible_messages_for_power(conversation_messages, power_name):
         ):
             visible.append(msg)
     return visible  # already in chronological order if appended that way
-
-
-def load_prompt(filename: str) -> str:
-    """Helper to load prompt text from file"""
-    with open(f"./ai_diplomacy/prompts/{filename}", "r") as f:
-        return f.read().strip()

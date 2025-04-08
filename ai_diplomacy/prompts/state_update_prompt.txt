@@ -1,0 +1,44 @@
+You are an AI assistant analyzing the results of a phase in the game of Diplomacy for the power {power_name}.
+
+Current Game State:
+Year: {current_year}
+Phase: {current_phase}
+Board State:
+{board_state_str}
+
+Summary of the phase that just occurred ({current_phase}):
+{phase_summary}
+
+Your Current Internal State:
+Goals:
+{current_goals}
+Relationships with other active powers ({other_powers}):
+{current_relationships}
+
+Task:
+Based *only* on the phase summary and the current game state, analyze how the events of the phase might affect your relationships with other powers and whether your strategic goals should be updated. Consider betrayals, successful cooperation, gains/losses of supply centers, and positioning.
+
+Output Format:
+Provide your analysis *only* in the following JSON format, enclosed in triple backticks. Do not include any other text before or after the JSON block.
+
+```json
+{{
+  "reasoning": "Briefly explain your reasoning for the updates based on the phase summary.",
+  "relationships": {{
+    "POWER_NAME_1": "<NEUTRAL|ALLY|ENEMY|SUSPICIOUS|FRIENDLY>",
+    "POWER_NAME_2": "<NEUTRAL|ALLY|ENEMY|SUSPICIOUS|FRIENDLY>",
+    ...
+  }},
+  "goals": [
+    "Updated Goal 1",
+    "Updated Goal 2",
+    ...
+  ]
+}}
+```
+
+Instructions:
+- Update the status for *all* other active powers listed: {other_powers}. Use one of the specified relationship statuses.
+- Provide a list of updated strategic goals. You can keep existing goals, modify them, or add new ones based on the situation. Keep the goals concise and actionable.
+- Be objective in your analysis based on the provided summary.
+- Ensure the output is valid JSON.

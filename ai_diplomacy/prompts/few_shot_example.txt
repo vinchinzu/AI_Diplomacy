@@ -6,8 +6,6 @@ Possible Orders:
   PAR: ['A PAR H','A PAR - BUR','A PAR - GAS']
   BRE: ['F BRE H','F BRE - MAO']
   
-Convoy Paths Possible:
- [("A NAP", {"F ION","F TYS"}, "TUN")]  # Example route
 
 Past Phase Summaries:
 - Your move A BUD -> SER bounced last time because Turkey also moved A SMY -> SER with support.

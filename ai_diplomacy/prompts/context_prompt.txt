@@ -2,44 +2,20 @@
 
 Power: {power_name}
 Current phase: {current_phase}
+Current Goals: {agent_goals}
+Relationships: {agent_relationships}
 
-**MAP DETAILS**
+**MAP & GAME STATE**
 
-Abbreviations: 
-{game_map_loc_name}
+All Unit Locations:
+{all_unit_locations}
 
-Type of each location: 
-{game_map_loc_type}
+All Supply Centers:
+{all_supply_centers}
 
-Game map as an adjacency list: 
-{map_as_adjacency_list}
-
-Possible coasts at each location: 
-{possible_coasts}
-
-All supply centers on the map: 
-{game_map_scs}
+Possible Orders:
+{possible_orders}
 
 **GAME HISTORY**
 
 {game_history}
-
-**CURRENT CONTEXT**
-
-Enemy units: 
-{enemy_units}
-
-Enemy supply centers: 
-{enemy_centers}
-
-Your units: 
-{units_info}
-
-Your supply centers: 
-{centers_info}
-
-Possible orders: 
-{possible_orders}
-
-Convoy paths possible: 
-{convoy_paths_possible}

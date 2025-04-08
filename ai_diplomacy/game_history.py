@@ -28,6 +28,10 @@ class Phase:
     results_by_power: Dict[str, List[List[str]]] = field(
         default_factory=lambda: defaultdict(list)
     )
+    # NEW: Store phase-end summaries provided by each power
+    phase_summaries: Dict[str, str] = field(default_factory=dict)
+    # NEW: Store experience/journal updates from each power for this phase
+    experience_updates: Dict[str, str] = field(default_factory=dict)
 
     def add_plan(self, power_name: str, plan: str):
         self.plans[power_name] = plan
@@ -83,31 +87,63 @@ class Phase:
 class GameHistory:
     phases: List[Phase] = field(default_factory=list)
 
-    def add_phase(self, phase_name: str) -> Phase:
-        # Check if phase already exists
-        for phase in self.phases:
+    def add_phase(self, phase_name: str):
+        # Avoid adding duplicate phases
+        if not self.phases or self.phases[-1].name != phase_name:
+            self.phases.append(Phase(name=phase_name))
+            logger.debug(f"Added new phase: {phase_name}")
+        else:
+            logger.warning(f"Phase {phase_name} already exists. Not adding again.")
+
+    def _get_phase(self, phase_name: str) -> Optional[Phase]:
+        for phase in reversed(self.phases):
             if phase.name == phase_name:
                 return phase
-
-        # Create new phase
-        new_phase = Phase(name=phase_name)
-        self.phases.append(new_phase)
-        return new_phase
+        logger.error(f"Phase {phase_name} not found in history.")
+        return None
 
     def add_plan(self, phase_name: str, power_name: str, plan: str):
-        # get current phase
-        phase = self.add_phase(phase_name)
-        phase.add_plan(power_name, plan)
-    
-    def add_message(self, phase_name: str, sender: str, recipient: str, content: str):
-        phase = self.add_phase(phase_name)
-        phase.add_message(sender, recipient, content)
+        phase = self._get_phase(phase_name)
+        if phase:
+            phase.plans[power_name] = plan
+            logger.debug(f"Added plan for {power_name} in {phase_name}")
 
-    def add_orders(
-        self, phase_name: str, power: str, orders: List[str], results: List[List[str]]
+    def add_message(
+        self, phase_name: str, sender: str, recipient: str, message_content: str
     ):
-        phase = self.add_phase(phase_name)
-        phase.add_orders(power, orders, results)
+        phase = self._get_phase(phase_name)
+        if phase:
+            message = Message(
+                sender=sender, recipient=recipient, content=message_content
+            )
+            phase.messages.append(message)
+            logger.debug(f"Added message from {sender} to {recipient} in {phase_name}")
+
+    def add_orders(self, phase_name: str, power_name: str, orders: List[str]):
+        phase = self._get_phase(phase_name)
+        if phase:
+            phase.orders_by_power[power_name].extend(orders)
+            logger.debug(f"Added orders for {power_name} in {phase_name}: {orders}")
+
+    def add_results(self, phase_name: str, power_name: str, results: List[List[str]]):
+        phase = self._get_phase(phase_name)
+        if phase:
+            phase.results_by_power[power_name].extend(results)
+            logger.debug(f"Added results for {power_name} in {phase_name}: {results}")
+
+    # NEW: Method to add phase summary for a power
+    def add_phase_summary(self, phase_name: str, power_name: str, summary: str):
+        phase = self._get_phase(phase_name)
+        if phase:
+            phase.phase_summaries[power_name] = summary
+            logger.debug(f"Added phase summary for {power_name} in {phase_name}")
+
+    # NEW: Method to add experience update for a power
+    def add_experience_update(self, phase_name: str, power_name: str, update: str):
+        phase = self._get_phase(phase_name)
+        if phase:
+            phase.experience_updates[power_name] = update
+            logger.debug(f"Added experience update for {power_name} in {phase_name}")
 
     def get_strategic_directives(self): 
         # returns for last phase only if exists
@@ -115,7 +151,9 @@ class GameHistory:
             return {}
         return self.phases[-1].plans
 
-    def get_game_history(self, power_name: str, include_plans: bool = True, num_prev_phases: int = 5) -> str:
+    def get_game_history(
+        self, power_name: str, include_plans: bool = True, num_prev_phases: int = 5
+    ) -> str:
         if not self.phases:
             return ""
 

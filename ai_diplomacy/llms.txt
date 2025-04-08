@@ -1,0 +1,136 @@
+# AI Diplomacy Codebase Analysis (Core Logic Modules) - Updated
+
+This document provides an analysis of key Python modules within the `ai_diplomacy` package, focusing on their roles, functions, interdependencies, and implementation status.
+
+---
+
+## 1. Module Status
+
+### COMPLETED MODULES:
+
+#### 1.1. `game_history.py` (COMPLETE)
+**Goal:** To structure, store, and retrieve the historical events of a Diplomacy game phase by phase, including messages, plans, orders, and results.
+**Status:** Fully implemented and operational.
+
+#### 1.2. `map_utils.py` (COMPLETE BUT NOT INTEGRATED)
+**Goal:** To provide graph-based map analysis and pathfinding for strategic decision-making.
+**Status:** BFS search algorithms implemented but not integrated into planning/order generation.
+
+**Key Components:**
+* `DiplomacyGraph`: Represents map territory connectivity with support for unit-specific movement rules (Army vs Fleet).
+* `bfs_shortest_path`: Finds shortest path from a starting territory to any territory matching criteria.
+* `bfs_nearest_adjacent`: Finds shortest path to a territory adjacent to any territory in a target set.
+* `build_diplomacy_graph`: Constructs the graph representation from the game map.
+
+#### 1.3. `phase_summary.py` (COMPLETE, in lm_game.py)
+**Goal:** Generate concise, structured summaries of each game phase for post-game analysis.
+**Status:** Fully implemented via `phase_summary_callback` in `lm_game.py`.
+
+**Key Components:**
+* Structured summaries with:
+  * Current board state (sorted by supply center count)
+  * Successful moves by power
+  * Unsuccessful moves by power with failure reasons
+  * Optional sections for other move types
+
+### PARTIALLY IMPLEMENTED MODULES:
+
+#### 1.4. `agent.py` (PARTIAL)
+**Goal:** To maintain stateful agent representation with personality, goals, and relationships.
+**Status:** Base class implemented but not fully integrated into planning/negotiation workflows.
+
+**Key Components:**
+* `DiplomacyAgent` class with:
+  * `power_name`: The power this agent represents
+  * `personality`: Agent's personality profile
+  * `goals`: List of strategic goals
+  * `relationships`: Dict of relationships with other powers
+  * `private_journal`: List of internal thoughts/reflections
+  * Methods for plan generation, updating goals, and updating relationships
+
+**Integration Points Needed:**
+* Connect agent state to context generation in `clients.py`
+* Define how personality affects planning and negotiations
+* Remove redundant order generation logic
+
+#### 1.5. `negotiations.py` (PARTIAL)
+**Goal:** To orchestrate the communication phase among active AI powers.
+**Status:** Works but needs integration with DiplomacyAgent state.
+
+#### 1.6. `planning.py` (PARTIAL)
+**Goal:** To allow each AI power to generate a high-level strategic directive or plan.
+**Status:** Works but needs integration with DiplomacyAgent state and map analysis.
+
+#### 1.7. `utils.py` (COMPLETE)
+**Goal:** To provide common utility functions used across other AI diplomacy modules.
+**Status:** Fully implemented.
+
+#### 1.8. `clients.py` (COMPLETE BUT NEEDS EXTENSION)
+**Goal:** To abstract and manage interactions with various LLM APIs.
+**Status:** Works, but needs extension to incorporate agent state into context.
+
+---
+
+## 2. Integration Points
+
+The following connections need to be established:
+
+1. **Agent State → Context Building**
+   * `BaseModelClient.build_context_prompt` needs to incorporate agent's personality, goals, and relationships
+   * Modify `context_prompt.txt` to include sections for agent state
+
+2. **Map Analysis → Planning**
+   * Use `DiplomacyGraph` and BFS search in `planning_phase` to identify strategic options
+   * Incorporate territory accessibility analysis into strategic planning
+
+3. **Agent State → Negotiations**
+   * Have agent's personality, goals, and relationships influence message generation
+   * Update relationships based on negotiation context and results
+
+4. **Map Analysis → Order Generation**
+   * Incorporate BFS search to help identify optimal movements and support actions
+   * Analyze territory adjacency for attack planning
+
+---
+
+## 3. Next Steps (Implementation Plan)
+
+1. **Phase 1: Agent Integration**
+   * Enhance `BaseModelClient.build_context_prompt` to include agent state
+   * Update prompt templates to utilize agent information
+   * Add a regularly updating 'relationships' section to the context prompt
+   * Add a regularly updating 'goals' section to the context prompt
+   * Add a regularly updating 'journal' section to the context prompt
+
+2. **Phase 2: Map Analysis Integration**
+   * Create utility functions to leverage BFS search for common strategic questions
+   * Integrate these into planning phase
+   * Add territory analysis to order generation context
+
+3. **Phase 3: Test!
+
+---
+
+## 4. Dependency Map (Updated)
+
+```ascii
++-----------------+       +-------------------+       +-----------------+
+| negotiations.py | ----> |    clients.py     | <---- |   planning.py   |
++-----------------+       +-------------------+       +-----------------+
+        |                       ^   |   ^                    |
+        |                       |   |   |                    |
+        v                       |   v   |                    v
++-----------------+             | +-----+          +-----------------+
+| game_history.py | <-----------+ |                |    agent.py     |
++-----------------+               |                +-----------------+
+        ^                         |                        |
+        |                         v                        v
+        |                  +--------------+        +--------------+
+        +------------------+    utils.py  | <----- | map_utils.py |
+                           +--------------+        +--------------+
+```
+
+**Current Integration Status:**
+* `agent.py` and `map_utils.py` are implemented but not fully integrated with other modules
+* `phase_summary_callback` works in `lm_game.py` but is not integrated with agent state
+* Base message passing and planning works, but doesn't leverage agent personality or map analysis
