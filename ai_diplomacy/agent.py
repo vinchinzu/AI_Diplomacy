@@ -13,6 +13,24 @@ logger = logging.getLogger(__name__)
 
 # == Best Practice: Define constants at module level ==
 ALL_POWERS = frozenset({"AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"})
+ALLOWED_RELATIONSHIPS = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
+
+# == New: Helper function to load prompt files reliably ==
+def _load_prompt_file(filename: str) -> Optional[str]:
+    """Loads a prompt template from the prompts directory."""
+    try:
+        # Construct path relative to this file's location
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        prompts_dir = os.path.join(current_dir, 'prompts')
+        filepath = os.path.join(prompts_dir, filename)
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.error(f"Prompt file not found: {filepath}")
+        return None
+    except Exception as e:
+        logger.error(f"Error loading prompt file {filepath}: {e}")
+        return None
 
 class DiplomacyAgent:
     """
@@ -76,6 +94,62 @@ class DiplomacyAgent:
         logger.info(f"Initialized DiplomacyAgent for {self.power_name} with goals: {self.goals}")
         self.add_journal_entry(f"Agent initialized. Initial Goals: {self.goals}")
 
+    def _extract_json_from_text(self, text: str) -> dict:
+        """Extract and parse JSON from text, handling common LLM response formats."""
+        # Try different patterns to extract JSON
+        # 1. Try to find JSON wrapped in markdown code blocks
+        patterns = [
+            r"```json\n(.*?)\n```",  # Markdown JSON block
+            r"```\n(.*?)\n```",      # Generic markdown block
+            r"`(.*?)`",              # Inline code block
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.DOTALL)
+            if matches:
+                # Try each match until one parses successfully
+                for match in matches:
+                    try:
+                        return json.loads(match)
+                    except json.JSONDecodeError:
+                        continue
+        
+        # 2. Try to find JSON between braces
+        try:
+            start = text.find('{')
+            end = text.rfind('}') + 1
+            if start != -1 and end > start:
+                return json.loads(text[start:end])
+        except json.JSONDecodeError:
+            pass
+        
+        # 3. Aggressively clean the string and try again
+        # Remove common non-JSON text that LLMs might add
+        cleaned_text = re.sub(r'[^{}[\]"\',:.\d\w\s_-]', '', text)
+        try:
+            start = cleaned_text.find('{')
+            end = cleaned_text.rfind('}') + 1
+            if start != -1 and end > start:
+                return json.loads(cleaned_text[start:end])
+        except json.JSONDecodeError:
+            pass
+        
+        # 4. Repair common JSON issues and try again
+        try:
+            # Replace single quotes with double quotes (common LLM error)
+            text_fixed = re.sub(r"'([^']*)':", r'"\1":', text)
+            text_fixed = re.sub(r': *\'([^\']*)\'', r': "\1"', text_fixed)
+            
+            start = text_fixed.find('{')
+            end = text_fixed.rfind('}') + 1
+            if start != -1 and end > start:
+                return json.loads(text_fixed[start:end])
+        except json.JSONDecodeError:
+            pass
+        
+        # If all attempts fail, raise error
+        raise json.JSONDecodeError("Could not extract valid JSON from LLM response", text, 0)
+
     def add_journal_entry(self, entry: str):
         """Adds a formatted entry string to the agent's private journal."""
         # Ensure entry is a string
@@ -90,11 +164,13 @@ class DiplomacyAgent:
         try:
             # Use a simplified prompt for initial state generation
             # TODO: Create a dedicated 'initial_state_prompt.txt'
-            initial_prompt = f"You are the agent for {self.power_name} in a game of Diplomacy at the very start (Spring 1901). \
-                             Analyze the initial board position and suggest 2-3 strategic high-level goals for the early game. \
-                             Consider your power's strengths, weaknesses, and neighbors. \
-                             Also, provide an initial assessment of relationships with other powers (Ally, Neutral, Potential Threat, Enemy). \
-                             Format your response as a JSON object with two keys: 'initial_goals' (a list of strings) and 'initial_relationships' (a dictionary mapping power names to relationship strings)."
+            allowed_labels_str = ", ".join(ALLOWED_RELATIONSHIPS)
+            initial_prompt = f"You are the agent for {self.power_name} in a game of Diplomacy at the very start (Spring 1901). " \
+                             f"Analyze the initial board position and suggest 2-3 strategic high-level goals for the early game. " \
+                             f"Consider your power's strengths, weaknesses, and neighbors. " \
+                             f"Also, provide an initial assessment of relationships with other powers. " \
+                             f"IMPORTANT: For each relationship, you MUST use exactly one of the following labels: {allowed_labels_str}. " \
+                             f"Format your response as a JSON object with two keys: 'initial_goals' (a list of strings) and 'initial_relationships' (a dictionary mapping power names to one of the allowed relationship strings)."
 
             # == Fix: Get required state info from game object ==
             board_state = game.get_state()
@@ -118,25 +194,33 @@ class DiplomacyAgent:
             response = self.client.generate_response(full_prompt)
             logger.debug(f"[{self.power_name}] LLM response for initial state: {response}")
 
-            # Extract JSON potentially wrapped in markdown fences or with extra text
-            json_match = re.search(r"```json\n(.*?)\n```", response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # If no fences, try to find the first '{' and last '}'
-                start = response.find('{')
-                end = response.rfind('}')
-                if start != -1 and end != -1:
-                    json_str = response[start:end+1]
-                else:
-                     # Fallback to raw response if no JSON structure identified
-                    json_str = response 
+            # Try to extract JSON from the response
+            try:
+                update_data = self._extract_json_from_text(response)
+                logger.debug(f"[{self.power_name}] Successfully parsed JSON: {update_data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"[{self.power_name}] All JSON extraction attempts failed: {e}")
+                # Create default data rather than failing
+                update_data = {
+                    "initial_goals": ["Survive and expand", "Form beneficial alliances", "Secure key territories"],
+                    "initial_relationships": {p: "Neutral" for p in ALL_POWERS if p != self.power_name},
+                    "goals": ["Survive and expand", "Form beneficial alliances", "Secure key territories"],
+                    "relationships": {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
+                }
+                logger.warning(f"[{self.power_name}] Using default goals and relationships: {update_data}")
 
-            logger.debug(f"[{self.power_name}] Attempting to parse JSON: {json_str}")
-            update_data = json.loads(json_str)
-
+            # Check for both possible key names
             initial_goals = update_data.get('initial_goals')
+            if initial_goals is None:
+                initial_goals = update_data.get('goals')
+                if initial_goals is not None:
+                    logger.debug(f"[{self.power_name}] Using 'goals' key instead of 'initial_goals'")
+            
             initial_relationships = update_data.get('initial_relationships')
+            if initial_relationships is None:
+                initial_relationships = update_data.get('relationships')
+                if initial_relationships is not None:
+                    logger.debug(f"[{self.power_name}] Using 'relationships' key instead of 'initial_relationships'")
 
             if isinstance(initial_goals, list):
                 self.goals = initial_goals
@@ -144,24 +228,62 @@ class DiplomacyAgent:
                 self.add_journal_entry(f"[{game.current_short_phase}] Initial Goals Set: {self.goals}")
             else:
                 logger.warning(f"[{self.power_name}] LLM did not provide valid 'initial_goals' list.")
+                # Set default goals
+                self.goals = ["Survive and expand", "Form beneficial alliances", "Secure key territories"]
+                self.add_journal_entry(f"[{game.current_short_phase}] Set default initial goals: {self.goals}")
 
             if isinstance(initial_relationships, dict):
-                # Validate relationship keys
-                valid_relationships = {p: r for p, r in initial_relationships.items() if p in ALL_POWERS and p != self.power_name}
-                self.relationships = valid_relationships
-                 # == Fix: Correct add_journal_entry call signature ==
-                self.add_journal_entry(f"[{game.current_short_phase}] Initial Relationships Set: {self.relationships}")
+                # Validate relationship keys and values
+                valid_relationships = {}
+                invalid_count = 0
+                
+                for p, r in initial_relationships.items():
+                    # Convert power name to uppercase for case-insensitive matching
+                    p_upper = p.upper()
+                    if p_upper in ALL_POWERS and p_upper != self.power_name:
+                        # Check against allowed labels (case-insensitive)
+                        r_title = r.title() if isinstance(r, str) else r  # Convert "enemy" to "Enemy" etc.
+                        if r_title in ALLOWED_RELATIONSHIPS:
+                            valid_relationships[p_upper] = r_title
+                        else:
+                            invalid_count += 1
+                            if invalid_count <= 2:  # Only log first few to reduce noise
+                                logger.warning(f"[{self.power_name}] Received invalid relationship label '{r}' for '{p}'. Setting to Neutral.")
+                                valid_relationships[p_upper] = "Neutral"
+                    else:
+                        invalid_count += 1
+                        if invalid_count <= 2 and not p_upper.startswith(self.power_name):  # Only log first few to reduce noise
+                            logger.warning(f"[{self.power_name}] Received relationship for invalid/own power '{p}'. Ignoring.")
+                
+                # Summarize if there were many invalid entries
+                if invalid_count > 2:
+                    logger.warning(f"[{self.power_name}] {invalid_count} total invalid relationships were processed.")
+                
+                # If we have any valid relationships, use them
+                if valid_relationships:
+                    self.relationships = valid_relationships
+                    self.add_journal_entry(f"[{game.current_short_phase}] Initial Relationships Set: {self.relationships}")
+                else:
+                    # Set default relationships
+                    logger.warning(f"[{self.power_name}] No valid relationships found, using defaults.")
+                    self.relationships = {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
+                    self.add_journal_entry(f"[{game.current_short_phase}] Set default neutral relationships.")
             else:
                  logger.warning(f"[{self.power_name}] LLM did not provide valid 'initial_relationships' dict.")
+                 # Set default relationships
+                 self.relationships = {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
+                 self.add_journal_entry(f"[{game.current_short_phase}] Set default neutral relationships.")
 
-        except json.JSONDecodeError as e:
-            logger.error(f"[{self.power_name}] Failed to parse LLM JSON response for initial state: {e}")
-            logger.error(f"[{self.power_name}] Raw response was: {response}")
         except Exception as e:
             logger.error(f"[{self.power_name}] Error during initial state generation: {e}", exc_info=True)
+            # Set conservative defaults even if everything fails
+            if not self.goals:
+                self.goals = ["Survive and expand", "Form beneficial alliances", "Secure key territories"]
+            if not self.relationships:
+                self.relationships = {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
+            logger.info(f"[{self.power_name}] Set fallback goals and relationships after error.")
 
-
-    def analyze_phase_and_update_state(self, game: 'Game', game_history: 'GameHistory'):
+    def analyze_phase_and_update_state(self, game: 'Game', board_state: dict, phase_summary: str, game_history: 'GameHistory'):
         """Analyzes the outcome of the last phase and updates goals/relationships using the LLM."""
         # Use self.power_name internally
         power_name = self.power_name 
@@ -170,29 +292,31 @@ class DiplomacyAgent:
 
         try:
             # 1. Construct the prompt using the dedicated state update prompt file
-            prompt_template = self.client.load_prompt('state_update_prompt.txt')
+            prompt_template = _load_prompt_file('state_update_prompt.txt')
             if not prompt_template:
                  logger.error(f"[{power_name}] Could not load state_update_prompt.txt. Skipping state update.")
                  return
  
-            # Get previous phase safely
-            prev_phase = game.get_prev_phase()
-            if not prev_phase:
-                 logger.warning(f"[{power_name}] No previous phase found to analyze for {game.current_short_phase}. Skipping state update.")
-                 return
-                 
-            last_phase_summary = game_history.get_phase_summary(prev_phase)
-            if not last_phase_summary:
-                logger.warning(f"[{power_name}] No summary available for previous phase {prev_phase}. Skipping state update.")
+            # Get previous phase safely from history
+            if not game_history or not game_history.phases:
+                logger.warning(f"[{power_name}] No game history available to analyze for {game.current_short_phase}. Skipping state update.")
                 return
 
-            # == Fix: Get required state info from game object for context ==
-            board_state = game.get_state()
+            last_phase = game_history.phases[-1]
+            last_phase_name = last_phase.name # Assuming phase object has a 'name' attribute
+            
+            # Use the provided phase_summary parameter instead of retrieving it
+            last_phase_summary = phase_summary
+            if not last_phase_summary:
+                logger.warning(f"[{power_name}] No summary available for previous phase {last_phase_name}. Skipping state update.")
+                return
+ 
+            # == Fix: Use board_state parameter ==
             possible_orders = game.get_all_possible_orders()
 
             context = self.client.build_context_prompt(
                 game=game,
-                board_state=board_state, # Pass board_state
+                board_state=board_state, # Use provided board_state parameter
                 power_name=power_name,
                 possible_orders=possible_orders, # Pass possible_orders
                 game_history=game_history, # Pass game_history
@@ -201,12 +325,28 @@ class DiplomacyAgent:
             )
 
             # Add previous phase summary to the information provided to the LLM
+            other_powers = [p for p in game.powers if p != power_name]
+            
+            # Create a readable board state string from the board_state dict
+            board_state_str = f"Board State:\n"
+            for p_name, power_data in board_state.get('powers', {}).items():
+                # Get units and centers from the board state
+                units = power_data.get('units', [])
+                centers = power_data.get('centers', [])
+                board_state_str += f"  {p_name}: Units={units}, Centers={centers}\n"
+            
+            # Extract year from the phase name (e.g., "S1901M" -> "1901")
+            current_year = last_phase_name[1:5] if len(last_phase_name) >= 5 else "unknown"
+            
             prompt = prompt_template.format(
                 power_name=power_name,
-                current_goals=self.goals,
-                current_relationships=self.relationships,
-                phase_summary=last_phase_summary, # Provide summary of what just happened
-                game_context=context # Provide current game state
+                current_year=current_year,
+                current_phase=last_phase_name, # Analyze the phase that just ended
+                board_state_str=board_state_str,
+                phase_summary=last_phase_summary, # Use provided phase_summary
+                other_powers=str(other_powers), # Pass as string representation
+                current_goals="\n".join([f"- {g}" for g in self.goals]) if self.goals else "None",
+                current_relationships=str(self.relationships) if self.relationships else "None"
             )
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
@@ -214,54 +354,85 @@ class DiplomacyAgent:
             response = self.client.generate_response(prompt)
             logger.debug(f"[{power_name}] Raw LLM response for state update: {response}")
 
-            # Extract JSON potentially wrapped in markdown fences or with extra text
-            json_match = re.search(r"```json\n(.*?)\n```", response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # If no fences, try to find the first '{' and last '}'
-                start = response.find('{')
-                end = response.rfind('}')
-                if start != -1 and end != -1:
-                    json_str = response[start:end+1]
-                else:
-                     # Fallback to raw response if no JSON structure identified
-                    json_str = response
+            # Use our robust JSON extraction helper
+            try:
+                update_data = self._extract_json_from_text(response)
+                logger.debug(f"[{power_name}] Successfully parsed JSON: {update_data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"[{power_name}] Failed to parse JSON response for state update: {e}")
+                logger.error(f"[{power_name}] Raw response was: {response}")
+                # Create fallback data to avoid full failure
+                update_data = {
+                    "updated_goals": self.goals, # Maintain current goals
+                    "updated_relationships": self.relationships, # Maintain current relationships
+                    "goals": self.goals, # Alternative key
+                    "relationships": self.relationships # Alternative key
+                }
+                logger.warning(f"[{power_name}] Using existing goals and relationships as fallback: {update_data}")
 
-            logger.debug(f"[{power_name}] Attempting to parse JSON for state update: {json_str}")
-            update_data = json.loads(json_str)
-
+            # Check for both possible key names (prompt uses "goals"/"relationships", 
+            # but code was expecting "updated_goals"/"updated_relationships")
             updated_goals = update_data.get('updated_goals')
+            if updated_goals is None:
+                updated_goals = update_data.get('goals')
+                if updated_goals is not None:
+                    logger.debug(f"[{power_name}] Using 'goals' key instead of 'updated_goals'")
+            
             updated_relationships = update_data.get('updated_relationships')
+            if updated_relationships is None:
+                updated_relationships = update_data.get('relationships')
+                if updated_relationships is not None:
+                    logger.debug(f"[{power_name}] Using 'relationships' key instead of 'updated_relationships'")
 
             if isinstance(updated_goals, list):
                 # Simple overwrite for now, could be more sophisticated (e.g., merging)
                 self.goals = updated_goals
-                # == Fix: Correct add_journal_entry call signature ==
-                self.add_journal_entry(f"[{game.current_short_phase}] Goals updated based on {prev_phase}: {self.goals}")
+                self.add_journal_entry(f"[{game.current_short_phase}] Goals updated based on {last_phase_name}: {self.goals}")
             else:
                 logger.warning(f"[{power_name}] LLM did not provide valid 'updated_goals' list in state update.")
+                # Keep current goals, no update needed
 
             if isinstance(updated_relationships, dict):
                 # Validate and update relationships
-                valid_new_relationships = {p: r for p, r in updated_relationships.items() if p in ALL_POWERS and p != power_name}
+                valid_new_relationships = {}
+                invalid_count = 0
+                
+                for p, r in updated_relationships.items():
+                    # Convert power name to uppercase for case-insensitive matching
+                    p_upper = p.upper()
+                    if p_upper in ALL_POWERS and p_upper != power_name:
+                        # Check against allowed labels (case-insensitive)
+                        r_title = r.title() if isinstance(r, str) else r  # Convert "enemy" to "Enemy" etc.
+                        if r_title in ALLOWED_RELATIONSHIPS:
+                            valid_new_relationships[p_upper] = r_title
+                        else:
+                            invalid_count += 1
+                            if invalid_count <= 2:  # Only log first few to reduce noise
+                                logger.warning(f"[{power_name}] Received invalid relationship label '{r}' for '{p}'. Ignoring.")
+                    else:
+                        invalid_count += 1
+                        if invalid_count <= 2 and not p_upper.startswith(power_name):  # Only log first few to reduce noise
+                            logger.warning(f"[{power_name}] Received relationship for invalid/own power '{p}' (normalized: {p_upper}). Ignoring.")
+                
+                # Summarize if there were many invalid entries
+                if invalid_count > 2:
+                    logger.warning(f"[{power_name}] {invalid_count} total invalid relationships were ignored.")
+                    
                 # Update relationships if the dictionary is not empty after validation
                 if valid_new_relationships:
                     self.relationships.update(valid_new_relationships)
-                    # == Fix: Correct add_journal_entry call signature ==
-                    self.add_journal_entry(f"[{game.current_short_phase}] Relationships updated based on {prev_phase}: {valid_new_relationships}")
+                    self.add_journal_entry(f"[{game.current_short_phase}] Relationships updated based on {last_phase_name}: {valid_new_relationships}")
                 elif updated_relationships: # Log if the original dict wasn't empty but validation removed everything
-                    logger.warning(f"[{power_name}] LLM provided relationships, but none were valid: {updated_relationships}")
+                    logger.warning(f"[{power_name}] Found relationships in LLM response but none were valid after normalization. Using defaults.")
                 else: # Log if the original dict was empty
-                     logger.warning(f"[{power_name}] LLM provided empty or invalid 'updated_relationships' dict.")
+                     logger.warning(f"[{power_name}] LLM did not provide valid 'updated_relationships' dict in state update.")
+                     # Keep current relationships, no update needed
             else:
                  logger.warning(f"[{power_name}] LLM did not provide valid 'updated_relationships' dict in state update.")
+                 # Keep current relationships, no update needed
 
         except FileNotFoundError:
             logger.error(f"[{power_name}] state_update_prompt.txt not found. Skipping state update.")
-        except json.JSONDecodeError as e:
-            logger.error(f"[{power_name}] Failed to parse LLM JSON response for state update: {e}")
-            logger.error(f"[{power_name}] Raw response was: {response}")
         except Exception as e:
             # Catch any other unexpected errors during the update process
             logger.error(f"[{power_name}] Error during state analysis/update for phase {game.current_short_phase}: {e}", exc_info=True)

@@ -356,19 +356,28 @@ def main():
         # === Add Post-Phase Agent State Analysis ===
         if not game.is_game_done:
             logger.info("Starting post-phase agent state analysis...")
-            active_powers_after_process = game.powers.keys() # Re-check active powers
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_powers_after_process)) as executor:
-                futures = {
-                    executor.submit(agents[power_name].analyze_phase_and_update_state, game, game_history):
-                    power_name for power_name in active_powers_after_process if power_name in agents
-                }
-                for future in concurrent.futures.as_completed(futures):
-                    power_name = futures[future]
+            # Get current board state and phase summary after processing
+            completed_phase_name = current_phase  # The phase that just completed
+            current_board_state = game.get_state()  # Get current board state
+            phase_summary = game.phase_summaries.get(completed_phase_name, "Summary not found")
+            
+            active_powers_after_process = list(game.powers.keys()) # Get keys once
+            for power_name in active_powers_after_process:
+                if power_name in agents:
                     try:
-                        future.result() # We don't expect a return value, but check for exceptions
+                        logger.debug(f"Analyzing state for {power_name}...")
+                        # Call with correct parameters
+                        agents[power_name].analyze_phase_and_update_state(
+                            game, 
+                            current_board_state, 
+                            phase_summary, 
+                            game_history
+                        )
                         logger.info(f"Agent state analysis completed for {power_name}.")
                     except Exception as exc:
                         logger.error(f"Agent state analysis failed for {power_name}: {exc}", exc_info=True)
+                else:
+                     logger.warning(f"Skipping state analysis for non-agent power {power_name}")
             logger.info("Post-phase agent state analysis complete.")
         # === End Post-Phase Analysis ===
 

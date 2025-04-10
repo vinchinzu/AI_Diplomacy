@@ -36,7 +36,30 @@
 
 ## Debugging Table, -$100 on failure, +$500 on success 
 
-| # | Problem                                                                                                | Attempted Solution         | Outcome | Balance ($) |
-|---|--------------------------------------------------------------------------------------------------------|----------------------------|---------|-------------|
-| 4 | Initial goals `TypeError` in `build_context_prompt`; State update loop not called.                      | Debug logs; Implement loop | Failure | -$100       |
-| 5 | `TypeError` in `add_journal_entry` (wrong args); `JSONDecodeError` (LLM added extra text/markdown fences) | Fix args; Robust JSON parse | Pending | -$100       |
+| # | Problem                                                                                                | Attempted Solution         | Outcome           | Balance ($) |
+|---|--------------------------------------------------------------------------------------------------------|----------------------------|-------------------|-------------|
+| 4 | Initial goals `TypeError` in `build_context_prompt`; State update loop not called.                      | Debug logs; Implement loop | Failure           | -$100       |
+| 5 | `TypeError` in `add_journal_entry` (wrong args); `JSONDecodeError` (LLM added extra text/markdown fences) | Fix args; Robust JSON parse | Partial Success*  | -$100       |
+| 6 | `TypeError: wrong number of args` for state update call.    | Helper fn; Sync loop; Fix | Failure        | -$100      |
+| 7 | `AttributeError: 'Game' has no attribute 'get_board_state_str'/'current_year'` and JSON key mismatch | Create board_state_str from board_state; Extract year from phase name; Fix JSON key mismatches | Partial Success** | -$100 |
+
+*Partial Success: Game ran 1 year, but failed during state update phase.
+**Partial Success: Game runs without crashing, but LLM responses still don't match expected JSON format.
+
+## Experiment 7: Game State Processing Fixes
+
+**Date:** 2025-04-08
+**Goal:** Fix the game state processing and JSON format issues.
+**Changes:**
+1. Fixed parameter mismatch in `analyze_phase_and_update_state`: Changed from (game, game_history) to (game, board_state, phase_summary, game_history)
+2. Made JSON parsing more robust with a dedicated `_extract_json_from_text` helper method
+3. Added fallback values in case of JSON parsing failures
+4. Fixed missing game attributes: created board_state_str from board_state dict, extracted year from phase name
+5. Identified JSON key mismatch between prompt ("relationships"/"goals") and code ("updated_relationships"/"updated_goals")
+
+**Observation:** Game now runs without crashing through basic state updates, but LLM responses don't use the expected JSON keys (they use "relationships"/"goals" while code expects "updated_relationships"/"updated_goals").
+
+**Next Steps:** Fix the JSON key mismatch by either:
+1. Updating the state_update_prompt.txt to use "updated_goals" and "updated_relationships", or
+2. Modifying the agent.py code to look for "goals" and "relationships" keys and map them to the expected variables.
+ 
