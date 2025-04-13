@@ -29,6 +29,35 @@
    - When animations complete, show phase summary (if available)
    - Advance to next phase and repeat
 
+## Agent State Display
+The game now includes agent state data that can be visualized:
+
+1. **Goals and Relationships**: Each power has strategic goals and relationships with other powers
+2. **Journal Entries**: Internal thoughts that help explain decision making
+
+### JSON Format Expectations:
+- Agent state is stored in the game JSON with the following structure:
+  ```json
+  {
+    "powers": {
+      "FRANCE": {
+        "goals": ["Secure Belgium", "Form alliance with Italy"],
+        "relationships": {
+          "GERMANY": "Enemy",
+          "ITALY": "Ally",
+          "ENGLAND": "Neutral",
+          "AUSTRIA": "Neutral",
+          "RUSSIA": "Unfriendly",
+          "TURKEY": "Neutral"
+        },
+        "journal": ["Suspicious of England's fleet movements"]
+      }
+    }
+  }
+  ```
+- Relationship status must be one of: "Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"
+- The code handles case variations but the display should normalize to title case
+
 ## Known Issues
 - Text-to-speech requires an ElevenLabs API key in `.env` file
 - Unit animations sometimes don't fire properly after messages

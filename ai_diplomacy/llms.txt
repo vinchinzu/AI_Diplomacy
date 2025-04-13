@@ -33,11 +33,9 @@ This document provides an analysis of key Python modules within the `ai_diplomac
   * Unsuccessful moves by power with failure reasons
   * Optional sections for other move types
 
-### PARTIALLY IMPLEMENTED MODULES:
-
-#### 1.4. `agent.py` (PARTIAL)
+#### 1.4. `agent.py` (COMPLETE)
 **Goal:** To maintain stateful agent representation with personality, goals, and relationships.
-**Status:** Base class implemented but not fully integrated into planning/negotiation workflows.
+**Status:** Fully implemented and integrated with planning/negotiation workflows.
 
 **Key Components:**
 * `DiplomacyAgent` class with:
@@ -46,26 +44,40 @@ This document provides an analysis of key Python modules within the `ai_diplomac
   * `goals`: List of strategic goals
   * `relationships`: Dict of relationships with other powers
   * `private_journal`: List of internal thoughts/reflections
+  * `_extract_json_from_text`: Robust JSON extraction from LLM responses
+  * `initialize_agent_state`: Sets initial goals and relationships
+  * `analyze_phase_and_update_state`: Updates goals and relationships based on game events
   * Methods for plan generation, updating goals, and updating relationships
 
-**Integration Points Needed:**
-* Connect agent state to context generation in `clients.py`
-* Define how personality affects planning and negotiations
-* Remove redundant order generation logic
+**Integration Points:**
+* Connected to context generation in `clients.py`
+* Influences planning and negotiations through goals and relationships
+* Case-insensitive validation of LLM-provided power names and relationship statuses
+* Robust error recovery with fallback defaults when LLM responses fail to parse
 
-#### 1.5. `negotiations.py` (PARTIAL)
+#### 1.5. `negotiations.py` (COMPLETE)
 **Goal:** To orchestrate the communication phase among active AI powers.
-**Status:** Works but needs integration with DiplomacyAgent state.
+**Status:** Fully implemented and integrated with DiplomacyAgent state.
 
-#### 1.6. `planning.py` (PARTIAL)
+#### 1.6. `planning.py` (COMPLETE)
 **Goal:** To allow each AI power to generate a high-level strategic directive or plan.
-**Status:** Works but needs integration with DiplomacyAgent state and map analysis.
+**Status:** Fully implemented and integrated with DiplomacyAgent state.
 
 #### 1.7. `utils.py` (COMPLETE)
 **Goal:** To provide common utility functions used across other AI diplomacy modules.
 **Status:** Fully implemented.
 
-#### 1.8. `clients.py` (COMPLETE BUT NEEDS EXTENSION)
+#### 1.8. `clients.py` (COMPLETE)
+**Goal:** To abstract and manage interactions with various LLM APIs.
+**Status:** Fully implemented with agent state integration.
+
+### PARTIALLY IMPLEMENTED MODULES:
+
+#### 1.9. `utils.py` (COMPLETE)
+**Goal:** To provide common utility functions used across other AI diplomacy modules.
+**Status:** Fully implemented.
+
+#### 1.10. `clients.py` (COMPLETE BUT NEEDS EXTENSION)
 **Goal:** To abstract and manage interactions with various LLM APIs.
 **Status:** Works, but needs extension to incorporate agent state into context.
 
@@ -73,41 +85,44 @@ This document provides an analysis of key Python modules within the `ai_diplomac
 
 ## 2. Integration Points
 
-The following connections need to be established:
+The following connections have been established:
 
 1. **Agent State → Context Building**
-   * `BaseModelClient.build_context_prompt` needs to incorporate agent's personality, goals, and relationships
-   * Modify `context_prompt.txt` to include sections for agent state
+   * `BaseModelClient.build_context_prompt` incorporates agent's personality, goals, and relationships
+   * Modified prompt templates include sections for agent state
 
-2. **Map Analysis → Planning**
-   * Use `DiplomacyGraph` and BFS search in `planning_phase` to identify strategic options
-   * Incorporate territory accessibility analysis into strategic planning
+2. **Agent State → Negotiations**
+   * Agent's personality, goals, and relationships influence message generation
+   * Relationships are updated based on negotiation context and results
 
-3. **Agent State → Negotiations**
-   * Have agent's personality, goals, and relationships influence message generation
-   * Update relationships based on negotiation context and results
+3. **Robust LLM Interaction**
+   * Implemented multi-strategy JSON extraction to handle various LLM response formats
+   * Added case-insensitive validation for power names and relationship statuses
+   * Created fallback mechanisms for all LLM interactions
 
-4. **Map Analysis → Order Generation**
-   * Incorporate BFS search to help identify optimal movements and support actions
-   * Analyze territory adjacency for attack planning
+4. **Error Recovery**
+   * Added defensive programming throughout agent state updates
+   * Implemented progressive fallback strategies for parsing LLM outputs
+   * Used intelligent defaults to maintain consistent agent state
 
 ---
 
-## 3. Next Steps (Implementation Plan)
+## 3. Future Work
 
-1. **Phase 1: Agent Integration**
-   * Enhance `BaseModelClient.build_context_prompt` to include agent state
-   * Update prompt templates to utilize agent information
-   * Add a regularly updating 'relationships' section to the context prompt
-   * Add a regularly updating 'goals' section to the context prompt
-   * Add a regularly updating 'journal' section to the context prompt
-
-2. **Phase 2: Map Analysis Integration**
+1. **Map Analysis Integration**
    * Create utility functions to leverage BFS search for common strategic questions
    * Integrate these into planning phase
    * Add territory analysis to order generation context
 
-3. **Phase 3: Test!
+2. **Enhanced Agent Adaptation**
+   * Develop more sophisticated goal updating strategies based on game events
+   * Implement memory of betrayals/alliances across multiple phases
+   * Create feedback loops between relationship states and planning priorities
+
+3. **UI Integration**
+   * Expose agent states (goals, relationships) in the game visualization
+   * Show evolving relationships between powers graphically
+   * Integrate agent journal entries as commentary
 
 ---
 
@@ -131,6 +146,7 @@ The following connections need to be established:
 ```
 
 **Current Integration Status:**
-* `agent.py` and `map_utils.py` are implemented but not fully integrated with other modules
-* `phase_summary_callback` works in `lm_game.py` but is not integrated with agent state
-* Base message passing and planning works, but doesn't leverage agent personality or map analysis
+* `agent.py` is fully implemented and integrated with other modules
+* State updates work reliably between phases
+* Robust JSON parsing and case-insensitive validation ensure smooth operation
+* `map_utils.py` is implemented but not yet fully leveraged for strategic planning
