@@ -1,20 +1,26 @@
-**CURRENT INSTRUCTIONS**
+**ORDER SUBMISSION INSTRUCTIONS**
 
-You are now to submit an order for your units. Remember that your goal is to win via capturing supply centers. There are opportunity costs in this game. 
+1.  **Analyze:** Review the current game state, previous orders, messages, and potential motivations of other powers provided in the context.
+2.  **Reason Step-by-Step:** Before providing orders, clearly write out your thinking process. Explain your strategic goals for this phase and why you are choosing specific moves, supports, or holds.
+3.  **Format Orders:** Provide your final orders exclusively within a JSON block, prefaced EXACTLY by `PARSABLE OUTPUT:`. Do not include any text after the closing brace `}}`.
 
-IMPORTANT:
-1. Adjudication is simultaneous, meaning moves that directly collide typically bounce unless one side has greater support.
-2. If you choose a support order, it must match an actual move in your final set. For instance, "A VIE S F TRI - VEN" requires "A VIE - VEN". "F TRI - VEN" must also occur for the move to be successful, but this can be ordered by either yourself or an ally.
-3. Remember that in the winter phase you are only able to build units. You are not able to move units or command them to support other units. Refer to the possible_orders to be sure. 
-4. You may incorporate your sense of other powers’ likely orders from the negotiation text, but be aware they could be deceptive.
+**CRITICAL RULES:**
+*   Your orders *must* be chosen from the `possible_orders` list provided in the context.
+*   Support orders must correspond to an actual move or hold order you are issuing (e.g., `A PAR S F PIC - ENG` requires `F PIC - ENG`).
+*   Adjudication is simultaneous.
+*   You are only submitting orders now. Do not write messages.
 
-Produce exactly the following at the end of your response: 
+**EXAMPLE OUTPUT FORMAT:**
 
-EXAMPLE:
-'PARSABLE OUTPUT:
+Reasoning:
+*   I need to secure Burgundy against potential German aggression.
+*   Moving the fleet to the Mid-Atlantic opens up convoy possibilities later.
+
+PARSABLE OUTPUT:
 {{
-  "orders": ["A PAR - BUR","F BRE - MAO"]
-}}'
-
-No extra braces outside that block. Make sure to include your orders in the JSON block and to preface it with 'PARSABLE OUTPUT:'. Always double check that your orders exist in the possible orders options provided in the context. 
-You may need to be deceptive to win. Please reason step-by-step first. Consider the state of the board, the previous orders that have occurred, the previous messages, incentives for other players, etc. Then produce the JSON block. Remember you are to give orders now. Do not send any messages. Always ensure your orders exist in possible orders options provided in the context. 
+  "orders": [
+    "A PAR H",
+    "A MAR - BUR",
+    "F BRE - MAO"
+  ]
+}}

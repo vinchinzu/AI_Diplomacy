@@ -1,67 +1,86 @@
 from dotenv import load_dotenv
 import logging
 import concurrent.futures
-
-from diplomacy.engine.message import Message, GLOBAL
+from typing import Dict
 
 from .clients import load_model_client
-from .utils import gather_possible_orders
+from .game_history import GameHistory
+from .agent import DiplomacyAgent
 
-logger = logging.getLogger("utils")
-logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-load_dotenv()
-
-
-def planning_phase(game, game_history, model_error_stats, max_rounds=3):
+def planning_phase(
+    game, 
+    agents: Dict[str, DiplomacyAgent], 
+    game_history: GameHistory, 
+    model_error_stats
+):
     """
-    Lets each power form a strategic directive for the upcoming phase. 
+    Lets each power generate a strategic plan using their DiplomacyAgent.
     """
+    logger.info(f"Starting planning phase for {game.current_short_phase}...")
     active_powers = [
         p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
     ]
+    
+    board_state = game.get_state()
 
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=len(active_powers)
     ) as executor: 
         futures = {}
         for power_name in active_powers:
-            model_id = game.power_model_map.get(power_name, "o3-mini")
-            client = load_model_client(model_id)
-            possible_orders = gather_possible_orders(game, power_name)
-            if not possible_orders:
-                logger.info(f"No orderable locations for {power_name}; skipping.")
+            if power_name not in agents:
+                logger.warning(f"Agent for {power_name} not found in planning phase. Skipping.")
                 continue
-            board_state = game.get_state()
-
+            agent = agents[power_name]
+            client = agent.client
+            
             future = executor.submit(
-                client.get_planning_reply,
+                client.get_plan,
                 game,
                 board_state,
                 power_name,
-                possible_orders,
+                gather_possible_orders(game, power_name),
                 game_history,
-                game.current_short_phase,
-                active_powers,
+                agent_goals=agent.goals,
+                agent_relationships=agent.relationships,
             )
-
             futures[future] = power_name
-            logger.debug(f"Submitted get_planning_reply task for {power_name}.")
-        
-        logger.info("Waiting for planning replies...")
+            logger.debug(f"Submitted get_plan task for {power_name}.")
+
+        logger.info(f"Waiting for {len(futures)} planning results...")
         for future in concurrent.futures.as_completed(futures):
             power_name = futures[future]
             try:
-                reply = future.result()
-                logger.info(f"Received planning reply from {power_name}.")
-                if reply:
+                plan_result = future.result()
+                logger.info(f"Received planning result from {power_name}.")
+                
+                if plan_result.startswith("Error:"):
+                     logger.warning(f"Agent {power_name} reported an error during planning: {plan_result}")
+                     if power_name in model_error_stats:
+                        model_error_stats[power_name].setdefault('planning_generation_errors', 0)
+                        model_error_stats[power_name]['planning_generation_errors'] += 1
+                     else:
+                        model_error_stats.setdefault(f'{power_name}_planning_generation_errors', 0)
+                        model_error_stats[f'{power_name}_planning_generation_errors'] += 1
+                elif plan_result:
+                    agent.add_journal_entry(f"Generated plan for {game.current_short_phase}: {plan_result[:100]}...")
                     game_history.add_plan(
-                        game.current_short_phase, power_name, reply
+                        game.current_short_phase, power_name, plan_result
                     )
+                    logger.debug(f"Added plan for {power_name} to history.")
+                else:
+                    logger.warning(f"Agent {power_name} returned an empty plan.")
+
             except Exception as e:
-                logger.error(f"Error in planning reply for {power_name}: {e}")
-                model_error_stats[power_name] += 1
+                logger.error(f"Exception during planning result processing for {power_name}: {e}")
+                if power_name in model_error_stats:
+                    model_error_stats[power_name].setdefault('planning_execution_errors', 0)
+                    model_error_stats[power_name]['planning_execution_errors'] += 1
+                else:
+                     model_error_stats.setdefault(f'{power_name}_planning_execution_errors', 0)
+                     model_error_stats[f'{power_name}_planning_execution_errors'] += 1
         
-    logger.info("Planning phase complete.")
+    logger.info("Planning phase processing complete.")
     return game_history
