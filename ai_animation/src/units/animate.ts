@@ -6,23 +6,8 @@ import { gameState } from "../gameState";
 import type { UnitOrder } from "../types/unitOrders";
 import { logger } from "../logger";
 import { config } from "../config"; // Assuming config is defined in a separate file
-import { PowerENUM, ProvinceENUM, ProvTypeENUM } from "../types/map";
+import { PowerENUM, ProvinceENUM } from "../types/map";
 import { UnitTypeENUM } from "../types/units";
-
-//FIXME: Move this to a file with all the constants
-enum AnimationTypeENUM {
-  CREATE,
-  MOVE,
-  DELETE,
-}
-export type UnitAnimation = {
-  duration: number
-  endPos: any
-  startPos: any
-  object: THREE.Group
-  startTime: number
-  animationType?: AnimationTypeENUM
-}
 
 function getUnit(unitOrder: UnitOrder, power: string) {
   if (power === undefined) throw new Error("Must pass the power argument, cannot be undefined")

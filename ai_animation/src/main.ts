@@ -18,6 +18,8 @@ import { Tween, Group, Easing } from "@tweenjs/tween.js";
 const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
 
+let prevPos
+
 
 // --- INITIALIZE SCENE ---
 function initScene() {
@@ -73,29 +75,43 @@ function initScene() {
 }
 
 function createCameraPan() {
+  // Create a target object to store the desired camera position
+  const cameraTarget = { x: gameState.camera.position.x, y: gameState.camera.position.y, z: gameState.camera.position.z };
+
   // Move from the starting camera position to the left side of the map
-  let moveToStartSweepAnim = new Tween(gameState.camera.position).to({
+  let moveToStartSweepAnim = new Tween(cameraTarget).to({
     x: -400,
     y: 500,
     z: 1000
-  }, 8000).onUpdate((posVector) => {
-    gameState.camera.position.set(posVector.x, posVector.y, posVector.z)
-  })
+  }, 8000).onUpdate((target) => {
+    // Use smooth interpolation to avoid jumps
+    gameState.camera.position.lerp(new THREE.Vector3(target.x, target.y, target.z), 0.1);
+  });
+
   let cameraSweepOperation = new Tween({ timeStep: 0 }).to({
     timeStep: Math.PI
   }, 20000)
     .onUpdate((tweenObj) => {
-      let radius = 2200
-      gameState.camera.position.set(
-        radius * Math.sin(tweenObj.timeStep / 2) - 400,
-        500 + 200 * Math.sin(tweenObj.timeStep),
-        1000 + 900 * Math.sin(tweenObj.timeStep)
-      );
-    }).easing(Easing.Quadratic.InOut).yoyo(true).repeat(Infinity)
+      let radius = 2200;
+      // Calculate the target position
+      const targetX = radius * Math.sin(tweenObj.timeStep / 2) - 400;
+      const targetY = 500 + 200 * Math.sin(tweenObj.timeStep);
+      const targetZ = 1000 + 900 * Math.sin(tweenObj.timeStep);
 
-  moveToStartSweepAnim.chain(cameraSweepOperation)
-  moveToStartSweepAnim.start()
-  return new Group(moveToStartSweepAnim, cameraSweepOperation)
+      // Update the target object
+      cameraTarget.x = targetX;
+      cameraTarget.y = targetY;
+      cameraTarget.z = targetZ;
+
+      // Use smooth interpolation to avoid jumps
+      gameState.camera.position.lerp(new THREE.Vector3(targetX, targetY, targetZ), 0.05);
+    })
+    // .easing(Easing.Quadratic.InOut)
+    .yoyo(true).repeat(Infinity);
+
+  moveToStartSweepAnim.chain(cameraSweepOperation);
+  moveToStartSweepAnim.start();
+  return new Group(moveToStartSweepAnim, cameraSweepOperation);
 }
 
 // --- ANIMATION LOOP ---
@@ -106,12 +122,32 @@ function createCameraPan() {
 function animate() {
   requestAnimationFrame(animate);
 
+  // Store previous position as a new Vector3 to avoid reference issues
+  prevPos = new THREE.Vector3().copy(gameState.camera.position);
+
   if (gameState.isPlaying) {
     // Update the camera angle
-    gameState.cameraPanAnim.update()
+    gameState.cameraPanAnim.update();
   } else {
     // Manual camera controls when not in playback mode
     gameState.camControls.update();
+  }
+
+  // Instead of throwing an error, smoothly interpolate if jump is too large
+  const jumpThreshold = 20;
+  if (Math.abs(prevPos.x - gameState.camera.position.x) > jumpThreshold ||
+    Math.abs(prevPos.y - gameState.camera.position.y) > jumpThreshold ||
+    Math.abs(prevPos.z - gameState.camera.position.z) > jumpThreshold) {
+    console.warn("Large camera position jump detected, smoothing transition");
+    // Interpolate to avoid the jump
+    gameState.camera.position.lerp(
+      new THREE.Vector3(
+        prevPos.x + Math.sign(gameState.camera.position.x - prevPos.x) * jumpThreshold,
+        gameState.camera.position.y,
+        gameState.camera.position.z
+      ),
+      0.5
+    );
   }
 
   // Check if all animations are complete
@@ -223,7 +259,6 @@ function togglePlayback() {
   if (gameState.isSpeaking) return;
 
   // Pause the camera animation
-  if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll().map(anim => anim.pause())
 
   gameState.isPlaying = !gameState.isPlaying;
 
@@ -233,6 +268,7 @@ function togglePlayback() {
     nextBtn.disabled = true;
     logger.log("Starting playback...");
 
+    if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[1].start()
     // Hide standings board when playback starts
     hideStandingsBoard();
 
@@ -248,6 +284,7 @@ function togglePlayback() {
       displayPhaseWithAnimation();
     }
   } else {
+    if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[0].pause();
     playBtn.textContent = "▶ Play";
     if (gameState.playbackTimer) {
       clearTimeout(gameState.playbackTimer);
