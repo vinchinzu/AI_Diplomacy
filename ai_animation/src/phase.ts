@@ -56,7 +56,7 @@ export function displayPhase(skipMessages = false) {
 
   // Show messages with animation or immediately based on skipMessages flag
   if (!skipMessages) {
-    updateChatWindows(currentPhase, true);
+    //updateChatWindows(currentPhase, true);
   } else {
     gameState.messagesPlaying = false;
   }
@@ -111,7 +111,6 @@ export function advanceToNextPhase() {
   if (!gameState.isPlaying) {
     moveToNextPhase()
   }
-  console.log("advanceToNextPhase called");
 
   if (!gameState.gameData || !gameState.gameData.phases || gameState.phaseIndex < 0) {
     logger.log("Cannot advance phase: invalid game state");
@@ -168,9 +167,6 @@ function moveToNextPhase() {
     clearTimeout(gameState.playbackTimer);
     gameState.playbackTimer = 0;
   }
-
-  // Clear any existing animations
-  gameState.unitAnimations = [];
 
   // Reset animation state
   gameState.isAnimating = false;

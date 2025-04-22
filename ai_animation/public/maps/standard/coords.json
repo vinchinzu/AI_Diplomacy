@@ -2,8 +2,8 @@
   "provinces": {
     "SWI": {
       "label": {
-        "x": 890.0,
-        "y": 291
+        "x": 638,
+        "y": 924.8
       },
       "unit": {
         "x": 720,
@@ -81,7 +81,8 @@
         "x": 581.8,
         "y": 776.2
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "BER": {
       "label": {
@@ -127,7 +128,8 @@
         "x": 1061.8,
         "y": 1089.1
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "BUR": {
       "label": {
@@ -156,7 +158,8 @@
         "x": 718.2,
         "y": 584.3
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "EAS": {
       "label": {
@@ -356,7 +359,8 @@
         "x": 760,
         "y": 391.7
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "NWG": {
       "label": {
@@ -393,7 +397,8 @@
         "x": 175.1,
         "y": 1102.1
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "PRU": {
       "label": {
@@ -422,14 +427,16 @@
         "x": 1036.7,
         "y": 1015.4
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "SER": {
       "label": {
         "x": 954.3,
         "y": 1060.6
       },
-      "type": "Land"
+      "type": "Land",
+      "isSupplyCenter": true
     },
     "SEV": {
       "label": {
@@ -467,7 +474,8 @@
         "x": 302.3,
         "y": 1119.7
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "STP": {
       "label": {
@@ -482,7 +490,8 @@
         "x": 845.1,
         "y": 391.7
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "SYR": {
       "label": {
@@ -504,7 +513,8 @@
         "x": 634.4,
         "y": 1331.8
       },
-      "type": "Coast"
+      "type": "Coast",
+      "isSupplyCenter": true
     },
     "TUS": {
       "label": {

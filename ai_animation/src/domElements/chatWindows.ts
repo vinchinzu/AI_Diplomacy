@@ -269,6 +269,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
 
         // Schedule next message with proper delay
         setTimeout(showNext, config.playbackSpeed / 2);
+        //showNext()
       };
 
       // Add the message with word animation

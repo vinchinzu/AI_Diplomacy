@@ -6,23 +6,8 @@ import { gameState } from "../gameState";
 import type { UnitOrder } from "../types/unitOrders";
 import { logger } from "../logger";
 import { config } from "../config"; // Assuming config is defined in a separate file
-import { PowerENUM, ProvinceENUM, ProvTypeENUM } from "../types/map";
+import { PowerENUM, ProvinceENUM } from "../types/map";
 import { UnitTypeENUM } from "../types/units";
-
-//FIXME: Move this to a file with all the constants
-enum AnimationTypeENUM {
-  CREATE,
-  MOVE,
-  DELETE,
-}
-export type UnitAnimation = {
-  duration: number
-  endPos: any
-  startPos: any
-  object: THREE.Group
-  startTime: number
-  animationType?: AnimationTypeENUM
-}
 
 function getUnit(unitOrder: UnitOrder, power: string) {
   if (power === undefined) throw new Error("Must pass the power argument, cannot be undefined")
@@ -30,7 +15,8 @@ function getUnit(unitOrder: UnitOrder, power: string) {
     return (
       unit.userData.province === unitOrder.unit.origin &&
       unit.userData.type === unitOrder.unit.type &&
-      unit.userData.power === power
+      unit.userData.power === power &&
+      (unit.userData.isAnimating === false || unit.userData.isAnimating === undefined)
     );
   });
 
@@ -61,6 +47,8 @@ function createMoveAnimation(unitMesh: THREE.Group, orderDestination: ProvinceEN
   if (!destinationVector) {
     throw new Error("Unable to find the vector for province with name " + orderDestination)
   }
+  unitMesh.userData.province = orderDestination;
+  unitMesh.userData.isAnimating = true
   let anim = new Tween(unitMesh.position)
     .to({
       x: destinationVector.x,
@@ -76,12 +64,12 @@ function createMoveAnimation(unitMesh: THREE.Group, orderDestination: ProvinceEN
       }
     })
     .onComplete(() => {
-      unitMesh.userData.province = orderDestination;
       unitMesh.position.y = 10;
       if (unitMesh.userData.type === 'F') {
         unitMesh.rotation.z = 0;
         unitMesh.rotation.x = 0;
       }
+      unitMesh.userData.isAnimating = false
     })
     .start();
   gameState.unitAnimations.push(anim);
@@ -125,18 +113,21 @@ export function createAnimationsForNextPhase() {
       }
       // If the result is void, that means the move was not valid?
       if (lastPhaseResultMatches[0].result === "void") continue;
+      let unitIndex = -1
 
-      let unitIndex = getUnit(order, power);
-      if (order.type != "build" && unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
       switch (order.type) {
         case "move":
           if (!order.destination) throw new Error("Move order with no destination, cannot complete move.")
+          unitIndex = getUnit(order, power);
+          if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           // Create a tween for smooth movement
           createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
           break;
 
         case "disband":
           // TODO: Death animation
+          unitIndex = getUnit(order, power);
+          if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           gameState.scene.remove(gameState.unitMeshes[unitIndex]);
           gameState.unitMeshes.splice(unitIndex, 1);
           break;
@@ -160,7 +151,13 @@ export function createAnimationsForNextPhase() {
           //TODO: Hold animation, maybe a sheild or something?
           break;
 
+        case "convoy":
+          createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
+          break;
+
         case "retreat":
+          unitIndex = getUnit(order, power);
+          if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
           break;
 

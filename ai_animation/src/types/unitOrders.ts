@@ -62,6 +62,14 @@ export const OrderFromString = z.string().transform((orderStr) => {
       raw: orderStr
     }
   }
+  else if (tokens.includes("C")) {
+    return {
+      type: "convoy",
+      unit: { type: unitType, origin: tokens.at(-3) },
+      destination: tokens.at(-1),
+      raw: orderStr
+    }
+  }
   // Otherwise, assume it's a move order if a hyphen ("-") is present.
   else if (tokens.includes("-")) {
     const dashIndex = tokens.indexOf("-");
