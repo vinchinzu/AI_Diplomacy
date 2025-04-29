@@ -22,7 +22,7 @@ def assign_models_to_powers() -> Dict[str, str]:
         "FRANCE": "o3-mini",
         "GERMANY": "claude-3-5-haiku-20241022",
         "ENGLAND": "gemini-2.0-flash",
-        "RUSSIA": "openrouter/quasar-alpha",
+        "RUSSIA": "gemini-2.5-flash-preview-04-17",
         "ITALY": "gpt-4o",
         "AUSTRIA": "gpt-4o-mini",
         "TURKEY": "claude-3-7-sonnet-latest",
