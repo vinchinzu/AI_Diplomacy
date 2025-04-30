@@ -58,6 +58,7 @@ This document provides an analysis of key Python modules within the `ai_diplomac
 #### 1.5. `negotiations.py` (COMPLETE)
 **Goal:** To orchestrate the communication phase among active AI powers.
 **Status:** Fully implemented and integrated with DiplomacyAgent state.
+**Note:** Relies heavily on `prompts/conversation_instructions.txt` to guide LLMs in generating correctly formatted messages for parsing.
 
 #### 1.6. `planning.py` (COMPLETE)
 **Goal:** To allow each AI power to generate a high-level strategic directive or plan.
@@ -70,6 +71,7 @@ This document provides an analysis of key Python modules within the `ai_diplomac
 #### 1.8. `clients.py` (COMPLETE)
 **Goal:** To abstract and manage interactions with various LLM APIs.
 **Status:** Fully implemented with agent state integration.
+**Note:** Uses various files in `prompts/` (e.g., `context_prompt.txt`, `order_instructions.txt`, `conversation_instructions.txt`) to structure LLM requests and define expected output formats. Ensuring these instruction files are present and correct is critical for reliable operation, especially for parsing structured data like orders or messages.
 
 ### PARTIALLY IMPLEMENTED MODULES:
 
