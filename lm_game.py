@@ -353,34 +353,6 @@ def main():
         # Process with our custom callback
         game.process(phase_summary_callback=phase_summary_callback)
 
-        # === Add Post-Phase Agent State Analysis ===
-        if not game.is_game_done:
-            logger.info("Starting post-phase agent state analysis...")
-            # Get current board state and phase summary after processing
-            completed_phase_name = current_phase  # The phase that just completed
-            current_board_state = game.get_state()  # Get current board state
-            phase_summary = game.phase_summaries.get(completed_phase_name, "Summary not found")
-            
-            active_powers_after_process = list(game.powers.keys()) # Get keys once
-            for power_name in active_powers_after_process:
-                if power_name in agents:
-                    try:
-                        logger.debug(f"Analyzing state for {power_name}...")
-                        # Call with correct parameters
-                        agents[power_name].analyze_phase_and_update_state(
-                            game, 
-                            current_board_state, 
-                            phase_summary, 
-                            game_history
-                        )
-                        logger.info(f"Agent state analysis completed for {power_name}.")
-                    except Exception as exc:
-                        logger.error(f"Agent state analysis failed for {power_name}: {exc}", exc_info=True)
-                else:
-                     logger.warning(f"Skipping state analysis for non-agent power {power_name}")
-            logger.info("Post-phase agent state analysis complete.")
-        # === End Post-Phase Analysis ===
-
         # Log the results
         logger.info(f"Results for {current_phase}:")
         for power_name, power in game.powers.items():
@@ -449,6 +421,7 @@ def main():
         active_agent_powers = [p for p in active_powers if p[0] in agents] # Filter for powers with active agents
 
         if active_agent_powers: # Only run if there are agents to update
+             logger.info(f"Beginning concurrent state analysis for {len(active_agent_powers)} agents...")
              with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_agent_powers)) as executor:
                   analysis_futures = {}
                   for power_name, _ in active_agent_powers:
@@ -473,6 +446,7 @@ def main():
                       except Exception as e:
                           logger.error(f"Error during state analysis for {power_name}: {e}")
 
+             logger.info(f"Finished concurrent state analysis for {len(active_agent_powers)} agents.")
              logger.info(f"Completed state update analysis for phase {completed_phase_name}.")
         else:
              logger.info(f"No active agents found to perform state update analysis for phase {completed_phase_name}.")
