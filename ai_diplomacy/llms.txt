@@ -152,3 +152,16 @@ The following connections have been established:
 * State updates work reliably between phases
 * Robust JSON parsing and case-insensitive validation ensure smooth operation
 * `map_utils.py` is implemented but not yet fully leveraged for strategic planning
+
+**Asynchronous API Calls (Implemented April 2025)**
+- Successfully refactored major LLM interaction points to use asynchronous patterns (`async`/`await`, `asyncio.gather`).
+- Utilized async client libraries (`AsyncOpenAI`, `AsyncAnthropic`, `generate_content_async` for Gemini).
+- Refactored components:
+    - `DiplomacyAgent.initialize_agent_state`
+    - `negotiations.conduct_negotiations` (message generation)
+    - `utils.get_valid_orders` (order generation)
+    - `DiplomacyAgent.analyze_phase_and_update_state`
+- This significantly improves performance by allowing concurrent API calls instead of sequential ones.
+- Replaced `concurrent.futures.ThreadPoolExecutor` with `asyncio.gather` for managing concurrent async tasks.
+
+```

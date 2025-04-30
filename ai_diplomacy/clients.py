@@ -4,31 +4,30 @@ from json import JSONDecodeError
 import re
 import logging
 import ast
+import asyncio  # Added for async operations
 
 from typing import List, Dict, Optional, Any
 from dotenv import load_dotenv
 
-import anthropic
+# Use Async versions of clients
+from openai import AsyncOpenAI
+from openai import AsyncOpenAI as AsyncDeepSeekOpenAI # Alias for clarity
+from anthropic import AsyncAnthropic
 
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
-import google.generativeai as genai  # Import after setting log level
-from openai import OpenAI as DeepSeekOpenAI
-from openai import OpenAI
-from anthropic import Anthropic
-from google import genai
+import google.generativeai as genai
 
 from diplomacy.engine.message import GLOBAL
-
 from .game_history import GameHistory
 from .utils import load_prompt
 
 # set logger back to just info
 logger = logging.getLogger("client")
-logger.setLevel(logging.DEBUG)
-logging.basicConfig(level=logging.DEBUG)
+logger.setLevel(logging.DEBUG) # Keep debug for now during async changes
+# Note: BasicConfig might conflict if already configured in lm_game. Keep client-specific for now.
+# logging.basicConfig(level=logging.DEBUG) # Might be redundant if lm_game configures root
 
 load_dotenv()
-
 
 ##############################################################################
 # 1) Base Interface
@@ -52,7 +51,7 @@ class BaseModelClient:
         self.system_prompt = content
         logger.info(f"[{self.model_name}] System prompt updated.")
 
-    def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str) -> str:
         """
         Returns a raw string from the LLM.
         Subclasses override this.
@@ -153,7 +152,7 @@ class BaseModelClient:
         # Prepend the system prompt!
         return self.system_prompt + "\n\n" + context + "\n\n" + instructions
 
-    def get_orders(
+    async def get_orders(
         self,
         game,
         board_state,
@@ -182,7 +181,7 @@ class BaseModelClient:
         raw_response = ""
 
         try:
-            raw_response = self.generate_response(prompt)
+            raw_response = await self.generate_response(prompt)
             logger.debug(
                 f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
             )
@@ -392,7 +391,7 @@ class BaseModelClient:
 
         return context + "\n\n" + instructions
 
-    def get_planning_reply(
+    async def get_planning_reply(
         self,
         game,
         board_state,
@@ -415,11 +414,11 @@ class BaseModelClient:
             agent_relationships=agent_relationships,
         )
 
-        raw_response = self.generate_response(prompt)
+        raw_response = await self.generate_response(prompt)
         logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}")
         return raw_response
     
-    def get_conversation_reply(
+    async def get_conversation_reply(
         self,
         game,
         board_state,
@@ -464,7 +463,7 @@ class BaseModelClient:
         logger.debug(f"[{self.model_name}] Conversation prompt for {power_name}:\n{prompt}")
 
         try:
-            response = self.generate_response(prompt)
+            response = await self.generate_response(prompt)
             logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{response}")
             
             messages = []
@@ -519,7 +518,7 @@ class BaseModelClient:
             logger.error(f"[{self.model_name}] Error in get_conversation_reply for {power_name}: {e}")
             return []
 
-    def get_plan(
+    async def get_plan(
         self,
         game,
         board_state,
@@ -577,7 +576,7 @@ class BaseModelClient:
 
         # 4. Generate the response from the LLM
         try:
-            raw_plan = self.generate_response(full_prompt)
+            raw_plan = await self.generate_response(full_prompt)
             logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_plan}")
             logger.info(f"[{self.model_name}] Validated plan for {power_name}: {raw_plan}")
             # No parsing needed for the plan, return the raw string
@@ -599,12 +598,12 @@ class OpenAIClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        self.client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str) -> str:
         # Updated to new API format
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
@@ -636,12 +635,12 @@ class ClaudeClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        self.client = AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
-    def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str) -> str:
         # Updated Claude messages format
         try:
-            response = self.client.messages.create(
+            response = await self.client.messages.create(
                 model=self.model_name,
                 max_tokens=2000,
                 system=self.system_prompt,  # system is now a top-level parameter
@@ -672,14 +671,19 @@ class GeminiClient(BaseModelClient):
 
     def __init__(self, model_name: str):
         super().__init__(model_name)
-        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        # Configure and get the model (corrected initialization)
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is required")
+        genai.configure(api_key=api_key)
+        self.client = genai.GenerativeModel(model_name)
+        logger.debug(f"[{self.model_name}] Initialized Gemini client (genai.GenerativeModel)")
 
-    def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str) -> str:
         full_prompt = self.system_prompt + prompt
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
+            response = await self.client.generate_content_async(
                 contents=full_prompt,
             )
             if not response or not response.text:
@@ -701,13 +705,13 @@ class DeepSeekClient(BaseModelClient):
     def __init__(self, model_name: str):
         super().__init__(model_name)
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
-        self.client = DeepSeekOpenAI(
+        self.client = AsyncDeepSeekOpenAI(
             api_key=self.api_key, base_url="https://api.deepseek.com/"
         )
 
-    def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str) -> str:
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
@@ -772,18 +776,18 @@ class OpenRouterClient(BaseModelClient):
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY environment variable is required")
             
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=self.api_key
         )
         
         logger.debug(f"[{self.model_name}] Initialized OpenRouter client")
 
-    def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str) -> str:
         """Generate a response using OpenRouter."""
         try:
             # Prepare standard OpenAI-compatible request
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
@@ -841,7 +845,7 @@ def load_model_client(model_id: str) -> BaseModelClient:
 ##############################################################################
 
 
-def example_game_loop(game):
+async def example_game_loop(game):
     """
     Pseudocode: Integrate with the Diplomacy loop.
     """
@@ -862,7 +866,7 @@ def example_game_loop(game):
         board_state = game.get_state()
 
         # Get orders from the client
-        orders = client.get_orders(board_state, power_name, possible_orders)
+        orders = await client.get_orders(board_state, power_name, possible_orders)
         game.set_orders(power_name, orders)
 
     # Then process, etc.
@@ -878,12 +882,12 @@ class LMServiceVersus:
     def __init__(self):
         self.power_model_map = assign_models_to_powers()
 
-    def get_orders_for_power(self, game, power_name):
+    async def get_orders_for_power(self, game, power_name):
         model_id = self.power_model_map.get(power_name, "o3-mini")
         client = load_model_client(model_id)
         possible_orders = gather_possible_orders(game, power_name)
         board_state = game.get_state()
-        return client.get_orders(board_state, power_name, possible_orders)
+        return await client.get_orders(board_state, power_name, possible_orders)
 
 
 ##############################################################################

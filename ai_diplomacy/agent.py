@@ -158,7 +158,8 @@ class DiplomacyAgent:
         self.private_journal.append(entry)
         logger.debug(f"[{self.power_name} Journal]: {entry}")
 
-    def initialize_agent_state(self, game: 'Game', game_history: 'GameHistory'):
+    # Make the initialization method asynchronous
+    async def initialize_agent_state(self, game: 'Game', game_history: 'GameHistory'):
         """Uses the LLM to set initial goals based on the starting game state."""
         logger.info(f"[{self.power_name}] Initializing agent state using LLM...")
         try:
@@ -191,7 +192,8 @@ class DiplomacyAgent:
             )
             full_prompt = initial_prompt + "\n\n" + context
 
-            response = self.client.generate_response(full_prompt)
+            # Await the asynchronous client call
+            response = await self.client.generate_response(full_prompt)
             logger.debug(f"[{self.power_name}] LLM response for initial state: {response}")
 
             # Try to extract JSON from the response
@@ -283,7 +285,11 @@ class DiplomacyAgent:
                 self.relationships = {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
             logger.info(f"[{self.power_name}] Set fallback goals and relationships after error.")
 
-    def analyze_phase_and_update_state(self, game: 'Game', board_state: dict, phase_summary: str, game_history: 'GameHistory'):
+    def log_state(self, prefix=""):
+        logger.debug(f"[{self.power_name}] {prefix} State: Goals={self.goals}, Relationships={self.relationships}")
+
+    # Make this method async
+    async def analyze_phase_and_update_state(self, game: 'Game', board_state: dict, phase_summary: str, game_history: 'GameHistory'):
         """Analyzes the outcome of the last phase and updates goals/relationships using the LLM."""
         # Use self.power_name internally
         power_name = self.power_name 
@@ -350,8 +356,8 @@ class DiplomacyAgent:
             )
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
-            # Use the client's raw generation capability
-            response = self.client.generate_response(prompt)
+            # Use the client's raw generation capability - AWAIT the async call
+            response = await self.client.generate_response(prompt)
             logger.debug(f"[{power_name}] Raw LLM response for state update: {response}")
 
             # Use our robust JSON extraction helper
@@ -492,9 +498,3 @@ class DiplomacyAgent:
     #      # 2. Delegate to self.client.get_conversation_reply(...)
     #      # 3. Add journal entry about the generated message
     #      pass
-
-    def log_state(self, message: str):
-        """Logs the current state of the agent."""
-        logger.info(f"[{self.power_name}] {message}")
-        logger.info(f"  Goals: {self.goals}")
-        logger.info(f"  Relationships: {self.relationships}")

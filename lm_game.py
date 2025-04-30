@@ -4,6 +4,7 @@ import time
 import dotenv
 import os
 import json
+import asyncio
 from collections import defaultdict
 import concurrent.futures
 
@@ -77,12 +78,12 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main():
+async def main():
     args = parse_arguments()
     max_year = args.max_year
 
     logger.info(
-        "Starting a new Diplomacy game for testing with multiple LLMs, now concurrent!"
+        "Starting a new Diplomacy game for testing with multiple LLMs, now async!"
     )
     start_whole = time.time()
 
@@ -133,6 +134,7 @@ def main():
 
     # == Goal 1: Centralize Agent Instances ==
     agents = {}
+    initialization_tasks = []
     logger.info("Initializing Diplomacy Agents for each power...")
     for power_name, model_id in game.power_model_map.items():
         if not game.powers[power_name].is_eliminated(): # Only create for active powers initially
@@ -141,18 +143,30 @@ def main():
                 # TODO: Potentially load initial goals/relationships from config later
                 agent = DiplomacyAgent(power_name=power_name, client=client) 
                 agents[power_name] = agent
-                logger.info(f"Initialized agent for {power_name} with model {model_id}")
-                # == Add call to initialize agent state using LLM ==
-                try:
-                    agents[power_name].initialize_agent_state(game, game_history)
-                except Exception as e:
-                     logger.error(f"Failed to initialize agent state for {power_name}: {e}", exc_info=True)
-                     # Decide if we should continue without initialized state or exit? For now, continue.
+                logger.info(f"Preparing initialization task for {power_name} with model {model_id}")
+                initialization_tasks.append(agent.initialize_agent_state(game, game_history))
             except Exception as e:
-                logger.error(f"Failed to initialize agent for {power_name} with model {model_id}: {e}")
+                logger.error(f"Failed to create agent or client for {power_name} with model {model_id}: {e}", exc_info=True)
         else:
              logger.info(f"Skipping agent initialization for eliminated power: {power_name}")
-    # =======================================
+    
+    # == Run initializations concurrently ==
+    logger.info(f"Running {len(initialization_tasks)} agent initializations concurrently...")
+    initialization_results = await asyncio.gather(*initialization_tasks, return_exceptions=True)
+    # Check results for errors
+    # Note: agents dict might have fewer entries than results if client creation failed
+    initialized_powers = list(agents.keys()) # Get powers for which agents were created
+    for i, result in enumerate(initialization_results):
+         if i < len(initialized_powers): # Ensure index is valid for initialized_powers
+             power_name = initialized_powers[i]
+             if isinstance(result, Exception):
+                 logger.error(f"Failed to initialize agent state for {power_name}: {result}", exc_info=result)
+                 # Potentially remove agent if initialization failed? Depends on desired behavior.
+             else:
+                 logger.info(f"Successfully initialized agent state for {power_name}.")
+         else:
+             logger.error(f"Initialization result mismatch - unexpected result: {result}")
+    # ========================================
 
     while not game.is_game_done:
         phase_start = time.time()
@@ -190,7 +204,8 @@ def main():
                     model_error_stats,
                 )
             logger.debug("Starting negotiation phase block...")
-            game_history = conduct_negotiations(
+            # Await the async negotiation function
+            game_history = await conduct_negotiations(
                 game,
                 agents, # Pass agents dict
                 game_history,
@@ -198,66 +213,90 @@ def main():
                 max_rounds=args.num_negotiation_rounds,
             )
 
-        # Gather orders from each power concurrently
+        # --- Async Order Generation --- 
         active_powers = [
             (p_name, p_obj)
             for p_name, p_obj in game.powers.items()
             if not p_obj.is_eliminated()
         ]
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(active_powers)
-        ) as executor:
-            futures = {}
-            for power_name, _ in active_powers:
-                # model_id = game.power_model_map.get(power_name, "o3-mini") # Client now managed by agent
-                # client = load_model_client(model_id) # Client now managed by agent
-                
-                # == Goal 2: Inject Agent State into Order Generation ==
-                if power_name not in agents:
-                     logger.warning(f"Agent not found for active power {power_name}. Skipping order generation.")
-                     continue
-                agent = agents[power_name]
-                client = agent.client # Use the agent's client
-                # ======================================================
+        order_tasks = []
+        power_names_for_order_tasks = []
 
-                possible_orders = gather_possible_orders(game, power_name)
-                if not possible_orders:
-                    logger.debug(f"No orderable locations for {power_name}; skipping order generation.")
-                    continue
-                board_state = game.get_state()
+        for power_name, _ in active_powers:
+             if power_name not in agents:
+                 logger.warning(f"Agent not found for active power {power_name}. Skipping order generation.")
+                 continue
+             agent = agents[power_name]
+             client = agent.client 
 
-                future = executor.submit(
-                    get_valid_orders,
-                    game,
-                    client,
-                    board_state,
-                    power_name,
-                    possible_orders,
-                    game_history,  # Pass game_history object
-                    model_error_stats,
-                    # == Goal 2: Inject Agent State into Order Generation ==
-                    agent_goals=agent.goals,
-                    agent_relationships=agent.relationships,
-                    # ======================================================
-                )
-                futures[future] = power_name
-                logger.debug(f"Submitted get_valid_orders task for {power_name}.")
+             possible_orders = gather_possible_orders(game, power_name)
+             if not possible_orders:
+                 logger.debug(f"No orderable locations for {power_name}; skipping order generation.")
+                 continue
+             board_state = game.get_state()
 
-            for future in concurrent.futures.as_completed(futures):
-                p_name = futures[future]
-                try:
-                    orders = future.result()
-                    logger.debug(f"Validated orders for {p_name}: {orders}")
-                    if orders:
-                        game.set_orders(p_name, orders)
-                        logger.debug(
-                            f"Set orders for {p_name} in {game.current_short_phase}: {orders}"
-                        )
-                    else:
-                        logger.debug(f"No valid orders returned for {p_name}.")
-                except Exception as exc:
-                    logger.error(f"LLM request failed for {p_name}: {exc}")
+             # Append the awaitable call to get_valid_orders
+             order_tasks.append(
+                 get_valid_orders(
+                     game,
+                     client,
+                     board_state,
+                     power_name,
+                     possible_orders,
+                     game_history,  # Pass game_history object
+                     model_error_stats,
+                     agent_goals=agent.goals,
+                     agent_relationships=agent.relationships,
+                 )
+             )
+             power_names_for_order_tasks.append(power_name)
+             logger.debug(f"Prepared get_valid_orders task for {power_name}.")
+
+        # Run order generation tasks concurrently
+        if order_tasks:
+             logger.debug(f"Running {len(order_tasks)} order generation tasks concurrently...")
+             order_results = await asyncio.gather(*order_tasks, return_exceptions=True)
+        else:
+             logger.debug("No order generation tasks to run.")
+             order_results = []
+
+        # Process order results and set them in the game
+        for i, result in enumerate(order_results):
+             p_name = power_names_for_order_tasks[i]
+             agent = agents[p_name] # Get agent for logging/stats if needed
+             model_name = agent.client.model_name
+
+             if isinstance(result, Exception):
+                 logger.error(f"Error during get_valid_orders for {p_name}: {result}", exc_info=result)
+                 # Log error stats (consider if fallback orders should be set here)
+                 if model_name in model_error_stats:
+                    model_error_stats[model_name].setdefault("order_generation_errors", 0)
+                    model_error_stats[model_name]["order_generation_errors"] += 1
+                 # Optionally set fallback orders here if needed, e.g., game.set_orders(p_name, []) or specific fallback
+                 game.set_orders(p_name, []) # Set empty orders on error for now
+                 logger.warning(f"Setting empty orders for {p_name} due to generation error.")
+             elif result is None:
+                 # Handle case where get_valid_orders might theoretically return None
+                 logger.warning(f"get_valid_orders returned None for {p_name}. Setting empty orders.")
+                 game.set_orders(p_name, [])
+                 if model_name in model_error_stats:
+                     model_error_stats[model_name].setdefault("order_generation_errors", 0)
+                     model_error_stats[model_name]["order_generation_errors"] += 1
+             else:
+                 # Result is the list of validated orders
+                 orders = result
+                 logger.debug(f"Validated orders for {p_name}: {orders}")
+                 if orders:
+                     game.set_orders(p_name, orders)
+                     logger.debug(
+                         f"Set orders for {p_name} in {game.current_short_phase}: {orders}"
+                     )
+                 else:
+                     logger.debug(f"No valid orders returned by get_valid_orders for {p_name}. Setting empty orders.")
+                     game.set_orders(p_name, []) # Set empty if get_valid_orders returned empty
+
+        # --- End Async Order Generation ---
 
         # Process orders
         logger.info(f"Processing orders for {current_phase}...")
@@ -405,8 +444,7 @@ def main():
             logger.info(f"  {power:<8}: {order_str}")
         logger.info("-----------------------------------")
 
-        # == Goal 3: Implement LLM-Powered State Update ==
-        # Analyze the results of the phase that just completed
+        # --- Async State Update --- 
         completed_phase_name = current_phase # The phase name BEFORE processing
         logger.info(f"Starting state update analysis for completed phase {completed_phase_name}...")
         
@@ -422,35 +460,46 @@ def main():
 
         if active_agent_powers: # Only run if there are agents to update
              logger.info(f"Beginning concurrent state analysis for {len(active_agent_powers)} agents...")
-             with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_agent_powers)) as executor:
-                  analysis_futures = {}
-                  for power_name, _ in active_agent_powers:
-                       agent = agents[power_name]
-                       logger.debug(f"Submitting state analysis task for {power_name}")
-                       # Submit the analysis task - assumes analyze_phase_and_update_state exists in DiplomacyAgent
-                       future = executor.submit(
-                            agent.analyze_phase_and_update_state,
+             
+             analysis_tasks = []
+             power_names_for_analysis = []
+
+             for power_name, _ in active_agent_powers:
+                  agent = agents[power_name]
+                  logger.debug(f"Preparing state analysis task for {power_name}")
+                  # Append the awaitable call
+                  analysis_tasks.append(
+                       agent.analyze_phase_and_update_state(
                             game, 
-                            current_board_state,
+                            current_board_state, # Use state AFTER processing
                             phase_summary, 
                             game_history
                        )
-                       analysis_futures[future] = power_name
+                  )
+                  power_names_for_analysis.append(power_name)
                   
-                  # Wait for analyses to complete and log any errors
-                  for future in concurrent.futures.as_completed(analysis_futures):
-                      power_name = analysis_futures[future]
-                      try:
-                          future.result() # Check for exceptions during analysis
-                          logger.debug(f"State analysis completed successfully for {power_name}.")
-                      except Exception as e:
-                          logger.error(f"Error during state analysis for {power_name}: {e}")
+             # Run analysis tasks concurrently
+             if analysis_tasks:
+                  logger.debug(f"Running {len(analysis_tasks)} state analysis tasks concurrently...")
+                  analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
+             else:
+                  analysis_results = []
+                  
+             # Process results (check for exceptions)
+             for i, result in enumerate(analysis_results):
+                 power_name = power_names_for_analysis[i]
+                 if isinstance(result, Exception):
+                      logger.error(f"Error during state analysis for {power_name}: {result}", exc_info=result)
+                      # Optionally log error stats here
+                 else:
+                      # Result is None if the function completes normally
+                      logger.debug(f"State analysis completed successfully for {power_name}.")
 
              logger.info(f"Finished concurrent state analysis for {len(active_agent_powers)} agents.")
              logger.info(f"Completed state update analysis for phase {completed_phase_name}.")
         else:
              logger.info(f"No active agents found to perform state update analysis for phase {completed_phase_name}.")
-        # ===============================================
+        # --- End Async State Update ---
 
         # Append the strategic directives to the manifesto file
         strategic_directives = game_history.get_strategic_directives()
@@ -519,4 +568,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Run the async main function
+    asyncio.run(main())

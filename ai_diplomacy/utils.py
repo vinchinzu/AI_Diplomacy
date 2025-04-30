@@ -42,7 +42,7 @@ def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
     return result
 
 
-def get_valid_orders(
+async def get_valid_orders(
     game: Game,
     client,
     board_state,
@@ -60,7 +60,7 @@ def get_valid_orders(
     """
 
     # Ask the LLM for orders
-    orders = client.get_orders(
+    orders = await client.get_orders(
         game=game,
         board_state=board_state,
         power_name=power_name,
