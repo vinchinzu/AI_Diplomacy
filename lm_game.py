@@ -25,6 +25,7 @@ from ai_diplomacy.negotiations import conduct_negotiations
 from ai_diplomacy.planning import planning_phase
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.agent import DiplomacyAgent
+import ai_diplomacy.narrative
 
 dotenv.load_dotenv()
 

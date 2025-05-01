@@ -27,7 +27,7 @@ class GamePhaseData(Jsonable):
     """ Small class to represent data for a game phase:
         phase name, state, orders, orders results and messages for this phase.
     """
-    __slots__ = ['name', 'state', 'orders', 'results', 'messages', 'summary']
+    __slots__ = ['name', 'state', 'orders', 'results', 'messages', 'summary', 'statistical_summary']
 
     model = {
         strings.NAME: str,
@@ -35,10 +35,11 @@ class GamePhaseData(Jsonable):
         strings.ORDERS: parsing.DictType(str, parsing.OptionalValueType(parsing.SequenceType(str))),
         strings.RESULTS: parsing.DictType(str, parsing.SequenceType(parsing.StringableType(common.StringableCode))),
         strings.MESSAGES: MESSAGES_TYPE,
-        'summary': parsing.OptionalValueType(str)
+        'summary': parsing.OptionalValueType(str),
+        'statistical_summary': parsing.OptionalValueType(str)
     }
 
-    def __init__(self, name=None, state=None, orders=None, messages=None, results=None, summary=None, **kwargs):
+    def __init__(self, name=None, state=None, orders=None, messages=None, results=None, summary=None, statistical_summary=None, **kwargs):
         """ Constructor. """
         self.name = ''
 
@@ -50,5 +51,5 @@ class GamePhaseData(Jsonable):
 
         self.messages = {} 
         self.summary = None
-        super(GamePhaseData, self).__init__(name=name, state=state, orders=orders, results=results, messages=messages, summary=summary, **kwargs)
-
+        self.statistical_summary = None
+        super(GamePhaseData, self).__init__(name=name, state=state, orders=orders, results=results, messages=messages, summary=summary, statistical_summary=statistical_summary, **kwargs)
