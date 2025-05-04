@@ -25,7 +25,7 @@ def assign_models_to_powers() -> Dict[str, str]:
         "RUSSIA": "gemini-2.5-flash-preview-04-17",
         "ITALY": "gpt-4o",
         "AUSTRIA": "gpt-4o-mini",
-        "TURKEY": "claude-3-7-sonnet-latest",
+        "TURKEY": "gemini-2.5-pro-preview-03-25",
     }
 
 

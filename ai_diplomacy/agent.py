@@ -99,6 +99,8 @@ class DiplomacyAgent:
         # Try different patterns to extract JSON
         # 1. Try to find JSON wrapped in markdown code blocks
         patterns = [
+            # New: More robust pattern allowing optional whitespace and 'json'
+            r"\s*```(?:json)?\s*\n(.*?)\n\s*```\s*",
             r"```json\n(.*?)\n```",  # Markdown JSON block
             r"```\n(.*?)\n```",      # Generic markdown block
             r"`(.*?)`",              # Inline code block
@@ -157,6 +159,10 @@ class DiplomacyAgent:
             entry = str(entry)
         self.private_journal.append(entry)
         logger.debug(f"[{self.power_name} Journal]: {entry}")
+
+    def get_relationships(self) -> Dict[str, str]:
+        """Returns a copy of the agent's current relationships with other powers."""
+        return self.relationships.copy()
 
     # Make the initialization method asynchronous
     async def initialize_agent_state(self, game: 'Game', game_history: 'GameHistory'):

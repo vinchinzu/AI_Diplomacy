@@ -169,6 +169,9 @@ async def main():
              logger.error(f"Initialization result mismatch - unexpected result: {result}")
     # ========================================
 
+    # == Add storage for relationships per phase ==
+    all_phase_relationships = {}
+
     while not game.is_game_done:
         phase_start = time.time()
         current_phase = game.get_current_phase()
@@ -445,6 +448,28 @@ async def main():
             logger.info(f"  {power:<8}: {order_str}")
         logger.info("-----------------------------------")
 
+        # == Collect Agent Relationships for this Phase ==
+        current_relationships_for_phase = {}
+        logger.debug(f"Collecting relationships for phase: {current_short_phase}")
+        active_powers_in_phase = set(game.powers.keys()) # Get powers present at end of phase
+        for power_name, agent in agents.items():
+            # Only collect relationships if the power is still active in the game
+            if power_name in active_powers_in_phase and not game.powers[power_name].is_eliminated():
+                try:
+                    current_relationships_for_phase[power_name] = agent.get_relationships()
+                    logger.debug(f"  Collected relationships for {power_name}")
+                except Exception as e:
+                     logger.error(f"Error getting relationships for {power_name}: {e}")
+            # else:
+            #    logger.debug(f"  Skipping relationships for inactive/eliminated power {power_name}")
+        all_phase_relationships[current_short_phase] = current_relationships_for_phase
+        logger.debug(f"Stored relationships for {len(current_relationships_for_phase)} agents in phase {current_short_phase}")
+        # ================================================
+
+        # Log phase duration
+        phase_end = time.time()
+        logger.info(f"Phase {current_phase} took {phase_end - phase_start:.2f}s")
+
         # --- Async State Update --- 
         completed_phase_name = current_phase # The phase name BEFORE processing
         logger.info(f"Starting state update analysis for completed phase {completed_phase_name}...")
@@ -552,6 +577,17 @@ async def main():
             summary_phases_count += 1
             logger.debug(f"Added summary to phase {phase_name} in export")
     logger.info(f"Added summaries to {summary_phases_count}/{len(saved_game['phases'])} phases in the export")
+
+    # == Add agent relationships to each phase in the export ==
+    relationships_added_count = 0
+    for i, phase_data in enumerate(saved_game['phases']):
+        phase_name = phase_data.get('name') # Assumes 'name' key exists and matches current_short_phase used earlier
+        if phase_name and phase_name in all_phase_relationships:
+            saved_game['phases'][i]['agent_relationships'] = all_phase_relationships[phase_name]
+            relationships_added_count += 1
+            logger.debug(f"Added agent_relationships to phase {phase_name} in export")
+    logger.info(f"Added agent_relationships to {relationships_added_count}/{len(saved_game['phases'])} phases in the export")
+    # =====================================================
 
     # Save the modified game data
     logger.info(f"Saving game to {output_path}...")

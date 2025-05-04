@@ -20,7 +20,7 @@ from openai import OpenAI  # Import the new OpenAI client
 from diplomacy.engine.game import Game
 
 LOGGER = logging.getLogger(__name__)
-
+ 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
