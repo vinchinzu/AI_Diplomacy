@@ -22,16 +22,21 @@ def assign_models_to_powers() -> Dict[str, str]:
     Example usage: define which model each power uses.
     Return a dict: { power_name: model_id, ... }
     POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
+    Models supported: o3-mini, o4-mini, o3, gpt-4o, gpt-4o-mini
+                    claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022, claude-3-7-sonnet-20250219 
+                    gemini-2.0-flash, gemini-2.5-flash-preview-04-17, gemini-2.5-pro-preview-03-25, 
+                    deepseek-chat, deepseek-reasoner
+                    openrouter-meta-llama/llama-3.3-70b-instruct, openrouter-qwen/qwen3-235b-a22b, openrouter-microsoft/phi-4-reasoning-plus:free, openrouter-deepseek/deepseek-prover-v2:free, openrouter-meta-llama/llama-4-maverick:free, openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free, openrouter-google/gemma-3-12b-it:free
     """
 
     return {
-        "FRANCE": "o3-mini",
-        "GERMANY": "claude-3-5-haiku-20241022",
-        "ENGLAND": "gemini-2.0-flash",
-        "RUSSIA": "gemini-2.5-flash-preview-04-17",
-        "ITALY": "gpt-4o",
-        "AUSTRIA": "gpt-4o-mini",
-        "TURKEY": "gemini-2.5-pro-preview-03-25",
+        "AUSTRIA": "openrouter-meta-llama/llama-3.3-70b-instruct",
+        "ENGLAND": "openrouter-qwen/qwen3-235b-a22b",
+        "FRANCE": "openrouter-microsoft/phi-4-reasoning-plus:free",
+        "GERMANY": "openrouter-deepseek/deepseek-prover-v2:free",
+        "ITALY": "openrouter-meta-llama/llama-4-maverick:free",
+        "RUSSIA": "openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free",
+        "TURKEY": "openrouter-google/gemma-3-12b-it:free",
     }
 
 

@@ -804,6 +804,8 @@ class OpenRouterClient(BaseModelClient):
         # Allow specifying just the model identifier or the full path
         if not model_name.startswith("openrouter/") and "/" not in model_name:
             model_name = f"openrouter/{model_name}"
+        if model_name.startswith("openrouter-"):
+            model_name = model_name.replace("openrouter-", "")
             
         super().__init__(model_name)
         self.api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -861,14 +863,15 @@ def load_model_client(model_id: str) -> BaseModelClient:
     """
     # Basic pattern matching or direct mapping
     lower_id = model_id.lower()
-    if "claude" in lower_id:
+    # Check for OpenRouter first to handle prefixed models like openrouter-deepseek
+    if "openrouter" in lower_id or "quasar" in lower_id:
+        return OpenRouterClient(model_id)
+    elif "claude" in lower_id:
         return ClaudeClient(model_id)
     elif "gemini" in lower_id:
         return GeminiClient(model_id)
     elif "deepseek" in lower_id:
         return DeepSeekClient(model_id)
-    elif "openrouter" in lower_id or "quasar" in lower_id:
-        return OpenRouterClient(model_id)
     else:
         # Default to OpenAI
         return OpenAIClient(model_id)
