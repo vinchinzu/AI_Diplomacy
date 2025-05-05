@@ -6,8 +6,8 @@ import re
 
 # Assuming BaseModelClient is importable from clients.py in the same directory
 from .clients import BaseModelClient 
-# Import load_prompt from utils
-from .utils import load_prompt
+# Import load_prompt and the new logging wrapper from utils
+from .utils import load_prompt, run_llm_and_log
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +165,10 @@ class DiplomacyAgent:
         return self.relationships.copy()
 
     # Make the initialization method asynchronous
-    async def initialize_agent_state(self, game: 'Game', game_history: 'GameHistory'):
+    async def initialize_agent_state(self, game: 'Game', game_history: 'GameHistory', log_file_path: str):
         """Uses the LLM to set initial goals based on the starting game state."""
         logger.info(f"[{self.power_name}] Initializing agent state using LLM...")
+        current_phase = game.get_current_phase() # Get phase for logging
         try:
             # Use a simplified prompt for initial state generation
             # TODO: Create a dedicated 'initial_state_prompt.txt'
@@ -198,8 +199,15 @@ class DiplomacyAgent:
             )
             full_prompt = initial_prompt + "\n\n" + context
 
-            # Await the asynchronous client call
-            response = await self.client.generate_response(full_prompt)
+            # Await the asynchronous client call USING THE WRAPPER
+            response = await run_llm_and_log(
+                client=self.client,
+                prompt=full_prompt,
+                log_file_path=log_file_path,
+                power_name=self.power_name,
+                phase=current_phase,
+                response_type='initialization',
+            )
             logger.debug(f"[{self.power_name}] LLM response for initial state: {response}")
 
             # Try to extract JSON from the response
@@ -295,12 +303,13 @@ class DiplomacyAgent:
         logger.debug(f"[{self.power_name}] {prefix} State: Goals={self.goals}, Relationships={self.relationships}")
 
     # Make this method async
-    async def analyze_phase_and_update_state(self, game: 'Game', board_state: dict, phase_summary: str, game_history: 'GameHistory'):
+    async def analyze_phase_and_update_state(self, game: 'Game', board_state: dict, phase_summary: str, game_history: 'GameHistory', log_file_path: str):
         """Analyzes the outcome of the last phase and updates goals/relationships using the LLM."""
         # Use self.power_name internally
         power_name = self.power_name 
-        logger.info(f"[{power_name}] Analyzing phase {game.current_short_phase} outcome to update state...")
-        self.log_state(f"Before State Update ({game.current_short_phase})")
+        current_phase = game.get_current_phase() # Get phase for logging
+        logger.info(f"[{power_name}] Analyzing phase {current_phase} outcome to update state...")
+        self.log_state(f"Before State Update ({current_phase})")
 
         try:
             # 1. Construct the prompt using the dedicated state update prompt file
@@ -362,8 +371,15 @@ class DiplomacyAgent:
             )
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
-            # Use the client's raw generation capability - AWAIT the async call
-            response = await self.client.generate_response(prompt)
+            # Use the client's raw generation capability - AWAIT the async call USING THE WRAPPER
+            response = await run_llm_and_log(
+                client=self.client,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=power_name,
+                phase=current_phase,
+                response_type='state_update',
+            )
             logger.debug(f"[{power_name}] Raw LLM response for state update: {response}")
 
             # Use our robust JSON extraction helper

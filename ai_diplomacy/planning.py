@@ -13,7 +13,8 @@ def planning_phase(
     game, 
     agents: Dict[str, DiplomacyAgent], 
     game_history: GameHistory, 
-    model_error_stats
+    model_error_stats,
+    log_file_path: str,
 ):
     """
     Lets each power generate a strategic plan using their DiplomacyAgent.
@@ -45,6 +46,7 @@ def planning_phase(
                 game_history,
                 agent_goals=agent.goals,
                 agent_relationships=agent.relationships,
+                log_file_path=log_file_path,
             )
             futures[future] = power_name
             logger.debug(f"Submitted get_plan task for {power_name}.")

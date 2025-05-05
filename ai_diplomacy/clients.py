@@ -19,7 +19,7 @@ import google.generativeai as genai
 
 from diplomacy.engine.message import GLOBAL
 from .game_history import GameHistory
-from .utils import load_prompt
+from .utils import load_prompt, run_llm_and_log
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -160,6 +160,8 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         conversation_text: str,
         model_error_stats: dict,
+        log_file_path: str,
+        phase: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
     ) -> List[str]:
@@ -181,7 +183,15 @@ class BaseModelClient:
         raw_response = ""
 
         try:
-            raw_response = await self.generate_response(prompt)
+            # Call LLM using the logging wrapper
+            raw_response = await run_llm_and_log(
+                client=self,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=power_name,
+                phase=phase,
+                response_type='order',
+            )
             logger.debug(
                 f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
             )
@@ -348,6 +358,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        log_file_path: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
@@ -374,6 +385,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        log_file_path: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
@@ -399,6 +411,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        log_file_path: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
@@ -410,6 +423,7 @@ class BaseModelClient:
             possible_orders,
             game_history,
             game_phase,
+            log_file_path,
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
         )
@@ -426,6 +440,7 @@ class BaseModelClient:
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
         game_phase: str,
+        log_file_path: str,
         active_powers: Optional[List[str]] = None,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
@@ -443,6 +458,7 @@ class BaseModelClient:
             active_powers: List of powers still active.
             agent_goals: The agent's goals.
             agent_relationships: The agent's relationships.
+            log_file_path: Path to the log file.
 
         Returns:
             List[Dict[str, str]]: Parsed JSON messages from the LLM response.
@@ -456,6 +472,7 @@ class BaseModelClient:
             possible_orders,
             game_history,
             game_phase,
+            log_file_path,
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
         )
@@ -463,7 +480,15 @@ class BaseModelClient:
         logger.debug(f"[{self.model_name}] Conversation prompt for {power_name}:\n{prompt}")
 
         try:
-            response = await self.generate_response(prompt)
+            # Call LLM using the logging wrapper
+            response = await run_llm_and_log(
+                client=self,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=power_name,
+                phase=game_phase,
+                response_type='negotiation',
+            )
             logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{response}")
             
             messages = []
@@ -525,6 +550,7 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
+        log_file_path: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
     ) -> str:
@@ -536,6 +562,7 @@ class BaseModelClient:
             board_state: The current board state dictionary.
             power_name: The name of the power for which to generate a plan.
             game_history: The history of the game.
+            log_file_path: Path to the log file.
             agent_goals: The agent's goals.
             agent_relationships: The agent's relationships.
 
@@ -576,7 +603,14 @@ class BaseModelClient:
 
         # 4. Generate the response from the LLM
         try:
-            raw_plan = await self.generate_response(full_prompt)
+            raw_plan = await run_llm_and_log(
+                client=self,
+                prompt=full_prompt,
+                log_file_path=log_file_path,
+                power_name=power_name,
+                phase=game.current_short_phase, # Get phase from game object
+                response_type='plan',
+            )
             logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_plan}")
             logger.info(f"[{self.model_name}] Validated plan for {power_name}: {raw_plan}")
             # No parsing needed for the plan, return the raw string

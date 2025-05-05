@@ -3,6 +3,12 @@ import logging
 import os
 from typing import Dict, List, Tuple, Set, Optional
 from diplomacy import Game
+import csv
+from typing import TYPE_CHECKING
+
+# Avoid circular import for type hinting
+if TYPE_CHECKING:
+    from .clients import BaseModelClient
 
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
@@ -52,6 +58,8 @@ async def get_valid_orders(
     model_error_stats: Dict[str, Dict[str, int]],
     agent_goals: Optional[List[str]] = None,
     agent_relationships: Optional[Dict[str, str]] = None,
+    log_file_path: str = None,
+    phase: str = None,
 ) -> List[str]:
     """
     Tries up to 'max_retries' to generate and validate orders.
@@ -69,6 +77,8 @@ async def get_valid_orders(
         model_error_stats=model_error_stats,
         agent_goals=agent_goals,
         agent_relationships=agent_relationships,
+        log_file_path=log_file_path,
+        phase=phase,
     )
     
     # Initialize list to track invalid order information
@@ -229,3 +239,79 @@ def load_prompt(filename: str) -> str:
         logger.error(f"Prompt file not found: {prompt_path}")
         # Return an empty string or raise an error, depending on desired handling
         return ""
+
+
+# == New LLM Response Logging Function ==
+def log_llm_response(
+    log_file_path: str,
+    model_name: str,
+    power_name: Optional[str], # Optional for non-power-specific calls like summary
+    phase: str,
+    response_type: str,
+    raw_response: str,
+):
+    """Appends a raw LLM response to a CSV log file."""
+    try:
+        # Ensure the directory exists
+        log_dir = os.path.dirname(log_file_path)
+        if log_dir: # Ensure log_dir is not empty (e.g., if path is just a filename)
+             os.makedirs(log_dir, exist_ok=True)
+
+        # Check if file exists to write header
+        file_exists = os.path.isfile(log_file_path)
+
+        with open(log_file_path, "a", newline="", encoding="utf-8") as csvfile:
+            fieldnames = ["model", "power", "phase", "response_type", "raw_response"]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            if not file_exists:
+                writer.writeheader()  # Write header only if file is new
+
+            writer.writerow({
+                "model": model_name,
+                "power": power_name if power_name else "game", # Use 'game' if no specific power
+                "phase": phase,
+                "response_type": response_type,
+                "raw_response": raw_response,
+            })
+    except Exception as e:
+        logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)
+
+
+# == New Async LLM Wrapper with Logging ==
+async def run_llm_and_log(
+    client: 'BaseModelClient',
+    prompt: str,
+    log_file_path: str,
+    power_name: Optional[str],
+    phase: str,
+    response_type: str,
+) -> str:
+    """Calls the client's generate_response and logs the raw output."""
+    raw_response = "" # Initialize in case of error
+    try:
+        raw_response = await client.generate_response(prompt)
+        # Log the successful response
+        log_llm_response(
+            log_file_path=log_file_path,
+            model_name=client.model_name,
+            power_name=power_name,
+            phase=phase,
+            response_type=response_type,
+            raw_response=raw_response,
+        )
+    except Exception as e:
+         # Log the error attempt (optional, could log empty response instead)
+        logger.error(f"Error during LLM call for {power_name}/{response_type} in phase {phase}: {e}", exc_info=True)
+        log_llm_response(
+            log_file_path=log_file_path,
+            model_name=client.model_name,
+            power_name=power_name,
+            phase=phase,
+            response_type=f"ERROR_{response_type}", # Mark response type as error
+            raw_response=f"Error generating response: {e}",
+        )
+        # Depending on desired behavior, you might want to re-raise the exception
+        # or return a specific error indicator string. Returning empty for now.
+        # raise e
+    return raw_response

@@ -25,6 +25,7 @@ async def conduct_negotiations(
     agents: Dict[str, DiplomacyAgent],
     game_history: 'GameHistory',
     model_error_stats: Dict[str, Dict[str, int]],
+    log_file_path: str,
     max_rounds: int = 3,
 ):
     """
@@ -68,7 +69,8 @@ async def conduct_negotiations(
                     possible_orders,
                     game_history,
                     game.current_short_phase,
-                    active_powers,
+                    log_file_path=log_file_path,
+                    active_powers=active_powers,
                     agent_goals=agent.goals,
                     agent_relationships=agent.relationships,
                 )

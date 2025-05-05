@@ -110,6 +110,8 @@ async def main():
     # Use provided output filename or generate one based on the timestamp
     game_file_path = args.output if args.output else f"{result_folder}/lmvsgame.json"
     overview_file_path = f"{result_folder}/overview.jsonl"
+    # == Add LLM Response Log Path ==
+    llm_log_file_path = f"{result_folder}/llm_responses.csv"
 
     # Handle power model mapping
     if args.models:
@@ -145,7 +147,8 @@ async def main():
                 agent = DiplomacyAgent(power_name=power_name, client=client) 
                 agents[power_name] = agent
                 logger.info(f"Preparing initialization task for {power_name} with model {model_id}")
-                initialization_tasks.append(agent.initialize_agent_state(game, game_history))
+                # Pass log path to initialization
+                initialization_tasks.append(agent.initialize_agent_state(game, game_history, llm_log_file_path))
             except Exception as e:
                 logger.error(f"Failed to create agent or client for {power_name} with model {model_id}: {e}", exc_info=True)
         else:
@@ -198,107 +201,117 @@ async def main():
 
         # If it's a movement phase (e.g. ends with "M"), conduct negotiations
         if game.current_short_phase.endswith("M"):
-            
-            if args.planning_phase:
-                logger.debug("Starting planning phase block...")
-                game_history = planning_phase(
+            if args.num_negotiation_rounds > 0:
+                logger.info(f"Running {args.num_negotiation_rounds} rounds of negotiations...")
+                game_history = await conduct_negotiations(
                     game,
-                    agents, # Pass agents dict
+                    agents,
                     game_history,
                     model_error_stats,
+                    max_rounds=args.num_negotiation_rounds,
+                    # Pass log path
+                    log_file_path=llm_log_file_path,
                 )
-            logger.debug("Starting negotiation phase block...")
-            # Await the async negotiation function
-            game_history = await conduct_negotiations(
-                game,
-                agents, # Pass agents dict
-                game_history,
-                model_error_stats,
-                max_rounds=args.num_negotiation_rounds,
+            else:
+                logger.info("Skipping negotiation phase as num_negotiation_rounds=0")
+
+            # === Execute Planning Phase (if enabled) AFTER potential negotiations ===
+            if args.planning_phase:
+                logger.info("Executing strategic planning phase...")
+                # NOTE: Assuming planning_phase needs modification to accept log_path
+                # We'll modify this call after checking planning.py
+                # Pass log path to planning
+                await planning_phase(
+                    game,
+                    agents,
+                    game_history,
+                    model_error_stats, 
+                    log_file_path=llm_log_file_path,
+                )
+            # ======================================================================
+
+        # AI Decision Making: Get orders for each power
+        logger.info("Getting orders from agents...")
+        order_tasks = []
+        order_power_names = []
+        # Calculate board state once before the loop
+        board_state = game.get_state()
+
+        for power_name, agent in agents.items():
+            if game.powers[power_name].is_eliminated():
+                logger.debug(f"Skipping order generation for eliminated power {power_name}.")
+                continue
+
+            # Calculate possible orders for the current power
+            possible_orders = gather_possible_orders(game, power_name)
+            if not possible_orders:
+                logger.debug(f"No orderable locations for {power_name}; submitting empty orders.")
+                game.set_orders(power_name, []) # Ensure empty orders if none possible
+                continue
+
+            order_power_names.append(power_name)
+            # NOTE: get_valid_orders is in utils, we assume it calls client.get_orders
+            # Need to modify get_valid_orders signature in utils.py later
+            order_tasks.append(
+                get_valid_orders(
+                    # --- Positional Arguments --- 
+                    game,                    
+                    agent.client,            
+                    board_state,             
+                    power_name,              
+                    possible_orders,         
+                    game_history,            
+                    model_error_stats,       
+                    # --- Keyword Arguments --- 
+                    agent_goals=agent.goals,
+                    agent_relationships=agent.relationships,
+                    log_file_path=llm_log_file_path,
+                    phase=current_phase,     
+                )
             )
 
-        # --- Async Order Generation --- 
-        active_powers = [
-            (p_name, p_obj)
-            for p_name, p_obj in game.powers.items()
-            if not p_obj.is_eliminated()
-        ]
-
-        order_tasks = []
-        power_names_for_order_tasks = []
-
-        for power_name, _ in active_powers:
-             if power_name not in agents:
-                 logger.warning(f"Agent not found for active power {power_name}. Skipping order generation.")
-                 continue
-             agent = agents[power_name]
-             client = agent.client 
-
-             possible_orders = gather_possible_orders(game, power_name)
-             if not possible_orders:
-                 logger.debug(f"No orderable locations for {power_name}; skipping order generation.")
-                 continue
-             board_state = game.get_state()
-
-             # Append the awaitable call to get_valid_orders
-             order_tasks.append(
-                 get_valid_orders(
-                     game,
-                     client,
-                     board_state,
-                     power_name,
-                     possible_orders,
-                     game_history,  # Pass game_history object
-                     model_error_stats,
-                     agent_goals=agent.goals,
-                     agent_relationships=agent.relationships,
-                 )
-             )
-             power_names_for_order_tasks.append(power_name)
-             logger.debug(f"Prepared get_valid_orders task for {power_name}.")
-
-        # Run order generation tasks concurrently
+        # Run order generation concurrently
         if order_tasks:
-             logger.debug(f"Running {len(order_tasks)} order generation tasks concurrently...")
-             order_results = await asyncio.gather(*order_tasks, return_exceptions=True)
+            logger.debug(f"Running {len(order_tasks)} order generation tasks concurrently...")
+            order_results = await asyncio.gather(*order_tasks, return_exceptions=True)
         else:
-             logger.debug("No order generation tasks to run.")
-             order_results = []
+            logger.debug("No order generation tasks to run.")
+            order_results = []
 
         # Process order results and set them in the game
         for i, result in enumerate(order_results):
-             p_name = power_names_for_order_tasks[i]
-             agent = agents[p_name] # Get agent for logging/stats if needed
-             model_name = agent.client.model_name
+            p_name = order_power_names[i]
+            agent = agents[p_name] # Get agent for logging/stats if needed
+            model_name = agent.client.model_name
 
-             if isinstance(result, Exception):
-                 logger.error(f"Error during get_valid_orders for {p_name}: {result}", exc_info=result)
-                 # Log error stats (consider if fallback orders should be set here)
-                 if model_name in model_error_stats:
+            if isinstance(result, Exception):
+                logger.error(f"Error during get_valid_orders for {p_name}: {result}", exc_info=result)
+                # Log error stats (consider if fallback orders should be set here)
+                if model_name in model_error_stats:
                     model_error_stats[model_name].setdefault("order_generation_errors", 0)
                     model_error_stats[model_name]["order_generation_errors"] += 1
-                 # Optionally set fallback orders here if needed, e.g., game.set_orders(p_name, []) or specific fallback
-                 game.set_orders(p_name, []) # Set empty orders on error for now
-                 logger.warning(f"Setting empty orders for {p_name} due to generation error.")
-             elif result is None:
-                 # Handle case where get_valid_orders might theoretically return None
-                 logger.warning(f"get_valid_orders returned None for {p_name}. Setting empty orders.")
-                 game.set_orders(p_name, [])
-                 if model_name in model_error_stats:
-                     model_error_stats[model_name].setdefault("order_generation_errors", 0)
-                     model_error_stats[model_name]["order_generation_errors"] += 1
-             else:
-                 # Result is the list of validated orders
-                 orders = result
-                 logger.debug(f"Validated orders for {p_name}: {orders}")
-                 if orders:
-                     game.set_orders(p_name, orders)
-                     logger.debug(
-                         f"Set orders for {p_name} in {game.current_short_phase}: {orders}"
-                     )
-                 else:
-                     logger.debug(f"No valid orders returned by get_valid_orders for {p_name}. Setting empty orders.")
-                     game.set_orders(p_name, []) # Set empty if get_valid_orders returned empty
+                # Optionally set fallback orders here if needed, e.g., game.set_orders(p_name, []) or specific fallback
+                game.set_orders(p_name, []) # Set empty orders on error for now
+                logger.warning(f"Setting empty orders for {p_name} due to generation error.")
+            elif result is None:
+                # Handle case where get_valid_orders might theoretically return None
+                logger.warning(f"get_valid_orders returned None for {p_name}. Setting empty orders.")
+                game.set_orders(p_name, [])
+                if model_name in model_error_stats:
+                    model_error_stats[model_name].setdefault("order_generation_errors", 0)
+                    model_error_stats[model_name]["order_generation_errors"] += 1
+            else:
+                # Result is the list of validated orders
+                orders = result
+                logger.debug(f"Validated orders for {p_name}: {orders}")
+                if orders:
+                    game.set_orders(p_name, orders)
+                    logger.debug(
+                        f"Set orders for {p_name} in {game.current_short_phase}: {orders}"
+                    )
+                else:
+                    logger.debug(f"No valid orders returned by get_valid_orders for {p_name}. Setting empty orders.")
+                    game.set_orders(p_name, []) # Set empty if get_valid_orders returned empty
 
         # --- End Async Order Generation ---
 
@@ -475,39 +488,40 @@ async def main():
         logger.info(f"Starting state update analysis for completed phase {completed_phase_name}...")
         
         # Ensure phase summary exists (it should be generated by the callback during game.process)
-        phase_summary = game.phase_summaries.get(completed_phase_name, f"Summary for {completed_phase_name} not found.")
-        if f"Summary for {completed_phase_name} not found" in phase_summary:
+        phase_summary = game.phase_summaries.get(current_phase, "(Summary not generated)")
+        if f"Summary for {current_phase} not found" in phase_summary:
              logger.warning(phase_summary)
 
         current_board_state = game.get_state() # State *after* processing
 
         # Update state concurrently for active agents
-        active_agent_powers = [p for p in active_powers if p[0] in agents] # Filter for powers with active agents
+        active_agent_powers = [p for p in game.powers.items() if p[0] in agents] # Filter for powers with active agents
 
         if active_agent_powers: # Only run if there are agents to update
              logger.info(f"Beginning concurrent state analysis for {len(active_agent_powers)} agents...")
              
-             analysis_tasks = []
+             state_update_tasks = []
              power_names_for_analysis = []
 
              for power_name, _ in active_agent_powers:
                   agent = agents[power_name]
                   logger.debug(f"Preparing state analysis task for {power_name}")
                   # Append the awaitable call
-                  analysis_tasks.append(
+                  state_update_tasks.append(
                        agent.analyze_phase_and_update_state(
                             game, 
                             current_board_state, # Use state AFTER processing
                             phase_summary, 
-                            game_history
+                            game_history,
+                            llm_log_file_path,
                        )
                   )
                   power_names_for_analysis.append(power_name)
                   
              # Run analysis tasks concurrently
-             if analysis_tasks:
-                  logger.debug(f"Running {len(analysis_tasks)} state analysis tasks concurrently...")
-                  analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
+             if state_update_tasks:
+                  logger.debug(f"Running {len(state_update_tasks)} state analysis tasks concurrently...")
+                  analysis_results = await asyncio.gather(*state_update_tasks, return_exceptions=True)
              else:
                   analysis_results = []
                   
