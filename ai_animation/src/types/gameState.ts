@@ -3,6 +3,14 @@ import { PowerENUMSchema } from './map';
 import { OrderFromString } from './unitOrders';
 import { ProvinceENUMSchema } from './map';
 
+// Define the possible relationship statuses
+const RelationshipStatusSchema = z.enum([
+  "Enemy", 
+  "Unfriendly", 
+  "Neutral", 
+  "Friendly", 
+  "Ally"
+]);
 
 const GameState = z.record(ProvinceENUMSchema, z.object({
   power: PowerENUMSchema,
@@ -22,6 +30,11 @@ const PhaseSchema = z.object({
   }),
   year: z.number().optional(),
   summary: z.string().optional(),
+  // Add agent_relationships based on the provided lmvsgame.json structure
+  agent_relationships: z.record(
+    PowerENUMSchema, 
+    z.record(PowerENUMSchema, RelationshipStatusSchema)
+  ).optional(),
 });
 
 export const GameSchema = z.object({
@@ -32,5 +45,3 @@ export const GameSchema = z.object({
 
 export type GamePhase = z.infer<typeof PhaseSchema>;
 export type GameSchemaType = z.infer<typeof GameSchema>;
-
-

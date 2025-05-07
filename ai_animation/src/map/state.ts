@@ -3,7 +3,7 @@ import { gameState } from "../gameState";
 import { leaderboard } from "../domElements";
 import { ProvTypeENUM, PowerENUM } from "../types/map";
 import { MeshBasicMaterial } from "three";
-
+import { updateRotatingDisplay } from "../components/rotatingDisplay";
 
 export function updateSupplyCenterOwnership(centers) {
   if (!centers) return;
@@ -45,54 +45,11 @@ export function updateSupplyCenterOwnership(centers) {
 }
 
 export function updateLeaderboard(phase) {
-  // Get supply center counts
-  const centerCounts = {};
-  const unitCounts = {};
-
-  // Count supply centers by power
-  if (phase.state?.centers) {
-    for (const [power, provinces] of Object.entries(phase.state.centers)) {
-      centerCounts[power] = provinces.length;
-    }
+  // Instead of directly updating the leaderboard HTML,
+  // use the rotating display component if game data exists
+  if (gameState.gameData) {
+    updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
   }
-
-  // Count units by power
-  if (phase.state?.units) {
-    for (const [power, units] of Object.entries(phase.state.units)) {
-      unitCounts[power] = units.length;
-    }
-  }
-
-  // Combine all powers from both centers and units
-  const allPowers = new Set([
-    ...Object.keys(centerCounts),
-    ...Object.keys(unitCounts)
-  ]);
-
-  // Sort powers by supply center count (descending)
-  const sortedPowers = Array.from(allPowers).sort((a, b) => {
-    return (centerCounts[b] || 0) - (centerCounts[a] || 0);
-  });
-
-  // Build HTML for leaderboard
-  let html = `<strong>Council Standings</strong><br/>`;
-
-  sortedPowers.forEach(power => {
-    const centers = centerCounts[power] || 0;
-    const units = unitCounts[power] || 0;
-
-    // Use CSS classes instead of inline styles for better contrast
-    html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
-          <span class="power-${power.toLowerCase()}">${power}</span>
-          <span>${centers} SCs, ${units} units</span>
-        </div>`;
-  });
-
-  // Add victory condition reminder
-  html += `<hr style="border-color: #555; margin: 8px 0;"/>
-        <small>Victory: 18 supply centers</small>`;
-
-  leaderboard.innerHTML = html;
 }
 
 export function updateMapOwnership() {
@@ -129,4 +86,3 @@ export function updateMapOwnership() {
     }
   }
 }
-

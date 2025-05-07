@@ -56,7 +56,7 @@ export function displayPhase(skipMessages = false) {
 
   // Show messages with animation or immediately based on skipMessages flag
   if (!skipMessages) {
-    //updateChatWindows(currentPhase, true);
+    updateChatWindows(currentPhase, true);
   } else {
     gameState.messagesPlaying = false;
   }

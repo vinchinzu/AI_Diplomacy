@@ -121,14 +121,14 @@
     position: absolute;
     bottom: 20px;
     left: 10px;
-    width: 320px;
-    max-height: 180px;
+    width: 450px;
+    min-height: 180px;
     
     /* Another parchment style with slight variation */
     background: radial-gradient(ellipse at center, #f6e7ca 0%, #d8bc7e 100%);
     border: 3px solid #4f3b16;
     border-radius: 8px;
-    padding: 10px;
+    padding: 15px;
     font-size: 14px;
     line-height: 1.4em;
     overflow-y: auto;
@@ -136,7 +136,6 @@
     
     box-shadow: 0 0 10px rgba(0,0,0,0.4);
     color: #3b2c02;
-    margin-bottom: 13px; /* Add bottom margin to raise leaderboard above banner */
   }
   
   /* Make the power names stand out */

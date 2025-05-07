@@ -10,6 +10,7 @@ import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./do
 import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase } from "./phase";
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
+import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -41,6 +42,9 @@ function initScene() {
     initMap(gameState.scene).then(() => {
       // Update info panel with initial power information
       logger.updateInfoPanel();
+
+      // Initialize rotating display
+      initRotatingDisplay('leaderboard');
 
       // Only show standings board at startup if no game is loaded
       if (!gameState.gameData || !gameState.gameData.phases || gameState.gameData.phases.length === 0) {
@@ -239,6 +243,10 @@ function loadDefaultGameFile() {
       console.log("Default game file loaded and parsed successfully");
       // Explicitly hide standings board after loading game
       hideStandingsBoard();
+      // Update rotating display with game data
+      if (gameState.gameData) {
+        updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+      }
     })
     .catch(error => {
       console.error("Error loading default game file:", error);
@@ -271,6 +279,11 @@ function togglePlayback() {
     if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[1].start()
     // Hide standings board when playback starts
     hideStandingsBoard();
+    
+    // Update rotating display
+    if (gameState.gameData) {
+      updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+    }
 
     // First, show the messages of the current phase if it's the initial playback
     const phase = gameState.gameData.phases[gameState.phaseIndex];
@@ -306,6 +319,10 @@ fileInput.addEventListener('change', e => {
     loadGameBtnFunction(file);
     // Explicitly hide standings board after loading game
     hideStandingsBoard();
+    // Update rotating display with game data
+    if (gameState.gameData) {
+      updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+    }
   }
 });
 
@@ -331,6 +348,5 @@ speedSelector.addEventListener('change', e => {
 
 // --- BOOTSTRAP ON PAGE LOAD ---
 window.addEventListener('load', initScene);
-
 
 

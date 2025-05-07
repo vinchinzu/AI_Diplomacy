@@ -12,10 +12,10 @@ class Logger {
   // Modified to only log to console without updating the info panel
   log = (msg: string) => {
     if (typeof msg !== "string") {
-      throw new Error(`Logger messages must be strings, you passed a ${typeof msg}`)
+      throw new Error(`Logger messages must be strings, you passed a ${typeof msg}`);
     }
     // Remove the update to infoPanel.textContent
-    console.log(msg)
+    console.log(msg);
   }
 
   // Updated function to update info panel with useful information and smooth transitions
@@ -35,7 +35,7 @@ class Logger {
 
       this.infoPanel.innerHTML = `
         <div><strong>Power:</strong> <span class="power-${gameState.currentPower.toLowerCase()}">${gameState.currentPower}</span></div>
-        <div><strong>Current Phase:</strong> ${phaseName} (${currentPhaseNumber}/${totalPhases})</div>
+        <div><strong>Current Phase:</strong> ${phaseName}</div>
         <hr/>
         <h4>Supply Center Counts</h4>
         <ul style="list-style:none;padding-left:0;margin:0;">
@@ -71,9 +71,9 @@ class Logger {
 
     if (centers) {
       // Count supply centers for each power
-      Object.entries(centers).forEach(([_, power]) => {
-        if (power && typeof power === 'string' && power in counts) {
-          counts[power as keyof typeof counts]++;
+      Object.entries(centers).forEach(([power, provinces]) => {
+        if (power && Array.isArray(provinces)) {
+          counts[power as keyof typeof counts] = provinces.length;
         }
       });
     }

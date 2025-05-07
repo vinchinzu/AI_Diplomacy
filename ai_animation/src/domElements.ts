@@ -10,7 +10,7 @@ export function updatePhaseDisplay() {
 
   // Update text after fade-out
   setTimeout(() => {
-    phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'} (${gameState.phaseIndex + 1}/${gameState.gameData.phases.length})`;
+    phaseDisplay.textContent = `Era: ${currentPhase.name || 'Unknown Era'}`;
     // Fade back in
     phaseDisplay.style.opacity = '1';
   }, 300);
@@ -57,5 +57,4 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
     return this;
   };
 }
-
 
