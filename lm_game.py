@@ -26,18 +26,19 @@ from ai_diplomacy.planning import planning_phase
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.agent import DiplomacyAgent
 import ai_diplomacy.narrative
+from ai_diplomacy.initialization import initialize_agent_state_ext
 
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     datefmt="%H:%M:%S",
 )
 # Silence noisy dependencies
 logging.getLogger("httpx").setLevel(logging.WARNING)
-#logging.getLogger("root").setLevel(logging.WARNING) # Assuming root handles AFC
+logging.getLogger("root").setLevel(logging.WARNING) # Assuming root handles AFC
 
 
 def parse_arguments():
@@ -148,7 +149,7 @@ async def main():
                 agents[power_name] = agent
                 logger.info(f"Preparing initialization task for {power_name} with model {model_id}")
                 # Pass log path to initialization
-                initialization_tasks.append(agent.initialize_agent_state(game, game_history, llm_log_file_path))
+                initialization_tasks.append(initialize_agent_state_ext(agent, game, game_history, llm_log_file_path))
             except Exception as e:
                 logger.error(f"Failed to create agent or client for {power_name} with model {model_id}: {e}", exc_info=True)
         else:
@@ -230,62 +231,31 @@ async def main():
                 )
             # ======================================================================
 
-
-            # === Generate Negotiation Diary Entries ===        
-            logger.info("Agents generating negotiation diary entries and updating state...")
-            negotiation_diary_tasks = []
-            # Ensure we only try this for agents of active powers
-            active_agents_for_diary = [name for name, agent_obj in agents.items() if not game.powers[name].is_eliminated()]
-
-            for power_name in active_agents_for_diary:
-                if power_name in agents: # Check if agent exists
-                    agent = agents[power_name]
-                    negotiation_diary_tasks.append(
-                        agent.generate_negotiation_diary_entry(
-                            game,
-                            game_history, # game_history contains messages from this round
-                            llm_log_file_path
-                        )
-                    )
-                else:
-                    logger.warning(f"Agent for {power_name} not found, skipping negotiation diary generation.")
-            
-            if negotiation_diary_tasks:
-                # Process exceptions if any occur during diary generation
-                results = await asyncio.gather(*negotiation_diary_tasks, return_exceptions=True)
-                for i, res in enumerate(results):
-                    if isinstance(res, Exception):
-                        # Ensure active_agents_for_diary[i] is valid if some agents were skipped
-                        power_name_with_error = active_agents_for_diary[i] if i < len(active_agents_for_diary) else "Unknown Power"
-                        logger.error(f"Error generating negotiation diary for {power_name_with_error}: {res}", exc_info=res)
-            logger.info("Negotiation diary entries and state updates complete.")
-            # =========================================
-
         # AI Decision Making: Get orders for each power
         logger.info("Getting orders from agents...")
         order_tasks = []
         order_power_names = []
-        board_state = game.get_state() # Calculate board state once
-
-        # NEW: Dictionary to store orders set in this phase, before game.process()
-        orders_set_this_phase = defaultdict(list)
+        # Calculate board state once before the loop
+        board_state = game.get_state()
 
         for power_name, agent in agents.items():
             if game.powers[power_name].is_eliminated():
-                # logger.debug(f"Skipping order generation for eliminated power {power_name}.") # Already logged
+                logger.debug(f"Skipping order generation for eliminated power {power_name}.")
                 continue
 
+            # Calculate possible orders for the current power
             possible_orders = gather_possible_orders(game, power_name)
             if not possible_orders:
-                # logger.debug(f"No orderable locations for {power_name}; submitting empty orders.") # Already logged
-                game.set_orders(power_name, []) 
-                orders_set_this_phase[power_name] = [] # Record that empty orders were set
+                logger.debug(f"No orderable locations for {power_name}; submitting empty orders.")
+                game.set_orders(power_name, []) # Ensure empty orders if none possible
                 continue
 
             order_power_names.append(power_name)
-            formatted_private_diary = agent.format_private_diary_for_prompt()
+            # NOTE: get_valid_orders is in utils, we assume it calls client.get_orders
+            # Need to modify get_valid_orders signature in utils.py later
             order_tasks.append(
                 get_valid_orders(
+                    # --- Positional Arguments --- 
                     game,                    
                     agent.client,            
                     board_state,             
@@ -293,97 +263,58 @@ async def main():
                     possible_orders,         
                     game_history,            
                     model_error_stats,       
+                    # --- Keyword Arguments --- 
                     agent_goals=agent.goals,
                     agent_relationships=agent.relationships,
-                    agent_private_diary_str=formatted_private_diary,
                     log_file_path=llm_log_file_path,
                     phase=current_phase,     
                 )
             )
 
+        # Run order generation concurrently
         if order_tasks:
+            logger.debug(f"Running {len(order_tasks)} order generation tasks concurrently...")
             order_results = await asyncio.gather(*order_tasks, return_exceptions=True)
         else:
+            logger.debug("No order generation tasks to run.")
             order_results = []
 
         # Process order results and set them in the game
         for i, result in enumerate(order_results):
             p_name = order_power_names[i]
-            agent = agents[p_name] 
+            agent = agents[p_name] # Get agent for logging/stats if needed
             model_name = agent.client.model_name
-
-            current_orders_for_power = [] # To store what's actually set
 
             if isinstance(result, Exception):
                 logger.error(f"Error during get_valid_orders for {p_name}: {result}", exc_info=result)
+                # Log error stats (consider if fallback orders should be set here)
                 if model_name in model_error_stats:
                     model_error_stats[model_name].setdefault("order_generation_errors", 0)
                     model_error_stats[model_name]["order_generation_errors"] += 1
-                game.set_orders(p_name, []) 
-                current_orders_for_power = []
+                # Optionally set fallback orders here if needed, e.g., game.set_orders(p_name, []) or specific fallback
+                game.set_orders(p_name, []) # Set empty orders on error for now
                 logger.warning(f"Setting empty orders for {p_name} due to generation error.")
             elif result is None:
+                # Handle case where get_valid_orders might theoretically return None
                 logger.warning(f"get_valid_orders returned None for {p_name}. Setting empty orders.")
                 game.set_orders(p_name, [])
-                current_orders_for_power = []
                 if model_name in model_error_stats:
                     model_error_stats[model_name].setdefault("order_generation_errors", 0)
                     model_error_stats[model_name]["order_generation_errors"] += 1
             else:
+                # Result is the list of validated orders
                 orders = result
                 logger.debug(f"Validated orders for {p_name}: {orders}")
                 if orders:
                     game.set_orders(p_name, orders)
-                    current_orders_for_power = orders # Store the orders
                     logger.debug(
                         f"Set orders for {p_name} in {game.current_short_phase}: {orders}"
                     )
                 else:
                     logger.debug(f"No valid orders returned by get_valid_orders for {p_name}. Setting empty orders.")
-                    game.set_orders(p_name, []) 
-                    current_orders_for_power = []
-            
-            orders_set_this_phase[p_name] = current_orders_for_power # Store in our temp dict
+                    game.set_orders(p_name, []) # Set empty if get_valid_orders returned empty
 
         # --- End Async Order Generation ---
-
-
-        # === Generate Order Diary Entries ===
-        logger.info("Agents generating order diary entries...")
-        order_diary_tasks = []
-        
-        # Use orders_set_this_phase to determine who submitted orders (or had orders set)
-        # active_agents_for_order_diary will be powers that are not eliminated AND are keys in orders_set_this_phase
-        active_agents_for_order_diary = [
-            name for name, agent_obj in agents.items() 
-            if not game.powers[name].is_eliminated() and name in orders_set_this_phase
-        ]
-
-        for power_name in active_agents_for_order_diary:
-            # Agent existence already checked by how active_agents_for_order_diary is built
-            agent = agents[power_name]
-            # Get the orders from our temporary dictionary
-            submitted_orders = orders_set_this_phase.get(power_name, []) 
-            
-            # We removed the 'if submitted_orders:' check here previously,
-            # so generate_order_diary_entry will be called even if submitted_orders is [].
-            order_diary_tasks.append(
-                agent.generate_order_diary_entry(
-                    game, 
-                    submitted_orders, # This can be an empty list
-                    llm_log_file_path
-                )
-            )
-            
-        if order_diary_tasks:
-            results = await asyncio.gather(*order_diary_tasks, return_exceptions=True)
-            for i, res in enumerate(results):
-                if isinstance(res, Exception):
-                    power_name_with_error = active_agents_for_order_diary[i] if i < len(active_agents_for_order_diary) else "Unknown Power"
-                    logger.error(f"Error generating order diary for {power_name_with_error}: {res}", exc_info=res)
-        logger.info("Order diary entries complete.")
-        # ====================================
-
 
         # Process orders
         logger.info(f"Processing orders for {current_phase}...")

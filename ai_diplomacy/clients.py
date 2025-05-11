@@ -3,7 +3,6 @@ import json
 from json import JSONDecodeError
 import re
 import logging
-import ast
 import asyncio  # Added for async operations
 
 from typing import List, Dict, Optional, Any
@@ -19,9 +18,10 @@ import google.generativeai as genai
 
 from diplomacy.engine.message import GLOBAL
 from .game_history import GameHistory
-from .utils import load_prompt, run_llm_and_log
+from .utils import load_prompt, run_llm_and_log, log_llm_response # Ensure log_llm_response is imported
 # Import DiplomacyAgent for type hinting if needed, but avoid circular import if possible
 # from .agent import DiplomacyAgent 
+from .possible_order_context import generate_rich_order_context
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -98,11 +98,11 @@ class BaseModelClient:
                 enemy_units[power] = info
                 enemy_centers[power] = board_state["centers"].get(power, [])
 
-        # Get possible orders
-        possible_orders_str = ""
-        for loc, orders in possible_orders.items():
-            possible_orders_str += f"  {loc}: {orders}\n"
-
+        # Get possible orders - REPLACED WITH NEW FUNCTION
+        # possible_orders_str = ""
+        # for loc, orders in possible_orders.items():
+        #     possible_orders_str += f"  {loc}: {orders}\n"
+        possible_orders_context_str = generate_rich_order_context(game, power_name, possible_orders)
 
         # Get messages for the current round
         messages_this_round_text = game_history.get_messages_this_round(
@@ -111,15 +111,6 @@ class BaseModelClient:
         )
         if not messages_this_round_text.strip():
             messages_this_round_text = "\n(No messages this round)\n"
-
-        # Get history from previous phases
-        previous_history_text = game_history.get_previous_phases_history(
-            power_name=power_name,
-            current_phase_name=year_phase
-            # include_plans and num_prev_phases will use defaults
-        )
-        if not previous_history_text.strip():
-            previous_history_text = "\n(No previous game history)\n"
 
         # Load in current context values
         # Simplified map representation based on DiploBench approach
@@ -132,8 +123,7 @@ class BaseModelClient:
             all_unit_locations=units_repr, 
             all_supply_centers=centers_repr, 
             messages_this_round=messages_this_round_text,
-            previous_game_history=previous_history_text,
-            possible_orders=possible_orders_str,
+            possible_orders=possible_orders_context_str,
             agent_goals="\n".join(f"- {g}" for g in agent_goals) if agent_goals else "None specified",
             agent_relationships="\n".join(f"- {p}: {s}" for p, s in agent_relationships.items()) if agent_relationships else "None specified",
             agent_private_diary=agent_private_diary if agent_private_diary else "(No diary entries yet)", # Use new parameter
@@ -207,6 +197,9 @@ class BaseModelClient:
         )
 
         raw_response = ""
+        # Initialize success status. Will be updated based on outcome.
+        success_status = "Failure: Initialized"
+        parsed_orders_for_return = self.fallback_orders(possible_orders) # Default to fallback
 
         try:
             # Call LLM using the logging wrapper
@@ -216,10 +209,10 @@ class BaseModelClient:
                 log_file_path=log_file_path,
                 power_name=power_name,
                 phase=phase,
-                response_type='order',
+                response_type='order', # Context for run_llm_and_log's own error logging
             )
             logger.debug(
-                f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}"
+                f"[{self.model_name}] Raw LLM response for {power_name} orders:\n{raw_response}"
             )
 
             # Attempt to parse the final "orders" from the LLM
@@ -229,17 +222,37 @@ class BaseModelClient:
                 logger.warning(
                     f"[{self.model_name}] Could not extract moves for {power_name}. Using fallback."
                 )
-                if model_error_stats is not None:
+                if model_error_stats is not None and self.model_name in model_error_stats:
+                    model_error_stats[self.model_name].setdefault("order_decoding_errors", 0)
                     model_error_stats[self.model_name]["order_decoding_errors"] += 1
-                return self.fallback_orders(possible_orders)
-            # Validate or fallback
-            validated_moves = self._validate_orders(move_list, possible_orders)
-            logger.debug(f"[{self.model_name}] Validated moves for {power_name}: {validated_moves}")
-            return validated_moves
+                success_status = "Failure: No moves extracted"
+                # Fallback is already set to parsed_orders_for_return
+            else:
+                # Validate or fallback
+                validated_moves = self._validate_orders(move_list, possible_orders)
+                logger.debug(f"[{self.model_name}] Validated moves for {power_name}: {validated_moves}")
+                parsed_orders_for_return = validated_moves
+                success_status = "Success"
 
         except Exception as e:
-            logger.error(f"[{self.model_name}] LLM error for {power_name}: {e}")
-            return self.fallback_orders(possible_orders)
+            logger.error(f"[{self.model_name}] LLM error for {power_name} in get_orders: {e}", exc_info=True)
+            success_status = f"Failure: Exception ({type(e).__name__})"
+            # Fallback is already set to parsed_orders_for_return
+        finally:
+            # Log the attempt regardless of outcome
+            if log_file_path: # Only log if a path is provided
+                log_llm_response(
+                    log_file_path=log_file_path,
+                    model_name=self.model_name,
+                    power_name=power_name,
+                    phase=phase,
+                    response_type="order_generation", # Specific type for CSV logging
+                    raw_input_prompt=prompt, # Renamed from 'prompt' to match log_llm_response arg
+                    raw_response=raw_response,
+                    success=success_status
+                    # token_usage and cost can be added later if available and if log_llm_response supports them
+                )
+        return parsed_orders_for_return
 
     def _extract_moves(self, raw_response: str, power_name: str) -> Optional[List[str]]:
         """
@@ -272,7 +285,7 @@ class BaseModelClient:
 
         # 2) If still no match, check for triple-backtick code fences containing JSON
         if not matches:
-            code_fence_pattern = r"```json\s*(\{.*?\})\s*```"
+            code_fence_pattern = r"```json\n(.*?)\n```"
             matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
             if matches:
                 logger.debug(
@@ -481,81 +494,126 @@ class BaseModelClient:
         game_history: GameHistory,
         game_phase: str,
         log_file_path: str,
-        active_powers: Optional[List[str]] = None, # Keep active_powers if needed by prompt logic
+        active_powers: Optional[List[str]] = None, 
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
-        agent_private_diary_str: Optional[str] = None, # Added
+        agent_private_diary_str: Optional[str] = None, 
     ) -> List[Dict[str, str]]:
         """
         Generates a negotiation message, considering agent state.
         """
-        prompt = self.build_conversation_prompt(
-            game,
-            board_state,
-            power_name,
-            possible_orders,
-            game_history,
-            # game_phase, # Not passed to build_conversation_prompt directly
-            # log_file_path, # Not passed to build_conversation_prompt directly
-            agent_goals=agent_goals,
-            agent_relationships=agent_relationships,
-            agent_private_diary_str=agent_private_diary_str, # Pass diary string
-        )
-
-        logger.debug(f"[{self.model_name}] Conversation prompt for {power_name}:\n{prompt}")
+        raw_input_prompt = "" # Initialize for finally block
+        raw_response = ""    # Initialize for finally block
+        success_status = "Failure: Initialized" # Default status
+        messages_to_return = [] # Initialize to ensure it's defined
 
         try:
-            # Call LLM using the logging wrapper
-            response = await run_llm_and_log(
+            raw_input_prompt = self.build_conversation_prompt(
+                game,
+                board_state,
+                power_name,
+                possible_orders,
+                game_history,
+                agent_goals=agent_goals,
+                agent_relationships=agent_relationships,
+                agent_private_diary_str=agent_private_diary_str, 
+            )
+
+            logger.debug(f"[{self.model_name}] Conversation prompt for {power_name}:\n{raw_input_prompt}")
+
+            raw_response = await run_llm_and_log(
                 client=self,
-                prompt=prompt,
+                prompt=raw_input_prompt,
                 log_file_path=log_file_path,
                 power_name=power_name,
-                phase=game_phase, # Use game_phase for logging
-                response_type='negotiation',
+                phase=game_phase, 
+                response_type='negotiation', # For run_llm_and_log's internal context
             )
-            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{response}")
+            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}")
             
-            messages = []
+            parsed_messages = []
             json_blocks = []
+            json_decode_error_occurred = False
             
-            double_brace_blocks = re.findall(r'\{\{(.*?)\}\}', response, re.DOTALL)
+            # Attempt to find blocks enclosed in {{...}}
+            double_brace_blocks = re.findall(r'\{\{(.*?)\}\}', raw_response, re.DOTALL)
             if double_brace_blocks:
+                # If {{...}} blocks are found, assume each is a self-contained JSON object
                 json_blocks.extend(['{' + block.strip() + '}' for block in double_brace_blocks])
             else:
-                 code_block_match = re.search(r"```json\n(.*?)\n```", response, re.DOTALL)
-                 if code_block_match:
-                     potential_json = code_block_match.group(1).strip()
-                     json_blocks = re.findall(r'\{.*?\}', potential_json, re.DOTALL)
-                 else:
-                     json_blocks = re.findall(r'\{.*?\}', response, re.DOTALL)
+                # If no {{...}} blocks, look for ```json ... ``` markdown blocks
+                code_block_match = re.search(r"```json\n(.*?)\n```", raw_response, re.DOTALL)
+                if code_block_match:
+                    potential_json_array_or_objects = code_block_match.group(1).strip()
+                    # Try to parse as a list of objects or a single object
+                    try:
+                        data = json.loads(potential_json_array_or_objects)
+                        if isinstance(data, list):
+                            json_blocks = [json.dumps(item) for item in data if isinstance(item, dict)]
+                        elif isinstance(data, dict):
+                            json_blocks = [json.dumps(data)]
+                    except json.JSONDecodeError:
+                        # If parsing the whole block fails, fall back to regex for individual objects
+                        json_blocks = re.findall(r'\{.*?\}', potential_json_array_or_objects, re.DOTALL)
+                else:
+                    # If no markdown block, fall back to regex for any JSON object in the response
+                    json_blocks = re.findall(r'\{.*?\}', raw_response, re.DOTALL)
 
             if not json_blocks:
-                logger.warning(f"[{self.model_name}] No JSON message blocks found in response for {power_name}. Raw response:\n{response}")
-                return []
+                logger.warning(f"[{self.model_name}] No JSON message blocks found in response for {power_name}. Raw response:\n{raw_response}")
+                success_status = "Success: No JSON blocks found"
+                # messages_to_return remains empty
+            else:
+                for block_index, block in enumerate(json_blocks):
+                    try:
+                        cleaned_block = block.strip()
+                        # Attempt to fix common JSON issues like trailing commas before parsing
+                        cleaned_block = re.sub(r',\s*([\}\]])', r'\1', cleaned_block) 
+                        parsed_message = json.loads(cleaned_block)
+                        
+                        if isinstance(parsed_message, dict) and "message_type" in parsed_message and "content" in parsed_message:
+                            # Further validation, e.g., recipient for private messages
+                            if parsed_message["message_type"] == "private" and "recipient" not in parsed_message:
+                                logger.warning(f"[{self.model_name}] Private message missing recipient for {power_name} in block {block_index}. Skipping: {cleaned_block}")
+                                continue # Skip this message
+                            parsed_messages.append(parsed_message)
+                        else:
+                            logger.warning(f"[{self.model_name}] Invalid message structure or missing keys in block {block_index} for {power_name}: {cleaned_block}")
+                             
+                    except json.JSONDecodeError as jde:
+                        json_decode_error_occurred = True
+                        logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name}. Error: {jde}. Block content:\n{block}")
 
-            for block in json_blocks:
-                try:
-                    cleaned_block = block.strip()
-                    parsed_message = json.loads(cleaned_block)
-                    
-                    if isinstance(parsed_message, dict) and "message_type" in parsed_message and "content" in parsed_message:
-                         messages.append(parsed_message)
-                    else:
-                         logger.warning(f"[{self.model_name}] Invalid message structure in block for {power_name}: {cleaned_block}")
-                         
-                except json.JSONDecodeError:
-                    logger.warning(f"[{self.model_name}] Failed to decode JSON block for {power_name}. Block content:\n{block}")
+                if parsed_messages:
+                    success_status = "Success: Messages extracted"
+                    messages_to_return = parsed_messages
+                elif json_decode_error_occurred:
+                    success_status = "Failure: JSONDecodeError during block parsing"
+                    messages_to_return = []
+                else: # JSON blocks found, but none were valid messages
+                    success_status = "Success: No valid messages extracted from JSON blocks"
+                    messages_to_return = []
 
-            if not messages:
-                 logger.warning(f"[{self.model_name}] No valid messages extracted after parsing blocks for {power_name}. Raw response:\n{response}")
-
-            logger.debug(f"[{self.model_name}] Validated conversation replies for {power_name}: {messages}")
-            return messages
-            
+            logger.debug(f"[{self.model_name}] Validated conversation replies for {power_name}: {messages_to_return}")
+            # return messages_to_return # Return will happen in finally block or after
+        
         except Exception as e:
-            logger.error(f"[{self.model_name}] Error in get_conversation_reply for {power_name}: {e}")
-            return []
+            logger.error(f"[{self.model_name}] Error in get_conversation_reply for {power_name}: {e}", exc_info=True)
+            success_status = f"Failure: Exception ({type(e).__name__})"
+            messages_to_return = [] # Ensure empty list on general exception
+        finally:
+            if log_file_path:
+                log_llm_response(
+                    log_file_path=log_file_path,
+                    model_name=self.model_name,
+                    power_name=power_name,
+                    phase=game_phase,
+                    response_type="negotiation_message",
+                    raw_input_prompt=raw_input_prompt,
+                    raw_response=raw_response,
+                    success=success_status
+                )
+            return messages_to_return
 
     async def get_plan( # This is the original get_plan, now distinct from get_planning_reply
         self,
@@ -600,22 +658,42 @@ class BaseModelClient:
         if self.system_prompt:
             full_prompt = f"{self.system_prompt}\n\n{full_prompt}"
 
+        raw_plan_response = ""
+        success_status = "Failure: Initialized"
+        plan_to_return = f"Error: Plan generation failed for {power_name} (initial state)"
+
         try:
             # Use run_llm_and_log for the actual LLM call
-            raw_plan = await run_llm_and_log(
+            raw_plan_response = await run_llm_and_log(
                 client=self, # Pass self (the client instance)
                 prompt=full_prompt,
                 log_file_path=log_file_path,
                 power_name=power_name,
                 phase=game.current_short_phase, 
-                response_type='plan_generation', # More specific type
+                response_type='plan_generation', # More specific type for run_llm_and_log context
             )
-            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name} plan generation:\n{raw_plan}")
+            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name} plan generation:\n{raw_plan_response}")
             # No parsing needed for the plan, return the raw string
-            return raw_plan.strip()
+            plan_to_return = raw_plan_response.strip()
+            success_status = "Success"
         except Exception as e:
-            logger.error(f"Failed to generate plan for {power_name}: {e}")
-            return f"Error: Failed to generate plan due to exception: {e}"
+            logger.error(f"Failed to generate plan for {power_name}: {e}", exc_info=True)
+            success_status = f"Failure: Exception ({type(e).__name__})"
+            plan_to_return = f"Error: Failed to generate plan for {power_name} due to exception: {e}"
+        finally:
+            if log_file_path: # Only log if a path is provided
+                log_llm_response(
+                    log_file_path=log_file_path,
+                    model_name=self.model_name,
+                    power_name=power_name,
+                    phase=game.current_short_phase if game else "UnknownPhase",
+                    response_type="plan_generation", # Specific type for CSV logging
+                    raw_input_prompt=full_prompt, # Renamed from 'full_prompt' to match log_llm_response arg
+                    raw_response=raw_plan_response,
+                    success=success_status
+                    # token_usage and cost can be added later
+                )
+        return plan_to_return
 
 
 ##############################################################################

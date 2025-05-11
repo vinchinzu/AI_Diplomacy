@@ -30,15 +30,14 @@ def assign_models_to_powers() -> Dict[str, str]:
                     deepseek-chat, deepseek-reasoner
                     openrouter-meta-llama/llama-3.3-70b-instruct, openrouter-qwen/qwen3-235b-a22b, openrouter-microsoft/phi-4-reasoning-plus:free, openrouter-deepseek/deepseek-prover-v2:free, openrouter-meta-llama/llama-4-maverick:free, openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free, openrouter-google/gemma-3-12b-it:free
     """
-
     return {
-        "AUSTRIA": "openrouter-meta-llama/llama-3.3-70b-instruct",
-        "ENGLAND": "openrouter-qwen/qwen3-235b-a22b",
-        "FRANCE": "openrouter-microsoft/phi-4-reasoning-plus:free",
-        "GERMANY": "openrouter-deepseek/deepseek-prover-v2:free",
-        "ITALY": "openrouter-meta-llama/llama-4-maverick:free",
-        "RUSSIA": "openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free",
-        "TURKEY": "openrouter-google/gemma-3-12b-it:free",
+        "AUSTRIA": "openrouter-google/gemini-2.5-flash-preview",
+        "ENGLAND": "openrouter-google/gemini-2.5-flash-preview",
+        "FRANCE": "openrouter-google/gemini-2.5-flash-preview",
+        "GERMANY": "openrouter-google/gemini-2.5-flash-preview",
+        "ITALY": "openrouter-google/gemini-2.5-flash-preview",
+        "RUSSIA": "openrouter-google/gemini-2.5-flash-preview",
+        "TURKEY": "openrouter-google/gemini-2.5-flash-preview",
     }
 
 
@@ -269,7 +268,9 @@ def log_llm_response(
     power_name: Optional[str], # Optional for non-power-specific calls like summary
     phase: str,
     response_type: str,
+    raw_input_prompt: str, # Added new parameter for the raw input
     raw_response: str,
+    success: str,  # Changed from bool to str
 ):
     """Appends a raw LLM response to a CSV log file."""
     try:
@@ -282,7 +283,8 @@ def log_llm_response(
         file_exists = os.path.isfile(log_file_path)
 
         with open(log_file_path, "a", newline="", encoding="utf-8") as csvfile:
-            fieldnames = ["model", "power", "phase", "response_type", "raw_response"]
+            # Added "raw_input" to fieldnames
+            fieldnames = ["model", "power", "phase", "response_type", "raw_input", "raw_response", "success"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
             if not file_exists:
@@ -293,7 +295,9 @@ def log_llm_response(
                 "power": power_name if power_name else "game", # Use 'game' if no specific power
                 "phase": phase,
                 "response_type": response_type,
+                "raw_input": raw_input_prompt, # Added raw_input to the row
                 "raw_response": raw_response,
+                "success": success,
             })
     except Exception as e:
         logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)
@@ -303,36 +307,17 @@ def log_llm_response(
 async def run_llm_and_log(
     client: 'BaseModelClient',
     prompt: str,
-    log_file_path: str,
-    power_name: Optional[str],
-    phase: str,
-    response_type: str,
+    log_file_path: str,  # Kept for context, but not used for logging here
+    power_name: Optional[str], # Kept for context, but not used for logging here
+    phase: str, # Kept for context, but not used for logging here
+    response_type: str, # Kept for context, but not used for logging here
 ) -> str:
-    """Calls the client's generate_response and logs the raw output."""
+    """Calls the client's generate_response and returns the raw output. Logging is handled by the caller."""
     raw_response = "" # Initialize in case of error
     try:
         raw_response = await client.generate_response(prompt)
-        # Log the successful response
-        log_llm_response(
-            log_file_path=log_file_path,
-            model_name=client.model_name,
-            power_name=power_name,
-            phase=phase,
-            response_type=response_type,
-            raw_response=raw_response,
-        )
     except Exception as e:
-         # Log the error attempt (optional, could log empty response instead)
-        logger.error(f"Error during LLM call for {power_name}/{response_type} in phase {phase}: {e}", exc_info=True)
-        log_llm_response(
-            log_file_path=log_file_path,
-            model_name=client.model_name,
-            power_name=power_name,
-            phase=phase,
-            response_type=f"ERROR_{response_type}", # Mark response type as error
-            raw_response=f"Error generating response: {e}",
-        )
-        # Depending on desired behavior, you might want to re-raise the exception
-        # or return a specific error indicator string. Returning empty for now.
-        # raise e # Re-raising might be better to let caller handle it.
+        # Log the API call error. The caller will decide how to log this in llm_responses.csv
+        logger.error(f"API Error during LLM call for {client.model_name}/{power_name}/{response_type} in phase {phase}: {e}", exc_info=True)
+        # raw_response remains "" indicating failure to the caller
     return raw_response

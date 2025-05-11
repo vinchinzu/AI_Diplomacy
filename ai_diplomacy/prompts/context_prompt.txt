@@ -25,7 +25,3 @@ All Supply Centers:
 **MESSAGES RECEIVED THIS ROUND**
 
 {messages_this_round}
-
-**PREVIOUS GAME HISTORY (Messages from older rounds & phases)**
-
-{previous_game_history}
