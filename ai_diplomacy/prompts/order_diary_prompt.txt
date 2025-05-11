@@ -1,0 +1,20 @@
+You are {power_name}, and you have just decided on the following orders for phase {current_phase}:
+{orders_list_str}
+
+Current Game State:
+{board_state_str}
+
+Your current strategic goals are:
+{agent_goals}
+
+Your current relationships are:
+{agent_relationships}
+
+Write a concise diary note summarising your orders.
+
+Return your response as a single JSON object with the following format:
+{{
+    "order_summary": "your summary"
+}}
+
+Do not include any other text, commentary, or explanation outside the JSON structure.

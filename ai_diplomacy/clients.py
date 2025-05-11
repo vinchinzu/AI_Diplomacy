@@ -20,6 +20,8 @@ import google.generativeai as genai
 from diplomacy.engine.message import GLOBAL
 from .game_history import GameHistory
 from .utils import load_prompt, run_llm_and_log
+# Import DiplomacyAgent for type hinting if needed, but avoid circular import if possible
+# from .agent import DiplomacyAgent 
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -67,6 +69,7 @@ class BaseModelClient:
         game_history: GameHistory,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary: Optional[str] = None, # Changed parameter name
     ) -> str:
         context = load_prompt("context_prompt.txt")
 
@@ -75,6 +78,8 @@ class BaseModelClient:
             logger.debug(f"[{self.model_name}] Using goals for {power_name}: {agent_goals}")
         if agent_relationships:
             logger.debug(f"[{self.model_name}] Using relationships for {power_name}: {agent_relationships}")
+        if agent_private_diary:
+            logger.debug(f"[{self.model_name}] Using private diary for {power_name}: {agent_private_diary[:200]}...") # Log snippet
         # ================================
 
         # Get our units and centers
@@ -131,6 +136,7 @@ class BaseModelClient:
             possible_orders=possible_orders_str,
             agent_goals="\n".join(f"- {g}" for g in agent_goals) if agent_goals else "None specified",
             agent_relationships="\n".join(f"- {p}: {s}" for p, s in agent_relationships.items()) if agent_relationships else "None specified",
+            agent_private_diary=agent_private_diary if agent_private_diary else "(No diary entries yet)", # Use new parameter
         )
 
         return context
@@ -144,6 +150,7 @@ class BaseModelClient:
         game_history: GameHistory,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> str:
         """
         Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
@@ -161,10 +168,13 @@ class BaseModelClient:
             game_history,
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary=agent_private_diary_str, # Pass diary string
         )
 
         # Prepend the system prompt!
-        return self.system_prompt + "\n\n" + context + "\n\n" + instructions
+        final_prompt = self.system_prompt + "\n\n" + context + "\n\n" + instructions
+        #print(final_prompt)
+        return final_prompt
 
     async def get_orders(
         self,
@@ -172,12 +182,13 @@ class BaseModelClient:
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
-        conversation_text: str,
+        conversation_text: str, # This is GameHistory
         model_error_stats: dict,
         log_file_path: str,
         phase: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> List[str]:
         """
         1) Builds the prompt with conversation context if available
@@ -189,9 +200,10 @@ class BaseModelClient:
             board_state,
             power_name,
             possible_orders,
-            conversation_text,
+            conversation_text, # This is GameHistory
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary_str=agent_private_diary_str, # Pass diary string
         )
 
         raw_response = ""
@@ -371,10 +383,11 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
-        game_phase: str,
-        log_file_path: str,
+        # game_phase: str, # Not used directly by build_context_prompt
+        # log_file_path: str, # Not used directly by build_context_prompt
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> str:
         
         instructions = load_prompt("planning_instructions.txt")
@@ -387,6 +400,7 @@ class BaseModelClient:
             game_history,
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary=agent_private_diary_str, # Pass diary string
         )
 
         return context + "\n\n" + instructions
@@ -398,10 +412,11 @@ class BaseModelClient:
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
-        game_phase: str,
-        log_file_path: str,
+        # game_phase: str, # Not used directly by build_context_prompt
+        # log_file_path: str, # Not used directly by build_context_prompt
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> str:
         instructions = load_prompt("conversation_instructions.txt")
 
@@ -413,21 +428,23 @@ class BaseModelClient:
             game_history,
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary=agent_private_diary_str, # Pass diary string
         )
 
         return context + "\n\n" + instructions
 
-    async def get_planning_reply(
+    async def get_planning_reply( # Renamed from get_plan to avoid conflict with get_plan in agent.py
         self,
         game,
         board_state,
         power_name: str,
         possible_orders: Dict[str, List[str]],
         game_history: GameHistory,
-        game_phase: str,
-        log_file_path: str,
+        game_phase: str, # Used for logging
+        log_file_path: str, # Used for logging
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> str:
         
         prompt = self.build_planning_prompt(
@@ -436,14 +453,23 @@ class BaseModelClient:
             power_name,
             possible_orders,
             game_history,
-            game_phase,
-            log_file_path,
+            # game_phase, # Not passed to build_planning_prompt directly
+            # log_file_path, # Not passed to build_planning_prompt directly
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary_str=agent_private_diary_str, # Pass diary string
         )
 
-        raw_response = await self.generate_response(prompt)
-        logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_response}")
+        # Call LLM using the logging wrapper
+        raw_response = await run_llm_and_log(
+            client=self,
+            prompt=prompt,
+            log_file_path=log_file_path,
+            power_name=power_name,
+            phase=game_phase, # Use game_phase for logging
+            response_type='plan_reply', # Changed from 'plan' to avoid confusion
+        )
+        logger.debug(f"[{self.model_name}] Raw LLM response for {power_name} planning reply:\n{raw_response}")
         return raw_response
     
     async def get_conversation_reply(
@@ -455,40 +481,25 @@ class BaseModelClient:
         game_history: GameHistory,
         game_phase: str,
         log_file_path: str,
-        active_powers: Optional[List[str]] = None,
+        active_powers: Optional[List[str]] = None, # Keep active_powers if needed by prompt logic
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> List[Dict[str, str]]:
         """
         Generates a negotiation message, considering agent state.
-
-        Args:
-            game: The Diplomacy game instance.
-            board_state: Current state dictionary.
-            power_name: The negotiating power.
-            possible_orders: Dictionary of possible orders.
-            game_history: The GameHistory object.
-            game_phase: The current phase string.
-            active_powers: List of powers still active.
-            agent_goals: The agent's goals.
-            agent_relationships: The agent's relationships.
-            log_file_path: Path to the log file.
-
-        Returns:
-            List[Dict[str, str]]: Parsed JSON messages from the LLM response.
         """
-
-        # Call build_conversation_prompt and pass agent state
         prompt = self.build_conversation_prompt(
             game,
             board_state,
             power_name,
             possible_orders,
             game_history,
-            game_phase,
-            log_file_path,
+            # game_phase, # Not passed to build_conversation_prompt directly
+            # log_file_path, # Not passed to build_conversation_prompt directly
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary_str=agent_private_diary_str, # Pass diary string
         )
 
         logger.debug(f"[{self.model_name}] Conversation prompt for {power_name}:\n{prompt}")
@@ -500,28 +511,23 @@ class BaseModelClient:
                 prompt=prompt,
                 log_file_path=log_file_path,
                 power_name=power_name,
-                phase=game_phase,
+                phase=game_phase, # Use game_phase for logging
                 response_type='negotiation',
             )
             logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{response}")
             
             messages = []
-            # Extract JSON blocks from the response
             json_blocks = []
             
-            # First try to find {{ ... }} blocks (common in Claude responses)
             double_brace_blocks = re.findall(r'\{\{(.*?)\}\}', response, re.DOTALL)
             if double_brace_blocks:
                 json_blocks.extend(['{' + block.strip() + '}' for block in double_brace_blocks])
             else:
-                 # Fallback: try finding JSON within ```json ... ``` blocks, like in get_orders
                  code_block_match = re.search(r"```json\n(.*?)\n```", response, re.DOTALL)
                  if code_block_match:
                      potential_json = code_block_match.group(1).strip()
-                     # Sometimes the LLM might put multiple JSONs in one block
                      json_blocks = re.findall(r'\{.*?\}', potential_json, re.DOTALL)
                  else:
-                     # Final fallback: try finding any {...} block
                      json_blocks = re.findall(r'\{.*?\}', response, re.DOTALL)
 
             if not json_blocks:
@@ -530,13 +536,9 @@ class BaseModelClient:
 
             for block in json_blocks:
                 try:
-                    # Clean the block and ensure it's valid JSON
                     cleaned_block = block.strip()
-                    
-                    # Attempt to parse the individual JSON block
                     parsed_message = json.loads(cleaned_block)
                     
-                    # Basic validation (can be expanded)
                     if isinstance(parsed_message, dict) and "message_type" in parsed_message and "content" in parsed_message:
                          messages.append(parsed_message)
                     else:
@@ -544,7 +546,6 @@ class BaseModelClient:
                          
                 except json.JSONDecodeError:
                     logger.warning(f"[{self.model_name}] Failed to decode JSON block for {power_name}. Block content:\n{block}")
-                    # Continue to next block if one fails
 
             if not messages:
                  logger.warning(f"[{self.model_name}] No valid messages extracted after parsing blocks for {power_name}. Raw response:\n{response}")
@@ -553,80 +554,63 @@ class BaseModelClient:
             return messages
             
         except Exception as e:
-            # Catch any other exceptions during generation or processing
             logger.error(f"[{self.model_name}] Error in get_conversation_reply for {power_name}: {e}")
             return []
 
-    async def get_plan(
+    async def get_plan( # This is the original get_plan, now distinct from get_planning_reply
         self,
         game,
         board_state,
         power_name: str,
-        possible_orders: Dict[str, List[str]],
+        # possible_orders: Dict[str, List[str]], # Not typically needed for high-level plan
         game_history: GameHistory,
         log_file_path: str,
         agent_goals: Optional[List[str]] = None,
         agent_relationships: Optional[Dict[str, str]] = None,
+        agent_private_diary_str: Optional[str] = None, # Added
     ) -> str:
         """
         Generates a strategic plan for the given power based on the current state.
-
-        Args:
-            game: The current Diplomacy game object.
-            board_state: The current board state dictionary.
-            power_name: The name of the power for which to generate a plan.
-            game_history: The history of the game.
-            log_file_path: Path to the log file.
-            agent_goals: The agent's goals.
-            agent_relationships: The agent's relationships.
-
-        Returns:
-            A string containing the generated strategic plan.
+        This method is called by the agent's generate_plan method.
         """
-        logger.info(f"Generating strategic plan for {power_name}...")
+        logger.info(f"Client generating strategic plan for {power_name}...")
         
-        # 1. Load the specific planning instructions
         planning_instructions = load_prompt("planning_instructions.txt")
         if not planning_instructions:
             logger.error("Could not load planning_instructions.txt! Cannot generate plan.")
             return "Error: Planning instructions not found."
 
-        # 2. Build the context prompt (reusing the existing method)
-        # We don't need possible_orders for planning instructions, but build_context_prompt needs it.
-        # Pass an empty dict or calculate it if context depends heavily on it.
-        # For simplicity, let's assume context building doesn't strictly require possible_orders
-        # or can handle it being empty/None for planning purposes.
-        # If necessary, calculate possible_orders here: 
-        # possible_orders = game.get_all_possible_orders()
-        possible_orders = {} # Pass empty for planning context
+        # For planning, possible_orders might be less critical for the context,
+        # but build_context_prompt expects it. We can pass an empty dict or calculate it.
+        # For simplicity, let's pass empty if not strictly needed by context for planning.
+        possible_orders_for_context = {} # game.get_all_possible_orders() if needed by context
+        
         context_prompt = self.build_context_prompt(
             game,
             board_state,
             power_name,
-            possible_orders,
+            possible_orders_for_context, 
             game_history,
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
+            agent_private_diary=agent_private_diary_str, # Pass diary string
         )
 
-        # 3. Combine context and planning instructions into the final prompt
-        # Ensure the system prompt is prepended if it exists
         full_prompt = f"{context_prompt}\n\n{planning_instructions}"
         if self.system_prompt:
             full_prompt = f"{self.system_prompt}\n\n{full_prompt}"
 
-        # 4. Generate the response from the LLM
         try:
+            # Use run_llm_and_log for the actual LLM call
             raw_plan = await run_llm_and_log(
-                client=self,
+                client=self, # Pass self (the client instance)
                 prompt=full_prompt,
                 log_file_path=log_file_path,
                 power_name=power_name,
-                phase=game.current_short_phase, # Get phase from game object
-                response_type='plan',
+                phase=game.current_short_phase, 
+                response_type='plan_generation', # More specific type
             )
-            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name}:\n{raw_plan}")
-            logger.info(f"[{self.model_name}] Validated plan for {power_name}: {raw_plan}")
+            logger.debug(f"[{self.model_name}] Raw LLM response for {power_name} plan generation:\n{raw_plan}")
             # No parsing needed for the plan, return the raw string
             return raw_plan.strip()
         except Exception as e:
@@ -915,10 +899,19 @@ async def example_game_loop(game):
         # Get possible orders from the game
         possible_orders = game.get_all_possible_orders()
         board_state = game.get_state()
+        
+        # Example: Fetch agent instance (assuming agents are stored in a dict)
+        # agent = agents_dict[power_name] 
+        # formatted_diary = agent.format_private_diary_for_prompt()
 
         # Get orders from the client
-        orders = await client.get_orders(board_state, power_name, possible_orders)
-        game.set_orders(power_name, orders)
+        # orders = await client.get_orders(
+        #     board_state, 
+        #     power_name, 
+        #     possible_orders,
+        #     agent_private_diary_str=formatted_diary # Pass the diary
+        # )
+        # game.set_orders(power_name, orders)
 
     # Then process, etc.
     game.process()
@@ -933,12 +926,22 @@ class LMServiceVersus:
     def __init__(self):
         self.power_model_map = assign_models_to_powers()
 
-    async def get_orders_for_power(self, game, power_name):
+    async def get_orders_for_power(self, game, power_name, agent): # Added agent
         model_id = self.power_model_map.get(power_name, "o3-mini")
         client = load_model_client(model_id)
         possible_orders = gather_possible_orders(game, power_name)
         board_state = game.get_state()
-        return await client.get_orders(board_state, power_name, possible_orders)
+        
+        formatted_diary = agent.format_private_diary_for_prompt() # Get diary from agent
+
+        # This method signature in LMServiceVersus might need to align with client.get_orders
+        # or client.get_orders needs to be called with all its required params.
+        # For now, assuming client.get_orders is called elsewhere with full context.
+        # This example shows how to get the diary string.
+        # return await client.get_orders(
+        #    board_state, power_name, possible_orders, agent_private_diary_str=formatted_diary
+        # )
+        pass # Placeholder for actual call
 
 
 ##############################################################################

@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 # Avoid circular import for type hinting
 if TYPE_CHECKING:
     from .clients import BaseModelClient
+    # If DiplomacyAgent is used for type hinting for an 'agent' parameter:
+    # from .agent import DiplomacyAgent 
 
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
@@ -55,14 +57,15 @@ def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
 
 async def get_valid_orders(
     game: Game,
-    client,
+    client, # This is the BaseModelClient instance
     board_state,
     power_name: str,
     possible_orders: Dict[str, List[str]],
-    game_history,
+    game_history, # This is GameHistory instance
     model_error_stats: Dict[str, Dict[str, int]],
     agent_goals: Optional[List[str]] = None,
     agent_relationships: Optional[Dict[str, str]] = None,
+    agent_private_diary_str: Optional[str] = None, # Added new parameter
     log_file_path: str = None,
     phase: str = None,
 ) -> List[str]:
@@ -78,10 +81,11 @@ async def get_valid_orders(
         board_state=board_state,
         power_name=power_name,
         possible_orders=possible_orders,
-        conversation_text=game_history,
+        conversation_text=game_history, # Pass GameHistory instance
         model_error_stats=model_error_stats,
         agent_goals=agent_goals,
         agent_relationships=agent_relationships,
+        agent_private_diary_str=agent_private_diary_str, # Pass the diary string
         log_file_path=log_file_path,
         phase=phase,
     )
@@ -93,6 +97,11 @@ async def get_valid_orders(
     all_valid = True
     valid_orders = []
     
+    if not isinstance(orders, list): # Ensure orders is a list before iterating
+        logger.warning(f"[{power_name}] Orders received from LLM is not a list: {orders}. Using fallback.")
+        model_error_stats[client.model_name]["order_decoding_errors"] += 1 # Use client.model_name
+        return client.fallback_orders(possible_orders)
+
     for move in orders:
         # Skip empty orders
         if not move or move.strip() == "":
@@ -114,9 +123,15 @@ async def get_valid_orders(
         order_part = tokens[2]  # e.g. "H" or "S A MAR"
 
         # Use the internal game validation method
-        if order_part == "B":
+        if order_part == "B": # Build orders
             validity = 1  # hack because game._valid_order doesn't support 'B'
-        else:
+        elif order_part == "D": # Disband orders
+             # Check if the unit is actually one of the power's units
+            if unit in game.powers[power_name].units:
+                validity = 1 # Simple check, engine handles full validation
+            else:
+                validity = 0
+        else: # Movement, Support, Hold, Convoy, Retreat
             try:
                 validity = game._valid_order(
                     game.powers[power_name], unit, order_part, report=1
@@ -142,7 +157,8 @@ async def get_valid_orders(
         return valid_orders
     else:
         logger.debug(f"[{power_name}] Some orders invalid, using fallback.")
-        model_error_stats[power_name]["order_decoding_errors"] += 1
+        # Use client.model_name for stats key, as power_name might not be unique if multiple agents use same model
+        model_error_stats[client.model_name]["order_decoding_errors"] += 1
         fallback = client.fallback_orders(possible_orders)
         return fallback
 
@@ -238,7 +254,7 @@ def load_prompt(filename: str) -> str:
     # Consider using absolute paths or pkg_resources if needed for robustness
     prompt_path = os.path.join(os.path.dirname(__file__), 'prompts', filename)
     try:
-        with open(prompt_path, "r") as f:
+        with open(prompt_path, "r", encoding='utf-8') as f: # Added encoding
             return f.read().strip()
     except FileNotFoundError:
         logger.error(f"Prompt file not found: {prompt_path}")
@@ -318,5 +334,5 @@ async def run_llm_and_log(
         )
         # Depending on desired behavior, you might want to re-raise the exception
         # or return a specific error indicator string. Returning empty for now.
-        # raise e
+        # raise e # Re-raising might be better to let caller handle it.
     return raw_response

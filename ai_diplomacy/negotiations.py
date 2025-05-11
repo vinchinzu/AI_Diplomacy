@@ -73,6 +73,7 @@ async def conduct_negotiations(
                     active_powers=active_powers,
                     agent_goals=agent.goals,
                     agent_relationships=agent.relationships,
+                    agent_private_diary_str=agent.format_private_diary_for_prompt(),
                 )
             )
             power_names_for_tasks.append(power_name)
