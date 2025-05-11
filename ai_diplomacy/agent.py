@@ -68,6 +68,7 @@ class DiplomacyAgent:
         else:
             self.relationships: Dict[str, str] = initial_relationships
         self.private_journal: List[str] = []
+        self.private_diary: List[str] = [] # New private diary
 
         # --- Load and set the appropriate system prompt ---
         # Get the directory containing the current file (agent.py)
@@ -160,6 +161,154 @@ class DiplomacyAgent:
         self.private_journal.append(entry)
         logger.debug(f"[{self.power_name} Journal]: {entry}")
 
+    def add_diary_entry(self, entry: str, phase: str):
+        """Adds a formatted entry string to the agent's private diary."""
+        if not isinstance(entry, str):
+            entry = str(entry) # Ensure it's a string
+        formatted_entry = f"[{phase}] {entry}"
+        self.private_diary.append(formatted_entry)
+        # Keep diary to a manageable size, e.g., last 100 entries
+        #self.private_diary = self.private_diary[-100:] 
+        logger.debug(f"[{self.power_name} Diary Entry Added for {phase}]: {entry[:100]}...")
+
+    def format_private_diary_for_prompt(self, max_entries=40) -> str:
+        """Formats the last N private diary entries for inclusion in a prompt."""
+        if not self.private_diary:
+            return "(No diary entries yet)"
+        # Get the most recent entries
+        recent_entries = self.private_diary[-max_entries:]
+        return "\n".join(recent_entries)
+
+    async def generate_negotiation_diary_entry(self, game: 'Game', game_history: 'GameHistory', log_file_path: str):
+        """
+        Generates a diary entry summarizing negotiations and updates relationships.
+        """
+        logger.info(f"[{self.power_name}] Generating negotiation diary entry for {game.current_short_phase}...")
+        
+        prompt_template = _load_prompt_file('negotiation_diary_prompt.txt')
+        if not prompt_template:
+            logger.error(f"[{self.power_name}] Could not load negotiation_diary_prompt.txt. Skipping diary entry.")
+            return
+
+        # Prepare context for the prompt
+        board_state_dict = game.get_state()
+        board_state_str = f"Units: {board_state_dict.get('units', {})}, Centers: {board_state_dict.get('centers', {})}"
+        
+        messages_this_round = game_history.get_messages_this_round(
+            power_name=self.power_name,
+            current_phase_name=game.current_short_phase
+        )
+        if not messages_this_round.strip() or messages_this_round.startswith("\n(No messages"):
+            messages_this_round = "(No messages exchanged this negotiation round)"
+
+        goals_str = "\n".join([f"- {g}" for g in self.goals]) if self.goals else "None"
+        relationships_str = "\n".join([f"- {p}: {s}" for p, s in self.relationships.items()]) if self.relationships else "None"
+
+        prompt = prompt_template.format(
+            power_name=self.power_name,
+            current_phase=game.current_short_phase,
+            messages_this_round=messages_this_round,
+            agent_goals=goals_str,
+            agent_relationships=relationships_str,
+            board_state_str=board_state_str
+        )
+
+        response_data = None
+        try:
+            raw_response = await run_llm_and_log(
+                client=self.client,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=self.power_name,
+                phase=game.current_short_phase,
+                response_type='negotiation_diary',
+            )
+            response_data = self._extract_json_from_text(raw_response)
+        except Exception as e:
+            logger.error(f"[{self.power_name}] Error generating or parsing negotiation diary: {e}", exc_info=True)
+            self.add_diary_entry(f"Error generating negotiation diary: {e}", game.current_short_phase)
+            return
+
+        if response_data:
+            summary = response_data.get("negotiation_summary", "(No summary provided)")
+            intent = response_data.get("intent", "(No intent stated)")
+            diary_text = f"Negotiation Summary: {summary}\nIntent for Orders: {intent}"
+            self.add_diary_entry(diary_text, game.current_short_phase)
+
+            # Update relationships
+            rship_updates = response_data.get("relationship_updates", {})
+            if isinstance(rship_updates, dict):
+                updated_count = 0
+                for power, status in rship_updates.items():
+                    power_upper = power.upper() # Normalize
+                    if power_upper in ALL_POWERS and power_upper != self.power_name and status in ALLOWED_RELATIONSHIPS:
+                        if self.relationships.get(power_upper) != status:
+                            self.relationships[power_upper] = status
+                            self.add_journal_entry(f"[{game.current_short_phase}] Relationship with {power_upper} updated to {status} via diary.")
+                            updated_count +=1
+                    else:
+                        logger.warning(f"[{self.power_name}] Invalid relationship update from diary: {power}-{status}")
+                if updated_count > 0:
+                     logger.info(f"[{self.power_name}] Updated {updated_count} relationships based on negotiation diary.")
+            else:
+                logger.warning(f"[{self.power_name}] Relationship updates from diary not in expected dict format: {rship_updates}")
+        else:
+            self.add_diary_entry("Failed to generate negotiation summary and intent.", game.current_short_phase)
+
+    async def generate_order_diary_entry(self, game: 'Game', orders: List[str], log_file_path: str):
+        """
+        Generates a diary entry reflecting on the decided orders.
+        """
+        logger.info(f"[{self.power_name}] Generating order diary entry for {game.current_short_phase}...")
+        
+        prompt_template = _load_prompt_file('order_diary_prompt.txt')
+        if not prompt_template:
+            logger.error(f"[{self.power_name}] Could not load order_diary_prompt.txt. Skipping diary entry.")
+            return
+
+        board_state_dict = game.get_state()
+        board_state_str = f"Units: {board_state_dict.get('units', {})}, Centers: {board_state_dict.get('centers', {})}"
+        orders_list_str = "\n".join([f"- {o}" for o in orders]) if orders else "No orders submitted."
+        
+        goals_str = "\n".join([f"- {g}" for g in self.goals]) if self.goals else "None"
+        relationships_str = "\n".join([f"- {p}: {s}" for p, s in self.relationships.items()]) if self.relationships else "None"
+
+        prompt = prompt_template.format(
+            power_name=self.power_name,
+            current_phase=game.current_short_phase,
+            orders_list_str=orders_list_str,
+            board_state_str=board_state_str,
+            agent_goals=goals_str,
+            agent_relationships=relationships_str
+        )
+        
+        response_data = None
+        raw_response = None
+        try:
+            raw_response = await run_llm_and_log(
+                client=self.client,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=self.power_name,
+                phase=game.current_short_phase,
+                response_type='order_diary',
+            )
+            response_data = self._extract_json_from_text(raw_response)
+        except Exception as e:
+            logger.error(f"[{self.power_name}] Error generating or parsing order diary: {e}", exc_info=True)
+            logger.error(raw_response)
+            #self.add_diary_entry(f"Error generating order reflection diary: {e}", game.current_short_phase)
+            return
+
+        if response_data:
+            order_summary = response_data.get("order_summary", "(Order summary missing)")
+            logger.info('Order summary: ' + str(order_summary))
+            self.add_diary_entry(f"Order Summary: {order_summary}", game.current_short_phase)
+        else:
+            logger.error("Failed to generate order summary.")
+            #self.add_diary_entry("Failed to generate order summary.", game.current_short_phase)
+
+
     def get_relationships(self) -> Dict[str, str]:
         """Returns a copy of the agent's current relationships with other powers."""
         return self.relationships.copy()
@@ -188,6 +337,9 @@ class DiplomacyAgent:
             logger.debug(f"[{self.power_name}] Preparing context for initial state. Got board_state type: {type(board_state)}, possible_orders type: {type(possible_orders)}, game_history type: {type(game_history)}")
             logger.debug(f"[{self.power_name}] Calling build_context_prompt with game: {game is not None}, board_state: {board_state is not None}, power_name: {self.power_name}, possible_orders: {possible_orders is not None}, game_history: {game_history is not None}")
 
+            # Get formatted diary for context (will be empty at initialization)
+            formatted_diary = self.format_private_diary_for_prompt()
+
             context = self.client.build_context_prompt(
                 game=game,
                 board_state=board_state, # Pass board_state
@@ -196,6 +348,7 @@ class DiplomacyAgent:
                 game_history=game_history, # Pass game_history
                 agent_goals=None, # No goals yet
                 agent_relationships=None, # No relationships yet (defaults used in prompt)
+                agent_private_diary=formatted_diary, # Pass formatted diary
             )
             full_prompt = initial_prompt + "\n\n" + context
 
@@ -334,6 +487,9 @@ class DiplomacyAgent:
  
             # == Fix: Use board_state parameter ==
             possible_orders = game.get_all_possible_orders()
+            
+            # Get formatted diary for context
+            formatted_diary = self.format_private_diary_for_prompt()
 
             context = self.client.build_context_prompt(
                 game=game,
@@ -342,7 +498,8 @@ class DiplomacyAgent:
                 possible_orders=possible_orders, # Pass possible_orders
                 game_history=game_history, # Pass game_history
                 agent_goals=self.goals,
-                agent_relationships=self.relationships
+                agent_relationships=self.relationships,
+                agent_private_diary=formatted_diary, # Pass formatted diary
             )
 
             # Add previous phase summary to the information provided to the LLM

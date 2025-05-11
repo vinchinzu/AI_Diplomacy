@@ -47,6 +47,7 @@ def planning_phase(
                 agent_goals=agent.goals,
                 agent_relationships=agent.relationships,
                 log_file_path=log_file_path,
+                agent_private_diary_str=agent.format_private_diary_for_prompt(),
             )
             futures[future] = power_name
             logger.debug(f"Submitted get_plan task for {power_name}.")

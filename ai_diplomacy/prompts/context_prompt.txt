@@ -8,6 +8,9 @@ Current phase: {current_phase}
 Current Goals: {agent_goals}
 Relationships: {agent_relationships}
 
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+{agent_private_diary}
+
 **MAP & GAME STATE**
 
 All Unit Locations:
