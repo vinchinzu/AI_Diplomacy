@@ -99,9 +99,22 @@ class BaseModelClient:
             possible_orders_str += f"  {loc}: {orders}\n"
 
 
-        conversation_text = game_history.get_game_history(power_name)
-        if not conversation_text:
-            conversation_text = "\n(No game history yet)\n"
+        # Get messages for the current round
+        messages_this_round_text = game_history.get_messages_this_round(
+            power_name=power_name,
+            current_phase_name=year_phase
+        )
+        if not messages_this_round_text.strip():
+            messages_this_round_text = "\n(No messages this round)\n"
+
+        # Get history from previous phases
+        previous_history_text = game_history.get_previous_phases_history(
+            power_name=power_name,
+            current_phase_name=year_phase
+            # include_plans and num_prev_phases will use defaults
+        )
+        if not previous_history_text.strip():
+            previous_history_text = "\n(No previous game history)\n"
 
         # Load in current context values
         # Simplified map representation based on DiploBench approach
@@ -113,7 +126,8 @@ class BaseModelClient:
             current_phase=year_phase,
             all_unit_locations=units_repr, 
             all_supply_centers=centers_repr, 
-            game_history=conversation_text,
+            messages_this_round=messages_this_round_text,
+            previous_game_history=previous_history_text,
             possible_orders=possible_orders_str,
             agent_goals="\n".join(f"- {g}" for g in agent_goals) if agent_goals else "None specified",
             agent_relationships="\n".join(f"- {p}: {s}" for p, s in agent_relationships.items()) if agent_relationships else "None specified",

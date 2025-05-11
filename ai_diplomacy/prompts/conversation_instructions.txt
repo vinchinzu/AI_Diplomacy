@@ -17,25 +17,25 @@ If "message_type" is "private", you MUST also include:
 Example 1: Sending a global message
 {{
   "message_type": "global",
-  "content": "Let's coordinate against Austria this turn. Who is with me?"
+  "content": "..."
 }}
 
 Example 2: Sending a private message to Russia
 {{
   "message_type": "private",
   "recipient": "RUSSIA",
-  "content": "Are you willing to support my move into Vienna if I support your move into Galicia?"
+  "content": "..."
 }}
 
 Example 3: Sending multiple messages (one global, one private)
 {{
   "message_type": "global",
-  "content": "Peace in the West seems achievable.
+  "content": "..."
 }}
 {{
   "message_type": "private",
   "recipient": "GERMANY",
-  "content": "England seems distracted. Perhaps we can pressure them together?"
+  "content": "..."
 }}
 
 **Important:**

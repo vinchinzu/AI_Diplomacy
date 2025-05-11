@@ -151,58 +151,113 @@ class GameHistory:
             return {}
         return self.phases[-1].plans
 
-    def get_game_history(
-        self, power_name: str, include_plans: bool = True, num_prev_phases: int = 5
+    # NEW METHOD
+    def get_messages_this_round(self, power_name: str, current_phase_name: str) -> str:
+        current_phase: Optional[Phase] = None
+        for phase_obj in self.phases:
+            if phase_obj.name == current_phase_name:
+                current_phase = phase_obj
+                break
+
+        if not current_phase:
+            return f"\n(No messages found for current phase: {current_phase_name})\n"
+
+        messages_str = "" 
+
+        global_msgs_content = current_phase.get_global_messages()
+        if global_msgs_content:
+            messages_str += "**GLOBAL MESSAGES THIS ROUND:**\n"
+            messages_str += global_msgs_content
+        else:
+            messages_str += "**GLOBAL MESSAGES THIS ROUND:**\n (No global messages this round)\n"
+
+        private_msgs_dict = current_phase.get_private_messages(power_name)
+        if private_msgs_dict:
+            messages_str += "\n**PRIVATE MESSAGES TO/FROM YOU THIS ROUND:**\n"
+            for other_power, conversation_content in private_msgs_dict.items():
+                messages_str += f" Conversation with {other_power}:\n"
+                messages_str += conversation_content
+                messages_str += "\n"
+        else:
+            messages_str += "\n**PRIVATE MESSAGES TO/FROM YOU THIS ROUND:**\n (No private messages this round)\n"
+        
+        if not global_msgs_content and not private_msgs_dict:
+            return f"\n(No messages recorded for current phase: {current_phase_name})\n"
+
+        return messages_str.strip()
+
+    # MODIFIED METHOD (renamed from get_game_history)
+    def get_previous_phases_history(
+        self, power_name: str, current_phase_name: str, include_plans: bool = True, num_prev_phases: int = 5
     ) -> str:
         if not self.phases:
-            return ""
+            return "\n(No game history available)\n"
 
-        phases_to_report = self.phases[-num_prev_phases:]
+        relevant_phases = [p for p in self.phases if p.name != current_phase_name]
+
+        if not relevant_phases:
+            return "\n(No previous game history before this round)\n"
+
+        phases_to_report = relevant_phases[-num_prev_phases:]
+
+        if not phases_to_report:
+            return "\n(No previous game history available within the lookback window)\n"
+        
         game_history_str = ""
 
-        # Iterate through phases
-        for phase in phases_to_report:
-            game_history_str += f"\n{phase.name}:\n"
+        for phase_idx, phase in enumerate(phases_to_report):
+            phase_content_str = f"\nPHASE: {phase.name}\n"
+            current_phase_has_content = False
 
-            # Add GLOBAL section for this phase
             global_msgs = phase.get_global_messages()
             if global_msgs:
-                game_history_str += "\nGLOBAL:\n"
-                game_history_str += global_msgs
+                phase_content_str += "\n  GLOBAL MESSAGES:\n"
+                phase_content_str += "".join([f"    {line}\n" for line in global_msgs.strip().split('\n')])
+                current_phase_has_content = True
 
-            # Add PRIVATE section for this phase
             private_msgs = phase.get_private_messages(power_name)
             if private_msgs:
-                game_history_str += "\nPRIVATE:\n"
+                phase_content_str += "\n  PRIVATE MESSAGES:\n"
                 for other_power, messages in private_msgs.items():
-                    game_history_str += f" {other_power}:\n\n"
-                    game_history_str += messages + "\n"
+                    phase_content_str += f"    Conversation with {other_power}:\n"
+                    phase_content_str += "".join([f"      {line}\n" for line in messages.strip().split('\n')])
+                current_phase_has_content = True
 
-            # Add ORDERS section for this phase
             if phase.orders_by_power:
-                game_history_str += "\nORDERS:\n"
+                phase_content_str += "\n  ORDERS:\n"
                 for power, orders in phase.orders_by_power.items():
-                    game_history_str += f"{power}:\n"
+                    indicator = " (your power)" if power == power_name else ""
+                    phase_content_str += f"    {power}{indicator}:\n"
                     results = phase.results_by_power.get(power, [])
                     for i, order in enumerate(orders):
-                        if (
-                            i < len(results)
-                            and results[i]
-                            and not all(r == "" for r in results[i])
-                        ):
-                            # Join multiple results with commas
+                        result_str = " (successful)"
+                        if i < len(results) and results[i] and not all(r == "" for r in results[i]):
                             result_str = f" ({', '.join(results[i])})"
-                        else:
-                            result_str = " (successful)"
-                        game_history_str += f"  {order}{result_str}\n"
-                    game_history_str += "\n"
-
-            game_history_str += "-" * 50 + "\n"  # Add separator between phases
+                        phase_content_str += f"      {order}{result_str}\n"
+                    phase_content_str += "\n"
+                current_phase_has_content = True
             
-        # NOTE: only reports plan for the last phase (otherwise too much clutter)
-        if include_plans and phases_to_report and (power_name in phases_to_report[-1].plans):
-            game_history_str += f"\n{power_name} STRATEGIC DIRECTIVE:\n"
-            game_history_str += "Here is a high-level directive you have planned out previously for this phase.\n"
-            game_history_str += phases_to_report[-1].plans[power_name] + "\n"
+            if current_phase_has_content:
+                if not game_history_str:
+                    game_history_str = "**PREVIOUS GAME HISTORY (Messages, Orders, & Plans from older rounds & phases)**\n"
+                game_history_str += phase_content_str
+                if phase_idx < len(phases_to_report) -1 :
+                    game_history_str += "  " + "-" * 48 + "\n"
 
-        return game_history_str
+        if include_plans and phases_to_report:
+            last_reported_previous_phase = phases_to_report[-1]
+            if last_reported_previous_phase.plans:
+                if not game_history_str:
+                    game_history_str = "**PREVIOUS GAME HISTORY (Messages, Orders, & Plans from older rounds & phases)**\n"
+                game_history_str += f"\n  PLANS SUBMITTED FOR PHASE {last_reported_previous_phase.name}:\n"
+                if power_name in last_reported_previous_phase.plans:
+                    game_history_str += f"    Your Plan: {last_reported_previous_phase.plans[power_name]}\n"
+                for p_other, plan_other in last_reported_previous_phase.plans.items():
+                    if p_other != power_name:
+                        game_history_str += f"    {p_other}'s Plan: {plan_other}\n"
+                game_history_str += "\n"
+
+        if not game_history_str.replace("**PREVIOUS GAME HISTORY (Messages, Orders, & Plans from older rounds & phases)**\n", "").strip():
+            return "\n(No relevant previous game history to display)\n"
+
+        return game_history_str.strip()
