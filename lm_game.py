@@ -470,7 +470,7 @@ async def main():
             # Only collect relationships if the power is still active in the game
             if power_name in active_powers_in_phase and not game.powers[power_name].is_eliminated():
                 try:
-                    current_relationships_for_phase[power_name] = agent.get_relationships()
+                    current_relationships_for_phase[power_name] = agent.relationships
                     logger.debug(f"  Collected relationships for {power_name}")
                 except Exception as e:
                      logger.error(f"Error getting relationships for {power_name}: {e}")

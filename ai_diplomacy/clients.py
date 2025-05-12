@@ -5,7 +5,7 @@ import re
 import logging
 import asyncio  # Added for async operations
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from dotenv import load_dotenv
 
 # Use Async versions of clients
@@ -229,10 +229,30 @@ class BaseModelClient:
                 # Fallback is already set to parsed_orders_for_return
             else:
                 # Validate or fallback
-                validated_moves = self._validate_orders(move_list, possible_orders)
+                validated_moves, invalid_moves_list = self._validate_orders(move_list, possible_orders)
                 logger.debug(f"[{self.model_name}] Validated moves for {power_name}: {validated_moves}")
                 parsed_orders_for_return = validated_moves
-                success_status = "Success"
+                if invalid_moves_list:
+                    # Truncate if too many invalid moves to keep log readable
+                    max_invalid_to_log = 5
+                    display_invalid_moves = invalid_moves_list[:max_invalid_to_log]
+                    omitted_count = len(invalid_moves_list) - len(display_invalid_moves)
+                    
+                    invalid_moves_str = ", ".join(display_invalid_moves)
+                    if omitted_count > 0:
+                        invalid_moves_str += f", ... ({omitted_count} more)"
+                    
+                    success_status = f"Failure: Invalid LLM Moves ({len(invalid_moves_list)}): {invalid_moves_str}"
+                    # If some moves were validated despite others being invalid, it's still not a full 'Success'
+                    # because the LLM didn't provide a fully usable set of orders without intervention/fallbacks.
+                    # The fallback_orders logic within _validate_orders might fill in missing pieces,
+                    # but the key is that the LLM *proposed* invalid moves.
+                    if not validated_moves: # All LLM moves were invalid
+                         logger.warning(f"[{power_name}] All LLM-proposed moves were invalid. Using fallbacks. Invalid: {invalid_moves_list}")
+                    else:
+                        logger.info(f"[{power_name}] Some LLM-proposed moves were invalid. Using fallbacks/validated. Invalid: {invalid_moves_list}")
+                else:
+                    success_status = "Success"
 
         except Exception as e:
             logger.error(f"[{self.model_name}] LLM error for {power_name} in get_orders: {e}", exc_info=True)
@@ -341,17 +361,20 @@ class BaseModelClient:
 
     def _validate_orders(
         self, moves: List[str], possible_orders: Dict[str, List[str]]
-    ) -> List[str]:
+    ) -> Tuple[List[str], List[str]]: # MODIFIED RETURN TYPE
         """
         Filter out invalid moves, fill missing with HOLD, else fallback.
+        Returns a tuple: (validated_moves, invalid_moves_found)
         """
         logger.debug(f"[{self.model_name}] Proposed LLM moves: {moves}")
         validated = []
+        invalid_moves_found = [] # ADDED: To collect invalid moves
         used_locs = set()
 
         if not isinstance(moves, list):
             logger.debug(f"[{self.model_name}] Moves not a list, fallback.")
-            return self.fallback_orders(possible_orders)
+            # Return fallback and empty list for invalid_moves_found as no specific LLM moves were processed
+            return self.fallback_orders(possible_orders), [] 
 
         for move in moves:
             move_str = move.strip()
@@ -363,6 +386,7 @@ class BaseModelClient:
                     used_locs.add(parts[1][:3])
             else:
                 logger.debug(f"[{self.model_name}] Invalid move from LLM: {move_str}")
+                invalid_moves_found.append(move_str) # ADDED: Collect invalid move
 
         # Fill missing with hold
         for loc, orders_list in possible_orders.items():
@@ -372,11 +396,16 @@ class BaseModelClient:
                     hold_candidates[0] if hold_candidates else orders_list[0]
                 )
 
-        if not validated:
-            logger.warning(f"[{self.model_name}] All moves invalid, fallback.")
-            return self.fallback_orders(possible_orders)
+        if not validated and not invalid_moves_found: # Only if LLM provided no valid moves and no invalid moves (e.g. empty list from LLM)
+            logger.warning(f"[{self.model_name}] No valid LLM moves provided and no invalid ones to report. Using fallback.")
+            return self.fallback_orders(possible_orders), []
+        elif not validated and invalid_moves_found: # All LLM moves were invalid
+            logger.warning(f"[{self.model_name}] All LLM moves invalid ({len(invalid_moves_found)} found), using fallback. Invalid: {invalid_moves_found}")
+            # We return empty list for validated, but the invalid_moves_found list is populated
+            return self.fallback_orders(possible_orders), invalid_moves_found
 
-        return validated
+        # If we have some validated moves, return them along with any invalid ones found
+        return validated, invalid_moves_found
 
     def fallback_orders(self, possible_orders: Dict[str, List[str]]) -> List[str]:
         """
@@ -582,7 +611,7 @@ class BaseModelClient:
                              
                     except json.JSONDecodeError as jde:
                         json_decode_error_occurred = True
-                        logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name}. Error: {jde}. Block content:\n{block}")
+                        logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name}. Error: {jasde}. Block content:\n{block}")
 
                 if parsed_messages:
                     success_status = "Success: Messages extracted"
