@@ -153,7 +153,7 @@
     top: 60px;
     left: 10px;
     right: 10px;
-    pointer-events: auto;
+    pointer-events: none;
     z-index: 100;
     display: flex;
     flex-wrap: wrap;
@@ -164,6 +164,7 @@
   
   /* Each chat window: make it look like a scroll/paper note */
   .chat-window {
+    pointer-events: auto;
     background: radial-gradient(ellipse at center, #faf0d8 0%, #e2cfa1 100%);
     border: 3px solid #694c21;
     border-radius: 8px;

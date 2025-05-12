@@ -14,6 +14,8 @@ import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatin
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
+//
+//  TODO: When loading an invalide file, show an error.
 
 //const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = config.isDebugMode;
@@ -51,6 +53,8 @@ function initScene() {
         showStandingsBoard();
       }
 
+      gameState.cameraPanAnim = createCameraPan()
+
       // Load default game file if in debug mode
       if (isDebugMode || isStreamingMode) {
         loadDefaultGameFile();
@@ -58,7 +62,6 @@ function initScene() {
       if (isStreamingMode) {
         setTimeout(() => {
           togglePlayback()
-          gameState.cameraPanAnim = createCameraPan()
         }, 2000)
       }
     })
@@ -78,7 +81,7 @@ function initScene() {
   logger.updateInfoPanel();
 }
 
-function createCameraPan() {
+function createCameraPan(): Group {
   // Create a target object to store the desired camera position
   const cameraTarget = { x: gameState.camera.position.x, y: gameState.camera.position.y, z: gameState.camera.position.z };
 
@@ -279,7 +282,7 @@ function togglePlayback() {
     if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[1].start()
     // Hide standings board when playback starts
     hideStandingsBoard();
-    
+
     // Update rotating display
     if (gameState.gameData) {
       updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
@@ -348,5 +351,7 @@ speedSelector.addEventListener('change', e => {
 
 // --- BOOTSTRAP ON PAGE LOAD ---
 window.addEventListener('load', initScene);
+
+
 
 
