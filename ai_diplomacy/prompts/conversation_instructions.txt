@@ -1,44 +1,44 @@
-Based on the current game state, your goals, relationships, and the conversation history, decide if you want to send a message this round.
+You MUST generate negotiation message(s) to advance your strategic interests. Consider your current goals, relationships with other powers, and the ongoing conversation.
 
-**Your Task:** Generate your negotiation message(s). Format EACH message as a separate JSON object.
+**Your Task:** Craft one or more negotiation messages. Format EACH message as a separate JSON object. Use messages strategically to propose alliances, issue warnings, gather information, work together, or mislead opponents, always keeping your long-term goals and current relationships in mind.
 
 **Output Format:**
 Respond ONLY with one or more JSON objects. Do NOT include any other text, commentary, or explanation outside the JSON structure.
 
 Each JSON object MUST have the following keys:
 - "message_type": Either "global" (to send to all powers) or "private" (to send to one power).
-- "content": The text content of your message.
+- "content": The text content of your message. Be persuasive, deceptive, or direct as required by your strategy.
 
 If "message_type" is "private", you MUST also include:
 - "recipient": The name of the target power (e.g., "FRANCE", "RUSSIA").
 
 **Examples:**
 
-Example 1: Sending a global message
+Example 1: Sending a global message warning COUNTRY
 {{
   "message_type": "global",
-  "content": "..."
+  "content": "COUNTRY's aggression in the south will not go unanswered."
 }}
 
-Example 2: Sending a private message to Russia
+Example 2: Sending a private message proposing cooperation with COUNTRY
 {{
   "message_type": "private",
   "recipient": "RUSSIA",
-  "content": "..."
+  "content": "Perhaps we can coordinate against our mutual COUNTRY problem?"
 }}
 
-Example 3: Sending multiple messages (one global, one private)
+Example 3: Sending multiple messages (a global statement and a private proposal)
 {{
   "message_type": "global",
-  "content": "..."
+  "content": "Let's focus on maintaining stability this turn."
 }}
 {{
   "message_type": "private",
   "recipient": "GERMANY",
-  "content": "..."
+  "content": "Secretly, I'm planning to move against COUNTRY. Can you support?"
 }}
 
 **Important:**
-- Adhere strictly to the JSON format.
+- Adhere strictly to the JSON format. Every response MUST contain at least one valid JSON message block.
 - Ensure recipient names are spelled correctly if sending private messages.
-- If you choose not to send a message this round, output an empty response or just `[]`.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
