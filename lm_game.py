@@ -231,6 +231,23 @@ async def main():
                 )
             # ======================================================================
 
+            # === Generate Negotiation Diary Entries ===
+            logger.info(f"Generating negotiation diary entries for phase {current_short_phase}...")
+            neg_diary_tasks = []
+            for power_name, agent in agents.items():
+                if not game.powers[power_name].is_eliminated():
+                    neg_diary_tasks.append(
+                        agent.generate_negotiation_diary_entry(
+                            game,
+                            game_history,
+                            llm_log_file_path
+                        )
+                    )
+            if neg_diary_tasks:
+                await asyncio.gather(*neg_diary_tasks, return_exceptions=True)
+            logger.info(f"Finished generating negotiation diary entries for {current_short_phase}.")
+            # ==========================================
+
         # AI Decision Making: Get orders for each power
         logger.info("Getting orders from agents...")
         order_tasks = []
@@ -310,6 +327,19 @@ async def main():
                     logger.debug(
                         f"Set orders for {p_name} in {game.current_short_phase}: {orders}"
                     )
+                    # === Generate Order Diary Entry ===
+                    # Call after orders are successfully set
+                    logger.info(f"Generating order diary entry for {p_name} for phase {current_short_phase}...")
+                    try:
+                        await agent.generate_order_diary_entry(
+                            game,
+                            orders, # Pass the confirmed orders
+                            llm_log_file_path
+                        )
+                        logger.info(f"Finished generating order diary entry for {p_name}.")
+                    except Exception as e_diary:
+                        logger.error(f"Error generating order diary for {p_name}: {e_diary}", exc_info=True)
+                    # =================================
                 else:
                     logger.debug(f"No valid orders returned by get_valid_orders for {p_name}. Setting empty orders.")
                     game.set_orders(p_name, []) # Set empty if get_valid_orders returned empty

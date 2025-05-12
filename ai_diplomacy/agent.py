@@ -219,11 +219,11 @@ class DiplomacyAgent:
             full_prompt = prompt_template_content.format(
                 power_name=self.power_name,
                 current_phase=game.current_short_phase,
-                board_state=board_state_str,
+                board_state_str=board_state_str,  # Corrected to match prompt placeholder
                 messages_this_round=messages_this_round,
-                current_relationships=current_relationships_str,
-                current_goals=current_goals_str,
-                private_diary_summary=formatted_diary, # Pass formatted diary
+                agent_relationships=current_relationships_str,  # Corrected to match prompt placeholder
+                agent_goals=current_goals_str,  # Corrected to match prompt placeholder
+                private_diary_summary=formatted_diary, 
                 allowed_relationships_str=", ".join(ALLOWED_RELATIONSHIPS)
             )
 
@@ -254,7 +254,15 @@ class DiplomacyAgent:
             relationships_updated = False
 
             if parsed_data:
-                diary_entry_text = parsed_data.get('diary_entry', diary_entry_text)
+                # Correctly get 'negotiation_summary' as requested by the prompt
+                diary_text_candidate = parsed_data.get('negotiation_summary')
+                if isinstance(diary_text_candidate, str) and diary_text_candidate.strip():
+                    diary_entry_text = diary_text_candidate # Use the valid summary
+                    logger.info(f"[{self.power_name}] Successfully extracted 'negotiation_summary' for diary.")
+                else:
+                    logger.warning(f"[{self.power_name}] 'negotiation_summary' missing or invalid in diary response. Using fallback. Value: {diary_text_candidate}")
+                    # Keep the default fallback text
+
                 # Update relationships if provided and valid
                 new_relationships = parsed_data.get('updated_relationships')
                 if isinstance(new_relationships, dict):
@@ -293,7 +301,8 @@ class DiplomacyAgent:
                 success_status = "Success: Parsed, only diary text applied"
 
         except Exception as e:
-            logger.error(f"[{self.power_name}] Error in generate_negotiation_diary_entry: {e}", exc_info=True)
+            # Log the full exception details for better debugging
+            logger.error(f"[{self.power_name}] Caught unexpected error in generate_negotiation_diary_entry: {type(e).__name__}: {e}", exc_info=True)
             success_status = f"Failure: Exception ({type(e).__name__})"
             # Add a fallback diary entry in case of general error
             self.add_diary_entry(f"(Error generating diary entry: {type(e).__name__})", game.current_short_phase)
@@ -323,6 +332,7 @@ class DiplomacyAgent:
 
         board_state_dict = game.get_state()
         board_state_str = f"Units: {board_state_dict.get('units', {})}, Centers: {board_state_dict.get('centers', {})}"
+        
         orders_list_str = "\n".join([f"- {o}" for o in orders]) if orders else "No orders submitted."
         
         goals_str = "\n".join([f"- {g}" for g in self.goals]) if self.goals else "None"
@@ -358,25 +368,22 @@ class DiplomacyAgent:
                 try:
                     response_data = self._extract_json_from_text(raw_response)
                     if response_data:
-                        diary_text_candidate = response_data.get("diary_entry")
+                        # Directly attempt to get 'order_summary' as per the prompt
+                        diary_text_candidate = response_data.get("order_summary")
                         if isinstance(diary_text_candidate, str) and diary_text_candidate.strip():
                             actual_diary_text = diary_text_candidate
                             success_status = "TRUE"
+                            logger.info(f"[{self.power_name}] Successfully extracted 'order_summary' for order diary entry.")
                         else:
-                            # Try 'order_summary' if 'diary_entry' is missing or invalid
-                            logger.debug(f"[{self.power_name}] 'diary_entry' missing or invalid. Trying 'order_summary'. Value was: {diary_text_candidate}")
-                            order_summary_candidate = response_data.get("order_summary")
-                            if isinstance(order_summary_candidate, str) and order_summary_candidate.strip():
-                                actual_diary_text = order_summary_candidate
-                                success_status = "TRUE"
-                                logger.info(f"[{self.power_name}] Used 'order_summary' for order diary entry.")
-                            else:
-                                logger.warning(f"[{self.power_name}] Both 'diary_entry' and 'order_summary' missing, invalid, or empty. 'diary_entry': {diary_text_candidate}, 'order_summary': {order_summary_candidate}")
-                                success_status = "FALSE"
-                    # If response_data is None (JSON parsing failed), success_status remains "FALSE"
+                            logger.warning(f"[{self.power_name}] 'order_summary' missing, invalid, or empty. Value was: {diary_text_candidate}")
+                            success_status = "FALSE" # Explicitly set false if not found or invalid
+                    else:
+                        # response_data is None (JSON parsing failed)
+                        logger.warning(f"[{self.power_name}] Failed to parse JSON from order diary LLM response.")
+                        success_status = "FALSE"
                 except Exception as e:
-                    logger.error(f"[{self.power_name}] Error parsing order diary JSON: {e}. Raw response: {raw_response[:200]} ", exc_info=False)
-                    # success_status remains "FALSE"
+                    logger.error(f"[{self.power_name}] Error processing order diary JSON: {e}. Raw response: {raw_response[:200]} ", exc_info=False)
+                    success_status = "FALSE"
 
             log_llm_response(
                 log_file_path=log_file_path,
@@ -612,9 +619,6 @@ class DiplomacyAgent:
                 else: # Log if the original dict was empty
                      logger.warning(f"[{power_name}] LLM did not provide valid 'updated_relationships' dict in state update.")
                      # Keep current relationships, no update needed
-            else:
-                 logger.warning(f"[{power_name}] LLM did not provide valid 'updated_relationships' dict in state update.")
-                 # Keep current relationships, no update needed
 
         except FileNotFoundError:
             logger.error(f"[{power_name}] state_update_prompt.txt not found. Skipping state update.")
