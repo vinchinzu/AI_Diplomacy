@@ -175,6 +175,7 @@ async def main():
 
     # == Add storage for relationships per phase ==
     all_phase_relationships = {}
+    all_phase_relationships_history = {} # Initialize history
 
     while not game.is_game_done:
         phase_start = time.time()
@@ -566,6 +567,14 @@ async def main():
                       # Result is None if the function completes normally
                       logger.debug(f"State analysis completed successfully for {power_name}.")
 
+             # === Populate relationship history for the completed phase ===
+             current_phase_name_for_history = completed_phase_name # Or game.current_short_phase if more appropriate
+             all_phase_relationships_history[current_phase_name_for_history] = {}
+             for power_name, agent_obj in agents.items():
+                 all_phase_relationships_history[current_phase_name_for_history][power_name] = agent_obj.relationships.copy()
+             logger.info(f"Recorded relationships for phase {current_phase_name_for_history} into history.")
+             # ==========================================================
+
              logger.info(f"Finished concurrent state analysis for {len(active_agent_powers)} agents.")
              logger.info(f"Completed state update analysis for phase {completed_phase_name}.")
         else:
@@ -623,16 +632,34 @@ async def main():
             logger.debug(f"Added summary to phase {phase_name} in export")
     logger.info(f"Added summaries to {summary_phases_count}/{len(saved_game['phases'])} phases in the export")
 
-    # == Add agent relationships to each phase in the export ==
-    relationships_added_count = 0
-    for i, phase_data in enumerate(saved_game['phases']):
-        phase_name = phase_data.get('name') # Assumes 'name' key exists and matches current_short_phase used earlier
-        if phase_name and phase_name in all_phase_relationships:
-            saved_game['phases'][i]['agent_relationships'] = all_phase_relationships[phase_name]
-            relationships_added_count += 1
-            logger.debug(f"Added agent_relationships to phase {phase_name} in export")
-    logger.info(f"Added agent_relationships to {relationships_added_count}/{len(saved_game['phases'])} phases in the export")
-    # =====================================================
+    # == Capture Final Agent States After All Updates ==
+    final_agent_states = {}
+    if agents: # Ensure agents exist
+        for power_name, agent in agents.items():
+            # Access attributes directly as they should exist on the agent object
+            final_agent_states[power_name] = {
+                "relationships": agent.relationships,
+                "goals": agent.goals,
+                # Optionally add last diary entry or other final state info here
+            }
+        logger.info(f"Captured final states for {len(final_agent_states)} agents.")
+        # Add this dictionary to the main saved_game object
+        saved_game['final_agent_states'] = final_agent_states
+        logger.info("Added 'final_agent_states' key to the saved game data.")
+    else:
+        logger.info("No agents found, skipping capture of final agent states.")
+        saved_game['final_agent_states'] = {} # Add empty dict for consistency
+
+    # == Add Agent Relationships to Each Phase in the Export (Using History) ==
+    relationships_added_to_phases_count = 0
+    for i, phase_data in enumerate(saved_game.get('phases', [])):
+        phase_name = phase_data.get('name')
+        if phase_name in all_phase_relationships_history:
+            saved_game['phases'][i]['agent_relationships'] = all_phase_relationships_history[phase_name]
+            relationships_added_to_phases_count += 1
+            logger.debug(f"Added agent_relationships from history to phase {phase_name} in export")
+    logger.info(f"Added agent_relationships from history to {relationships_added_to_phases_count}/{len(saved_game.get('phases', []))} phases in the export")
+    # ======================================================================
 
     # Save the modified game data
     logger.info(f"Saving game to {output_path}...")
