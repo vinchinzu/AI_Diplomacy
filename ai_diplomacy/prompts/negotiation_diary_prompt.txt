@@ -19,9 +19,9 @@ Based on these negotiations, your goals, relationships, and the overall game sta
 Return your response as a single JSON object with the following keys:
 - "negotiation_summary": (string) Your summary of the negotiations.
 - "intent": (string) Your strategic intent for the upcoming orders.
-- "relationship_updates": (object) A dictionary where keys are power names (e.g., "FRANCE") and values are their new relationship status (e.g., "Friendly"). Only include powers whose relationships you wish to update.
+- "relationship_updates": (object) A dictionary where keys are power names (e.g., "FRANCE") and values are their new relationship status (e.g., "Friendly"). Only include powers whose relationships you wish to update. You may need to make strategic friends/allies to progress your ambitions.
 
 Example for "relationship_updates":
-{{ "FRANCE": "Friendly", "GERMANY": "Unfriendly" }}
+{{ "FRANCE": "Friendly", "GERMANY": "Unfriendly", "AUSTRIA":"Ally", "RUSSIA":"Enemy", "ITALY":"Neutral"}}
 
 Do not include any other text, commentary, or explanation outside the JSON structure.

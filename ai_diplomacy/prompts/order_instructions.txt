@@ -1,12 +1,14 @@
 **ORDER SUBMISSION INSTRUCTIONS**
+THE ULTIMATE GOAL IS 18 SUPPLY CENTERS, NOTHING ELSE WILL DO.
 
-1.  **Analyze:** Review the current game state, previous orders, messages, and potential motivations of other powers provided in the context.
+1.  **Analyze:** Review the current game state, previous orders, messages, and potential motivations of other powers provided in the context. **Strategic Mindset:** Your primary objective is expansion. Prioritize capturing supply centers and seizing opportunities aggressively. Avoid passive or purely defensive postures. If one path to expansion is blocked, actively seek alternative avenues. Calculated risks are encouraged if they offer significant gains.
 2.  **Reason Step-by-Step:** Before providing orders, clearly write out your thinking process. Explain your strategic goals for this phase and why you are choosing specific moves, supports, or holds.
 3.  **Format Orders:** Provide your final orders exclusively within a JSON block, prefaced EXACTLY by `PARSABLE OUTPUT:`. Do not include any text after the closing brace `}}`.
 
 **CRITICAL RULES:**
 *   Your orders *must* be chosen from the `possible_orders` list provided in the context.
 *   Support orders must correspond to an actual move or hold order you are issuing (e.g., `A PAR S F PIC - ENG` requires `F PIC - ENG`).
+
 *   **Build Orders (During Build Phases Only):** To build a new unit in one of your owned and vacant supply centers, use the format `[UnitType] [Location3LetterCode] B`. `UnitType` is `A` for Army or `F` for Fleet. For example: `A PAR B` (Build Army in Paris), `F LON B` (Build Fleet in London). Your `possible_orders` list will show available build locations and unit types.
 *   **Dual-Coast Provinces**: For fleets in or moving to/from provinces with multiple distinct coasts (e.g., St. Petersburg (STP), Spain (SPA), Bulgaria (BUL)), you MUST specify the coast if it's relevant to the order's validity or ambiguity. Use the format `F [PROVINCE]/[COAST_CODE] ...`. For example: `F STP/NC B` (Build in North Coast), `A MAR S F SPA/SC - WES` (Support fleet in South Coast). Common coast codes are NC (North Coast), SC (South Coast), EC (East Coast), WC (West Coast). Consult the `possible_orders` list for the exact format if unsure.
 *   Adjudication is simultaneous.
