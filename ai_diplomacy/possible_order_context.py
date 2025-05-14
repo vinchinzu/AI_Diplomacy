@@ -364,14 +364,15 @@ def get_adjacent_territory_details(
 # --- Main context generation function ---
 def generate_rich_order_context(game: Any, power_name: str, possible_orders_for_power: Dict[str, List[str]]) -> str:
     """
-    Generates the rich, multi-line context string for all units of a given power
-    that have possible orders.
+    Generates a strategic overview context string.
+    Details units and SCs for power_name, including possible orders and simplified adjacencies for its units.
+    Provides summaries of units and SCs for all other powers.
     """
     board_state: BoardState = game.get_state()
     game_map: GameMap = game.map
     graph = build_diplomacy_graph(game_map)
     
-    final_context_lines: List[str] = ["Enhanced Possible Orders Context:"]
+    final_context_lines: List[str] = ["<PossibleOrdersContext>"]
 
     # Iterate through units that have orders (keys of possible_orders_for_power are unit locations)
     for unit_loc_full, unit_specific_possible_orders in possible_orders_for_power.items():
@@ -382,7 +383,6 @@ def generate_rich_order_context(game: Any, power_name: str, possible_orders_for_
         unit_type_char = unit_str_full.split(" ")[0] # 'A' or 'F'
         unit_type_long = "ARMY" if unit_type_char == 'A' else "FLEET"
 
-        # Section Header: Strategic territory held by POWER: LOC (TYPE)
         loc_province_short = game_map.loc_name.get(unit_loc_full, unit_loc_full).upper()[:3]
         loc_type_short = game_map.loc_type.get(loc_province_short, "UNKNOWN").upper()
         if loc_type_short == 'COAST' or loc_type_short == 'LAND':
@@ -391,55 +391,68 @@ def generate_rich_order_context(game: Any, power_name: str, possible_orders_for_
             loc_type_display = loc_type_short
 
         current_unit_lines: List[str] = []
+        current_unit_lines.append(f'  <UnitContext loc="{unit_loc_full}">')
+        
+        # Unit Information section
+        current_unit_lines.append('    <UnitInformation>')
         sc_owner_at_loc = get_sc_controller(game_map, board_state, unit_loc_full)
-        header_line = f"\n# Strategic territory held by {power_name}: {unit_loc_full} ({loc_type_display})"
+        header_content = f"Strategic territory held by {power_name}: {unit_loc_full} ({loc_type_display})"
         if sc_owner_at_loc == power_name:
-            header_line += " (Controls SC)"
+            header_content += " (Controls SC)"
         elif sc_owner_at_loc:
-            header_line += f" (SC controlled by {sc_owner_at_loc})"
-        current_unit_lines.append(header_line)
-        current_unit_lines.append(f"Units present: {unit_str_full}")
+            header_content += f" (SC controlled by {sc_owner_at_loc})"
+        current_unit_lines.append(f"      {header_content}")
+        current_unit_lines.append(f"      Units present: {unit_str_full}")
+        current_unit_lines.append('    </UnitInformation>')
 
-        # Shortest path to friendly unit
-        friendly_path_info = get_shortest_path_to_friendly_unit(board_state, graph, game_map, power_name, unit_loc_full, unit_type_long)
-        if friendly_path_info:
-            friendly_unit_str, friendly_path_short = friendly_path_info
-            current_unit_lines.append("  Shortest path for {}:".format(unit_str_full.split(" ")[0] + " " + unit_loc_full )) # A TYR
-            current_unit_lines.append("    => Nearest friendly unit:")
-            current_unit_lines.append(f"       {friendly_unit_str} path=[{unit_loc_full}→{('→'.join(friendly_path_short[1:])) if len(friendly_path_short) > 1 else friendly_path_short[0]}]")
-        else:
-            current_unit_lines.append("  Shortest path for {}:".format(unit_str_full.split(" ")[0] + " " + unit_loc_full ))
-            current_unit_lines.append("    => Nearest friendly unit: None found")
-
-        # Possible moves (already given)
-        current_unit_lines.append("    => Possible moves:")
+        # Possible moves section
+        current_unit_lines.append('    <PossibleMoves>')
+        current_unit_lines.append("      Possible moves:")
         for order_str in unit_specific_possible_orders:
-            current_unit_lines.append(f"       {order_str}")
+            current_unit_lines.append(f"        {order_str}")
+        current_unit_lines.append('    </PossibleMoves>')
         
-        # Nearest enemy units
+        # Nearest enemy units section
         enemy_units_info = get_nearest_enemy_units(board_state, graph, game_map, power_name, unit_loc_full, unit_type_long, n=3)
+        current_unit_lines.append('    <NearestEnemyUnits>')
         if enemy_units_info:
-            current_unit_lines.append("  Nearest units (not ours):")
+            current_unit_lines.append("      Nearest units (not ours):")
             for enemy_unit_str, enemy_path_short in enemy_units_info:
-                current_unit_lines.append(f"    {enemy_unit_str}, path=[{unit_loc_full}→{('→'.join(enemy_path_short[1:])) if len(enemy_path_short) > 1 else enemy_path_short[0]}]")
+                current_unit_lines.append(f"        {enemy_unit_str}, path=[{unit_loc_full}→{('→'.join(enemy_path_short[1:])) if len(enemy_path_short) > 1 else enemy_path_short[0]}]")
         else:
-            current_unit_lines.append("  Nearest units (not ours): None found")
+            current_unit_lines.append("      Nearest units (not ours): None found")
+        current_unit_lines.append('    </NearestEnemyUnits>')
 
-        # Nearest supply centers (not controlled by us)
+        # Nearest supply centers (not controlled by us) section
         uncontrolled_scs_info = get_nearest_uncontrolled_scs(game_map, board_state, graph, power_name, unit_loc_full, unit_type_long, n=3)
+        current_unit_lines.append('    <NearestUncontrolledSupplyCenters>')
         if uncontrolled_scs_info:
-            current_unit_lines.append("  Nearest supply centers (not controlled by us):")
+            current_unit_lines.append("      Nearest supply centers (not controlled by us):")
             for sc_str, dist, sc_path_short in uncontrolled_scs_info:
-                current_unit_lines.append(f"    {sc_str}, dist={dist}, path=[{unit_loc_full}→{('→'.join(sc_path_short[1:])) if len(sc_path_short) > 1 else sc_path_short[0]}]")
+                current_unit_lines.append(f"        {sc_str}, dist={dist}, path=[{unit_loc_full}→{('→'.join(sc_path_short[1:])) if len(sc_path_short) > 1 else sc_path_short[0]}]")
         else:
-            current_unit_lines.append("  Nearest supply centers (not controlled by us): None found")
+            current_unit_lines.append("      Nearest supply centers (not controlled by us): None found")
+        current_unit_lines.append('    </NearestUncontrolledSupplyCenters>')
 
-        # Adjacent territories details
+        # Adjacent territories details section
         adj_details_str = get_adjacent_territory_details(game_map, board_state, unit_loc_full, unit_type_long, graph)
+        current_unit_lines.append('    <AdjacentTerritories>')
         if adj_details_str:
-            current_unit_lines.append("Adjacent territories (including units that can support/move to the adjacent territory):")
-            current_unit_lines.append(adj_details_str)
+            current_unit_lines.append("      Adjacent territories (including units that can support/move to the adjacent territory):")
+            # Assuming adj_details_str is already formatted with newlines and indentation for its content
+            # We might need to indent adj_details_str if it's a single block of text
+            # For now, let's add a standard indent to each line of adj_details_str if it contains newlines
+            if '\n' in adj_details_str:
+                indented_adj_details = "\n".join([f"        {line}" for line in adj_details_str.split('\n')])
+                current_unit_lines.append(indented_adj_details)
+            else:
+                 current_unit_lines.append(f"        {adj_details_str}")
+        else:
+            current_unit_lines.append("      Adjacent territories: None relevant or all are empty/uncontested by direct threats.") # Added more descriptive else
+        current_unit_lines.append('    </AdjacentTerritories>')
         
+        current_unit_lines.append('  </UnitContext>')
         final_context_lines.extend(current_unit_lines)
 
+    final_context_lines.append("</PossibleOrdersContext>")
     return "\n".join(final_context_lines)

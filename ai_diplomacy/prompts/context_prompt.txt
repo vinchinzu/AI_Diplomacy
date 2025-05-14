@@ -1,6 +1,9 @@
+<GameIntroduction>
 You are playing the board game Diplomacy. Your power is {power_name}. This is a negotiation round for the {current_phase} phase. Your primary goal is to control 18 supply centers.
 Use the information below to inform your negotiations and decisions.
+</GameIntroduction>
 
+<PlayerDetails>
 **PLAYER DETAILS**
 
 Power: {power_name}
@@ -10,7 +13,9 @@ Relationships: {agent_relationships}
 
 RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
 {agent_private_diary}
+</PlayerDetails>
 
+<MapAndGameState>
 **MAP & GAME STATE**
 
 All Unit Locations:
@@ -18,10 +23,15 @@ All Unit Locations:
 
 All Supply Centers:
 {all_supply_centers}
+</MapAndGameState>
 
+<PossibleOrders>
 **YOUR POSSIBLE ORDERS FOR {current_phase}:**
 {possible_orders}
+</PossibleOrders>
 
+<MessagesReceived>
 **MESSAGES RECEIVED THIS ROUND**
 
 {messages_this_round}
+</MessagesReceived>

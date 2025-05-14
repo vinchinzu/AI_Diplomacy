@@ -1,21 +1,35 @@
+<Introduction>
 You are {power_name}. The negotiation round for phase {current_phase} has just concluded.
+</Introduction>
+
+<MessagesExchanged>
 The messages exchanged during this round are:
 {messages_this_round}
+</MessagesExchanged>
 
+<StrategicGoals>
 Your current strategic goals are:
 {agent_goals}
+</StrategicGoals>
 
+<CurrentRelationships>
 Your current relationships are:
 {agent_relationships}
+</CurrentRelationships>
 
+<CurrentGameState>
 Current Game State:
 {board_state_str}
+</CurrentGameState>
 
+<TaskDescription>
 Based on these negotiations, your goals, relationships, and the overall game state:
 1.  Concisely summarize the key outcomes, agreements, or tensions from this negotiation round.
 2.  State your primary strategic intent for your upcoming orders in phase {current_phase}.
 3.  Suggest any updates to your relationships with other powers. For each power, choose one of: Enemy, Unfriendly, Neutral, Friendly, Ally.
+</TaskDescription>
 
+<OutputFormatInstructions>
 Return your response as a single JSON object with the following keys:
 - "negotiation_summary": (string) Your summary of the negotiations.
 - "intent": (string) Your strategic intent for the upcoming orders.
@@ -25,3 +39,4 @@ Example for "relationship_updates":
 {{ "FRANCE": "Friendly", "GERMANY": "Unfriendly", "AUSTRIA":"Ally", "RUSSIA":"Enemy", "ITALY":"Neutral"}}
 
 Do not include any other text, commentary, or explanation outside the JSON structure.
+</OutputFormatInstructions>

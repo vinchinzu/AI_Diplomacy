@@ -1,7 +1,12 @@
+<CoreDirective>
 You MUST generate negotiation message(s) to advance your strategic interests. Consider your current goals, relationships with other powers, and the ongoing conversation.
+</CoreDirective>
 
+<TaskDescription>
 **Your Task:** Craft one or more negotiation messages. Format EACH message as a separate JSON object. Use messages strategically to propose alliances, issue warnings, gather information, work together, or mislead opponents, always keeping your long-term goals and current relationships in mind.
+</TaskDescription>
 
+<OutputFormat>
 **Output Format:**
 Respond ONLY with one or more JSON objects. Do NOT include any other text, commentary, or explanation outside the JSON structure.
 
@@ -11,7 +16,9 @@ Each JSON object MUST have the following keys:
 
 If "message_type" is "private", you MUST also include:
 - "recipient": The name of the target power (e.g., "FRANCE", "RUSSIA").
+</OutputFormat>
 
+<MessageExamples>
 **Examples:**
 
 Example 1: Sending a global message warning COUNTRY
@@ -37,8 +44,11 @@ Example 3: Sending multiple messages (a global statement and a private proposal)
   "recipient": "GERMANY",
   "content": "Secretly, I'm planning to move against COUNTRY. Can you support?"
 }}
+</MessageExamples>
 
+<ImportantReminders>
 **Important:**
 - Adhere strictly to the JSON format. Every response MUST contain at least one valid JSON message block.
 - Ensure recipient names are spelled correctly if sending private messages.
 - Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+</ImportantReminders>

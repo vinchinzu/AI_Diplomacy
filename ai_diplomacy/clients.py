@@ -742,11 +742,14 @@ class OpenAIClient(BaseModelClient):
     async def generate_response(self, prompt: str) -> str:
         # Updated to new API format
         try:
+            # Append the call to action to the user's prompt
+            prompt_with_cta = prompt + "\n\nPROVIDE YOUR RESPONSE BELOW:"
+
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": prompt},
+                    {"role": "user", "content": prompt_with_cta},
                 ],
             )
             if not response or not hasattr(response, "choices") or not response.choices:
@@ -781,9 +784,9 @@ class ClaudeClient(BaseModelClient):
         try:
             response = await self.client.messages.create(
                 model=self.model_name,
-                max_tokens=2000,
+                max_tokens=4000,
                 system=self.system_prompt,  # system is now a top-level parameter
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": prompt + "\n\nPROVIDE YOUR RESPONSE BELOW:"}],
             )
             if not response.content:
                 logger.warning(
@@ -819,7 +822,7 @@ class GeminiClient(BaseModelClient):
         logger.debug(f"[{self.model_name}] Initialized Gemini client (genai.GenerativeModel)")
 
     async def generate_response(self, prompt: str) -> str:
-        full_prompt = self.system_prompt + prompt
+        full_prompt = self.system_prompt + prompt + "\n\nPROVIDE YOUR RESPONSE BELOW:"
 
         try:
             response = await self.client.generate_content_async(
@@ -850,11 +853,14 @@ class DeepSeekClient(BaseModelClient):
 
     async def generate_response(self, prompt: str) -> str:
         try:
+            # Append the call to action to the user's prompt
+            prompt_with_cta = prompt + "\n\nPROVIDE YOUR RESPONSE BELOW:"
+
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": prompt},
+                    {"role": "user", "content": prompt_with_cta},
                 ],
                 stream=False,
             )
@@ -927,15 +933,17 @@ class OpenRouterClient(BaseModelClient):
     async def generate_response(self, prompt: str) -> str:
         """Generate a response using OpenRouter."""
         try:
+            # Append the call to action to the user's prompt
+            prompt_with_cta = prompt + "\n\nPROVIDE YOUR RESPONSE BELOW:"
+
             # Prepare standard OpenAI-compatible request
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt_with_cta}
                 ],
-                temperature=0.3,  # Lower temperature for more deterministic responses
-                max_tokens=2048,  # Reasonable default, adjust as needed
+                max_tokens=4000,
             )
             
             if not response.choices:
