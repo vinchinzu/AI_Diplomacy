@@ -83,10 +83,10 @@ function initScene() {
 
 function createCameraPan(): Group {
   // Create a target object to store the desired camera position
-  const cameraTarget = { x: gameState.camera.position.x, y: gameState.camera.position.y, z: gameState.camera.position.z };
+  const cameraStart = { x: gameState.camera.position.x, y: gameState.camera.position.y, z: gameState.camera.position.z };
 
   // Move from the starting camera position to the left side of the map
-  let moveToStartSweepAnim = new Tween(cameraTarget).to({
+  let moveToStartSweepAnim = new Tween(cameraStart).to({
     x: -400,
     y: 500,
     z: 1000
@@ -95,9 +95,10 @@ function createCameraPan(): Group {
     gameState.camera.position.lerp(new THREE.Vector3(target.x, target.y, target.z), 0.1);
   });
 
-  let cameraSweepOperation = new Tween({ timeStep: 0 }).to({
-    timeStep: Math.PI
-  }, 20000)
+  let cameraSweepOperation = new Tween({ timeStep: 0 })
+    .to({
+      timeStep: Math.PI
+    }, 20000)
     .onUpdate((tweenObj) => {
       let radius = 2200;
       // Calculate the target position
@@ -105,16 +106,9 @@ function createCameraPan(): Group {
       const targetY = 500 + 200 * Math.sin(tweenObj.timeStep);
       const targetZ = 1000 + 900 * Math.sin(tweenObj.timeStep);
 
-      // Update the target object
-      cameraTarget.x = targetX;
-      cameraTarget.y = targetY;
-      cameraTarget.z = targetZ;
-
-      // Use smooth interpolation to avoid jumps
-      gameState.camera.position.lerp(new THREE.Vector3(targetX, targetY, targetZ), 0.05);
+      gameState.camera.position.set(targetX, targetY, targetZ);
     })
-    // .easing(Easing.Quadratic.InOut)
-    .yoyo(true).repeat(Infinity);
+    .easing(Easing.Quadratic.InOut).yoyo(true).repeat(Infinity);
 
   moveToStartSweepAnim.chain(cameraSweepOperation);
   moveToStartSweepAnim.start();
@@ -134,27 +128,13 @@ function animate() {
 
   if (gameState.isPlaying) {
     // Update the camera angle
+    // FIXME: This has to call the update functino twice inorder to avoid a bug in Tween.js, see here  https://github.com/tweenjs/tween.js/issues/677
     gameState.cameraPanAnim.update();
+    gameState.cameraPanAnim.update();
+
   } else {
     // Manual camera controls when not in playback mode
     gameState.camControls.update();
-  }
-
-  // Instead of throwing an error, smoothly interpolate if jump is too large
-  const jumpThreshold = 20;
-  if (Math.abs(prevPos.x - gameState.camera.position.x) > jumpThreshold ||
-    Math.abs(prevPos.y - gameState.camera.position.y) > jumpThreshold ||
-    Math.abs(prevPos.z - gameState.camera.position.z) > jumpThreshold) {
-    console.warn("Large camera position jump detected, smoothing transition");
-    // Interpolate to avoid the jump
-    gameState.camera.position.lerp(
-      new THREE.Vector3(
-        prevPos.x + Math.sign(gameState.camera.position.x - prevPos.x) * jumpThreshold,
-        gameState.camera.position.y,
-        gameState.camera.position.z
-      ),
-      0.5
-    );
   }
 
   // Check if all animations are complete
