@@ -766,6 +766,7 @@ class DeepSeekClient(BaseModelClient):
                 ],
                 stream=False,
             )
+            
             logger.debug(f"[{self.model_name}] Raw DeepSeek response:\n{response}")
 
             if not response or not response.choices:
@@ -778,28 +779,7 @@ class DeepSeekClient(BaseModelClient):
             if not content:
                 logger.warning(f"[{self.model_name}] DeepSeek returned empty content.")
                 return ""
-
-            try:
-                json_response = json.loads(content)
-                required_fields = ["message_type", "content"]
-                if json_response["message_type"] == "private":
-                    required_fields.append("recipient")
-                if not all(field in json_response for field in required_fields):
-                    logger.error(
-                        f"[{self.model_name}] Missing required fields in response: {content}"
-                    )
-                    return ""
-                return content
-            except JSONDecodeError:
-                logger.error(
-                    f"[{self.model_name}] Response is not valid JSON: {content}"
-                )
-                content = content.replace("'", '"')
-                try:
-                    json.loads(content)
-                    return content
-                except JSONDecodeError:
-                    return ""
+            return content
 
         except Exception as e:
             logger.error(

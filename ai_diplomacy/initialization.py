@@ -79,7 +79,21 @@ async def initialize_agent_state_ext(
             logger.error(f"[{power_name}] All JSON extraction attempts failed: {e}. Response snippet: {response[:300]}...")
             success_status = "Failure: JSONDecodeError"
             update_data = {} # Ensure update_data exists for fallback logic below
+            parsed_successfully = False # Explicitly set here too
             # Fallback logic for goals/relationships will be handled later if update_data is empty
+
+        # Defensive check for update_data type if parsing was initially considered successful
+        if parsed_successfully: 
+            if isinstance(update_data, str):
+                logger.error(f"[{power_name}] _extract_json_from_text returned a string, not a dict/list, despite not raising an exception. This indicates an unexpected parsing issue. String returned: {update_data[:300]}...")
+                update_data = {} # Treat as parsing failure
+                parsed_successfully = False
+                success_status = "Failure: ParsedAsStr"
+            elif not isinstance(update_data, dict): # Expecting a dict from JSON object
+                logger.error(f"[{power_name}] _extract_json_from_text returned a non-dict type ({type(update_data)}), expected dict. Data: {str(update_data)[:300]}")
+                update_data = {} # Treat as parsing failure
+                parsed_successfully = False
+                success_status = "Failure: NotADict"
 
         initial_goals_applied = False
         initial_relationships_applied = False

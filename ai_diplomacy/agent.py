@@ -3,6 +3,7 @@ import os
 from typing import List, Dict, Optional
 import json
 import re
+import json_repair
 
 # Assuming BaseModelClient is importable from clients.py in the same directory
 from .clients import BaseModelClient 
@@ -173,9 +174,30 @@ class DiplomacyAgent:
                 return json.loads(text_fixed[start:end])
         except json.JSONDecodeError:
             pass
+
+        # 4.5. Try to extract JSON from ```json ``` blocks
+        try:
+            # Find all ```json ``` blocks
+            json_blocks = re.findall(r'```json\s*\n(.*?)\n\s*```', text, re.DOTALL)
+            if json_blocks:
+                # Try to parse the first block
+                for block in json_blocks:
+                    try:
+                        return json.loads(block)
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as e_json_extract:
+            logger.error(f"Failed to extract JSON from ```json ``` blocks: {e_json_extract}")
         
-        # If all attempts fail, raise error
-        raise json.JSONDecodeError("Could not extract valid JSON from LLM response", text, 0)
+        # 5. Last resort: try json-repair on the original text
+        try:
+            logger.debug(f"Attempting to repair JSON with json-repair for text: {text[:200]}...")
+            return json_repair.loads(text)
+        except Exception as e_repair: # Catching a broader exception as json_repair might raise different errors
+            logger.error(f"json-repair failed to parse JSON. Error: {e_repair}. Original text snippet: {text[:200]}...")
+            # If all attempts fail, including json-repair, raise the original-style error
+            raise json.JSONDecodeError("Could not extract valid JSON from LLM response after all attempts including json-repair", text, 0)
+
 
     def add_journal_entry(self, entry: str):
         """Adds a formatted entry string to the agent's private journal."""

@@ -32,18 +32,19 @@ def assign_models_to_powers() -> Dict[str, str]:
     """
     
     # POWER MODELS
-    """
+    
     return {
-        "AUSTRIA": "openrouter-google/gemini-2.5-flash-preview",
+        "AUSTRIA": "claude-3-7-sonnet-20250219",
         "ENGLAND": "openrouter-google/gemini-2.5-flash-preview",
-        "FRANCE": "openrouter-google/gemini-2.5-pro-preview",
+        "FRANCE": "gemini-2.5-pro-preview-05-06",
         "GERMANY": "o4-mini",
         "ITALY": "o3",
-        "RUSSIA": "openrouter-deepseek/deepseek-r1:free",
+        "RUSSIA": "openrouter-deepseek/deepseek-chat-v3-0324",
         "TURKEY": "openrouter-x-ai/grok-3-beta",
     }
-    """
+    
     # TEST MODELS
+    """
     return {
         "AUSTRIA": "openrouter-google/gemini-2.5-flash-preview",
         "ENGLAND": "openrouter-google/gemini-2.5-flash-preview",
@@ -53,6 +54,7 @@ def assign_models_to_powers() -> Dict[str, str]:
         "RUSSIA": "openrouter-google/gemini-2.5-flash-preview",
         "TURKEY": "openrouter-google/gemini-2.5-flash-preview",
     }
+    """
 
 def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
     """

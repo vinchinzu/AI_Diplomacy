@@ -15,3 +15,4 @@ sphinx_rtd_theme
 openai
 anthropic
 google-genai
+json-repair

@@ -37,6 +37,7 @@ Write a detailed one-paragraph directive covering:
 - Defensive considerations
 - Diplomatic approach (including potential deception)
 
+
 This directive will guide your future negotiations and orders.
 Be specific, strategic, and wary of deception from others.
 

@@ -57,7 +57,27 @@ EXAMPLES
   "content": "Secretly, I'm planning to move against COUNTRY. Can you support?"
 }
 
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  "message_type": "private",
+  "recipient": "ITALY",
+  "content": "Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?"
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  "message_type": "global",
+  "content": "England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld."
+}
+{
+  "message_type": "private",
+  "recipient": "RUSSIA",
+  "content": "My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?"
+}
+
 Your response must contain at least one valid JSON message block.
 - Ensure recipient names are spelled correctly if sending private messages.
 - Think strategically about *why* you are sending each message and what outcome you hope to achieve.
 </ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
