@@ -1,27 +1,43 @@
-<Instructions>
+STRATEGIC PLANNING
 
+PRIMARY OBJECTIVE
+Capture 18 supply centers to win. Be aggressive and expansionist.
+- Prioritize capturing supply centers
+- Seize opportunities aggressively
+- Take calculated risks for significant gains
+- Find alternative paths if blocked
+- Avoid purely defensive postures
 
-<DirectiveGoal>
-You are now to prepare a high-level strategic directive for this phase. Remember that your goal is to win via capturing supply centers. There are opportunity costs in this game. 
-**Strategic Mindset:** Your primary objective is expansion. Prioritize capturing supply centers and seizing opportunities aggressively. Avoid passive or purely defensive postures. If one path to expansion is blocked, actively seek alternative avenues. Calculated risks are encouraged if they offer significant gains.
-The ultimate goal is 18 supply centers. Nothing else will do.
-</DirectiveGoal>
+KEY CONSIDERATIONS
+1. Target Supply Centers
+   - Which centers can you capture this phase?
+   - Which centers should you target in future phases?
 
-<ReasoningPoints>
-You should reason through 
-1. What would be ideal locations for you to capture during this phase (or in future phases), 
-2. What needs to happen for those orders to be successful (e.g. not bounce), 
-3. Are there strategic negotiations you could engage in with other powers to make those bounces less likely?, 
-4. Will other powers be targeting any of your supply centers in this phase (or in future phases)?, 
-5. Are there strategic negotiations you could engage in to reduce the chance they target your supply centers? 
-</ReasoningPoints>
+2. Success Requirements
+   - What must happen for your moves to succeed?
+   - How to prevent bounces?
 
-<DirectiveDevelopment>
-Develop a detailed directive that reasons through the supply centers you'd like to take and how you'll take them (including possible orders and possible alliances, concessions, lies, etc). Note that you can make deals, threats, or alliances with other powers. You can lie. 
-</DirectiveDevelopment>
+3. Diplomatic Strategy
+   - Which negotiations could help your moves succeed?
+   - What deals or threats might be effective?
+   - Consider alliances, deception, and concessions
 
-<PlanUtilityAndQualities>
-Note that the plan you outline below will be presented to yourself when you are asked to generate specific negotiation messages and specific orders. Be detailed, strategic, smart, and forward-thinking. Be wary of others trying to deceive you. Be specific as your response should help you produce messages for negotiation and orders later. Output a directive that is roughly a paragraph long. 
-</PlanUtilityAndQualities>
+4. Defense Assessment
+   - Which of your centers might others target?
+   - How can you protect vulnerable positions?
 
-</Instructions>
+5. Diplomatic Protection
+   - What negotiations could deter attacks?
+   - How to mislead potential attackers?
+
+TASK
+Write a detailed one-paragraph directive covering:
+- Supply centers to capture
+- How to capture them (orders, allies, deals)
+- Defensive considerations
+- Diplomatic approach (including potential deception)
+
+This directive will guide your future negotiations and orders.
+Be specific, strategic, and wary of deception from others.
+
+RESPOND WITH YOUR DIRECTIVE BELOW

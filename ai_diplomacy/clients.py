@@ -22,6 +22,7 @@ from .utils import load_prompt, run_llm_and_log, log_llm_response # Ensure log_l
 # Import DiplomacyAgent for type hinting if needed, but avoid circular import if possible
 # from .agent import DiplomacyAgent 
 from .possible_order_context import generate_rich_order_context
+from .prompt_constructor import construct_order_generation_prompt, build_context_prompt # Ensure build_context_prompt is imported
 
 # set logger back to just info
 logger = logging.getLogger("client")
@@ -60,111 +61,8 @@ class BaseModelClient:
         """
         raise NotImplementedError("Subclasses must implement generate_response().")
 
-    def build_context_prompt(
-        self,
-        game,
-        board_state,
-        power_name: str,
-        possible_orders: Dict[str, List[str]],
-        game_history: GameHistory,
-        agent_goals: Optional[List[str]] = None,
-        agent_relationships: Optional[Dict[str, str]] = None,
-        agent_private_diary: Optional[str] = None, # Changed parameter name
-    ) -> str:
-        context = load_prompt("context_prompt.txt")
-
-        # === Agent State Debug Logging ===
-        if agent_goals:
-            logger.debug(f"[{self.model_name}] Using goals for {power_name}: {agent_goals}")
-        if agent_relationships:
-            logger.debug(f"[{self.model_name}] Using relationships for {power_name}: {agent_relationships}")
-        if agent_private_diary:
-            logger.debug(f"[{self.model_name}] Using private diary for {power_name}: {agent_private_diary[:200]}...") # Log snippet
-        # ================================
-
-        # Get our units and centers
-        units_info = board_state["units"].get(power_name, [])
-        units_info_set = set(units_info)
-        centers_info = board_state["centers"].get(power_name, [])
-
-        # Get the current phase
-        year_phase = board_state["phase"]  # e.g. 'S1901M'
-
-        # Get enemy units and centers and label them for each power
-        enemy_units = {}
-        enemy_centers = {}
-        for power, info in board_state["units"].items():
-            if power != power_name:
-                enemy_units[power] = info
-                enemy_centers[power] = board_state["centers"].get(power, [])
-
-        # Get possible orders - REPLACED WITH NEW FUNCTION
-        # possible_orders_str = ""
-        # for loc, orders in possible_orders.items():
-        #     possible_orders_str += f"  {loc}: {orders}\n"
-        possible_orders_context_str = generate_rich_order_context(game, power_name, possible_orders)
-
-        # Get messages for the current round
-        messages_this_round_text = game_history.get_messages_this_round(
-            power_name=power_name,
-            current_phase_name=year_phase
-        )
-        if not messages_this_round_text.strip():
-            messages_this_round_text = "\n(No messages this round)\n"
-
-        # Load in current context values
-        # Simplified map representation based on DiploBench approach
-        units_repr = "\n".join([f"  {p}: {u}" for p, u in board_state["units"].items()])
-        centers_repr = "\n".join([f"  {p}: {c}" for p, c in board_state["centers"].items()])
-
-        context = context.format(
-            power_name=power_name,
-            current_phase=year_phase,
-            all_unit_locations=units_repr, 
-            all_supply_centers=centers_repr, 
-            messages_this_round=messages_this_round_text,
-            possible_orders=possible_orders_context_str,
-            agent_goals="\n".join(f"- {g}" for g in agent_goals) if agent_goals else "None specified",
-            agent_relationships="\n".join(f"- {p}: {s}" for p, s in agent_relationships.items()) if agent_relationships else "None specified",
-            agent_private_diary=agent_private_diary if agent_private_diary else "(No diary entries yet)", # Use new parameter
-        )
-
-        return context
-
-    def build_prompt(
-        self,
-        game,
-        board_state,
-        power_name: str,
-        possible_orders: Dict[str, List[str]],
-        game_history: GameHistory,
-        agent_goals: Optional[List[str]] = None,
-        agent_relationships: Optional[Dict[str, str]] = None,
-        agent_private_diary_str: Optional[str] = None, # Added
-    ) -> str:
-        """
-        Unified prompt approach: incorporate conversation and 'PARSABLE OUTPUT' requirements.
-        """
-        # Load prompts
-        few_shot_example = load_prompt("few_shot_example.txt")
-        instructions = load_prompt("order_instructions.txt")
-
-        # Build the context prompt
-        context = self.build_context_prompt(
-            game,
-            board_state,
-            power_name,
-            possible_orders,
-            game_history,
-            agent_goals=agent_goals,
-            agent_relationships=agent_relationships,
-            agent_private_diary=agent_private_diary_str, # Pass diary string
-        )
-
-        # Prepend the system prompt!
-        final_prompt = self.system_prompt + "\n\n" + context + "\n\n" + instructions
-        #print(final_prompt)
-        return final_prompt
+    # build_context_prompt and build_prompt (now construct_order_generation_prompt)
+    # have been moved to prompt_constructor.py
 
     async def get_orders(
         self,
@@ -185,15 +83,19 @@ class BaseModelClient:
         2) Calls LLM
         3) Parses JSON block
         """
-        prompt = self.build_prompt(
-            game,
-            board_state,
-            power_name,
-            possible_orders,
-            conversation_text, # This is GameHistory
+        # The 'conversation_text' parameter was GameHistory. Renaming for clarity.
+        game_history_obj = conversation_text 
+
+        prompt = construct_order_generation_prompt(
+            system_prompt=self.system_prompt,
+            game=game,
+            board_state=board_state,
+            power_name=power_name,
+            possible_orders=possible_orders,
+            game_history=game_history_obj, # Pass GameHistory object
             agent_goals=agent_goals,
             agent_relationships=agent_relationships,
-            agent_private_diary_str=agent_private_diary_str, # Pass diary string
+            agent_private_diary_str=agent_private_diary_str,
         )
 
         raw_response = ""
@@ -462,7 +364,7 @@ class BaseModelClient:
     ) -> str:
         instructions = load_prompt("conversation_instructions.txt")
 
-        context = self.build_context_prompt(
+        context = build_context_prompt(
             game,
             board_state,
             power_name,

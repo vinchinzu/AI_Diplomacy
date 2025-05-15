@@ -1,43 +1,35 @@
-<Introduction>
-You are an AI assistant analyzing the results of a phase in the game of Diplomacy for the power {power_name}.
-</Introduction>
+You are analyzing the results of a phase in Diplomacy for {power_name}.
 
-<CurrentGameState>
-Current Game State:
+GAME STATE
 Year: {current_year}
 Phase: {current_phase}
 Board State:
 {board_state_str}
-</CurrentGameState>
 
-<PhaseSummary>
-Summary of the phase that just occurred ({current_phase}):
+PHASE SUMMARY ({current_phase}):
 {phase_summary}
-</PhaseSummary>
 
-<CurrentInternalState>
-Your Current Internal State:
+CURRENT STATUS
 Goals:
 {current_goals}
-Relationships with other active powers ({other_powers}):
+
+Relationships with other powers ({other_powers}):
 {current_relationships}
-</CurrentInternalState>
 
-<TaskDescription>
-Task:
-Based *only* on the phase summary and the current game state, analyze how the events of the phase might affect your relationships with other powers and whether your strategic goals should be updated. Consider betrayals, successful cooperation, gains/losses of supply centers, and positioning.
-</TaskDescription>
+TASK
+Based on the phase summary and game state, analyze how recent events affect your relationships and goals. Consider:
+- Betrayals or successful cooperation
+- Supply center gains/losses
+- Strategic positioning
+- Potential threats or opportunities
 
-<OutputFormat>
-Output Format:
-Provide your analysis *only* in the following JSON format, enclosed in triple backticks. Do not include any other text before or after the JSON block.
-
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
 ```json
 {{
-  "reasoning": "Briefly explain your reasoning for the updates based on the phase summary.",
+  "reasoning": "Brief explanation of your updates based on the phase summary",
   "relationships": {{
-    "POWER_NAME_1": "<Enemy|Unfriendly|Neutral|Friendly|Ally>",
-    "POWER_NAME_2": "<Enemy|Unfriendly|Neutral|Friendly|Ally>",
+    "POWER_NAME": "Enemy|Unfriendly|Neutral|Friendly|Ally"
     ...
   }},
   "goals": [
@@ -47,7 +39,7 @@ Provide your analysis *only* in the following JSON format, enclosed in triple ba
   ]
 }}
 ```
-</OutputFormat>
+Do not include any text outside the JSON block.
 
 <OutputInstructions>
 Instructions:
@@ -56,3 +48,5 @@ Instructions:
 - Be objective in your analysis based on the provided summary.
 - Ensure the output is valid JSON.
 </OutputInstructions>
+
+RESPOND BELOW WITH ONLY YOUR JSON OUTPUT INCLUDING REASONING, RELATIONSHIPS, AND GOALS. Thank you!

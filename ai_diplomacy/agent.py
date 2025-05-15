@@ -8,6 +8,7 @@ import re
 from .clients import BaseModelClient 
 # Import load_prompt and the new logging wrapper from utils
 from .utils import load_prompt, run_llm_and_log, log_llm_response
+from .prompt_constructor import build_context_prompt # Added import
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +114,32 @@ class DiplomacyAgent:
                 # Try each match until one parses successfully
                 for match in matches:
                     try:
-                        return json.loads(match)
-                    except json.JSONDecodeError:
-                        continue
+                        return json.loads(match) # First attempt with the raw match
+                    except json.JSONDecodeError as e_initial_markdown_parse:
+                        # If initial parsing of the markdown-extracted block fails, try surgical cleaning
+                        try:
+                            # Regex to find and remove sentence-like text ending with a period,
+                            # when it appears before a comma, closing brace/bracket, or at the end of the object.
+                            # Targets interjections like "Phosphorous acid." or "Inhaled."
+                            # Pattern 1: Removes 'Sentence.' when followed by ',', '}', or ']'
+                            cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', match)
+                            # Pattern 2: Removes 'Sentence.' when it's at the very end, before the final '}' of the current match scope
+                            cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=\s*\}\s*$)', '', cleaned_match_candidate)
+
+                            if cleaned_match_candidate != match: # Log if actual cleaning happened
+                                logger.debug(f"Surgically cleaned JSON candidate. Original snippet: '{match[:150]}...', Cleaned snippet: '{cleaned_match_candidate[:150]}...'")
+                                return json.loads(cleaned_match_candidate) # Second attempt with cleaned string
+                            else:
+                                # If no surgical cleaning was applicable or changed the string, re-raise to fall through
+                                # or let the original loop continue if there are more matches from findall.
+                                # This 'continue' is for the inner 'for match in matches:' loop.
+                                logger.debug(f"Surgical cleaning regex made no changes to: {match[:100]}... Original error: {e_initial_markdown_parse}")
+                                continue # Try next match from re.findall(pattern, text, re.DOTALL)
+                        except json.JSONDecodeError as e_cleaned:
+                            # This error means cleaning happened, but the result was still not valid JSON.
+                            logger.warning(f"Surgical cleaning applied but did not result in valid JSON. Cleaned error: {e_cleaned}. Original snippet: {match[:150]}... Initial error: {e_initial_markdown_parse}")
+                            # Continue to the next match from re.findall or next pattern
+                            continue
         
         # 2. Try to find JSON between braces
         try:
@@ -462,7 +486,7 @@ class DiplomacyAgent:
             # Get formatted diary for context
             formatted_diary = self.format_private_diary_for_prompt()
 
-            context = self.client.build_context_prompt(
+            context = build_context_prompt(
                 game=game,
                 board_state=board_state, # Use provided board_state parameter
                 power_name=power_name,

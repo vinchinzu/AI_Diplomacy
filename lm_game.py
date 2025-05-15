@@ -106,6 +106,20 @@ async def main():
     result_folder = f"./results/{timestamp_str}"
     os.makedirs(result_folder, exist_ok=True)
 
+    # ADDED: Setup general file logging
+    general_log_file_path = os.path.join(result_folder, "general_game.log")
+    file_handler = logging.FileHandler(general_log_file_path, mode='a') # Append mode
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - [%(funcName)s:%(lineno)d] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    file_handler.setFormatter(file_formatter)
+    # Use the same log_level as basicConfig, or set a different one if needed for the file
+    file_handler.setLevel(logging.INFO) 
+    logging.getLogger().addHandler(file_handler) # Add handler to the root logger
+    
+    # It's good practice to define 'logger' after all root logger configurations if it's module-specific.
+    # If 'logger = logging.getLogger(__name__)' is defined later, this message will use it.
+    # If not, it uses the root logger directly.
+    logging.info(f"General game logs will be appended to: {general_log_file_path}")
+
     # File paths
     manifesto_path = f"{result_folder}/game_manifesto.txt"
     # Use provided output filename or generate one based on the timestamp
@@ -260,6 +274,18 @@ async def main():
             if game.powers[power_name].is_eliminated():
                 logger.debug(f"Skipping order generation for eliminated power {power_name}.")
                 continue
+
+            # ADDED: Diagnostic logging for orderable locations
+            logger.info(f"--- Diagnostic Log for {power_name} in phase {current_phase} ---")
+            try:
+                orderable_locs_from_game = game.get_orderable_locations(power_name)
+                logger.info(f"[{power_name}][{current_phase}] game.get_orderable_locations(): {orderable_locs_from_game}")
+                actual_units = game.get_units(power_name)
+                actual_unit_locs = [unit.split(' ')[1].split('/')[0] for unit in actual_units if ' ' in unit] # Corrected parsing
+                logger.info(f"[{power_name}][{current_phase}] Actual unit locations (from game.get_units()): {actual_unit_locs}")
+            except Exception as e_diag:
+                logger.error(f"[{power_name}][{current_phase}] Error during diagnostic logging: {e_diag}")
+            logger.info(f"--- End Diagnostic Log for {power_name} in phase {current_phase} ---")
 
             # Calculate possible orders for the current power
             possible_orders = gather_possible_orders(game, power_name)

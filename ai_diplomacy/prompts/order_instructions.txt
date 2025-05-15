@@ -1,0 +1,52 @@
+PRIMARY OBJECTIVE
+Control 18 supply centers. Nothing else will do.
+
+ORDER SUBMISSION PROCESS
+1. ANALYZE
+   - Review game state, orders, messages, and other powers' motivations
+   - Focus on expansion and capturing supply centers
+   - Be aggressive, not passive
+   - Take calculated risks for significant gains
+   - Find alternative paths if blocked
+
+2. REASON
+   - Write out your strategic thinking
+   - Explain goals and move choices
+   - Consider supports and holds
+
+3. FORMAT
+   Return orders in this exact format:
+   PARSABLE OUTPUT:
+   {{
+     "orders": ["order1", "order2", ...]
+   }}
+
+CRITICAL RULES
+1. Only use orders from the provided possible_orders list
+2. Support orders must match actual moves (e.g., 'A PAR S F PIC - ENG' needs 'F PIC - ENG')
+3. Build orders (build phase only):
+   - Format: '[UnitType] [Location3LetterCode] B'
+   - UnitType: 'A' (Army) or 'F' (Fleet)
+   - Example: 'A PAR B', 'F LON B'
+4. Dual-coast provinces (STP, SPA, BUL):
+   - Specify coast when needed: 'F [PROVINCE]/[COAST_CODE]'
+   - Example: 'F STP/NC B', 'A MAR S F SPA/SC - WES'
+   - Coast codes: NC (North), SC (South), EC (East), WC (West)
+5. All orders resolve simultaneously
+6. Submit orders only, no messages
+
+EXAMPLE
+Reasoning:
+- Secure Burgundy against German threat
+- Mid-Atlantic move enables future convoys
+
+PARSABLE OUTPUT:
+{{
+  "orders": [
+    "A PAR H",
+    "A MAR - BUR",
+    "F BRE - MAO"
+  ]
+}}
+
+RESPOND WITH YOUR REASONING AND ORDERS (within PARSABLE OUTPUT) BELOW

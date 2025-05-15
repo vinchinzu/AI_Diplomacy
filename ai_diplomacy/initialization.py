@@ -10,6 +10,7 @@ if False: # TYPE_CHECKING
 
 from .agent import ALL_POWERS, ALLOWED_RELATIONSHIPS
 from .utils import run_llm_and_log, log_llm_response
+from .prompt_constructor import build_context_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ async def initialize_agent_state_ext(
 
         formatted_diary = agent.format_private_diary_for_prompt()
 
-        context = agent.client.build_context_prompt(
+        context = build_context_prompt(
             game=game,
             board_state=board_state, 
             power_name=power_name,
