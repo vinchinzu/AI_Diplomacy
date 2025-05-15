@@ -152,7 +152,7 @@ function animate() {
     gameState.unitAnimations.forEach((anim) => anim.update())
 
     // If all animations are complete and we're in playback mode
-    if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying) {
+    if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying && !gameState.isSpeaking) {
       // Schedule next phase after a pause delay
       console.log(`Scheduling next phase in ${config.playbackSpeed}ms`);
       gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
