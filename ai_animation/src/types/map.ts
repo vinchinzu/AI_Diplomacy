@@ -133,7 +133,9 @@ export enum ProvinceENUM {
   BLA = "BLA",
   NAO = "NAO",
   MAO = "MAO",
-  TYS = "TYS"
+  TYS = "TYS",
+  NWG = "NWG",
+  LYO = "LYO"
 
 }
 
