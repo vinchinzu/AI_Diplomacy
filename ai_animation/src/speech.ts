@@ -1,4 +1,5 @@
 import { gameState } from "./gameState";
+import { config } from "./config";
 
 // --- ElevenLabs Text-to-Speech configuration ---
 let ELEVENLABS_API_KEY = '';
@@ -95,8 +96,13 @@ export async function speakSummary(summaryText: string): Promise<void> {
 
   try {
     // Truncate text to first 100 characters for ElevenLabs
-    const truncatedText = textToSpeak.substring(0, 100);
-
+    // FIXME: Is this meant to be truncated? Presumably not
+    //const textForSpeaking = textToSpeak.substring(0, 100);
+    if (config.isDebugMode) {
+      const textForSpeaking = textToSpeak.substring(0, 100);
+    } else {
+      const textForSpeaking = textToSpeak
+    }
     // Hit ElevenLabs TTS endpoint with the truncated text
     const headers = {
       "xi-api-key": ELEVENLABS_API_KEY,
@@ -108,7 +114,7 @@ export async function speakSummary(summaryText: string): Promise<void> {
       method: "POST",
       headers: headers,
       body: JSON.stringify({
-        text: truncatedText,
+        text: textForSpeaking,
         model_id: MODEL_ID,
       })
     });
@@ -142,5 +148,6 @@ export async function speakSummary(summaryText: string): Promise<void> {
     console.error("Failed to generate TTS from ElevenLabs");
     // Make sure to clear the flag if there's any exception
     gameState.isSpeaking = false;
+    throw err;
   }
 }

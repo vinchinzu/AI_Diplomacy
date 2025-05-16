@@ -138,19 +138,23 @@ export function advanceToNextPhase() {
     console.log("Added summary to news banner, preparing to call speakSummary");
 
     // Speak the summary and advance after
-    speakSummary(currentPhase.summary)
-      .then(() => {
-        console.log("Speech completed successfully");
-        if (gameState.isPlaying) {
-          moveToNextPhase();
-        }
-      })
-      .catch((error) => {
-        console.error("Speech failed with error:", error);
-        if (gameState.isPlaying) {
-          moveToNextPhase();
-        }
-      });
+    if (!gameState.isSpeaking) {
+      speakSummary(currentPhase.summary)
+        .then(() => {
+          console.log("Speech completed successfully");
+          if (gameState.isPlaying) {
+            moveToNextPhase();
+          }
+        })
+        .catch((error) => {
+          console.error("Speech failed with error:", error);
+          if (gameState.isPlaying) {
+            moveToNextPhase();
+          }
+        });
+    } else {
+      console.error("Attempted to start speaking when already speaking...")
+    }
   } else {
     console.log("No summary available, skipping speech");
     // No summary to speak, advance immediately
