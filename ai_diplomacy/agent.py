@@ -99,6 +99,14 @@ class DiplomacyAgent:
 
     def _extract_json_from_text(self, text: str) -> dict:
         """Extract and parse JSON from text, handling common LLM response formats."""
+        # Preprocessing: Normalize common formatting issues
+        # This helps with the KeyError: '\n  "negotiation_summary"' problem
+        text = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', text)  # Remove newlines before keys
+        # Also fix the specific pattern that's causing trouble
+        text = text.replace('\n  "negotiation_summary"', '"negotiation_summary"')
+        text = text.replace('\n  "relationship_updates"', '"relationship_updates"')
+        text = text.replace('\n  "updated_relationships"', '"updated_relationships"')
+        
         # Try different patterns to extract JSON
         # 1. Try to find JSON wrapped in markdown code blocks
         patterns = [
@@ -115,17 +123,35 @@ class DiplomacyAgent:
                 # Try each match until one parses successfully
                 for match in matches:
                     try:
-                        return json.loads(match) # First attempt with the raw match
+                        # Additional preprocessing for common formatting issues
+                        clean_match = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', match)  # Remove newlines before JSON keys
+                        clean_match = re.sub(r',\s*}', '}', clean_match)  # Remove trailing commas
+                        return json.loads(clean_match) # First attempt with the cleaned match
                     except json.JSONDecodeError as e_initial_markdown_parse:
                         # If initial parsing of the markdown-extracted block fails, try surgical cleaning
                         try:
-                            # Regex to find and remove sentence-like text ending with a period,
-                            # when it appears before a comma, closing brace/bracket, or at the end of the object.
-                            # Targets interjections like "Phosphorous acid." or "Inhaled."
+                            # Apply several different cleaning patterns to fix common LLM-generated JSON issues
+                            cleaned_match_candidate = match
+                            
                             # Pattern 1: Removes 'Sentence.' when followed by ',', '}', or ']'
-                            cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', match)
+                            cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', cleaned_match_candidate)
+                            
                             # Pattern 2: Removes 'Sentence.' when it's at the very end, before the final '}' of the current match scope
                             cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=\s*\}\s*$)', '', cleaned_match_candidate)
+                            
+                            # Pattern 3: Fix for newlines and spaces before JSON keys (common problem with LLMs)
+                            cleaned_match_candidate = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', cleaned_match_candidate)
+                            
+                            # Pattern 4: Fix trailing commas in JSON objects
+                            cleaned_match_candidate = re.sub(r',\s*}', '}', cleaned_match_candidate)
+                            
+                            # Pattern 5: Handle specific known problematic patterns
+                            cleaned_match_candidate = cleaned_match_candidate.replace('\n  "negotiation_summary"', '"negotiation_summary"')
+                            cleaned_match_candidate = cleaned_match_candidate.replace('\n  "relationship_updates"', '"relationship_updates"')
+                            cleaned_match_candidate = cleaned_match_candidate.replace('\n  "updated_relationships"', '"updated_relationships"')
+                            
+                            # Pattern 6: Fix quotes - replace single quotes with double quotes for keys
+                            cleaned_match_candidate = re.sub(r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate)
 
                             if cleaned_match_candidate != match: # Log if actual cleaning happened
                                 logger.debug(f"Surgically cleaned JSON candidate. Original snippet: '{match[:150]}...', Cleaned snippet: '{cleaned_match_candidate[:150]}...'")
@@ -237,15 +263,12 @@ class DiplomacyAgent:
         success_status = "Failure: Initialized" # Default
 
         try:
+            # Load the template file but safely preprocess it first
             prompt_template_content = _load_prompt_file('negotiation_diary_prompt.txt')
             if not prompt_template_content:
                 logger.error(f"[{self.power_name}] Could not load negotiation_diary_prompt.txt. Skipping diary entry.")
                 success_status = "Failure: Prompt file not loaded"
-                # No LLM call, so log_llm_response won't have typical LLM data, but we still log the attempt.
-                # Or, decide not to log if no LLM call is even attempted. For consistency, let's log an attempt.
-                # To do that, we'd need to call log_llm_response here or ensure finally block handles it.
-                # For now, the finally block will catch this, but raw_response and full_prompt will be empty.
-                return # Exit early if prompt is critical
+                return # Exit early if prompt can't be loaded
 
             # Prepare context for the prompt
             board_state_dict = game.get_state()
@@ -261,17 +284,57 @@ class DiplomacyAgent:
             current_relationships_str = json.dumps(self.relationships)
             current_goals_str = json.dumps(self.goals)
             formatted_diary = self.format_private_diary_for_prompt()
+            
+            # Do aggressive preprocessing of the template to fix the problematic patterns
+            # This includes removing any newlines or whitespace before JSON keys that cause issues
+            for pattern in ['negotiation_summary', 'updated_relationships', 'relationship_updates', 'intent']:
+                # Fix the "\n  "key"" pattern that breaks .format()
+                prompt_template_content = re.sub(
+                    fr'\n\s*"{pattern}"', 
+                    f'"{pattern}"', 
+                    prompt_template_content
+                )
+            
+            # Escape all curly braces in JSON examples to prevent format() from interpreting them
+            # First, temporarily replace the actual template variables
+            temp_vars = ['power_name', 'current_phase', 'messages_this_round', 'agent_goals', 
+                        'agent_relationships', 'board_state_str']
+            for var in temp_vars:
+                prompt_template_content = prompt_template_content.replace(f'{{{var}}}', f'<<{var}>>')
+            
+            # Now escape all remaining braces (which should be JSON)
+            prompt_template_content = prompt_template_content.replace('{', '{{')
+            prompt_template_content = prompt_template_content.replace('}', '}}')
+            
+            # Restore the template variables
+            for var in temp_vars:
+                prompt_template_content = prompt_template_content.replace(f'<<{var}>>', f'{{{var}}}')
+            
+            # Create a dictionary with safe values for formatting
+            format_vars = {
+                "power_name": self.power_name,
+                "current_phase": game.current_short_phase,
+                "board_state_str": board_state_str,
+                "messages_this_round": messages_this_round,
+                "agent_relationships": current_relationships_str,
+                "agent_goals": current_goals_str,
+                "allowed_relationships_str": ", ".join(ALLOWED_RELATIONSHIPS),
+                "private_diary_summary": formatted_diary
+            }
+            
+            # Now try to use the template after preprocessing
+            try:
+                # Apply format with our set of variables
+                full_prompt = prompt_template_content.format(**format_vars)
+                logger.info(f"[{self.power_name}] Successfully formatted prompt template after preprocessing.")
+                success_status = "Using prompt file with preprocessing"                
+            except KeyError as e:
+                logger.error(f"[{self.power_name}] Error formatting negotiation diary prompt template: {e}. Skipping diary entry.")
+                success_status = "Failure: Template formatting error"
+                return  # Exit early if prompt formatting fails
+            
+            logger.debug(f"[{self.power_name}] Negotiation diary prompt:\n{full_prompt[:500]}...")
 
-            full_prompt = prompt_template_content.format(
-                power_name=self.power_name,
-                current_phase=game.current_short_phase,
-                board_state_str=board_state_str,  # Corrected to match prompt placeholder
-                messages_this_round=messages_this_round,
-                agent_relationships=current_relationships_str,  # Corrected to match prompt placeholder
-                agent_goals=current_goals_str,  # Corrected to match prompt placeholder
-                private_diary_summary=formatted_diary, 
-                allowed_relationships_str=", ".join(ALLOWED_RELATIONSHIPS)
-            )
 
             logger.debug(f"[{self.power_name}] Negotiation diary prompt:\n{full_prompt[:500]}...")
 
@@ -300,17 +363,28 @@ class DiplomacyAgent:
             relationships_updated = False
 
             if parsed_data:
-                # Correctly get 'negotiation_summary' as requested by the prompt
-                diary_text_candidate = parsed_data.get('negotiation_summary')
-                if isinstance(diary_text_candidate, str) and diary_text_candidate.strip():
-                    diary_entry_text = diary_text_candidate # Use the valid summary
-                    logger.info(f"[{self.power_name}] Successfully extracted 'negotiation_summary' for diary.")
+                # Fix 1: Be more robust about extracting the negotiation_summary field
+                diary_text_candidate = None
+                for key in ['negotiation_summary', 'summary', 'diary_entry']:
+                    if key in parsed_data and isinstance(parsed_data[key], str) and parsed_data[key].strip():
+                        diary_text_candidate = parsed_data[key].strip()
+                        logger.info(f"[{self.power_name}] Successfully extracted '{key}' for diary.")
+                        break
+                        
+                if diary_text_candidate:
+                    diary_entry_text = diary_text_candidate
                 else:
-                    logger.warning(f"[{self.power_name}] 'negotiation_summary' missing or invalid in diary response. Using fallback. Value: {diary_text_candidate}")
+                    logger.warning(f"[{self.power_name}] Could not find valid summary field in diary response. Using fallback.")
                     # Keep the default fallback text
-
-                # Update relationships if provided and valid
-                new_relationships = parsed_data.get('updated_relationships')
+                
+                # Fix 2: Be more robust about extracting relationship updates
+                new_relationships = None
+                for key in ['relationship_updates', 'updated_relationships', 'relationships']:
+                    if key in parsed_data and isinstance(parsed_data[key], dict):
+                        new_relationships = parsed_data[key]
+                        logger.info(f"[{self.power_name}] Successfully extracted '{key}' for relationship updates.")
+                        break
+                        
                 if isinstance(new_relationships, dict):
                     valid_new_rels = {}
                     for p, r in new_relationships.items():
@@ -371,6 +445,7 @@ class DiplomacyAgent:
         """
         logger.info(f"[{self.power_name}] Generating order diary entry for {game.current_short_phase}...")
         
+        # Load the template but we'll use it carefully with string interpolation
         prompt_template = _load_prompt_file('order_diary_prompt.txt')
         if not prompt_template:
             logger.error(f"[{self.power_name}] Could not load order_diary_prompt.txt. Skipping diary entry.")
@@ -384,14 +459,47 @@ class DiplomacyAgent:
         goals_str = "\n".join([f"- {g}" for g in self.goals]) if self.goals else "None"
         relationships_str = "\n".join([f"- {p}: {s}" for p, s in self.relationships.items()]) if self.relationships else "None"
 
-        prompt = prompt_template.format(
-            power_name=self.power_name,
-            current_phase=game.current_short_phase,
-            orders_list_str=orders_list_str,
-            board_state_str=board_state_str,
-            agent_goals=goals_str,
-            agent_relationships=relationships_str
-        )
+        # Do aggressive preprocessing on the template file
+        # Fix any whitespace or formatting issues that could break .format()
+        for pattern in ['order_summary']:
+            prompt_template = re.sub(fr'\n\s*"{pattern}"', f'"{pattern}"', prompt_template)
+        
+        # Escape all curly braces in JSON examples to prevent format() from interpreting them
+        # First, temporarily replace the actual template variables
+        temp_vars = ['power_name', 'current_phase', 'orders_list_str', 'board_state_str', 
+                    'agent_goals', 'agent_relationships']
+        for var in temp_vars:
+            prompt_template = prompt_template.replace(f'{{{var}}}', f'<<{var}>>')
+        
+        # Now escape all remaining braces (which should be JSON)
+        prompt_template = prompt_template.replace('{', '{{')
+        prompt_template = prompt_template.replace('}', '}}')
+        
+        # Restore the template variables
+        for var in temp_vars:
+            prompt_template = prompt_template.replace(f'<<{var}>>', f'{{{var}}}')
+        
+        # Create a dictionary of variables for template formatting
+        format_vars = {
+            "power_name": self.power_name,
+            "current_phase": game.current_short_phase,
+            "orders_list_str": orders_list_str,
+            "board_state_str": board_state_str,
+            "agent_goals": goals_str,
+            "agent_relationships": relationships_str
+        }
+        
+        # Try to use the template with proper formatting
+        try:
+            prompt = prompt_template.format(**format_vars)
+            logger.info(f"[{self.power_name}] Successfully formatted order diary prompt template.")
+        except KeyError as e:
+            logger.error(f"[{self.power_name}] Error formatting order diary template: {e}. Skipping diary entry.")
+            return  # Exit early if prompt formatting fails
+        
+        logger.debug(f"[{self.power_name}] Order diary prompt:\n{prompt[:300]}...")
+
+
         
         response_data = None
         raw_response = None # Initialize raw_response

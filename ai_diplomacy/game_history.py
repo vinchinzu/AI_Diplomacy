@@ -186,6 +186,40 @@ class GameHistory:
 
         return messages_str.strip()
 
+    # New method to get recent messages TO a specific power
+    def get_recent_messages_to_power(self, power_name: str, limit: int = 3) -> List[Dict[str, str]]:
+        """
+        Gets the most recent messages sent TO this power, useful for tracking messages that need replies.
+        Returns a list of dictionaries with 'sender', 'content', and 'phase' keys.
+        """
+        if not self.phases:
+            return []
+            
+        # Get the most recent 2 phases including current phase
+        recent_phases = self.phases[-2:] if len(self.phases) >= 2 else self.phases[-1:]
+        
+        # Collect all messages sent TO this power
+        messages_to_power = []
+        for phase in recent_phases:
+            for msg in phase.messages:
+                # Personal messages to this power or global messages from others
+                if msg.recipient == power_name or (msg.recipient == "GLOBAL" and msg.sender != power_name):
+                    # Skip if sender is this power (don't need to respond to own messages)
+                    if msg.sender != power_name:
+                        messages_to_power.append({
+                            'sender': msg.sender,
+                            'content': msg.content,
+                            'phase': phase.name
+                        })
+        
+        # Add debug logging
+        logger.info(f"Found {len(messages_to_power)} messages to {power_name} across {len(recent_phases)} phases")
+        if not messages_to_power:
+            logger.info(f"No messages found for {power_name} to respond to")
+        
+        # Take the most recent 'limit' messages
+        return messages_to_power[-limit:] if messages_to_power else []
+    
     # MODIFIED METHOD (renamed from get_game_history)
     def get_previous_phases_history(
         self, power_name: str, current_phase_name: str, include_plans: bool = True, num_prev_phases: int = 5

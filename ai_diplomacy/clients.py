@@ -260,7 +260,7 @@ class BaseModelClient:
 
         # If all attempts failed
         return None
-
+    
     def _validate_orders(
         self, moves: List[str], possible_orders: Dict[str, List[str]]
     ) -> Tuple[List[str], List[str]]: # MODIFIED RETURN TYPE
@@ -277,9 +277,8 @@ class BaseModelClient:
             logger.debug(f"[{self.model_name}] Moves not a list, fallback.")
             # Return fallback and empty list for invalid_moves_found as no specific LLM moves were processed
             return self.fallback_orders(possible_orders), [] 
-
-        for move in moves:
-            move_str = move.strip()
+        
+        for move_str in moves:
             # Check if it's in possible orders
             if any(move_str in loc_orders for loc_orders in possible_orders.values()):
                 validated.append(move_str)
@@ -374,8 +373,25 @@ class BaseModelClient:
             agent_relationships=agent_relationships,
             agent_private_diary=agent_private_diary_str, # Pass diary string
         )
+        
+        # Get recent messages targeting this power to prioritize responses
+        recent_messages_to_power = game_history.get_recent_messages_to_power(power_name, limit=3)
+        
+        # Debug logging to verify messages
+        logger.info(f"[{power_name}] Found {len(recent_messages_to_power)} high priority messages to respond to")
+        if recent_messages_to_power:
+            for i, msg in enumerate(recent_messages_to_power):
+                logger.info(f"[{power_name}] Priority message {i+1}: From {msg['sender']} in {msg['phase']}: {msg['content'][:50]}...")
+        
+        # Add a section for unanswered messages
+        unanswered_messages = "\n\nRECENT MESSAGES REQUIRING YOUR ATTENTION:\n"
+        if recent_messages_to_power:
+            for msg in recent_messages_to_power:
+                unanswered_messages += f"\nFrom {msg['sender']} in {msg['phase']}: {msg['content']}\n"
+        else:
+            unanswered_messages += "\nNo urgent messages requiring direct responses.\n"
 
-        return context + "\n\n" + instructions
+        return context + unanswered_messages + "\n\n" + instructions
 
     async def get_planning_reply( # Renamed from get_plan to avoid conflict with get_plan in agent.py
         self,
@@ -513,7 +529,7 @@ class BaseModelClient:
                              
                     except json.JSONDecodeError as jde:
                         json_decode_error_occurred = True
-                        logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name}. Error: {jasde}. Block content:\n{block}")
+                        logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name}. Error: {jde}. Block content:\n{block}")
 
                 if parsed_messages:
                     success_status = "Success: Messages extracted"

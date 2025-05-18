@@ -2,17 +2,21 @@ NEGOTIATION MESSAGES
 
 TASK
 Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the "RECENT MESSAGES REQUIRING YOUR ATTENTION" section.
+
 Consider:
 - Your current goals
 - Relationships with other powers
-- Ongoing conversations
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the "REQUIRING YOUR ATTENTION" section
 
 Message purposes can include:
-- Proposing alliances
-- Issuing warnings
-- Gathering information
-- Coordinating moves
-- Strategic deception
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
 
 RESPONSE FORMAT
 Return ONLY JSON objects. One or more messages, each as a separate JSON object.
@@ -75,9 +79,21 @@ EXAMPLES
   "content": "My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?"
 }
 
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  "message_type": "private",
+  "recipient": "AUSTRIA",
+  "content": "Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?"
+}
+
 Your response must contain at least one valid JSON message block.
 - Ensure recipient names are spelled correctly if sending private messages.
 - Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
 </ImportantReminders>
 
 JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
