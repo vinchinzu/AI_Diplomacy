@@ -285,6 +285,18 @@ class DiplomacyAgent:
             current_goals_str = json.dumps(self.goals)
             formatted_diary = self.format_private_diary_for_prompt()
             
+            # Get ignored messages context
+            ignored_messages = game_history.get_ignored_messages_by_power(self.power_name)
+            ignored_context = ""
+            if ignored_messages:
+                ignored_context = "\n\nPOWERS NOT RESPONDING TO YOUR MESSAGES:\n"
+                for power, msgs in ignored_messages.items():
+                    ignored_context += f"{power}:\n"
+                    for msg in msgs[-2:]:  # Show last 2 ignored messages per power
+                        ignored_context += f"  - Phase {msg['phase']}: {msg['content'][:100]}...\n"
+            else:
+                ignored_context = "\n\nAll powers have been responsive to your messages."
+            
             # Do aggressive preprocessing of the template to fix the problematic patterns
             # This includes removing any newlines or whitespace before JSON keys that cause issues
             for pattern in ['negotiation_summary', 'updated_relationships', 'relationship_updates', 'intent']:
@@ -298,7 +310,7 @@ class DiplomacyAgent:
             # Escape all curly braces in JSON examples to prevent format() from interpreting them
             # First, temporarily replace the actual template variables
             temp_vars = ['power_name', 'current_phase', 'messages_this_round', 'agent_goals', 
-                        'agent_relationships', 'board_state_str']
+                        'agent_relationships', 'board_state_str', 'ignored_messages_context']
             for var in temp_vars:
                 prompt_template_content = prompt_template_content.replace(f'{{{var}}}', f'<<{var}>>')
             
@@ -319,7 +331,8 @@ class DiplomacyAgent:
                 "agent_relationships": current_relationships_str,
                 "agent_goals": current_goals_str,
                 "allowed_relationships_str": ", ".join(ALLOWED_RELATIONSHIPS),
-                "private_diary_summary": formatted_diary
+                "private_diary_summary": formatted_diary,
+                "ignored_messages_context": ignored_context
             }
             
             # Now try to use the template after preprocessing

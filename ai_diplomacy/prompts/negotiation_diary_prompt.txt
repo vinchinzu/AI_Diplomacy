@@ -4,6 +4,7 @@ Phase: {current_phase}
 
 MESSAGES THIS ROUND
 {messages_this_round}
+{ignored_messages_context}
 
 CURRENT STATUS
 Goals:
@@ -20,6 +21,13 @@ Analyze the negotiations, goals, relationships, and game state to:
 1. Summarize key outcomes and agreements
 2. State your strategic intent for {current_phase}
 3. Update relationships as needed (Enemy, Unfriendly, Neutral, Friendly, Ally)
+4. Note which powers are not responding to your messages and consider adjusting your approach
+
+When powers ignore your messages, consider:
+- They may be intentionally avoiding commitment
+- They could be prioritizing other relationships
+- Your approach may need adjustment (more direct questions, different incentives)
+- Their silence might indicate hostility or indifference
 
 RESPONSE FORMAT
 Return ONLY a JSON object with this structure:
@@ -64,6 +72,21 @@ Scenario 2: As Turkey, after Germany proposed an alliance against Russia, but Fr
 "ENGLAND": "Neutral",
 "ITALY": "Neutral",
 "AUSTRIA": "Unfriendly"
+}
+}
+
+Scenario 3: As England, when France hasn't responded to two alliance proposals and Russia is ignoring naval cooperation messages.
+
+{
+"negotiation_summary": "France continues to ignore my alliance proposals regarding Belgium and the Channel, having not responded to messages in the last two phases. Russia similarly hasn't acknowledged my Baltic cooperation suggestions. Meanwhile, Germany actively engaged about Denmark. This silence from France and Russia is telling - they likely have other commitments or see me as a threat.",
+"intent": "Shift focus to Germany as primary partner given their responsiveness. Prepare defensive positions against potentially hostile France. Consider more aggressive Baltic moves since Russia seems uninterested in cooperation. May need to force France's hand with direct questions or public statements.",
+"updated_relationships": {
+"FRANCE": "Unfriendly",
+"GERMANY": "Friendly", 
+"RUSSIA": "Unfriendly",
+"ITALY": "Neutral",
+"AUSTRIA": "Neutral",
+"TURKEY": "Neutral"
 }
 }
 

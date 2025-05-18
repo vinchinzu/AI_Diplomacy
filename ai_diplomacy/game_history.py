@@ -220,6 +220,76 @@ class GameHistory:
         # Take the most recent 'limit' messages
         return messages_to_power[-limit:] if messages_to_power else []
     
+    def get_ignored_messages_by_power(self, sender_name: str, num_phases: int = 3) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Identifies which powers are not responding to messages from sender_name.
+        Returns a dict mapping power names to their ignored messages.
+        
+        A message is considered ignored if:
+        1. It was sent from sender_name to another power (private)
+        2. No response from that power was received in the same or next phase
+        """
+        ignored_by_power = {}
+        
+        # Get recent phases
+        recent_phases = self.phases[-num_phases:] if self.phases else []
+        if not recent_phases:
+            return ignored_by_power
+        
+        for i, phase in enumerate(recent_phases):
+            # Get messages sent by sender to specific powers (not global)
+            sender_messages = []
+            for msg in phase.messages:
+                # Handle both Message objects and dict objects
+                if isinstance(msg, Message):
+                    if msg.sender == sender_name and msg.recipient not in ['GLOBAL', 'ALL']:
+                        sender_messages.append(msg)
+                else:  # Assume dict
+                    if msg['sender'] == sender_name and msg['recipient'] not in ['GLOBAL', 'ALL']:
+                        sender_messages.append(msg)
+            
+            # Check for responses in this and next phases
+            for msg in sender_messages:
+                # Handle both Message objects and dict objects
+                if isinstance(msg, Message):
+                    recipient = msg.recipient
+                    msg_content = msg.content
+                else:
+                    recipient = msg['recipient']
+                    msg_content = msg['content']
+                
+                # Look for responses in current phase and next phases
+                found_response = False
+                
+                # Check remaining phases starting from current
+                for check_phase in recent_phases[i:min(i+2, len(recent_phases))]:
+                    # Look for messages FROM the recipient TO the sender (direct response)
+                    # or FROM the recipient to GLOBAL/ALL that might acknowledge sender
+                    response_msgs = []
+                    for m in check_phase.messages:
+                        if isinstance(m, Message):
+                            if m.sender == recipient and (m.recipient == sender_name or 
+                               (m.recipient in ['GLOBAL', 'ALL'] and sender_name in m.content)):
+                                response_msgs.append(m)
+                        else:  # Assume dict
+                            if m['sender'] == recipient and (m['recipient'] == sender_name or 
+                               (m['recipient'] in ['GLOBAL', 'ALL'] and sender_name in m.get('content', ''))):
+                                response_msgs.append(m)
+                    
+                    if response_msgs:
+                        found_response = True
+                        break
+                
+                if not found_response:
+                    if recipient not in ignored_by_power:
+                        ignored_by_power[recipient] = []
+                    ignored_by_power[recipient].append({
+                        'phase': phase.name,
+                        'content': msg_content
+                    })
+        
+        return ignored_by_power
+    
     # MODIFIED METHOD (renamed from get_game_history)
     def get_previous_phases_history(
         self, power_name: str, current_phase_name: str, include_plans: bool = True, num_prev_phases: int = 5
