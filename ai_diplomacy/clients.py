@@ -13,7 +13,6 @@ from openai import AsyncOpenAI
 from openai import AsyncOpenAI as AsyncDeepSeekOpenAI # Alias for clarity
 from anthropic import AsyncAnthropic
 
-os.environ["GRPC_PYTHON_LOG_LEVEL"] = "10"
 import google.generativeai as genai
 
 from diplomacy.engine.message import GLOBAL
