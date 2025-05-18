@@ -146,3 +146,5 @@ ai_animation/src/elevenlabskey.txt
 
 ai_diplomacy/alt_implementations
 /experiments
+game_moments.json
+game_moments_report.md

@@ -241,15 +241,19 @@ class DiplomacyAgent:
         self.private_diary.append(formatted_entry)
         # Keep diary to a manageable size, e.g., last 100 entries
         #self.private_diary = self.private_diary[-100:] 
-        logger.debug(f"[{self.power_name} Diary Entry Added for {phase}]: {entry[:100]}...")
+        logger.info(f"[{self.power_name}] DIARY ENTRY ADDED for {phase}. Total entries: {len(self.private_diary)}. New entry: {entry[:100]}...")
 
     def format_private_diary_for_prompt(self, max_entries=40) -> str:
         """Formats the last N private diary entries for inclusion in a prompt."""
+        logger.info(f"[{self.power_name}] Formatting diary for prompt. Total entries: {len(self.private_diary)}")
         if not self.private_diary:
+            logger.warning(f"[{self.power_name}] No diary entries found when formatting for prompt")
             return "(No diary entries yet)"
         # Get the most recent entries
         recent_entries = self.private_diary[-max_entries:]
-        return "\n".join(recent_entries)
+        formatted_diary = "\n".join(recent_entries)
+        logger.info(f"[{self.power_name}] Formatted {len(recent_entries)} diary entries for prompt. Preview: {formatted_diary[:200]}...")
+        return formatted_diary
 
     async def generate_negotiation_diary_entry(self, game: 'Game', game_history: 'GameHistory', log_file_path: str):
         """
@@ -589,6 +593,110 @@ class DiplomacyAgent:
             self.add_diary_entry(fallback_diary, game.current_short_phase)
             logger.warning(f"[{self.power_name}] Added fallback order diary entry due to critical error.")
         # Rest of the code remains the same
+
+    async def generate_phase_result_diary_entry(
+        self, 
+        game: 'Game', 
+        game_history: 'GameHistory',
+        phase_summary: str,
+        all_orders: Dict[str, List[str]],
+        log_file_path: str
+    ):
+        """
+        Generates a diary entry analyzing the actual phase results,
+        comparing them to negotiations and identifying betrayals/collaborations.
+        """
+        logger.info(f"[{self.power_name}] Generating phase result diary entry for {game.current_short_phase}...")
+        
+        # Load the template
+        prompt_template = _load_prompt_file('phase_result_diary_prompt.txt')
+        if not prompt_template:
+            logger.error(f"[{self.power_name}] Could not load phase_result_diary_prompt.txt. Skipping diary entry.")
+            return
+        
+        # Format all orders for the prompt
+        all_orders_formatted = ""
+        for power, orders in all_orders.items():
+            orders_str = ", ".join(orders) if orders else "No orders"
+            all_orders_formatted += f"{power}: {orders_str}\n"
+        
+        # Get your own orders
+        your_orders = all_orders.get(self.power_name, [])
+        your_orders_str = ", ".join(your_orders) if your_orders else "No orders"
+        
+        # Get recent negotiations for this phase
+        messages_this_phase = game_history.get_messages_by_phase(game.current_short_phase)
+        your_negotiations = ""
+        for msg in messages_this_phase:
+            if msg.sender == self.power_name:
+                your_negotiations += f"To {msg.recipient}: {msg.content}\n"
+            elif msg.recipient == self.power_name:
+                your_negotiations += f"From {msg.sender}: {msg.content}\n"
+        
+        if not your_negotiations:
+            your_negotiations = "No negotiations this phase"
+        
+        # Format relationships
+        relationships_str = "\n".join([f"{p}: {r}" for p, r in self.relationships.items()])
+        
+        # Format goals
+        goals_str = "\n".join([f"- {g}" for g in self.goals]) if self.goals else "None"
+        
+        # Create the prompt
+        prompt = prompt_template.format(
+            power_name=self.power_name,
+            current_phase=game.current_short_phase,
+            phase_summary=phase_summary,
+            all_orders_formatted=all_orders_formatted,
+            your_negotiations=your_negotiations,
+            pre_phase_relationships=relationships_str,
+            agent_goals=goals_str,
+            your_actual_orders=your_orders_str
+        )
+        
+        logger.debug(f"[{self.power_name}] Phase result diary prompt:\n{prompt[:500]}...")
+        
+        raw_response = ""
+        success_status = "FALSE"
+        
+        try:
+            raw_response = await run_llm_and_log(
+                client=self.client,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=self.power_name,
+                phase=game.current_short_phase,
+                response_type='phase_result_diary'
+            )
+            
+            if raw_response and raw_response.strip():
+                # The response should be plain text diary entry
+                diary_entry = raw_response.strip()
+                self.add_diary_entry(diary_entry, game.current_short_phase)
+                success_status = "TRUE"
+                logger.info(f"[{self.power_name}] Phase result diary entry generated and added.")
+            else:
+                fallback_diary = f"Phase {game.current_short_phase} completed. Orders executed as: {your_orders_str}. (Failed to generate detailed analysis)"
+                self.add_diary_entry(fallback_diary, game.current_short_phase)
+                logger.warning(f"[{self.power_name}] Empty response from LLM. Added fallback phase result diary.")
+                success_status = "FALSE"
+                
+        except Exception as e:
+            logger.error(f"[{self.power_name}] Error generating phase result diary: {e}", exc_info=True)
+            fallback_diary = f"Phase {game.current_short_phase} completed. Unable to analyze results due to error."
+            self.add_diary_entry(fallback_diary, game.current_short_phase)
+            success_status = f"FALSE: {type(e).__name__}"
+        finally:
+            log_llm_response(
+                log_file_path=log_file_path,
+                model_name=self.client.model_name,
+                power_name=self.power_name,
+                phase=game.current_short_phase,
+                response_type='phase_result_diary',
+                raw_input_prompt=prompt,
+                raw_response=raw_response,
+                success=success_status
+            )
 
     def log_state(self, prefix=""):
         logger.debug(f"[{self.power_name}] {prefix} State: Goals={self.goals}, Relationships={self.relationships}")
