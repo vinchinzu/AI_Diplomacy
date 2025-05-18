@@ -6,7 +6,7 @@ import re
 import json_repair
 
 # Assuming BaseModelClient is importable from clients.py in the same directory
-from .clients import BaseModelClient 
+from .clients import BaseModelClient, load_model_client 
 # Import load_prompt and the new logging wrapper from utils
 from .utils import load_prompt, run_llm_and_log, log_llm_response
 from .prompt_constructor import build_context_prompt # Added import
@@ -254,6 +254,130 @@ class DiplomacyAgent:
         formatted_diary = "\n".join(recent_entries)
         logger.info(f"[{self.power_name}] Formatted {len(recent_entries)} diary entries for prompt. Preview: {formatted_diary[:200]}...")
         return formatted_diary
+    
+    async def consolidate_year_diary_entries(self, year: str, game: 'Game', log_file_path: str):
+        """
+        Consolidates all diary entries from a specific year into a concise summary.
+        This is called when we're 2+ years past a given year to prevent context bloat.
+        
+        Args:
+            year: The year to consolidate (e.g., "1901")
+            game: The game object for context
+            log_file_path: Path for logging LLM responses
+        """
+        logger.info(f"[{self.power_name}] CONSOLIDATION CALLED for year {year}")
+        logger.info(f"[{self.power_name}] Current diary has {len(self.private_diary)} total entries")
+        
+        # Debug: Log first few diary entries to see their format
+        if self.private_diary:
+            logger.info(f"[{self.power_name}] Sample diary entries:")
+            for i, entry in enumerate(self.private_diary[:3]):
+                logger.info(f"[{self.power_name}]   Entry {i}: {entry[:100]}...")
+        
+        # Find all diary entries from the specified year
+        year_entries = []
+        # Update pattern to match phase format: [S1901M], [F1901M], [W1901A] etc.
+        # We need to check for [S1901, [F1901, [W1901
+        patterns_to_check = [f"[S{year}", f"[F{year}", f"[W{year}"]
+        logger.info(f"[{self.power_name}] Looking for entries matching patterns: {patterns_to_check}")
+        
+        for i, entry in enumerate(self.private_diary):
+            # Check if entry matches any of our patterns
+            for pattern in patterns_to_check:
+                if pattern in entry:
+                    year_entries.append(entry)
+                    logger.info(f"[{self.power_name}] Found matching entry {i} with pattern '{pattern}': {entry[:50]}...")
+                    break  # Don't add the same entry multiple times
+        
+        if not year_entries:
+            logger.info(f"[{self.power_name}] No diary entries found for year {year} using patterns: {patterns_to_check}")
+            return
+        
+        logger.info(f"[{self.power_name}] Found {len(year_entries)} entries to consolidate for year {year}")
+        
+        # Load consolidation prompt template
+        prompt_template = _load_prompt_file('diary_consolidation_prompt.txt')
+        if not prompt_template:
+            logger.error(f"[{self.power_name}] Could not load diary_consolidation_prompt.txt")
+            return
+        
+        # Format entries for the prompt
+        year_diary_text = "\n\n".join(year_entries)
+        
+        # Create the consolidation prompt
+        prompt = prompt_template.format(
+            power_name=self.power_name,
+            year=year,
+            year_diary_entries=year_diary_text
+        )
+        
+        raw_response = ""
+        success_status = "FALSE"
+        
+        try:
+            # Use Gemini 2.5 Flash for consolidation if available
+            consolidation_client = load_model_client("openrouter-google/gemini-2.5-flash-preview")
+            if not consolidation_client:
+                consolidation_client = self.client  # Fallback to agent's own client
+                logger.warning(f"[{self.power_name}] Using agent's own model for consolidation instead of Gemini Flash")
+            
+            raw_response = await consolidation_client.generate_response(prompt)
+            
+            if raw_response and raw_response.strip():
+                consolidated_entry = raw_response.strip()
+                
+                # Separate entries into consolidated and regular entries
+                consolidated_entries = []
+                regular_entries = []
+                
+                for entry in self.private_diary:
+                    if entry.startswith("[CONSOLIDATED"):
+                        consolidated_entries.append(entry)
+                    else:
+                        # Check if this is an entry we should remove (from the year being consolidated)
+                        should_keep = True
+                        for pattern in patterns_to_check:
+                            if pattern in entry:
+                                should_keep = False
+                                break
+                        if should_keep:
+                            regular_entries.append(entry)
+                
+                # Create the new consolidated summary
+                consolidated_summary = f"[CONSOLIDATED {year}] {consolidated_entry}"
+                
+                # Sort consolidated entries by year (descending) to keep most recent consolidated years at top
+                consolidated_entries.append(consolidated_summary)
+                consolidated_entries.sort(key=lambda x: x[14:18], reverse=True)  # Extract year from "[CONSOLIDATED YYYY]"
+                
+                # Rebuild diary with consolidated entries at the top
+                self.private_diary = consolidated_entries + regular_entries
+                
+                success_status = "TRUE"
+                logger.info(f"[{self.power_name}] Successfully consolidated {len(year_entries)} entries from {year} into 1 summary")
+                logger.info(f"[{self.power_name}] New diary structure - Total entries: {len(self.private_diary)}, Consolidated: {len(consolidated_entries)}, Regular: {len(regular_entries)}")
+                logger.debug(f"[{self.power_name}] Diary order preview:")
+                for i, entry in enumerate(self.private_diary[:5]):
+                    logger.debug(f"[{self.power_name}]   Entry {i}: {entry[:50]}...")
+            else:
+                logger.warning(f"[{self.power_name}] Empty response from consolidation LLM")
+                success_status = "FALSE: Empty response"
+                
+        except Exception as e:
+            logger.error(f"[{self.power_name}] Error consolidating diary entries: {e}", exc_info=True)
+            success_status = f"FALSE: {type(e).__name__}"
+        finally:
+            if log_file_path:
+                log_llm_response(
+                    log_file_path=log_file_path,
+                    model_name=consolidation_client.model_name if 'consolidation_client' in locals() else self.client.model_name,
+                    power_name=self.power_name,
+                    phase=game.current_short_phase,
+                    response_type='diary_consolidation',
+                    raw_input_prompt=prompt,
+                    raw_response=raw_response,
+                    success=success_status
+                )
 
     async def generate_negotiation_diary_entry(self, game: 'Game', game_history: 'GameHistory', log_file_path: str):
         """

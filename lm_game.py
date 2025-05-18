@@ -580,6 +580,60 @@ async def main():
             logger.info(f"Finished generating phase result diary entries.")
         # --- End Phase Result Diary Generation ---
 
+        # --- Diary Consolidation Check ---
+        # After processing S1903M (or later), consolidate diary entries from 2 years ago
+        logger.info(f"[DIARY CONSOLIDATION] Checking consolidation for phase: {current_phase} (short: {current_short_phase})")
+        
+        # Try extracting from both phase formats to be safe
+        if len(current_short_phase) >= 6:  # e.g., "S1903M"
+            current_year_str = current_short_phase[1:5]
+            logger.info(f"[DIARY CONSOLIDATION] Extracting year from short phase: {current_short_phase}")
+        else:
+            current_year_str = current_phase[1:5]  # Extract year from phase
+            logger.info(f"[DIARY CONSOLIDATION] Extracting year from full phase: {current_phase}")
+            
+        logger.info(f"[DIARY CONSOLIDATION] Extracted year string: '{current_year_str}'")
+        
+        try:
+            current_year = int(current_year_str)
+            consolidation_year = current_year - 2  # Two years ago
+            
+            logger.info(f"[DIARY CONSOLIDATION] Current year: {current_year}, Consolidation year: {consolidation_year}")
+            logger.info(f"[DIARY CONSOLIDATION] Phase check - ends with 'M': {current_short_phase.endswith('M')}, starts with 'S': {current_short_phase.startswith('S')}")
+            logger.info(f"[DIARY CONSOLIDATION] Consolidation year check: {consolidation_year} >= 1901: {consolidation_year >= 1901}")
+            
+            # Check if we need to consolidate (after spring movement phase)
+            if current_short_phase.endswith("M") and current_short_phase.startswith("S") and consolidation_year >= 1901:
+                logger.info(f"[DIARY CONSOLIDATION] TRIGGERING consolidation for year {consolidation_year} (current year: {current_year})")
+                
+                consolidation_tasks = []
+                for power_name, agent in agents.items():
+                    if not game.powers[power_name].is_eliminated():
+                        logger.info(f"[DIARY CONSOLIDATION] Adding consolidation task for {power_name}")
+                        consolidation_tasks.append(
+                            agent.consolidate_year_diary_entries(
+                                str(consolidation_year),
+                                game,
+                                llm_log_file_path
+                            )
+                        )
+                    else:
+                        logger.info(f"[DIARY CONSOLIDATION] Skipping eliminated power: {power_name}")
+                
+                if consolidation_tasks:
+                    logger.info(f"[DIARY CONSOLIDATION] Running {len(consolidation_tasks)} diary consolidation tasks...")
+                    await asyncio.gather(*consolidation_tasks, return_exceptions=True)
+                    logger.info("[DIARY CONSOLIDATION] Diary consolidation complete")
+                else:
+                    logger.warning("[DIARY CONSOLIDATION] No consolidation tasks to run")
+            else:
+                logger.info(f"[DIARY CONSOLIDATION] Conditions not met for consolidation - phase: {current_short_phase}, year: {current_year}")
+        except (ValueError, IndexError) as e:
+            logger.error(f"[DIARY CONSOLIDATION] ERROR: Could not parse year from phase {current_phase}: {e}")
+        except Exception as e:
+            logger.error(f"[DIARY CONSOLIDATION] UNEXPECTED ERROR: {e}", exc_info=True)
+        # --- End Diary Consolidation ---
+
         # --- Async State Update --- 
         logger.info(f"Starting state update analysis for completed phase {completed_phase_name}...")
         
