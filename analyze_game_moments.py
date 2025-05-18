@@ -45,11 +45,14 @@ class GameMoment:
 class GameAnalyzer:
     """Analyzes Diplomacy game data for key strategic moments"""
     
-    def __init__(self, game_data_path: str, model_name: str = "openrouter-google/gemini-2.5-flash-preview"):
-        self.game_data_path = Path(game_data_path)
+    def __init__(self, results_folder: str, model_name: str = "openrouter-google/gemini-2.5-flash-preview"):
+        self.results_folder = Path(results_folder)
+        self.game_data_path = self.results_folder / "lmvsgame.json"
+        self.overview_path = self.results_folder / "overview.jsonl"
         self.model_name = model_name
         self.client = None
         self.game_data = None
+        self.power_to_model = None
         self.moments = []
         
     async def initialize(self):
@@ -57,6 +60,17 @@ class GameAnalyzer:
         # Load game data
         with open(self.game_data_path, 'r') as f:
             self.game_data = json.load(f)
+        
+        # Load power-to-model mapping from overview.jsonl
+        with open(self.overview_path, 'r') as f:
+            lines = f.readlines()
+            # Second line contains the power-to-model mapping
+            if len(lines) >= 2:
+                self.power_to_model = json.loads(lines[1])
+                logger.info(f"Loaded power-to-model mapping: {self.power_to_model}")
+            else:
+                logger.warning("Could not find power-to-model mapping in overview.jsonl")
+                self.power_to_model = {}
         
         # Initialize model client
         self.client = load_model_client(self.model_name)
@@ -77,15 +91,24 @@ class GameAnalyzer:
         # Format messages for analysis
         formatted_messages = []
         for msg in turn_data.get("messages", []):
+            sender = msg.get('sender', 'Unknown')
+            sender_model = self.power_to_model.get(sender, '')
+            sender_str = f"{sender} ({sender_model})" if sender_model else sender
+            
+            recipient = msg.get('recipient', 'Unknown')
+            recipient_model = self.power_to_model.get(recipient, '')
+            recipient_str = f"{recipient} ({recipient_model})" if recipient_model else recipient
+            
             formatted_messages.append(
-                f"{msg.get('sender', 'Unknown')} to {msg.get('recipient', 'Unknown')}: "
-                f"{msg.get('message', '')}"
+                f"{sender_str} to {recipient_str}: {msg.get('message', '')}"
             )
         
         # Format orders for analysis
         formatted_orders = []
         for power, power_orders in turn_data.get("orders", {}).items():
-            formatted_orders.append(f"{power}: {power_orders}")
+            power_model = self.power_to_model.get(power, '')
+            power_str = f"{power} ({power_model})" if power_model else power
+            formatted_orders.append(f"{power_str}: {power_orders}")
         
         prompt = f"""You are analyzing diplomatic negotiations and subsequent military orders from a Diplomacy game. Your task is to identify key strategic moments in the following categories:
 
@@ -171,11 +194,19 @@ Focus on:
             logger.error(f"Error analyzing turn {turn_data.get('phase', '')}: {e}")
             return []
     
-    async def analyze_game(self):
-        """Analyze the entire game for key moments"""
+    async def analyze_game(self, max_phases: Optional[int] = None):
+        """Analyze the entire game for key moments
+        
+        Args:
+            max_phases: Maximum number of phases to analyze (None = all)
+        """
         phases = self.game_data.get("phases", [])
         
-        logger.info(f"Analyzing {len(phases)} phases...")
+        if max_phases is not None:
+            phases = phases[:max_phases]
+            logger.info(f"Analyzing first {len(phases)} phases (out of {len(self.game_data.get('phases', []))} total)...")
+        else:
+            logger.info(f"Analyzing {len(phases)} phases...")
         
         for i, phase_data in enumerate(phases):
             phase_name = phase_data.get("name", f"Phase {i}")
@@ -192,6 +223,11 @@ Focus on:
         
         logger.info(f"Analysis complete. Found {len(self.moments)} key moments.")
     
+    def format_power_with_model(self, power: str) -> str:
+        """Format power name with model in parentheses"""
+        model = self.power_to_model.get(power, '')
+        return f"{power} ({model})" if model else power
+    
     def generate_report(self, output_path: str = "game_moments_report.md"):
         """Generate a markdown report of key moments"""
         report_lines = [
@@ -205,15 +241,26 @@ Focus on:
             f"- Collaborations: {len([m for m in self.moments if m.category == 'COLLABORATION'])}",
             f"- Playing Both Sides: {len([m for m in self.moments if m.category == 'PLAYING_BOTH_SIDES'])}",
             "",
-            "## Top 10 Most Interesting Moments",
+            "## Power Models",
             ""
         ]
         
+        # Add power-model mapping
+        for power, model in sorted(self.power_to_model.items()):
+            report_lines.append(f"- **{power}**: {model}")
+        
+        report_lines.extend([
+            "",
+            "## Top 10 Most Interesting Moments",
+            ""
+        ])
+        
         # Add top moments
         for i, moment in enumerate(self.moments[:10], 1):
+            powers_str = ', '.join([self.format_power_with_model(p) for p in moment.powers_involved])
             report_lines.extend([
                 f"### {i}. {moment.category} - {moment.phase} (Score: {moment.interest_score}/10)",
-                f"**Powers Involved:** {', '.join(moment.powers_involved)}",
+                f"**Powers Involved:** {powers_str}",
                 "",
                 f"**Promise/Agreement:** {moment.promise_agreement}",
                 "",
@@ -235,8 +282,9 @@ Focus on:
         
         betrayals = [m for m in self.moments if m.category == "BETRAYAL"]
         for moment in betrayals[:5]:
+            powers_str = ', '.join([self.format_power_with_model(p) for p in moment.powers_involved])
             report_lines.append(
-                f"- **{moment.phase}** ({', '.join(moment.powers_involved)}): "
+                f"- **{moment.phase}** ({powers_str}): "
                 f"{moment.promise_agreement[:100]}... Score: {moment.interest_score}"
             )
         
@@ -244,8 +292,9 @@ Focus on:
         
         collaborations = [m for m in self.moments if m.category == "COLLABORATION"]
         for moment in collaborations[:5]:
+            powers_str = ', '.join([self.format_power_with_model(p) for p in moment.powers_involved])
             report_lines.append(
-                f"- **{moment.phase}** ({', '.join(moment.powers_involved)}): "
+                f"- **{moment.phase}** ({powers_str}): "
                 f"{moment.promise_agreement[:100]}... Score: {moment.interest_score}"
             )
         
@@ -253,8 +302,9 @@ Focus on:
         
         playing_both = [m for m in self.moments if m.category == "PLAYING_BOTH_SIDES"]
         for moment in playing_both[:5]:
+            powers_str = ', '.join([self.format_power_with_model(p) for p in moment.powers_involved])
             report_lines.append(
-                f"- **{moment.phase}** ({', '.join(moment.powers_involved)}): "
+                f"- **{moment.phase}** ({powers_str}): "
                 f"{moment.promise_agreement[:100]}... Score: {moment.interest_score}"
             )
         
@@ -281,21 +331,23 @@ Focus on:
 
 async def main():
     parser = argparse.ArgumentParser(description="Analyze Diplomacy game for key strategic moments")
-    parser.add_argument("game_file", help="Path to lmvsgame.json file")
+    parser.add_argument("results_folder", help="Path to the results folder containing lmvsgame.json and overview.jsonl")
     parser.add_argument("--model", default="openrouter-google/gemini-2.5-flash-preview",
                         help="Model to use for analysis")
     parser.add_argument("--report", default="game_moments_report.md",
                         help="Output path for markdown report")
     parser.add_argument("--json", default="game_moments.json",
                         help="Output path for JSON results")
+    parser.add_argument("--max-phases", type=int, default=None,
+                        help="Maximum number of phases to analyze (useful for testing)")
     
     args = parser.parse_args()
     
-    analyzer = GameAnalyzer(args.game_file, args.model)
+    analyzer = GameAnalyzer(args.results_folder, args.model)
     
     try:
         await analyzer.initialize()
-        await analyzer.analyze_game()
+        await analyzer.analyze_game(max_phases=args.max_phases)
         analyzer.generate_report(args.report)
         analyzer.save_json_results(args.json)
         
@@ -308,8 +360,9 @@ async def main():
         # Show top 3 moments
         print("\nTop 3 Most Interesting Moments:")
         for i, moment in enumerate(analyzer.moments[:3], 1):
+            powers_str = ', '.join([analyzer.format_power_with_model(p) for p in moment.powers_involved])
             print(f"{i}. {moment.category} in {moment.phase} (Score: {moment.interest_score})")
-            print(f"   Powers: {', '.join(moment.powers_involved)}")
+            print(f"   Powers: {powers_str}")
             print(f"   Impact: {moment.impact[:100]}...")
             print()
         

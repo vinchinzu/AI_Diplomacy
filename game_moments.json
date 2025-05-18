@@ -1,0 +1,222 @@
+[
+  {
+    "phase": "S1901M",
+    "category": "PLAYING_BOTH_SIDES",
+    "powers_involved": [
+      "TURKEY",
+      "RUSSIA",
+      "AUSTRIA",
+      "ITALY"
+    ],
+    "promise_agreement": "Turkey negotiated with Austria, proposing a non-aggression pact and focusing eastward, suggesting a possible division of Balkan interests. Turkey also negotiated with Russia, repeatedly proposing a Black Sea stand-down (F SEV H if F ANK H). Turkey also negotiated with Italy, agreeing to a d\u00e9tente regarding the Aegean (Italy F NAP-ION, Turkey avoids AEG).",
+    "actual_action": "Turkey ordered F ANK - BLA, A CON - BUL, A SMY - ARM. These aggressive moves directly contradict the proposed Black Sea stand-down with Russia and the 'eastward focus' and non-aggression suggested to Austria. The move ignores the Italian request to keep the Aegean clear (although A CON-BUL doesn't *enter* AEG, securing Bulgaria is often prelude to it).",
+    "impact": "Turkey pursued an aggressive opening by taking the Black Sea and moving into Bulgaria, betraying or ignoring diplomatic overtures made to both Russia and Austria/Italy. This sets up immediate conflict with Russia and potentially Austria/Italy while securing key forward positions.",
+    "interest_score": 9.8
+  },
+  {
+    "phase": "S1901M",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "RUSSIA",
+      "TURKEY"
+    ],
+    "promise_agreement": "Turkey proposed avoiding conflict in the Black Sea and keeping the Sevastopol fleet out. Russia largely ignored Turkey's requests but did not explicitly agree or disagree in the final message before orders were due, keeping Turkey guessing.",
+    "actual_action": "Turkey moved F ANK - BLA. Russia ordered F SEV H. Turkey moved into the Black Sea despite its own proposal to avoid it if Russia did the same, and despite Russia's fleet holding.",
+    "impact": "Turkey gained control of the Black Sea in Spring 1901, opening the door for attacks on Russia's southern coast. Russia is now highly vulnerable in the south.",
+    "interest_score": 9.5
+  },
+  {
+    "phase": "S1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "AUSTRIA",
+      "ITALY"
+    ],
+    "promise_agreement": "Italy proposed a 'Lepanto' opening: Italy F NAP-ION, A ROM-APU, A VEN H/TUS; Austria F TRI-ALB, A BUD-SER, A VIE H/cover TRI. Both powers repeatedly confirmed variations of this exact set of moves are locked in for Spring.",
+    "actual_action": "Austria ordered A BUD - SER, F TRI - ALB, A VIE H. Italy ordered F NAP - ION, A ROM - APU, A VEN - TUS. These orders perfectly match the detailed 'Lepanto' plan they coordinated.",
+    "impact": "Austria and Italy successfully executed a coordinated opening to position themselves for a joint attack on Turkey in the fall, while securing their initial centers and borders.",
+    "interest_score": 9.0
+  },
+  {
+    "phase": "F1901M",
+    "category": "PLAYING_BOTH_SIDES",
+    "powers_involved": [
+      "RUSSIA",
+      "AUSTRIA",
+      "TURKEY"
+    ],
+    "promise_agreement": "Russia agreed with Austria to move F SEV-RUM to coordinate against Turkish expansion. Simultaneously, Turkey repeatedly proposed a temporary truce in the Black Sea where F SEV would not move into Rumania or Armenia if Turkish units avoided Sevastopol. Russia did not explicitly agree to the *Turkish* proposal in the messages shown, but Russia's actual order matched Turkey's requested action.",
+    "actual_action": "Russia ordered F SEV H, which aligns with Turkey's proposal for a Black Sea truce, directly contradicting Russia's agreement with Austria to move F SEV-RUM.",
+    "impact": "Russia appears to be playing both sides regarding the Black Sea. While explicitly agreeing with Austria to move offensively against Turkey, Russia's actual order aligns with Turkey's defensive truce proposal. This deception allows Russia to maintain relations with both powers potentially, but significantly betrays Austria's trust and disrupts their plan.",
+    "interest_score": 9.0
+  },
+  {
+    "phase": "S1901M",
+    "category": "PLAYING_BOTH_SIDES",
+    "powers_involved": [
+      "AUSTRIA",
+      "RUSSIA",
+      "ITALY"
+    ],
+    "promise_agreement": "Austria negotiated and agreed to a 'Lepanto' with Italy targeting Turkey (F TRI-ALB, A BUD-SER, A VIE H). Simultaneously, Austria negotiated with Russia, agreeing to a non-aggression pact in Galicia (Austria staying out) and acknowledging Russia's F SEV-RUM move, implying cooperation against Turkey in the Balkans.",
+    "actual_action": "Austria ordered A BUD - SER, F TRI - ALB, A VIE H. These orders prioritize the full 'Lepanto' plan with Italy and directly contradict any potential support from TRI or VIE for a Russian move into Rumania, which Russia failed to do anyway (F SEV H). Austria also fully respected the agreement to keep units out of Galicia.",
+    "impact": "Austria navigated seemingly conflicting agreements by prioritizing the Lepanto with Italy. While agreeing to 'respect' Russia's move, Austria's orders fully committed to the western Balkan plan, ensuring a clear strategic direction and avoiding accidental conflict with Italy. Russia's own failure to move to Rumania meant Austria didn't have to explicitly break a promise of support, but its orders would not have supported Russia's stated plan anyway.",
+    "interest_score": 8.5
+  },
+  {
+    "phase": "F1901M",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "RUSSIA",
+      "AUSTRIA"
+    ],
+    "promise_agreement": "Russia explicitly told Austria, 'My fleet in Sevastopol will move to Rumania as agreed.' and 'I will support your move into Greece if needed.' And later, 'Confirming our coordination against Turkey. My fleet in Sevastopol will move to Rumania as agreed.'",
+    "actual_action": "Russia ordered F SEV H and did not order any support for Austria's move into Greece.",
+    "impact": "Russia failed to execute a promised offensive move against Turkey in Rumania and failed to offer support for Austria's move to Greece (though Austria's move succeeded anyway). This directly contradicts Russia's explicit promises to Austria regarding coordination against Turkey and significantly hinders the planned joint strategy.",
+    "interest_score": 8.5
+  },
+  {
+    "phase": "S1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "FRANCE",
+      "ITALY"
+    ],
+    "promise_agreement": "Italy proposed peace in the west and a demilitarized Piedmont (Italy avoiding PIE, TYR, Tyrrhenian/Western Med) through 1901, focusing eastward. France agreed, stating its focus was on Iberia/Mid-Atlantic and that A MAR would go to SPA and F BRE to MAO. Both confirmed the pact multiple times.",
+    "actual_action": "France ordered A MAR - SPA, F BRE - MAO, A PAR - PIC. Italy ordered F NAP - ION, A ROM - APU, A VEN - TUS. Their orders align perfectly with the agreed-upon plan to keep the Franco-Italian border peaceful and focus elsewhere.",
+    "impact": "France and Italy successfully implemented a mutual non-aggression pact, allowing Italy to focus entirely on the east (Lepanto) and France to secure Spain and move into the mid-Atlantic, avoiding a potentially costly early war between them.",
+    "interest_score": 8.0
+  },
+  {
+    "phase": "F1901M",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "RUSSIA",
+      "ENGLAND"
+    ],
+    "promise_agreement": "Russia explicitly told England, 'I will support your move to Norway with F STP/SC to BOT this turn.' And later, 'Russia confirms its support for your move to Norway with F STP/SC to BOT.'",
+    "actual_action": "Russia ordered F STP/SC H.",
+    "impact": "Russia failed to execute a promised support order for England's move into Norway. England's move succeeded anyway, but Russia's broken promise could damage future trust and collaboration, particularly regarding Scandinavia.",
+    "interest_score": 7.5
+  },
+  {
+    "phase": "W1901A",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "TURKEY",
+      "RUSSIA"
+    ],
+    "promise_agreement": "Turkey proposed a temporary truce with Russia, offering to keep its fleet defensively out of Sevastopol if Russia agreed to keep its forces from moving into Rumania or Armenia.",
+    "actual_action": "Turkey built a fleet in Ankara (F ANK B), directly contradicting a defensive posture agreement aimed at the Black Sea. While technically not moving a pre-existing fleet *towards* Sevastopol, building a *new* fleet in a Black Sea adjacent center breaks the spirit and strategic implication of the 'preventing conflict in the Black Sea' and 'defensive posture' promise, especially when Russia took *no* builds.",
+    "impact": "This build increases Turkish naval power in the Black Sea, positioning Turkey to threaten Russia in S1902. It signals to Russia that Turkey is not fully committed to a Black Sea truce despite the message, potentially escalating tensions and conflict in the region. While Russia also took no aggressive builds, Turkey's F ANK B is a clear strategic move towards Black Sea dominance, not a defensive one.",
+    "interest_score": 7.5
+  },
+  {
+    "phase": "S1901M",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "AUSTRIA",
+      "RUSSIA"
+    ],
+    "promise_agreement": "Austria agreed with Russia to keep units out of Galicia and mutual respect for positions (Austria in Serbia, Russia in Rumania). Russia agreed to leave Galicia vacant and support Austria's move to Serbia, requesting Austrian support for F SEV-RUM. Austria's final messages confirmed Galicia would be respected and acknowledged Russia's move to Rumania, but did not explicitly promise support for RUM.",
+    "actual_action": "Austria moved A BUD - SER, F TRI - ALB, A VIE H. Russia ordered F SEV H, A WAR H. Austria kept units out of Galicia. Russia failed to move to Rumania, holding its fleet instead.",
+    "impact": "Russia failed to gain control of Rumania, a promised objective with Austria, and held units that could have been used against Turkey or Austria. Austria secured Serbia.",
+    "interest_score": 7.0
+  },
+  {
+    "phase": "F1901M",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "ITALY",
+      "AUSTRIA"
+    ],
+    "promise_agreement": "Italy repeatedly told Austria that A APU would Support Austria's F ALB-GRE move ('A APU S F ALB-GRE' or 'I can adjust A APU to support GRE if needed' or 'A APU S F ALB-GRE').",
+    "actual_action": "Italy ordered A APU H.",
+    "impact": "While Austria's move to Greece succeeded even without Italian support, Italy broke an explicit promise about a specific military order. This introduces distrust, even though the overall goals of gaining builds were met.",
+    "interest_score": 7.0
+  },
+  {
+    "phase": "F1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "GERMANY",
+      "ENGLAND"
+    ],
+    "promise_agreement": "Germany proposed moving F DEN-SWE to guard against French expansion in the Baltic and supporting England's interests in the Channel if England agreed to this Baltic move and avoided Helgoland Bight/northern German coast. England proposed securing Norway together, with England moving F NTH-NWY and Russia supporting, and discussing Sweden later.",
+    "actual_action": "Germany ordered F DEN - SWE and A RUH - HOL, A BER H. England ordered F NTH - NWY, F ENG H, A YOR H.",
+    "impact": "Germany successfully moved into Sweden. England successfully moved into Norway. While their initial proposals weren't perfectly aligned (Germany wanted English agreement on the Baltic move in exchange for Channel support, England focused on Norway), their actions resulted in both powers expanding into Scandinavia at Germany's requested move succeeded and England's unilateral move succeeded. There's a potential conflict in Norway given Germany's Sweden move and England's Norway grab, setting up a future contention despite Germany's offer of cooperation against France.",
+    "interest_score": 7.0
+  },
+  {
+    "phase": "S1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "ENGLAND",
+      "GERMANY"
+    ],
+    "promise_agreement": "England proposed demilitarizing the North Sea (England avoiding it if Germany did) and later confirmed F EDI - NTH, F LON - ENG, expecting Germany to respect the North Sea. Germany proposed that if England kept the North Sea demilitarized, Germany would keep the North and Skagerrak clear of German fleets. In final messages, England confirmed its moves supporting a North Sea agreement, and Germany confirmed F KIE-DEN and requested England avoid DEN/SWE in Autumn.",
+    "actual_action": "England ordered F EDI - NTH, F LON - ENG, A LVP - YOR. Germany ordered F KIE - DEN, A MUN - RUH, A BER H. England moved into the North Sea, not holding it. Germany moved into Denmark from Kiel. While not a complete DMZ as initially discussed (England didn't hold NTH), their moves were somewhat aligned with not actively attacking each other's home water areas, and Germany moved 'away' from the North Sea towards Denmark.",
+    "impact": "Early conflict between England and Germany in the North Sea was avoided, despite England not fully adhering to the 'demilitarize' language (moving into NTH rather than holding home). Germany gained a key position in Denmark for Scandinavia. They managed a non-hostile opening despite slight misalignment on the details of the navies.",
+    "interest_score": 6.5
+  },
+  {
+    "phase": "F1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "AUSTRIA",
+      "RUSSIA"
+    ],
+    "promise_agreement": "Austria and Russia discussed coordinating against Turkey. Austria proposed F ALB-GRE with A SER supporting and suggested Russia move F SEV-RUM. Russia agreed to move F SEV-RUM to counter Turkish expansion and offered to support Austria's move into Greece if needed. Austria confirmed F ALB-GRE with SER support and Russia's move to Rumania.",
+    "actual_action": "Austria ordered F ALB - GRE and A SER S F ALB - GRE. Russia ordered F SEV H and A WAR H, A MOS H, F STP/SC H.",
+    "impact": "Austria successfully captured Greece, gaining a build. Russia did not follow through on the agreed move to Rumania, instead holding Sevastopol. This failure to execute the move prevents the intended 'strategic encirclement' of Turkey discussed by Austria and hinders their coordinated effort against Turkey. Russia's inactivity suggests they might have been Playing Both Sides with Turkey (see below).",
+    "interest_score": 6.5
+  },
+  {
+    "phase": "F1901M",
+    "category": "COLABORATION",
+    "powers_involved": [
+      "ENGLAND",
+      "RUSSIA"
+    ],
+    "promise_agreement": "England proposed coordinating on Norway, with F NTH-NWY supported by Russia. Russia agreed and stated F STP/SC to BOT would support England's move to Norway.",
+    "actual_action": "England ordered F NTH - NWY. Russia ordered F STP/SC H.",
+    "impact": "England successfully captured Norway. Russia failed to provide the promised support from F STP/SC. England achieved its objective despite Russia's inaction, but Russia reneged on their agreement, potentially sowing distrust.",
+    "interest_score": 6.5
+  },
+  {
+    "phase": "S1902R",
+    "category": "BETRAYAL",
+    "powers_involved": [
+      "TURKEY",
+      "RUSSIA"
+    ],
+    "promise_agreement": "Turkey promised to hold its fleet in BLA and urged Russia to not move its fleet into the Black Sea to avoid conflict and maintain stability.",
+    "actual_action": "Turkey ordered A BUL R CON.",
+    "impact": "Turkey's order was an army move, not a fleet hold in BLA. While not a direct military attack on Russia's unit, it shows Turkey is not prioritizing the Black Sea hold agreement as suggested in their message. The A BUL R CON move was successful and kept Turkey's unit alive, which is a strategic gain. This betrayal might damage trust with Russia and make future Black Sea engagements more likely.",
+    "interest_score": 6.5
+  },
+  {
+    "phase": "F1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "FRANCE",
+      "ITALY"
+    ],
+    "promise_agreement": "France and Italy discussed and agreed to demilitarize Piedmont, Tyrolia, Gulf of Lyon, and Western Mediterranean through the end of 1902, with one-season notice before entering.",
+    "actual_action": "Italy ordered A TUS H and A VEN H, and F ION-TUN (moving away from the DMZ areas). France ordered A SPA H and F MAO-POR (moving away from the DMZ areas), and A PIC-BEL.",
+    "impact": "Both powers ordered their relevant units away from the agreed-upon DMZ areas, successfully implementing the non-aggression and demilitarization agreement for this turn. This secures their shared border and allows them to focus elsewhere.",
+    "interest_score": 6.0
+  },
+  {
+    "phase": "F1901M",
+    "category": "COLLABORATION",
+    "powers_involved": [
+      "AUSTRIA",
+      "ITALY"
+    ],
+    "promise_agreement": "Italy proposed a Lepanto framework including Austria moving F ALB-GRE with A SER support and Italy supporting this move with A APU, while Italy moves F ION-TUN, A TUS-APU, and A APU Holds (or supports). Austria confirmed F ALB-GRE with A SER support and Italy supporting from Apulia. Both powers confirmed their intention to gain a build and set up for a Spring 1902 Lepanto.",
+    "actual_action": "Austria ordered F ALB - GRE and A SER S F ALB - GRE. Italy ordered F ION - TUN, A TUS H, and A APU H. Italy's actual orders did not include the promised support from Apulia for Austria's move to Greece. Despite Italy's failure to support, Austria's move succeeded.",
+    "impact": "Austria successfully captured Greece for a build. Italy successfully captured Tunis for a build. While Italy did not provide the promised support, Austria's move succeeded anyway, and their core agreement to gain builds and set up for a Lepanto largely held.",
+    "interest_score": 5.5
+  }
+]
