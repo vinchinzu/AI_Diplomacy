@@ -165,6 +165,35 @@ class GameState {
         });
     })
   }
+  
+  /**
+   * Check if a power is present in the current game
+   * @param power The power to check
+   * @returns True if the power is present in the current phase
+   */
+  isPowerInGame = (power: string): boolean => {
+    if (!this.gameData || !this.gameData.phases || this.phaseIndex < 0 || this.phaseIndex >= this.gameData.phases.length) {
+      return false;
+    }
+    
+    const currentPhase = this.gameData.phases[this.phaseIndex];
+    
+    // Check if power has units or centers in the current phase
+    if (currentPhase.state?.units && power in currentPhase.state.units) {
+      return true;
+    }
+    
+    if (currentPhase.state?.centers && power in currentPhase.state.centers) {
+      return true;
+    }
+    
+    // Check if power has relationships defined
+    if (currentPhase.agent_relationships && power in currentPhase.agent_relationships) {
+      return true;
+    }
+    
+    return false;
+  }
   initScene = () => {
     this.scene.background = new THREE.Color(0x87CEEB);
 

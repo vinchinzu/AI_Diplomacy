@@ -7,6 +7,7 @@ import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
 import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
+import { initRelationshipPopup, hideRelationshipPopup, updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase } from "./phase";
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
@@ -38,6 +39,9 @@ function initScene() {
 
   // Initialize standings board
   initStandingsBoard();
+
+  // Initialize relationship popup
+  initRelationshipPopup();
 
   // Load coordinate data, then build the map
   gameState.loadBoardState().then(() => {
@@ -197,7 +201,7 @@ function loadDefaultGameFile() {
   console.log("Loading default game file for debug mode...");
 
   // Path to the default game file
-  const defaultGameFilePath = './default_game.json';
+  const defaultGameFilePath = './default_game2.json';
 
   fetch(defaultGameFilePath)
     .then(response => {
@@ -226,9 +230,10 @@ function loadDefaultGameFile() {
       console.log("Default game file loaded and parsed successfully");
       // Explicitly hide standings board after loading game
       hideStandingsBoard();
-      // Update rotating display with game data
+      // Update rotating display and relationship popup with game data
       if (gameState.gameData) {
         updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+        updateRelationshipPopup();
       }
     })
     .catch(error => {
@@ -302,9 +307,10 @@ fileInput.addEventListener('change', e => {
     loadGameBtnFunction(file);
     // Explicitly hide standings board after loading game
     hideStandingsBoard();
-    // Update rotating display with game data
+    // Update rotating display and relationship popup with game data
     if (gameState.gameData) {
       updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+      updateRelationshipPopup();
     }
   }
 });

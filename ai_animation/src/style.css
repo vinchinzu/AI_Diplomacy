@@ -615,7 +615,130 @@
 
   /* Media query for mobile devices */
   @media (max-width: 768px) {
-    #standings-btn {
+    #standings-btn, #relationships-btn {
       margin-top: 5px;
+    }
+  }
+  
+  /* -----------------
+     Relationship Popup
+     ----------------- */
+  .relationship-popup-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    font-family: "Book Antiqua", Palatino, serif;
+    overflow-y: auto;
+  }
+
+  .relationship-popup-container.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .relationship-header {
+    width: 90%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 20px 0;
+    padding: 10px 20px;
+    background: linear-gradient(90deg, #5a3e2b 0%, #382519 100%);
+    border: 2px solid #2e1c10;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  }
+
+  .relationship-header h2 {
+    margin: 0;
+    color: #f0e6d2;
+    font-size: 28px;
+    text-shadow: 1px 1px 2px #000;
+    letter-spacing: 1px;
+  }
+
+  #relationship-close-btn {
+    background-color: transparent;
+    color: #f0e6d2;
+    font-size: 24px;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  #relationship-close-btn:hover {
+    color: #ff9e54;
+  }
+
+  .relationship-content {
+    width: 90%;
+    max-width: 1200px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .power-relationship-container {
+    background: radial-gradient(ellipse at center, #f7ecd1 0%, #dbc08c 100%);
+    border: 3px solid #4f3b16;
+    border-radius: 8px;
+    padding: 15px;
+    width: 45%;
+    min-width: 400px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+  }
+
+  .power-relationship-container h3 {
+    margin-top: 0;
+    text-align: center;
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+
+  .relationship-chart-container {
+    width: 100%;
+  }
+
+  .no-data-message {
+    padding: 20px;
+    background: radial-gradient(ellipse at center, #f7ecd1 0%, #dbc08c 100%);
+    border: 3px solid #4f3b16;
+    border-radius: 8px;
+    color: #3b2c02;
+    text-align: center;
+    font-size: 18px;
+  }
+  
+  .sample-data-message {
+    padding: 15px;
+    background-color: rgba(255, 255, 200, 0.5);
+    border: 1px dashed #8d5a2b;
+    border-radius: 6px;
+    color: #3b2c02;
+    text-align: center;
+    font-size: 14px;
+    margin: 10px 0;
+  }
+
+  /* Mobile responsiveness for relationship popup */
+  @media (max-width: 900px) {
+    .power-relationship-container {
+      width: 90%;
+      min-width: 300px;
     }
   }

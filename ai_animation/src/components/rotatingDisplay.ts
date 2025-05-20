@@ -27,7 +27,13 @@ const RELATIONSHIP_VALUES = {
   "Unfriendly": -1,
   "Neutral": 0,
   "Friendly": 1,
-  "Ally": 2
+  "Ally": 2,
+  // Add lowercase versions for case-insensitive matching
+  "enemy": -2,
+  "unfriendly": -1,
+  "neutral": 0,
+  "friendly": 1,
+  "ally": 2
 };
 
 // Module state
@@ -43,21 +49,21 @@ let isInitialized = false;
  */
 export function initRotatingDisplay(containerId: string): void {
   containerElement = document.getElementById(containerId);
-  
+
   if (!containerElement) {
     console.error(`Container element with ID "${containerId}" not found`);
     return;
   }
-  
+
   // Set initial display type
   currentDisplayType = DisplayType.CURRENT_STANDINGS;
-  
+
   // Start rotation timer
   startRotationTimer();
-  
+
   // Mark as initialized
   isInitialized = true;
-  
+
   console.log("Rotating display initialized");
 }
 
@@ -69,7 +75,7 @@ function startRotationTimer(): void {
   if (rotationTimer !== null) {
     clearInterval(rotationTimer);
   }
-  
+
   // Set up new rotation timer
   rotationTimer = window.setInterval(() => {
     rotateToNextDisplay();
@@ -85,7 +91,7 @@ function rotateToNextDisplay(): void {
     console.log("Skipping display rotation during active playback");
     return;
   }
-  
+
   // Determine next display type
   switch (currentDisplayType) {
     case DisplayType.CURRENT_STANDINGS:
@@ -98,11 +104,11 @@ function rotateToNextDisplay(): void {
       currentDisplayType = DisplayType.CURRENT_STANDINGS;
       break;
   }
-  
+
   // Update the display with the new type
   if (gameState.gameData) {
     updateRotatingDisplay(
-      gameState.gameData, 
+      gameState.gameData,
       gameState.phaseIndex,
       gameState.currentPower
     );
@@ -117,7 +123,7 @@ function rotateToNextDisplay(): void {
  * @param forceUpdate Whether to force a full update even if the display type hasn't changed
  */
 export function updateRotatingDisplay(
-  gameData: GameSchemaType, 
+  gameData: GameSchemaType,
   currentPhaseIndex: number,
   currentPlayerPower: PowerENUM,
   forceUpdate: boolean = false
@@ -126,24 +132,24 @@ export function updateRotatingDisplay(
     console.warn("Rotating display not initialized");
     return;
   }
-  
+
   // If we're in the middle of playback animations or speech, defer updates for charts
-  if (gameState.isPlaying && 
-      (gameState.messagesPlaying || gameState.isSpeaking || gameState.isAnimating) && 
-      currentDisplayType !== DisplayType.CURRENT_STANDINGS) {
+  if (gameState.isPlaying &&
+    (gameState.messagesPlaying || gameState.isSpeaking || gameState.isAnimating) &&
+    currentDisplayType !== DisplayType.CURRENT_STANDINGS) {
     console.log("Deferring chart update during active playback");
     currentDisplayType = DisplayType.CURRENT_STANDINGS;
   }
-  
+
   // Check if we need to do a full re-render
   if (currentDisplayType !== lastRenderedDisplayType || forceUpdate) {
     // Clear the container
     containerElement.innerHTML = '';
-    
+
     // Apply fade transition
     containerElement.style.transition = 'opacity 0.3s ease-out';
     containerElement.style.opacity = '0';
-    
+
     // Update content after fade-out
     setTimeout(() => {
       // Render the appropriate view based on current display type
@@ -158,10 +164,10 @@ export function updateRotatingDisplay(
           renderRelationshipHistoryChartView(containerElement, gameData, currentPhaseIndex, currentPlayerPower);
           break;
       }
-      
+
       // Fade back in
       containerElement.style.opacity = '1';
-      
+
       // Update last rendered type
       lastRenderedDisplayType = currentDisplayType;
     }, 300);
@@ -175,59 +181,59 @@ export function updateRotatingDisplay(
  * @param currentPhaseIndex The current phase index
  */
 function renderCurrentStandingsView(
-  container: HTMLElement, 
-  gameData: GameSchemaType, 
+  container: HTMLElement,
+  gameData: GameSchemaType,
   currentPhaseIndex: number
 ): void {
   // Get current phase
   const currentPhase = gameData.phases[currentPhaseIndex];
-  
+
   // Get supply center counts
   const centerCounts: Record<string, number> = {};
   const unitCounts: Record<string, number> = {};
-  
+
   // Count supply centers by power
   if (currentPhase.state?.centers) {
     for (const [power, provinces] of Object.entries(currentPhase.state.centers)) {
       centerCounts[power] = provinces.length;
     }
   }
-  
+
   // Count units by power
   if (currentPhase.state?.units) {
     for (const [power, units] of Object.entries(currentPhase.state.units)) {
       unitCounts[power] = units.length;
     }
   }
-  
+
   // Combine all powers from both centers and units
   const allPowers = new Set([
     ...Object.keys(centerCounts),
     ...Object.keys(unitCounts)
   ]);
-  
+
   // Sort powers by supply center count (descending)
   const sortedPowers = Array.from(allPowers).sort((a, b) => {
     return (centerCounts[b] || 0) - (centerCounts[a] || 0);
   });
-  
+
   // Build HTML for view
   let html = `<strong>Council Standings</strong><br/>`;
-  
+
   sortedPowers.forEach(power => {
     const centers = centerCounts[power] || 0;
     const units = unitCounts[power] || 0;
-    
+
     html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
           <span class="power-${power.toLowerCase()}">${power}</span>
           <span>${centers} SCs, ${units} units</span>
         </div>`;
   });
-  
+
   // Add victory condition reminder
   html += `<hr style="border-color: #555; margin: 8px 0;"/>
         <small>Victory: 18 supply centers</small>`;
-  
+
   container.innerHTML = html;
 }
 
@@ -238,19 +244,19 @@ function renderCurrentStandingsView(
  * @param currentPhaseIndex The current phase index
  */
 function renderSCHistoryChartView(
-  container: HTMLElement, 
-  gameData: GameSchemaType, 
+  container: HTMLElement,
+  gameData: GameSchemaType,
   currentPhaseIndex: number
 ): void {
   // Create header
   const header = document.createElement('div');
   header.innerHTML = `<strong>Supply Center History</strong>`;
   container.appendChild(header);
-  
+
   // Prepare data for the chart - only up to current phase
   const scHistory = [];
   const allPowers = new Set<string>();
-  
+
   // Iterate through phases up to and including currentPhaseIndex
   for (let i = 0; i <= currentPhaseIndex; i++) {
     const phase = gameData.phases[i];
@@ -258,7 +264,7 @@ function renderSCHistoryChartView(
       phaseName: phase.name,
       phaseIndex: i
     };
-    
+
     // Count supply centers for each power
     if (phase.state?.centers) {
       for (const [power, provinces] of Object.entries(phase.state.centers)) {
@@ -266,13 +272,13 @@ function renderSCHistoryChartView(
         allPowers.add(power);
       }
     }
-    
+
     scHistory.push(phaseData);
   }
-  
+
   // Convert allPowers Set to Array for easier iteration
   const powers = Array.from(allPowers);
-  
+
   // Find the maximum SC count across all phases and powers
   let maxSCCount = 0;
   for (const phaseData of scHistory) {
@@ -283,38 +289,38 @@ function renderSCHistoryChartView(
       }
     }
   }
-  
+
   // Set a minimum max count of 18 (victory condition)
   maxSCCount = Math.max(maxSCCount, 18);
-  
+
   // Create SVG element
   const svgWidth = container.clientWidth;
   const svgHeight = 150;
   const margin = { top: 10, right: 10, bottom: 20, left: 25 };
   const width = svgWidth - margin.left - margin.right;
   const height = svgHeight - margin.top - margin.bottom;
-  
+
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("width", "100%");
   svg.setAttribute("height", `${svgHeight}px`);
   svg.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
   svg.style.overflow = "visible";
-  
+
   // Create SVG group for the chart content with margins
   const chart = document.createElementNS("http://www.w3.org/2000/svg", "g");
   chart.setAttribute("transform", `translate(${margin.left},${margin.top})`);
   svg.appendChild(chart);
-  
+
   // Create scales
   // X scale: map phase index to x position, handle case where there's only one phase
   const xScale = (index: number) => {
     const denominator = Math.max(1, scHistory.length - 1); // Avoid division by zero
     return margin.left + (index / denominator) * width;
   };
-  
+
   // Y scale: map SC count to y position (inverted, 0 at bottom)
   const yScale = (count: number) => margin.top + height - (count / maxSCCount) * height;
-  
+
   // Draw axes
   // X-axis
   const xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -325,7 +331,7 @@ function renderSCHistoryChartView(
   xAxis.setAttribute("stroke", "#8d5a2b");
   xAxis.setAttribute("stroke-width", "1");
   chart.appendChild(xAxis);
-  
+
   // Y-axis
   const yAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
   yAxis.setAttribute("x1", `${margin.left}`);
@@ -335,7 +341,7 @@ function renderSCHistoryChartView(
   yAxis.setAttribute("stroke", "#8d5a2b");
   yAxis.setAttribute("stroke-width", "1");
   chart.appendChild(yAxis);
-  
+
   // Y-axis ticks and labels
   const yTicks = [0, 5, 10, 15, 18];
   for (const tick of yTicks) {
@@ -348,7 +354,7 @@ function renderSCHistoryChartView(
     tickLine.setAttribute("stroke", "#8d5a2b");
     tickLine.setAttribute("stroke-width", "1");
     chart.appendChild(tickLine);
-    
+
     // Tick label
     const tickLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     tickLabel.setAttribute("x", `${margin.left - 8}`);
@@ -359,33 +365,33 @@ function renderSCHistoryChartView(
     tickLabel.textContent = tick.toString();
     chart.appendChild(tickLabel);
   }
-  
+
   // Draw lines for each power
   for (const power of powers) {
     // Create path for this power
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    
+
     // Generate path data
     let pathData = "";
     for (let i = 0; i < scHistory.length; i++) {
       const scCount = scHistory[i][power] || 0;
       const x = xScale(i);
       const y = yScale(scCount);
-      
+
       if (i === 0) {
         pathData += `M ${x} ${y}`;
       } else {
         pathData += ` L ${x} ${y}`;
       }
     }
-    
+
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", POWER_COLORS[power] || "#000000");
     path.setAttribute("stroke-width", "2");
     path.setAttribute("fill", "none");
     chart.appendChild(path);
   }
-  
+
   // Add a vertical line to indicate current phase
   const currentPhaseX = xScale(currentPhaseIndex);
   const currentPhaseLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -397,14 +403,14 @@ function renderSCHistoryChartView(
   currentPhaseLine.setAttribute("stroke-width", "1");
   currentPhaseLine.setAttribute("stroke-dasharray", "3,3");
   chart.appendChild(currentPhaseLine);
-  
+
   // Add legend
   const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
   legendGroup.setAttribute("transform", `translate(${margin.left}, ${margin.top + height + 10})`);
-  
+
   let legendX = 0;
   const legendItemWidth = width / powers.length;
-  
+
   for (const power of powers) {
     // Legend color box
     const legendBox = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -414,7 +420,7 @@ function renderSCHistoryChartView(
     legendBox.setAttribute("height", "10");
     legendBox.setAttribute("fill", POWER_COLORS[power] || "#000000");
     legendGroup.appendChild(legendBox);
-    
+
     // Legend text
     const legendText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     legendText.setAttribute("x", `${legendX + 15}`);
@@ -423,15 +429,15 @@ function renderSCHistoryChartView(
     legendText.setAttribute("fill", "#3b2c02");
     legendText.textContent = power;
     legendGroup.appendChild(legendText);
-    
+
     legendX += legendItemWidth;
   }
-  
+
   chart.appendChild(legendGroup);
-  
+
   // Add the SVG to the container
   container.appendChild(svg);
-  
+
   // Add phase info
   const phaseInfo = document.createElement('div');
   phaseInfo.style.fontSize = '12px';
@@ -447,9 +453,9 @@ function renderSCHistoryChartView(
  * @param currentPhaseIndex The current phase index
  * @param currentPlayerPower The power the current player is controlling
  */
-function renderRelationshipHistoryChartView(
-  container: HTMLElement, 
-  gameData: GameSchemaType, 
+export function renderRelationshipHistoryChartView(
+  container: HTMLElement,
+  gameData: GameSchemaType,
   currentPhaseIndex: number,
   currentPlayerPower: PowerENUM
 ): void {
@@ -457,11 +463,11 @@ function renderRelationshipHistoryChartView(
   const header = document.createElement('div');
   header.innerHTML = `<strong>Diplomatic Relations</strong> <span class="power-${currentPlayerPower.toLowerCase()}">(${currentPlayerPower})</span>`;
   container.appendChild(header);
-  
+
   // Prepare data for the chart
   const relationshipHistory = [];
   const otherPowers = new Set<string>();
-  
+
   // Iterate through all phases to collect relationship data
   for (let i = 0; i < gameData.phases.length; i++) {
     const phase = gameData.phases[i];
@@ -469,64 +475,72 @@ function renderRelationshipHistoryChartView(
       phaseName: phase.name,
       phaseIndex: i
     };
-    
+
     // Check if agent_relationships exists and has data for current player
-    if (phase.agent_relationships && 
-        phase.agent_relationships[currentPlayerPower]) {
-      
+    if (phase.agent_relationships &&
+      phase.agent_relationships[currentPlayerPower]) {
+
+      console.log(`Phase ${i} (${phase.name}): Found relationships for ${currentPlayerPower}`,
+        phase.agent_relationships[currentPlayerPower]);
+
       const relationships = phase.agent_relationships[currentPlayerPower];
-      
+
       for (const [power, relation] of Object.entries(relationships)) {
         if (power !== currentPlayerPower) {
           // Convert relationship string to numeric value
           let relationValue = RELATIONSHIP_VALUES[relation as keyof typeof RELATIONSHIP_VALUES];
-          
+
           // Default to neutral if the relationship string is not recognized
           if (relationValue === undefined) {
             relationValue = 0;
             console.warn(`Unknown relationship value: ${relation}, defaulting to Neutral (0)`);
           }
-          
+
+          console.log(`  Relationship ${currentPlayerPower} -> ${power}: ${relation} (${relationValue})`);
+
           phaseData[power] = relationValue;
           otherPowers.add(power);
         }
       }
     }
-    
+
     relationshipHistory.push(phaseData);
   }
-  
+
+  console.log("Collected relationship history:", relationshipHistory);
+  console.log("Other powers found:", Array.from(otherPowers));
+
   // Convert otherPowers Set to Array for easier iteration
   const powers = Array.from(otherPowers);
-  
+
   // Create SVG element
   const svgWidth = container.clientWidth;
   const svgHeight = 150;
   const margin = { top: 10, right: 10, bottom: 20, left: 25 };
   const width = svgWidth - margin.left - margin.right;
   const height = svgHeight - margin.top - margin.bottom;
-  
+
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("width", "100%");
   svg.setAttribute("height", `${svgHeight}px`);
   svg.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
   svg.style.overflow = "visible";
-  
+
   // Create SVG group for the chart content with margins
   const chart = document.createElementNS("http://www.w3.org/2000/svg", "g");
   chart.setAttribute("transform", `translate(${margin.left},${margin.top})`);
   svg.appendChild(chart);
-  
+
   // Create scales
   // X scale: map phase index to x position
   const xScale = (index: number) => {
     const denominator = Math.max(1, relationshipHistory.length - 1); // Avoid division by zero
     return margin.left + (index / denominator) * width;
   };
-  
+
   // Y scale: map relationship value (-2 to 2) to y position
   const yScale = (value: number) => margin.top + height / 2 - (value / 2) * (height / 2);
-  
+
   // Draw axes
   // X-axis (middle, represents neutral)
   const xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -537,7 +551,7 @@ function renderRelationshipHistoryChartView(
   xAxis.setAttribute("stroke", "#8d5a2b");
   xAxis.setAttribute("stroke-width", "1");
   chart.appendChild(xAxis);
-  
+
   // Y-axis
   const yAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
   yAxis.setAttribute("x1", `${margin.left}`);
@@ -547,15 +561,15 @@ function renderRelationshipHistoryChartView(
   yAxis.setAttribute("stroke", "#8d5a2b");
   yAxis.setAttribute("stroke-width", "1");
   chart.appendChild(yAxis);
-  
+
   // Y-axis ticks and labels
   const yTicks = [-2, -1, 0, 1, 2];
   const yTickLabels = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"];
-  
+
   for (let i = 0; i < yTicks.length; i++) {
     const tick = yTicks[i];
     const label = yTickLabels[i];
-    
+
     // Tick line
     const tickLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
     tickLine.setAttribute("x1", `${margin.left - 5}`);
@@ -565,7 +579,7 @@ function renderRelationshipHistoryChartView(
     tickLine.setAttribute("stroke", "#8d5a2b");
     tickLine.setAttribute("stroke-width", "1");
     chart.appendChild(tickLine);
-    
+
     // Tick label
     const tickLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     tickLabel.setAttribute("x", `${margin.left - 8}`);
@@ -576,7 +590,7 @@ function renderRelationshipHistoryChartView(
     tickLabel.textContent = label;
     chart.appendChild(tickLabel);
   }
-  
+
   // Draw horizontal grid lines
   for (const tick of yTicks) {
     const gridLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -589,22 +603,28 @@ function renderRelationshipHistoryChartView(
     gridLine.setAttribute("stroke-dasharray", "3,3");
     chart.appendChild(gridLine);
   }
-  
+
   // Draw lines for each power
   for (const power of powers) {
+    console.log(`Drawing line for power: ${power}`);
+
     // Create path for this power
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    
+
     // Generate path data
     let pathData = "";
     let hasData = false;
-    
+    let dataPoints = 0;
+
     for (let i = 0; i < relationshipHistory.length; i++) {
       if (relationshipHistory[i][power] !== undefined) {
         const relationValue = relationshipHistory[i][power];
         const x = xScale(i);
         const y = yScale(relationValue);
-        
+
+        console.log(`  Point ${i}: (${x}, ${y}) for value ${relationValue}`);
+        dataPoints++;
+
         if (!hasData) {
           pathData += `M ${x} ${y}`;
           hasData = true;
@@ -613,16 +633,22 @@ function renderRelationshipHistoryChartView(
         }
       }
     }
-    
+
+    console.log(`  Total data points for ${power}: ${dataPoints}, has data: ${hasData}`);
+    console.log(`  Path data: ${pathData.length > 100 ? pathData.substring(0, 100) + '...' : pathData}`);
+
     if (hasData) {
       path.setAttribute("d", pathData);
       path.setAttribute("stroke", POWER_COLORS[power] || "#000000");
       path.setAttribute("stroke-width", "2");
       path.setAttribute("fill", "none");
       chart.appendChild(path);
+      console.log(`  Added path to chart for ${power}`);
+    } else {
+      console.log(`  No path data for ${power}, not adding to chart`);
     }
   }
-  
+
   // Add a vertical line to indicate current phase
   const currentPhaseX = xScale(currentPhaseIndex);
   const currentPhaseLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -634,14 +660,14 @@ function renderRelationshipHistoryChartView(
   currentPhaseLine.setAttribute("stroke-width", "1");
   currentPhaseLine.setAttribute("stroke-dasharray", "3,3");
   chart.appendChild(currentPhaseLine);
-  
+
   // Add legend
   const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
   legendGroup.setAttribute("transform", `translate(${margin.left}, ${margin.top + height + 10})`);
-  
+
   let legendX = 0;
   const legendItemWidth = width / powers.length;
-  
+
   for (const power of powers) {
     // Legend color box
     const legendBox = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -651,7 +677,7 @@ function renderRelationshipHistoryChartView(
     legendBox.setAttribute("height", "10");
     legendBox.setAttribute("fill", POWER_COLORS[power] || "#000000");
     legendGroup.appendChild(legendBox);
-    
+
     // Legend text
     const legendText = document.createElementNS("http://www.w3.org/2000/svg", "text");
     legendText.setAttribute("x", `${legendX + 15}`);
@@ -660,15 +686,15 @@ function renderRelationshipHistoryChartView(
     legendText.setAttribute("fill", "#3b2c02");
     legendText.textContent = power;
     legendGroup.appendChild(legendText);
-    
+
     legendX += legendItemWidth;
   }
-  
+
   chart.appendChild(legendGroup);
-  
+
   // Add the SVG to the container
   container.appendChild(svg);
-  
+
   // Add phase info
   const phaseInfo = document.createElement('div');
   phaseInfo.style.fontSize = '12px';
