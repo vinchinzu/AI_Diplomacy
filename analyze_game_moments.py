@@ -121,7 +121,7 @@ class GameAnalyzer:
                 except (json.JSONDecodeError, TypeError):
                     # If JSON parsing fails, use a simplified version or skip
                     if raw_response and raw_response.lower() not in ['null', 'nan', 'none']:
-                        diary_entries[phase][power] = f"Raw diary: {raw_response[:300]}..."
+                        diary_entries[phase][power] = f"Raw diary: {raw_response}"
                     
             logger.info(f"Successfully parsed {len(diary_entries)} phases with diary entries")
             return diary_entries
@@ -154,7 +154,7 @@ class GameAnalyzer:
                                     diary_entries[phase][power] = diary_content
                                 except (json.JSONDecodeError, TypeError):
                                     if raw_response and raw_response != "null":
-                                        diary_entries[phase][power] = f"Raw diary: {raw_response[:300]}..."
+                                        diary_entries[phase][power] = f"Raw diary: {raw_response}"
                     except Exception as e:
                         continue  # Skip problematic rows
                         
@@ -416,7 +416,7 @@ IMPORTANT POWER DIARIES (internal thoughts of each power):
             narrative_prompt += f"Phase {phase}:\n"
             for power, diary in sorted(self.diary_entries[phase].items()):
                 power_with_model = self.format_power_with_model(power)
-                diary_excerpt = diary[:150] + "..." if len(diary) > 150 else diary
+                diary_excerpt = diary  # Display full diary content
                 narrative_prompt += f"- {power_with_model}: {diary_excerpt}\n"
             narrative_prompt += "\n"
             
@@ -426,7 +426,7 @@ IMPORTANT POWER DIARIES (internal thoughts of each power):
                 narrative_prompt += f"Phase {phase}:\n"
                 for power, diary in sorted(self.diary_entries[phase].items()):
                     power_with_model = self.format_power_with_model(power)
-                    diary_excerpt = diary[:150] + "..." if len(diary) > 150 else diary
+                    diary_excerpt = diary  # Display full diary content
                     narrative_prompt += f"- {power_with_model}: {diary_excerpt}\n"
                 narrative_prompt += "\n"
             
@@ -554,7 +554,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
             for power in moment.powers_involved:
                 if power in moment.diary_context:
                     power_with_model = self.format_power_with_model(power)
-                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power][:150]}...")
+                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power]}")
                     report_lines.append("")
                     
             report_lines.append("")
@@ -589,7 +589,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
             for power in moment.powers_involved:
                 if power in moment.diary_context:
                     power_with_model = self.format_power_with_model(power)
-                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power][:150]}...")
+                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power]}")
                     report_lines.append("")
                     
             report_lines.append("")
@@ -624,7 +624,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
             for power in moment.powers_involved:
                 if power in moment.diary_context:
                     power_with_model = self.format_power_with_model(power)
-                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power][:150]}...")
+                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power]}")
                     report_lines.append("")
                     
             report_lines.append("")
@@ -659,7 +659,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
             for power in moment.powers_involved:
                 if power in moment.diary_context:
                     power_with_model = self.format_power_with_model(power)
-                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power][:150]}...")
+                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power]}")
                     report_lines.append("")
                     
             report_lines.append("")
@@ -694,7 +694,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
             for power in moment.powers_involved:
                 if power in moment.diary_context:
                     power_with_model = self.format_power_with_model(power)
-                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power][:150]}...")
+                    report_lines.append(f"_{power_with_model} Diary:_ {moment.diary_context[power]}")
                     report_lines.append("")
                     
             report_lines.append("")
@@ -730,7 +730,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
             # Keep diary context but limit size
             if 'diary_context' in moment_dict:
                 for power, diary in moment_dict['diary_context'].items():
-                    moment_dict['diary_context'][power] = diary[:200] + "..." if len(diary) > 200 else diary
+                    moment_dict['diary_context'][power] = diary  # Include full diary content
             moments_data.append(moment_dict)
         
         # Create the final data structure with metadata
