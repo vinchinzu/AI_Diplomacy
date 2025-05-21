@@ -4,6 +4,7 @@ from typing import List, Dict, Optional
 import json
 import re
 import json_repair
+import json5  # More forgiving JSON parser
 
 # Assuming BaseModelClient is importable from clients.py in the same directory
 from .clients import BaseModelClient, load_model_client 
@@ -99,44 +100,66 @@ class DiplomacyAgent:
 
     def _extract_json_from_text(self, text: str) -> dict:
         """Extract and parse JSON from text, handling common LLM response formats."""
+        if not text or not text.strip():
+            logger.warning(f"[{self.power_name}] Empty text provided to JSON extractor")
+            return {}
+            
+        # Store original text for debugging
+        original_text = text
+        
         # Preprocessing: Normalize common formatting issues
         # This helps with the KeyError: '\n  "negotiation_summary"' problem
         text = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', text)  # Remove newlines before keys
-        # Also fix the specific pattern that's causing trouble
-        text = text.replace('\n  "negotiation_summary"', '"negotiation_summary"')
-        text = text.replace('\n  "relationship_updates"', '"relationship_updates"')
-        text = text.replace('\n  "updated_relationships"', '"updated_relationships"')
+        # Fix specific patterns that cause trouble
+        problematic_patterns = [
+            'negotiation_summary', 'relationship_updates', 'updated_relationships',
+            'order_summary', 'goals', 'relationships', 'intent'
+        ]
+        for pattern in problematic_patterns:
+            text = re.sub(fr'\n\s*"{pattern}"', f'"{pattern}"', text)
         
         # Try different patterns to extract JSON
-        # 1. Try to find JSON wrapped in markdown code blocks
+        # Order matters - try most specific patterns first
         patterns = [
-            # New: More robust pattern allowing optional whitespace and 'json'
-            r"\s*```(?:json)?\s*\n(.*?)\n\s*```\s*",
-            r"```json\n(.*?)\n```",  # Markdown JSON block
-            r"```\n(.*?)\n```",      # Generic markdown block
-            r"`(.*?)`",              # Inline code block
+            # Special handling for ```{{ ... }}``` format that some models use
+            r"```\s*\{\{\s*(.*?)\s*\}\}\s*```",
+            # JSON in code blocks with or without language specifier
+            r"```(?:json)?\s*\n(.*?)\n\s*```",
+            # JSON after "PARSABLE OUTPUT:" or similar
+            r"PARSABLE OUTPUT:\s*(\{.*?\})",
+            r"JSON:\s*(\{.*?\})",
+            # Any JSON object
+            r"(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})",
+            # Simple JSON in backticks
+            r"`(\{.*?\})`",
         ]
         
-        for pattern in patterns:
+        # Try each pattern
+        for pattern_idx, pattern in enumerate(patterns):
             matches = re.findall(pattern, text, re.DOTALL)
             if matches:
-                # Try each match until one parses successfully
-                for match in matches:
+                for match_idx, match in enumerate(matches):
+                    # Multiple attempts with different parsers
+                    json_text = match.strip()
+                    
+                    # Attempt 1: Standard JSON after basic cleaning
                     try:
-                        # Additional preprocessing for common formatting issues
-                        clean_match = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', match)  # Remove newlines before JSON keys
-                        clean_match = re.sub(r',\s*}', '}', clean_match)  # Remove trailing commas
-                        return json.loads(clean_match) # First attempt with the cleaned match
-                    except json.JSONDecodeError as e_initial_markdown_parse:
-                        # If initial parsing of the markdown-extracted block fails, try surgical cleaning
+                        cleaned = self._clean_json_text(json_text)
+                        result = json.loads(cleaned)
+                        logger.debug(f"[{self.power_name}] Successfully parsed JSON with pattern {pattern_idx}, match {match_idx}")
+                        return result
+                    except json.JSONDecodeError as e_initial:
+                        logger.debug(f"[{self.power_name}] Standard JSON parse failed: {e_initial}")
+                        
+                        # Attempt 1.5: Try surgical cleaning with original patterns if basic cleaning failed
                         try:
-                            # Apply several different cleaning patterns to fix common LLM-generated JSON issues
-                            cleaned_match_candidate = match
+                            # Apply several different cleaning patterns from the old method
+                            cleaned_match_candidate = json_text
                             
                             # Pattern 1: Removes 'Sentence.' when followed by ',', '}', or ']'
                             cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', cleaned_match_candidate)
                             
-                            # Pattern 2: Removes 'Sentence.' when it's at the very end, before the final '}' of the current match scope
+                            # Pattern 2: Removes 'Sentence.' when it's at the very end, before the final '}' of the current scope
                             cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=\s*\}\s*$)', '', cleaned_match_candidate)
                             
                             # Pattern 3: Fix for newlines and spaces before JSON keys (common problem with LLMs)
@@ -146,83 +169,110 @@ class DiplomacyAgent:
                             cleaned_match_candidate = re.sub(r',\s*}', '}', cleaned_match_candidate)
                             
                             # Pattern 5: Handle specific known problematic patterns
-                            cleaned_match_candidate = cleaned_match_candidate.replace('\n  "negotiation_summary"', '"negotiation_summary"')
-                            cleaned_match_candidate = cleaned_match_candidate.replace('\n  "relationship_updates"', '"relationship_updates"')
-                            cleaned_match_candidate = cleaned_match_candidate.replace('\n  "updated_relationships"', '"updated_relationships"')
+                            for pattern in problematic_patterns:
+                                cleaned_match_candidate = cleaned_match_candidate.replace(f'\n  "{pattern}"', f'"{pattern}"')
                             
                             # Pattern 6: Fix quotes - replace single quotes with double quotes for keys
                             cleaned_match_candidate = re.sub(r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate)
 
-                            if cleaned_match_candidate != match: # Log if actual cleaning happened
-                                logger.debug(f"Surgically cleaned JSON candidate. Original snippet: '{match[:150]}...', Cleaned snippet: '{cleaned_match_candidate[:150]}...'")
-                                return json.loads(cleaned_match_candidate) # Second attempt with cleaned string
-                            else:
-                                # If no surgical cleaning was applicable or changed the string, re-raise to fall through
-                                # or let the original loop continue if there are more matches from findall.
-                                # This 'continue' is for the inner 'for match in matches:' loop.
-                                logger.debug(f"Surgical cleaning regex made no changes to: {match[:100]}... Original error: {e_initial_markdown_parse}")
-                                continue # Try next match from re.findall(pattern, text, re.DOTALL)
-                        except json.JSONDecodeError as e_cleaned:
-                            # This error means cleaning happened, but the result was still not valid JSON.
-                            logger.warning(f"Surgical cleaning applied but did not result in valid JSON. Cleaned error: {e_cleaned}. Original snippet: {match[:150]}... Initial error: {e_initial_markdown_parse}")
-                            # Continue to the next match from re.findall or next pattern
-                            continue
-        
-        # 2. Try to find JSON between braces
-        try:
-            start = text.find('{')
-            end = text.rfind('}') + 1
-            if start != -1 and end > start:
-                return json.loads(text[start:end])
-        except json.JSONDecodeError:
-            pass
-        
-        # 3. Aggressively clean the string and try again
-        # Remove common non-JSON text that LLMs might add
-        cleaned_text = re.sub(r'[^{}[\]"\',:.\d\w\s_-]', '', text)
-        try:
-            start = cleaned_text.find('{')
-            end = cleaned_text.rfind('}') + 1
-            if start != -1 and end > start:
-                return json.loads(cleaned_text[start:end])
-        except json.JSONDecodeError:
-            pass
-        
-        # 4. Repair common JSON issues and try again
-        try:
-            # Replace single quotes with double quotes (common LLM error)
-            text_fixed = re.sub(r"'([^']*)':", r'"\1":', text)
-            text_fixed = re.sub(r': *\'([^\']*)\'', r': "\1"', text_fixed)
-            
-            start = text_fixed.find('{')
-            end = text_fixed.rfind('}') + 1
-            if start != -1 and end > start:
-                return json.loads(text_fixed[start:end])
-        except json.JSONDecodeError:
-            pass
-
-        # 4.5. Try to extract JSON from ```json ``` blocks
-        try:
-            # Find all ```json ``` blocks
-            json_blocks = re.findall(r'```json\s*\n(.*?)\n\s*```', text, re.DOTALL)
-            if json_blocks:
-                # Try to parse the first block
-                for block in json_blocks:
+                            # Only try parsing if cleaning actually changed something
+                            if cleaned_match_candidate != json_text:
+                                logger.debug(f"[{self.power_name}] Surgical cleaning applied. Attempting to parse modified JSON.")
+                                return json.loads(cleaned_match_candidate)
+                        except json.JSONDecodeError as e_surgical:
+                            logger.debug(f"[{self.power_name}] Surgical cleaning didn't work: {e_surgical}")
+                    
+                    # Attempt 2: json5 (more forgiving)
                     try:
-                        return json.loads(block)
-                    except json.JSONDecodeError:
-                        pass
-        except Exception as e_json_extract:
-            logger.error(f"Failed to extract JSON from ```json ``` blocks: {e_json_extract}")
+                        result = json5.loads(json_text)
+                        logger.debug(f"[{self.power_name}] Successfully parsed with json5")
+                        return result
+                    except Exception as e:
+                        logger.debug(f"[{self.power_name}] json5 parse failed: {e}")
+                    
+                    # Attempt 3: json-repair
+                    try:
+                        result = json_repair.loads(json_text)
+                        logger.debug(f"[{self.power_name}] Successfully parsed with json-repair")
+                        return result
+                    except Exception as e:
+                        logger.debug(f"[{self.power_name}] json-repair failed: {e}")
         
-        # 5. Last resort: try json-repair on the original text
+        # Fallback: Try to find ANY JSON-like structure
         try:
-            logger.debug(f"Attempting to repair JSON with json-repair for text: {text[:200]}...")
-            return json_repair.loads(text)
-        except Exception as e_repair: # Catching a broader exception as json_repair might raise different errors
-            logger.error(f"json-repair failed to parse JSON. Error: {e_repair}. Original text snippet: {text[:200]}...")
-            # If all attempts fail, including json-repair, raise the original-style error
-            raise json.JSONDecodeError("Could not extract valid JSON from LLM response after all attempts including json-repair", text, 0)
+            # Find the first { and last }
+            start = text.find('{')
+            end = text.rfind('}') + 1  # Include the closing brace
+            if start != -1 and end > start:
+                potential_json = text[start:end]
+                
+                # Try all parsers on this extracted text
+                for parser_name, parser_func in [
+                    ("json", json.loads),
+                    ("json5", json5.loads),
+                    ("json_repair", json_repair.loads)
+                ]:
+                    try:
+                        cleaned = self._clean_json_text(potential_json) if parser_name == "json" else potential_json
+                        result = parser_func(cleaned)
+                        logger.debug(f"[{self.power_name}] Fallback parse succeeded with {parser_name}")
+                        return result
+                    except Exception as e:
+                        logger.debug(f"[{self.power_name}] Fallback {parser_name} failed: {e}")
+                
+                # If standard parsers failed, try aggressive cleaning
+                try:
+                    # Remove common non-JSON text that LLMs might add
+                    cleaned_text = re.sub(r'[^{}[\]"\',:.\d\w\s_-]', '', potential_json)
+                    # Replace single quotes with double quotes (common LLM error)
+                    text_fixed = re.sub(r"'([^']*)':", r'"\1":', cleaned_text)
+                    text_fixed = re.sub(r': *\'([^\']*)\'', r': "\1"', text_fixed)
+                    
+                    result = json.loads(text_fixed)
+                    logger.debug(f"[{self.power_name}] Aggressive cleaning worked")
+                    return result
+                except json.JSONDecodeError:
+                    pass
+                    
+        except Exception as e:
+            logger.debug(f"[{self.power_name}] Fallback extraction failed: {e}")
+        
+        # Last resort: Try json-repair on the entire text
+        try:
+            result = json_repair.loads(text)
+            logger.warning(f"[{self.power_name}] Last resort json-repair succeeded")
+            return result
+        except Exception as e:
+            logger.error(f"[{self.power_name}] All JSON extraction attempts failed. Original text: {original_text[:500]}...")
+            return {}
+    
+    def _clean_json_text(self, text: str) -> str:
+        """Clean common JSON formatting issues from LLM responses."""
+        if not text:
+            return text
+            
+        # Remove trailing commas
+        text = re.sub(r',\s*}', '}', text)
+        text = re.sub(r',\s*]', ']', text)
+        
+        # Fix newlines before JSON keys
+        text = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', text)
+        
+        # Replace single quotes with double quotes for keys
+        text = re.sub(r"'(\w+)'\s*:", r'"\1":', text)
+        
+        # Remove comments (if any)
+        text = re.sub(r'//.*$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+        
+        # Fix unescaped quotes in values (basic attempt)
+        # This is risky but sometimes helps with simple cases
+        text = re.sub(r':\s*"([^"]*)"([^",}\]]+)"', r': "\1\2"', text)
+        
+        # Remove any BOM or zero-width spaces
+        text = text.replace('\ufeff', '').replace('\u200b', '')
+        
+        return text.strip()
 
 
     def add_journal_entry(self, entry: str):
@@ -321,7 +371,16 @@ class DiplomacyAgent:
                 consolidation_client = self.client  # Fallback to agent's own client
                 logger.warning(f"[{self.power_name}] Using agent's own model for consolidation instead of Gemini Flash")
             
-            raw_response = await consolidation_client.generate_response(prompt)
+            # Use the enhanced wrapper with retry logic
+            from .utils import run_llm_and_log
+            raw_response = await run_llm_and_log(
+                client=consolidation_client,
+                prompt=prompt,
+                log_file_path=log_file_path,
+                power_name=self.power_name,
+                phase=game.current_short_phase,
+                response_type='diary_consolidation',
+            )
             
             if raw_response and raw_response.strip():
                 consolidated_entry = raw_response.strip()
@@ -346,9 +405,9 @@ class DiplomacyAgent:
                 # Create the new consolidated summary
                 consolidated_summary = f"[CONSOLIDATED {year}] {consolidated_entry}"
                 
-                # Sort consolidated entries by year (descending) to keep most recent consolidated years at top
+                # Sort consolidated entries by year (ascending) to keep historical order
                 consolidated_entries.append(consolidated_summary)
-                consolidated_entries.sort(key=lambda x: x[14:18], reverse=True)  # Extract year from "[CONSOLIDATED YYYY]"
+                consolidated_entries.sort(key=lambda x: x[14:18], reverse=False)  # Extract year from "[CONSOLIDATED YYYY]"
                 
                 # Rebuild diary with consolidated entries at the top
                 self.private_diary = consolidated_entries + regular_entries
@@ -485,7 +544,7 @@ class DiplomacyAgent:
                 log_file_path=log_file_path, # Pass the main log file path
                 power_name=self.power_name,
                 phase=game.current_short_phase,
-                response_type='negotiation_diary_raw' # For run_llm_and_log context
+                response_type='negotiation_diary_raw', # For run_llm_and_log context
             )
 
             logger.debug(f"[{self.power_name}] Raw negotiation diary response: {raw_response[:300]}...")
@@ -651,8 +710,7 @@ class DiplomacyAgent:
                 log_file_path=log_file_path,
                 power_name=self.power_name,
                 phase=game.current_short_phase,
-                response_type='order_diary'
-                # raw_input_prompt=prompt, # REMOVED from run_llm_and_log
+                response_type='order_diary',
             )
 
             success_status = "FALSE"
@@ -790,7 +848,7 @@ class DiplomacyAgent:
                 log_file_path=log_file_path,
                 power_name=self.power_name,
                 phase=game.current_short_phase,
-                response_type='phase_result_diary'
+                response_type='phase_result_diary',
             )
             
             if raw_response and raw_response.strip():
@@ -899,6 +957,7 @@ class DiplomacyAgent:
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
             # Use the client's raw generation capability - AWAIT the async call USING THE WRAPPER
+            
             response = await run_llm_and_log(
                 client=self.client,
                 prompt=prompt,
@@ -917,6 +976,12 @@ class DiplomacyAgent:
                 try:
                     update_data = self._extract_json_from_text(response)
                     logger.debug(f"[{power_name}] Successfully parsed JSON: {update_data}")
+                    
+                    # Ensure update_data is a dictionary
+                    if not isinstance(update_data, dict):
+                        logger.warning(f"[{power_name}] Extracted data is not a dictionary, type: {type(update_data)}")
+                        update_data = {}
+                    
                     # Check if essential data ('updated_goals' or 'goals') is present AND is a list (for goals)
                     # For relationships, check for 'updated_relationships' or 'relationships' AND is a dict.
                     # Consider it TRUE if at least one of the primary data structures (goals or relationships) is present and correctly typed.
@@ -934,6 +999,11 @@ class DiplomacyAgent:
                 except json.JSONDecodeError as e:
                     logger.error(f"[{power_name}] Failed to parse JSON response for state update: {e}. Raw response: {response}")
                     log_entry_response_type = 'state_update_json_error' 
+                    # log_entry_success remains "FALSE"
+                except Exception as e:
+                    logger.error(f"[{power_name}] Unexpected error parsing state update: {e}")
+                    log_entry_response_type = 'state_update_unexpected_error'
+                    update_data = {}
                     # log_entry_success remains "FALSE"
             else: # response was None or empty/whitespace
                 logger.error(f"[{power_name}] No valid response (None or empty) received from LLM for state update.")

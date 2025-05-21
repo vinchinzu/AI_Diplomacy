@@ -3,7 +3,7 @@ import json
 from json import JSONDecodeError
 import re
 import logging
-import asyncio  # Added for async operations
+import ast  # For literal_eval in JSON fallback parsing
 
 from typing import List, Dict, Optional, Any, Tuple
 from dotenv import load_dotenv
@@ -745,6 +745,7 @@ class GeminiClient(BaseModelClient):
             response = await self.client.generate_content_async(
                 contents=full_prompt,
             )
+            
             if not response or not response.text:
                 logger.warning(
                     f"[{self.model_name}] Empty Gemini generate_response. Returning empty."
@@ -765,7 +766,8 @@ class DeepSeekClient(BaseModelClient):
         super().__init__(model_name)
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         self.client = AsyncDeepSeekOpenAI(
-            api_key=self.api_key, base_url="https://api.deepseek.com/"
+            api_key=self.api_key, 
+            base_url="https://api.deepseek.com/"
         )
 
     async def generate_response(self, prompt: str) -> str:
@@ -828,7 +830,7 @@ class OpenRouterClient(BaseModelClient):
         logger.debug(f"[{self.model_name}] Initialized OpenRouter client")
 
     async def generate_response(self, prompt: str) -> str:
-        """Generate a response using OpenRouter."""
+        """Generate a response using OpenRouter with robust error handling."""
         try:
             # Append the call to action to the user's prompt
             prompt_with_cta = prompt + "\n\nPROVIDE YOUR RESPONSE BELOW:"
@@ -856,8 +858,19 @@ class OpenRouterClient(BaseModelClient):
             return content
             
         except Exception as e:
-            logger.error(f"[{self.model_name}] Error in OpenRouter generate_response: {e}")
-            return ""
+            error_msg = str(e)
+            # Check if it's a specific OpenRouter error
+            if "429" in error_msg or "rate" in error_msg.lower():
+                logger.warning(f"[{self.model_name}] OpenRouter rate limit error: {e}")
+                # The retry logic in run_llm_and_log will handle this
+                raise e  # Re-raise to trigger retry
+            elif "provider" in error_msg.lower() and "error" in error_msg.lower():
+                logger.error(f"[{self.model_name}] OpenRouter provider error: {e}")
+                # This might be a temporary issue with the upstream provider
+                raise e  # Re-raise to trigger retry or fallback
+            else:
+                logger.error(f"[{self.model_name}] Error in OpenRouter generate_response: {e}")
+                return ""
 
 
 ##############################################################################
@@ -868,6 +881,10 @@ class OpenRouterClient(BaseModelClient):
 def load_model_client(model_id: str) -> BaseModelClient:
     """
     Returns the appropriate LLM client for a given model_id string.
+    
+    Args:
+        model_id: The model identifier
+    
     Example usage:
        client = load_model_client("claude-3-5-sonnet-20241022")
     """

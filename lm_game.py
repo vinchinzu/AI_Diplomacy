@@ -13,7 +13,7 @@ os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"  # ERROR level only
 os.environ["GRPC_VERBOSITY"] = "ERROR"  # Additional gRPC verbosity control
 os.environ["ABSL_MIN_LOG_LEVEL"] = "2"  # Suppress abseil warnings
 # Disable gRPC forking warnings
-os.environ["GRPC_POLL_STRATEGY"] = "epoll1"
+os.environ["GRPC_POLL_STRATEGY"] = "poll"  # Use 'poll' for macOS compatibility
 
 from diplomacy import Game
 from diplomacy.engine.message import GLOBAL, Message
