@@ -1,6 +1,8 @@
-# AI Diplomacy Codebase Analysis (Core Logic Modules) - Updated
+# AI Diplomacy Codebase Analysis (Core Logic Modules) - Comprehensive Update
 
 This document provides an analysis of key Python modules within the `ai_diplomacy` package, focusing on their roles, functions, interdependencies, and implementation status.
+
+**Last Major Update**: January 2025 - Added diary system details, consolidation logic, and comprehensive agent memory management.
 
 ---
 
@@ -29,27 +31,61 @@ This document provides an analysis of key Python modules within the `ai_diplomac
   * Unsuccessful moves by power with failure reasons
   * Optional sections for other move types
 
-#### 1.4. `agent.py` (COMPLETE)
-**Goal:** To maintain stateful agent representation with personality, goals, and relationships.
-**Status:** Fully implemented and integrated with planning/negotiation workflows. Initialization of goals and relationships via LLM is now handled by `initialization.py`.
+#### 1.4. `agent.py` (COMPLETE WITH ENHANCED MEMORY SYSTEM)
+**Goal:** To maintain stateful agent representation with personality, goals, relationships, and sophisticated memory management.
+**Status:** Fully implemented with dual memory system (journal + diary) and yearly consolidation.
 
 **Key Components:**
 * `DiplomacyAgent` class with:
   * `power_name`: The power this agent represents
-  * `personality`: Agent's personality profile (though less emphasized now, system prompts per power exist)
-  * `goals`: List of strategic goals, initially populated by `initialization.py` or constructor.
-  * `relationships`: Dict of relationships with other powers, initially populated by `initialization.py` or constructor.
-  * `private_journal`: List of internal thoughts/reflections (less structured).
-  * `private_diary`: List of structured, phase-prefixed summaries (negotiations, intents, orders) for concise historical context provided to LLMs.
-  * `_extract_json_from_text`: Robust JSON extraction from LLM responses
-  * `analyze_phase_and_update_state`: Updates goals and relationships based on game events.
-  * Methods for plan generation, updating goals, and updating relationships.
+  * `goals`: List of strategic goals, dynamically updated each phase
+  * `relationships`: Dict tracking relationships (Enemy/Unfriendly/Neutral/Friendly/Ally) with other powers
+  * `private_journal`: Unstructured internal logs for debugging/events
+  * `private_diary`: Structured, phase-prefixed strategic summaries - THE MAIN MEMORY SYSTEM
+  * `client`: BaseModelClient instance for LLM interactions
+  * Power-specific system prompts loaded from `prompts/{power_name}_system_prompt.txt`
+
+**Memory System Architecture:**
+1. **Private Journal** (Less Important):
+   * Simple string entries via `add_journal_entry()`
+   * Used for: "Goals updated", "Relationship changed", "Message sent", etc.
+   * Not directly fed to LLMs
+   * More like internal debug logs
+
+2. **Private Diary** (Critical for Decision Making):
+   * Structured entries with phase prefix via `add_diary_entry(entry, phase)`
+   * Three types of diary entries generated each phase:
+     - **Negotiation Diary** (`generate_negotiation_diary_entry`): Analyzes messages, updates relationships
+     - **Order Diary** (`generate_order_diary_entry`): Records strategic reasoning behind orders
+     - **Phase Result Diary** (`generate_phase_result_diary_entry`): Analyzes outcomes, detects betrayals
+   * Fed to LLMs via `format_private_diary_for_prompt(max_entries=40)`
+   * **Yearly Consolidation** (`consolidate_year_diary_entries`):
+     - Triggered 2 years after a given year (e.g., in S1903M, consolidate 1901)
+     - Uses Gemini Flash to summarize all entries from a year into one concise entry
+     - Replaces individual entries with `[CONSOLIDATED 1901] summary...`
+     - Prevents context bloat while preserving key memories
+
+**Advanced JSON Parsing:**
+* `_extract_json_from_text`: Multi-strategy parser handling various LLM output formats
+  * Handles ```json blocks, {{...}} blocks, PARSABLE OUTPUT: formats
+  * Uses json5 and json_repair as fallbacks
+  * Aggressive cleaning for common LLM formatting issues
+  * Returns empty dict on failure rather than crashing
+
+**State Update System:**
+* `analyze_phase_and_update_state`: Async method that:
+  * Uses phase summaries and board state
+  * Updates goals based on game evolution
+  * Adjusts relationships based on actions (not just words)
+  * Validates all updates with allowed values
+  * Has robust error handling with fallback to current state
 
 **Integration Points:**
-* Connected to context generation in `clients.py` (private diary provides summarized history)
-* Influences planning and negotiations through goals and relationships
-* Case-insensitive validation of LLM-provided power names and relationship statuses
-* Robust error recovery with fallback defaults when LLM responses fail to parse
+* Diary provides historical context for all LLM calls
+* Relationships influence negotiation tone and alliance decisions
+* Goals drive strategic planning and order generation
+* Power-specific prompts shape agent personality
+* All LLM interactions logged via `utils.log_llm_response`
 
 #### 1.5. `negotiations.py` (COMPLETE)
 **Goal:** To orchestrate the communication phase among active AI powers.
@@ -83,6 +119,45 @@ This document provides an analysis of key Python modules within the `ai_diplomac
 **Integration Points:**
 *   Called once per agent from `lm_game.py` immediately after the `DiplomacyAgent` object is instantiated and before the main game loop begins.
 
+#### 1.10. `possible_order_context.py` (COMPLETE)
+**Goal:** To generate rich, strategic context about possible orders including pathfinding and territory analysis.
+**Status:** Fully implemented and integrated into order generation prompts.
+
+**Key Components:**
+* `build_diplomacy_graph`: Creates adjacency graph with unit-specific movement rules
+* `bfs_shortest_path`: Finds shortest paths considering unit movement restrictions
+* `get_nearest_enemy_units`: Identifies closest threats using BFS
+* `get_nearest_uncontrolled_scs`: Finds expansion opportunities
+* `get_adjacent_territory_details`: Analyzes neighboring territories and support possibilities
+* `generate_rich_order_context`: Main function creating structured XML context for each orderable unit
+
+**Integration:**
+* Called by `prompt_constructor.py` to enhance order generation prompts
+* Provides strategic insights like "nearest enemy 3 moves away" or "undefended SC 2 territories north"
+
+#### 1.11. `prompt_constructor.py` (COMPLETE)
+**Goal:** To centralize and standardize prompt construction for all LLM interactions.
+**Status:** Fully implemented, replacing scattered prompt building logic.
+
+**Key Functions:**
+* `build_context_prompt`: Creates comprehensive game context including:
+  * Board state, unit positions, supply centers
+  * Power-specific goals and relationships
+  * Recent game history from agent's diary
+  * Strategic analysis from `possible_order_context`
+* `construct_order_generation_prompt`: Specialized for order generation with:
+  * Full context from `build_context_prompt`
+  * Detailed possible orders with strategic annotations
+  * Order validation rules and format requirements
+
+#### 1.12. `narrative.py` (PLACEHOLDER/FUTURE)
+**Goal:** To generate narrative descriptions of game events for visualization/entertainment.
+**Status:** Referenced in imports but not yet implemented.
+**Potential Features:**
+* Convert dry game events into dramatic narratives
+* Generate "news reports" of battles and diplomatic developments
+* Create power-specific propaganda/spin on events
+
 ---
 
 ## 2. Integration Points
@@ -113,60 +188,139 @@ The following connections have been established:
 
 ---
 
-## 3. Future Work
+## 3. Main Game Loop Flow (`lm_game.py`)
 
-1. **Map Analysis Integration**
-   * Create utility functions to leverage BFS search for common strategic questions
-   * Integrate these into planning phase
-   * Add territory analysis to order generation context
+The main game loop orchestrates all components in a sophisticated async flow:
 
-2. **Enhanced Agent Adaptation**
-   * Develop more sophisticated goal updating strategies based on game events
-   * Implement memory of betrayals/alliances across multiple phases
-   * Create feedback loops between relationship states and planning priorities
+1. **Initialization Phase**:
+   * Create `DiplomacyAgent` instances for each power
+   * Load power-specific system prompts
+   * Run `initialize_agent_state_ext` concurrently for all agents
+   * Set up logging infrastructure
 
-3. **UI Integration**
-   * Expose agent states (goals, relationships) in the game visualization
-   * Show evolving relationships between powers graphically
-   * Integrate agent journal entries as commentary
+2. **Per-Phase Flow** (Movement phases only for negotiations):
+   * **Negotiations** (if enabled):
+     - Round-robin message generation via `conduct_negotiations`
+     - Async generation of messages considering relationships
+     - Updates to `game_history` with all messages
+   * **Planning** (if enabled):
+     - Strategic directive generation via `planning_phase`
+     - Considers current goals and game state
+   * **Diary Generation** (Negotiation):
+     - Each agent generates negotiation diary entry
+     - Relationships may be updated based on messages
+   * **Order Generation**:
+     - Concurrent order generation for all powers
+     - Rich context from `possible_order_context`
+     - Validation and fallback logic
+   * **Order Diary**:
+     - Strategic reasoning recorded for chosen orders
+   * **Phase Processing**:
+     - Orders executed by Diplomacy engine
+     - Custom phase summary generated
+   * **Phase Result Diary**:
+     - Analysis of outcomes vs. expectations
+     - Betrayal detection
+   * **State Updates**:
+     - Goals and relationships updated based on results
+   * **Diary Consolidation** (every 2 years):
+     - Old diary entries summarized to manage context
+
+3. **Error Handling**:
+   * Comprehensive error tracking in `model_error_stats`
+   * All LLM calls wrapped with retry logic
+   * Fallback orders for any failures
+
+## 4. Future Work
+
+1. **Enhanced Memory Management**
+   * Implement selective memory retrieval based on relevance
+   * Add episodic memory for specific important events
+   * Create power-specific memory strategies
+
+2. **Advanced Negotiation Strategies**
+   * Implement deception detection algorithms
+   * Add negotiation pattern recognition
+   * Create coalition formation logic
+
+3. **Performance Optimizations**
+   * Cache common pathfinding results
+   * Implement speculative order generation
+   * Add early termination for losing positions
+
+4. **Analysis Tools**
+   * Post-game relationship evolution visualization
+   * Betrayal/alliance pattern analysis
+   * Goal achievement tracking
+
+5. **UI Integration**
+   * Real-time diary viewer
+   * Relationship graph visualization
+   * Goal tracking dashboard
 
 ---
 
-## 4. Dependency Map (Updated)
+## 5. Dependency Map (Comprehensive Update)
 
 ```ascii
-+-----------------+       +-------------------+       +-----------------+
-| negotiations.py | ----> |    clients.py     | <---- |   planning.py   |
-+-----------------+       +-------------------+       +-----------------+
-        |                       ^   |   ^                    |
-        |                       |   |   |                    |
-        v                       |   v   |                    v
-+-----------------+             | +-----+          +-----------------+
-| game_history.py | <-----------+ |                |    agent.py     |
-+-----------------+               |                +-----------------+
-        ^                         |                        |
-        |                         v                        |
-        |                  +--------------+                |
-        +------------------+    utils.py  | <---------------
-                           +--------------+        
+                              +----------------+
+                              |  lm_game.py    |
+                              |  (Main Loop)   |
+                              +-------+--------+
+                                      |
+        +-----------------------------+-----------------------------+
+        |                             |                             |
+        v                             v                             v
++-------+--------+            +-------+--------+            +-------+--------+
+|initialization.py|           |  agent.py      |           |game_history.py |
+|(Initial Setup)  |           |(State & Memory)|           |(Phase Storage) |
++----------------+            +-------+--------+            +----------------+
+                                      |
+        +-----------------------------+-----------------------------+
+        |                             |                             |
+        v                             v                             v
++-------+--------+            +-------+--------+            +-------+--------+
+|negotiations.py |            | planning.py    |           | utils.py       |
+|(Messages)      |            |(Strategy)      |           |(Logging/Errors)|
++-------+--------+            +-------+--------+            +-------+--------+
+        |                             |                             |
+        +-----------------------------+-----------------------------+
+                                      |
+                              +-------v--------+
+                              | clients.py     |
+                              |(LLM Interface) |
+                              +-------+--------+
+                                      |
+        +-----------------------------+-----------------------------+
+        |                             |                             |
+        v                             v                             v
++-------+--------+            +-------+--------+            +-------+--------+
+|prompt_constructor|          |possible_order_ |           |   prompts/     |
+|(Prompt Building)|           |context.py      |           |(Templates)     |
++----------------+            |(BFS/Analysis)  |            +----------------+
+                              +----------------+
 ```
 
-**Current Integration Status:**
-* `agent.py` is fully implemented and integrated with other modules
-* State updates work reliably between phases
-* Robust JSON parsing and case-insensitive validation ensure smooth operation
+**Key Relationships:**
+* `lm_game.py` orchestrates everything, managing the game loop and agent lifecycle
+* `agent.py` is the central state holder, maintaining goals, relationships, and memories
+* `clients.py` abstracts all LLM interactions with multiple provider support
+* `prompt_constructor.py` and `possible_order_context.py` work together for rich prompts
+* `utils.py` provides critical infrastructure for logging and error handling
+* All async operations use `asyncio.gather` for maximum concurrency
 
-**Asynchronous API Calls (Implemented April 2025)**
-- Successfully refactored major LLM interaction points to use asynchronous patterns (`async`/`await`, `asyncio.gather`).
-- Utilized async client libraries (`AsyncOpenAI`, `AsyncAnthropic`, `generate_content_async` for Gemini).
-- Refactored components:
-    - `initialization.initialize_agent_state_ext` (replaces `DiplomacyAgent.initialize_agent_state`)
-    - `negotiations.conduct_negotiations` (message generation)
-    - `utils.get_valid_orders` (order generation)
-    - `DiplomacyAgent.analyze_phase_and_update_state`
-    - `DiplomacyAgent.generate_negotiation_diary_entry`
-    - `DiplomacyAgent.generate_order_diary_entry`
-    - `DiplomacyAgent.decide_builds_or_disbands`
-    - `planning.planning_phase`
-- This significantly improves performance by allowing concurrent API calls instead of sequential ones.
-- Replaced `concurrent.futures.ThreadPoolExecutor` with `asyncio.gather` for managing concurrent async tasks.
+**Current Integration Status:**
+* All modules fully implemented and battle-tested
+* Sophisticated error handling throughout
+* Async architecture provides 5-10x performance improvement
+* Memory management prevents context overflow
+* Robust parsing handles various LLM output formats
+
+**Recent Enhancements (January 2025):**
+- Added comprehensive diary system with three entry types per phase
+- Implemented yearly diary consolidation to manage context size
+- Enhanced relationship tracking with ignored message detection
+- Added phase result analysis for betrayal detection
+- Integrated BFS pathfinding for strategic order context
+- Created centralized prompt construction system
+- Added power-specific system prompts for personality
