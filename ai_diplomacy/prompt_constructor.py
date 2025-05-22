@@ -66,8 +66,27 @@ def build_context_prompt(
     if not messages_this_round_text.strip():
         messages_this_round_text = "\n(No messages this round)\n"
 
-    units_repr = "\n".join([f"  {p}: {u}" for p, u in board_state["units"].items()])
-    centers_repr = "\n".join([f"  {p}: {c}" for p, c in board_state["centers"].items()])
+    # Separate active and eliminated powers for clarity
+    active_powers = [p for p in game.powers.keys() if not game.powers[p].is_eliminated()]
+    eliminated_powers = [p for p in game.powers.keys() if game.powers[p].is_eliminated()]
+    
+    # Build units representation with power status
+    units_lines = []
+    for p, u in board_state["units"].items():
+        if game.powers[p].is_eliminated():
+            units_lines.append(f"  {p}: {u} [ELIMINATED]")
+        else:
+            units_lines.append(f"  {p}: {u}")
+    units_repr = "\n".join(units_lines)
+    
+    # Build centers representation with power status  
+    centers_lines = []
+    for p, c in board_state["centers"].items():
+        if game.powers[p].is_eliminated():
+            centers_lines.append(f"  {p}: {c} [ELIMINATED]")
+        else:
+            centers_lines.append(f"  {p}: {c}")
+    centers_repr = "\n".join(centers_lines)
 
     context = context_template.format(
         power_name=power_name,

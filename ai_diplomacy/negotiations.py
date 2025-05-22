@@ -38,6 +38,15 @@ async def conduct_negotiations(
     active_powers = [
         p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
     ]
+    eliminated_powers = [
+        p_name for p_name, p_obj in game.powers.items() if p_obj.is_eliminated()
+    ]
+    
+    logger.info(f"Active powers for negotiations: {active_powers}")
+    if eliminated_powers:
+        logger.info(f"Eliminated powers (skipped): {eliminated_powers}")
+    else:
+        logger.info("No eliminated powers yet.")
 
     # We do up to 'max_rounds' single-message turns for each power
     for round_index in range(max_rounds):

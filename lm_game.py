@@ -252,6 +252,15 @@ async def main():
 
             # === Generate Negotiation Diary Entries ===
             logger.info(f"Generating negotiation diary entries for phase {current_short_phase}...")
+            
+            # Log active and eliminated powers for negotiation diary
+            active_powers_for_neg_diary = [p for p in agents.keys() if not game.powers[p].is_eliminated()]
+            eliminated_powers_for_neg_diary = [p for p in agents.keys() if game.powers[p].is_eliminated()]
+            
+            logger.info(f"Active powers for negotiation diary: {active_powers_for_neg_diary}")
+            if eliminated_powers_for_neg_diary:
+                logger.info(f"Eliminated powers (skipped): {eliminated_powers_for_neg_diary}")
+            
             neg_diary_tasks = []
             for power_name, agent in agents.items():
                 if not game.powers[power_name].is_eliminated():
@@ -269,6 +278,15 @@ async def main():
 
         # AI Decision Making: Get orders for each power
         logger.info("Getting orders from agents...")
+        
+        # Log active and eliminated powers for order generation
+        active_powers_for_orders = [p for p in agents.keys() if not game.powers[p].is_eliminated()]
+        eliminated_powers_for_orders = [p for p in agents.keys() if game.powers[p].is_eliminated()]
+        
+        logger.info(f"Active powers for order generation: {active_powers_for_orders}")
+        if eliminated_powers_for_orders:
+            logger.info(f"Eliminated powers (skipped): {eliminated_powers_for_orders}")
+        
         order_tasks = []
         order_power_names = []
         # Calculate board state once before the loop
@@ -556,6 +574,14 @@ async def main():
         completed_phase_name = current_phase
         logger.info(f"Generating phase result diary entries for completed phase {completed_phase_name}...")
         
+        # Log active and eliminated powers for phase result diary
+        active_powers_for_phase_diary = [p for p in agents.keys() if not game.powers[p].is_eliminated()]
+        eliminated_powers_for_phase_diary = [p for p in agents.keys() if game.powers[p].is_eliminated()]
+        
+        logger.info(f"Active powers for phase result diary: {active_powers_for_phase_diary}")
+        if eliminated_powers_for_phase_diary:
+            logger.info(f"Eliminated powers (skipped): {eliminated_powers_for_phase_diary}")
+        
         # Get phase summary and all orders for this phase
         phase_summary = game.phase_summaries.get(current_phase, "(Summary not generated)")
         all_orders_this_phase = game.order_history.get(current_short_phase, {})
@@ -606,6 +632,14 @@ async def main():
             if current_short_phase.endswith("M") and current_short_phase.startswith("S") and consolidation_year >= 1901:
                 logger.info(f"[DIARY CONSOLIDATION] TRIGGERING consolidation for year {consolidation_year} (current year: {current_year})")
                 
+                # Log active and eliminated powers for diary consolidation
+                active_powers_for_consolidation = [p for p in agents.keys() if not game.powers[p].is_eliminated()]
+                eliminated_powers_for_consolidation = [p for p in agents.keys() if game.powers[p].is_eliminated()]
+                
+                logger.info(f"[DIARY CONSOLIDATION] Active powers for consolidation: {active_powers_for_consolidation}")
+                if eliminated_powers_for_consolidation:
+                    logger.info(f"[DIARY CONSOLIDATION] Eliminated powers (skipped): {eliminated_powers_for_consolidation}")
+                
                 consolidation_tasks = []
                 for power_name, agent in agents.items():
                     if not game.powers[power_name].is_eliminated():
@@ -645,6 +679,14 @@ async def main():
 
         # Update state concurrently for active agents
         active_agent_powers = [p for p in game.powers.items() if p[0] in agents] # Filter for powers with active agents
+        
+        # Log active and eliminated powers for state updates
+        active_powers_for_state_update = [p[0] for p in active_agent_powers if not p[1].is_eliminated()]
+        eliminated_powers_for_state_update = [p for p in agents.keys() if game.powers[p].is_eliminated()]
+        
+        logger.info(f"Active powers for state update: {active_powers_for_state_update}")
+        if eliminated_powers_for_state_update:
+            logger.info(f"Eliminated powers (skipped): {eliminated_powers_for_state_update}")
 
         if active_agent_powers: # Only run if there are agents to update
              logger.info(f"Beginning concurrent state analysis for {len(active_agent_powers)} agents...")

@@ -9,7 +9,7 @@ from .agent import DiplomacyAgent
 
 logger = logging.getLogger(__name__)
 
-def planning_phase(
+async def planning_phase(
     game, 
     agents: Dict[str, DiplomacyAgent], 
     game_history: GameHistory, 
@@ -23,6 +23,15 @@ def planning_phase(
     active_powers = [
         p_name for p_name, p_obj in game.powers.items() if not p_obj.is_eliminated()
     ]
+    eliminated_powers = [
+        p_name for p_name, p_obj in game.powers.items() if p_obj.is_eliminated()
+    ]
+    
+    logger.info(f"Active powers for planning: {active_powers}")
+    if eliminated_powers:
+        logger.info(f"Eliminated powers (skipped): {eliminated_powers}")
+    else:
+        logger.info("No eliminated powers yet.")
     
     board_state = game.get_state()
 
