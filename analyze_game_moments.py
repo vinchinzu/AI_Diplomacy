@@ -61,6 +61,7 @@ class GameAnalyzer:
         self.power_to_model = None
         self.moments = []
         self.diary_entries = {}  # phase -> power -> diary content
+        self.invalid_moves_by_model = {} # Initialize attribute
         
     async def initialize(self):
         """Initialize the analyzer with game data and model client"""
@@ -82,6 +83,10 @@ class GameAnalyzer:
         # Load diary entries from CSV
         self.diary_entries = self.parse_llm_responses_csv()
         logger.info(f"Loaded diary entries for {len(self.diary_entries)} phases")
+        
+        # Load invalid moves data from CSV
+        self.invalid_moves_by_model = self.parse_invalid_moves_from_csv()
+        logger.info(f"Loaded invalid moves for {len(self.invalid_moves_by_model)} models")
         
         # Initialize model client
         self.client = load_model_client(self.model_name)
@@ -162,6 +167,62 @@ class GameAnalyzer:
             
         except Exception as e:
             logger.error(f"Error parsing CSV file: {e}")
+            return {}
+    
+    def parse_invalid_moves_from_csv(self) -> Dict[str, int]:
+        """Parse the CSV file to count invalid moves by model"""
+        invalid_moves_by_model = {}
+        
+        try:
+            import pandas as pd
+            # Use pandas for more robust CSV parsing
+            df = pd.read_csv(self.csv_path)
+            
+            # Look for failures in the success column
+            failure_df = df[df['success'].str.contains('Failure: Invalid LLM Moves', na=False)]
+            
+            for _, row in failure_df.iterrows():
+                model = row['model']
+                success_text = str(row['success'])
+                
+                # Extract the number from "Failure: Invalid LLM Moves (N):"
+                import re
+                match = re.search(r'Invalid LLM Moves \((\d+)\)', success_text)
+                if match:
+                    invalid_count = int(match.group(1))
+                    if model not in invalid_moves_by_model:
+                        invalid_moves_by_model[model] = 0
+                    invalid_moves_by_model[model] += invalid_count
+            
+            logger.info(f"Successfully parsed invalid moves for {len(invalid_moves_by_model)} models")
+            return invalid_moves_by_model
+            
+        except ImportError:
+            # Fallback to standard CSV if pandas not available
+            logger.info("Pandas not available, using standard CSV parsing for invalid moves")
+            import csv
+            import re
+            
+            with open(self.csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        success_text = row.get('success', '')
+                        if 'Failure: Invalid LLM Moves' in success_text:
+                            model = row.get('model', '')
+                            match = re.search(r'Invalid LLM Moves \((\d+)\)', success_text)
+                            if match and model:
+                                invalid_count = int(match.group(1))
+                                if model not in invalid_moves_by_model:
+                                    invalid_moves_by_model[model] = 0
+                                invalid_moves_by_model[model] += invalid_count
+                    except Exception as e:
+                        continue  # Skip problematic rows
+                        
+            return invalid_moves_by_model
+            
+        except Exception as e:
+            logger.error(f"Error parsing invalid moves from CSV file: {e}")
             return {}
     
     def extract_turn_data(self, phase_data: Dict) -> Dict:
@@ -325,11 +386,12 @@ Focus on:
             logger.error(f"Error analyzing turn {turn_data.get('phase', '')}: {e}")
             return []
     
-    async def analyze_game(self, max_phases: Optional[int] = None):
-        """Analyze the entire game for key moments
+    async def analyze_game(self, max_phases: Optional[int] = None, max_concurrent: int = 5):
+        """Analyze the entire game for key moments with concurrent processing
         
         Args:
             max_phases: Maximum number of phases to analyze (None = all)
+            max_concurrent: Maximum number of concurrent phase analyses
         """
         phases = self.game_data.get("phases", [])
         
@@ -339,15 +401,41 @@ Focus on:
         else:
             logger.info(f"Analyzing {len(phases)} phases...")
         
-        for i, phase_data in enumerate(phases):
-            phase_name = phase_data.get("name", f"Phase {i}")
-            logger.info(f"Analyzing phase {phase_name} ({i+1}/{len(phases)})")
+        # Process phases in batches to avoid overwhelming the API
+        all_moments = []
+        
+        for i in range(0, len(phases), max_concurrent):
+            batch = phases[i:i + max_concurrent]
+            batch_start = i + 1
+            batch_end = min(i + max_concurrent, len(phases))
             
-            moments = await self.analyze_turn(phase_data)
-            self.moments.extend(moments)
+            logger.info(f"Processing batch {batch_start}-{batch_end} of {len(phases)} phases...")
             
-            # Small delay to avoid rate limiting
-            await asyncio.sleep(0.5)
+            # Create tasks for concurrent processing
+            tasks = []
+            for j, phase_data in enumerate(batch):
+                phase_name = phase_data.get("name", f"Phase {i+j}")
+                logger.info(f"Starting analysis of phase {phase_name}")
+                task = self.analyze_turn(phase_data)
+                tasks.append(task)
+            
+            # Wait for all tasks in this batch to complete
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results and handle any exceptions
+            for j, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    phase_name = batch[j].get("name", f"Phase {i+j}")
+                    logger.error(f"Error analyzing phase {phase_name}: {result}")
+                else:
+                    all_moments.extend(result)
+            
+            # Small delay between batches to be respectful to the API
+            if i + max_concurrent < len(phases):
+                logger.info(f"Batch complete. Waiting 2 seconds before next batch...")
+                await asyncio.sleep(2)
+        
+        self.moments = all_moments
         
         # Sort moments by interest score
         self.moments.sort(key=lambda m: m.interest_score, reverse=True)
@@ -756,6 +844,7 @@ Create a single, cohesive narrative that captures the essence of the entire game
                 }
             },
             "power_models": self.power_to_model,
+            "invalid_moves_by_model": self.invalid_moves_by_model,
             "moments": moments_data
         }
         
@@ -777,6 +866,8 @@ async def main():
                         help="Output path for JSON results (auto-generates timestamped name if not specified)")
     parser.add_argument("--max-phases", type=int, default=None,
                         help="Maximum number of phases to analyze (useful for testing)")
+    parser.add_argument("--max-concurrent", type=int, default=5,
+                        help="Maximum number of concurrent phase analyses (default: 5)")
     
     args = parser.parse_args()
     
@@ -799,7 +890,7 @@ async def main():
     
     try:
         await analyzer.initialize()
-        await analyzer.analyze_game(max_phases=args.max_phases)
+        await analyzer.analyze_game(max_phases=args.max_phases, max_concurrent=args.max_concurrent)
         report_path = await analyzer.generate_report(args.report)
         json_path = analyzer.save_json_results(args.json)
         
