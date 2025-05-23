@@ -139,4 +139,10 @@ export enum ProvinceENUM {
 
 }
 
-export const ProvinceENUMSchema = z.nativeEnum(ProvinceENUM)
+export const ProvinceENUMSchema = z.preprocess((arg) => {
+  if (typeof arg === "string") {
+    // Strip the "/" and anything after it (e.g., "SPA/SC" becomes "SPA")
+    return arg.split('/')[0];
+  }
+  return arg;
+}, z.nativeEnum(ProvinceENUM));
