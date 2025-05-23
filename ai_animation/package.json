@@ -16,6 +16,7 @@
   "dependencies": {
     "@tweenjs/tween.js": "^25.0.0",
     "@types/three": "^0.174.0",
+    "chart.js": "^4.4.9",
     "three": "^0.174.0",
     "zod": "^3.24.2"
   },

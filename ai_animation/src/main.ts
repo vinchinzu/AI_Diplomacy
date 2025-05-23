@@ -2,7 +2,7 @@ import * as THREE from "three";
 import "./style.css"
 import { initMap } from "./map/create";
 import { createAnimationsForNextPhase as createAnimationsForNextPhase } from "./units/animate";
-import { gameState } from "./gameState";
+import { gameState, loadGameFile } from "./gameState";
 import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
@@ -61,7 +61,7 @@ function initScene() {
 
       // Load default game file if in debug mode
       if (isDebugMode || isStreamingMode) {
-        loadDefaultGameFile();
+        gameState.loadGameFile(0);
       }
       if (isStreamingMode) {
         setTimeout(() => {
@@ -196,65 +196,20 @@ function onWindowResize() {
   gameState.renderer.setSize(mapView.clientWidth, mapView.clientHeight);
 }
 
-// Load a default game if we're running debug
-function loadDefaultGameFile() {
-  console.log("Loading default game file for debug mode...");
 
-  // Path to the default game file
-  const defaultGameFilePath = './default_game2.json';
-
-  fetch(defaultGameFilePath)
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`Failed to load default game file: ${response.status}`);
-      }
-
-      // Check content type to avoid HTML errors
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error('Received HTML instead of JSON. Check the file path.');
-      }
-
-      return response.text();
-    })
-    .then(data => {
-      // Check for HTML content as a fallback
-      if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-        throw new Error('Received HTML instead of JSON. Check the file path.');
-      }
-
-      console.log("Loaded game file, attempting to parse...");
-      return gameState.loadGameData(data);
-    })
-    .then(() => {
-      console.log("Default game file loaded and parsed successfully");
-      // Explicitly hide standings board after loading game
-      hideStandingsBoard();
-      // Update rotating display and relationship popup with game data
-      if (gameState.gameData) {
-        updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
-        updateRelationshipPopup();
-      }
-    })
-    .catch(error => {
-      console.error("Error loading default game file:", error);
-      // Use console.error instead of logger.log to avoid updating the info panel
-      console.error(`Error loading default game: ${error.message}`);
-
-      // Fallback - tell user to drag & drop a file but don't update the info panel
-      console.log('Please load a game file using the "Load Game" button.');
-    });
-}
 
 
 // --- PLAYBACK CONTROLS ---
 function togglePlayback() {
-  if (!gameState.gameData || gameState.gameData.phases.length <= 1) return;
+  // If the game doesn't have any data, or there are no phases, return;
+  if (!gameState.gameData || gameState.gameData.phases.length <= 0) {
+    alert("This game file appears to be broken. Please reload the page and load a different game.")
+    throw Error("Bad gameState, exiting.")
+  };
 
-  // NEW: If we're speaking, don't allow toggling playback
+  // TODO: Likely not how we want to handle the speaking section of this. 
+  //   Should be able to pause the other elements while we're speaking
   if (gameState.isSpeaking) return;
-
-  // Pause the camera animation
 
   gameState.isPlaying = !gameState.isPlaying;
 

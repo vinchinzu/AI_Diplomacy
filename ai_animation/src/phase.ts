@@ -10,6 +10,7 @@ import { speakSummary } from "./speech";
 import { config } from "./config";
 
 
+
 /**
  * Unified function to display a phase with proper transitions
  * Handles both initial display and animated transitions between phases
@@ -17,8 +18,13 @@ import { config } from "./config";
  */
 export function displayPhase(skipMessages = false) {
   let index = gameState.phaseIndex
+  if (index >= gameState.gameData.phases.length) {
+    displayFinalPhase()
+    logger.log("Displayed final phase, moving to next game.")
+    loadGamefile(gameState.gameId + 1)
+  }
   if (!gameState.gameData || !gameState.gameData.phases ||
-    index < 0 || index >= gameState.gameData.phases.length) {
+    index < 0) {
     logger.log("Invalid phase index.");
     return;
   }
@@ -164,6 +170,10 @@ export function advanceToNextPhase() {
   }
 }
 
+function displayFinalPhase() {
+  // Stub for doing anything on the final phase of a game. 
+}
+
 /**
  * Internal helper to handle the actual phase advancement
  */
@@ -180,8 +190,11 @@ function moveToNextPhase() {
 
   // Advance the phase index
   if (gameState.gameData && gameState.phaseIndex >= gameState.gameData.phases.length - 1) {
-    gameState.phaseIndex = 0;
-    logger.log("Reached end of game, looping back to start");
+    logger.log("Reached end of game, Moving to next in 5 seconds");
+    setTimeout(() => {
+      gameState.loadGameFile(gameState.gameId + 1), 5000
+    })
+
   } else {
     gameState.phaseIndex++;
   }

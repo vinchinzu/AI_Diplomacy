@@ -1,4 +1,6 @@
 import * as THREE from "three"
+import { updateRotatingDisplay } from "./components/rotatingDisplay";
+import { updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { type CoordinateData, CoordinateDataSchema, PowerENUM } from "./types/map"
 import type { GameSchemaType } from "./types/gameState";
 import { GameSchema } from "./types/gameState";
@@ -8,6 +10,7 @@ import { logger } from "./logger";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
+import { hideStandingsBoard, } from "./domElements/standingsBoard";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -28,6 +31,7 @@ function getRandomPower(): PowerENUM {
 
 class GameState {
   boardState: CoordinateData
+  gameId: number
   gameData: GameSchemaType
   phaseIndex: number
   boardName: string
@@ -63,6 +67,7 @@ class GameState {
     this.phaseIndex = 0
     this.boardName = boardName
     this.currentPower = getRandomPower()
+    this.gameId = 1
     // State locks
     this.isSpeaking = false
     this.isPlaying = false
@@ -165,7 +170,7 @@ class GameState {
         });
     })
   }
-  
+
   /**
    * Check if a power is present in the current game
    * @param power The power to check
@@ -175,26 +180,79 @@ class GameState {
     if (!this.gameData || !this.gameData.phases || this.phaseIndex < 0 || this.phaseIndex >= this.gameData.phases.length) {
       return false;
     }
-    
+
     const currentPhase = this.gameData.phases[this.phaseIndex];
-    
+
     // Check if power has units or centers in the current phase
     if (currentPhase.state?.units && power in currentPhase.state.units) {
       return true;
     }
-    
+
     if (currentPhase.state?.centers && power in currentPhase.state.centers) {
       return true;
     }
-    
+
     // Check if power has relationships defined
     if (currentPhase.agent_relationships && power in currentPhase.agent_relationships) {
       return true;
     }
-    
+
     return false;
   }
+
+  /*
+   * Given a gameId, load that game's state into the GameState Object
+   */
+  loadGameFile = (gameId: number) => {
+
+    // Clear any data that was already on the board, including messages, units, animations, etc.
+    //clearGameData();
+
+    // Path to the default game file
+    const gameFilePath = `./default_game${gameId}.json`;
+
+    fetch(gameFilePath)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Failed to load default game file: ${response.status}`);
+        }
+
+        // Check content type to avoid HTML errors
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          throw new Error('Received HTML instead of JSON. Check the file path.');
+        }
+
+        return response.text();
+      })
+      .then(data => {
+        // Check for HTML content as a fallback
+        if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+          throw new Error('Received HTML instead of JSON. Check the file path.');
+        }
+
+        console.log("Loaded game file, attempting to parse...");
+        return this.loadGameData(data);
+      })
+      .then(() => {
+        console.log("Default game file loaded and parsed successfully");
+        // Explicitly hide standings board after loading game
+        hideStandingsBoard();
+        // Update rotating display and relationship popup with game data
+        if (this.gameData) {
+          updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
+          updateRelationshipPopup();
+        }
+      })
+      .catch(error => {
+        // Use console.error instead of logger.log to avoid updating the info panel
+        console.error(`Error loading game ${gameFilePath}: ${error.message}`);
+      });
+  }
   initScene = () => {
+    if (mapView === null) {
+      throw Error("Cannot find mapView element, unable to continue.")
+    }
     this.scene.background = new THREE.Color(0x87CEEB);
 
     // Camera
@@ -221,5 +279,6 @@ class GameState {
     this.camControls.target.set(0, 0, 100); // ADDED: Set control target to new map center
   }
 }
+
 
 export let gameState = new GameState(AvailableMaps.STANDARD);

@@ -1,6 +1,7 @@
 import { gameState } from "../gameState";
 import { PowerENUM } from "../types/map";
 import { GameSchemaType } from "../types/gameState";
+import { Chart } from "chart.js";
 
 // Enum for the different display types
 export enum DisplayType {
@@ -237,6 +238,7 @@ function renderCurrentStandingsView(
   container.innerHTML = html;
 }
 
+
 /**
  * Render the supply center history chart view
  * @param container The container element
@@ -438,12 +440,6 @@ function renderSCHistoryChartView(
   // Add the SVG to the container
   container.appendChild(svg);
 
-  // Add phase info
-  const phaseInfo = document.createElement('div');
-  phaseInfo.style.fontSize = '12px';
-  phaseInfo.style.marginTop = '5px';
-  phaseInfo.innerHTML = `Current phase: ${gameData.phases[currentPhaseIndex].name}`;
-  container.appendChild(phaseInfo);
 }
 
 /**
@@ -480,9 +476,6 @@ export function renderRelationshipHistoryChartView(
     if (phase.agent_relationships &&
       phase.agent_relationships[currentPlayerPower]) {
 
-      console.log(`Phase ${i} (${phase.name}): Found relationships for ${currentPlayerPower}`,
-        phase.agent_relationships[currentPlayerPower]);
-
       const relationships = phase.agent_relationships[currentPlayerPower];
 
       for (const [power, relation] of Object.entries(relationships)) {
@@ -496,7 +489,6 @@ export function renderRelationshipHistoryChartView(
             console.warn(`Unknown relationship value: ${relation}, defaulting to Neutral (0)`);
           }
 
-          console.log(`  Relationship ${currentPlayerPower} -> ${power}: ${relation} (${relationValue})`);
 
           phaseData[power] = relationValue;
           otherPowers.add(power);
@@ -507,8 +499,6 @@ export function renderRelationshipHistoryChartView(
     relationshipHistory.push(phaseData);
   }
 
-  console.log("Collected relationship history:", relationshipHistory);
-  console.log("Other powers found:", Array.from(otherPowers));
 
   // Convert otherPowers Set to Array for easier iteration
   const powers = Array.from(otherPowers);
@@ -606,7 +596,6 @@ export function renderRelationshipHistoryChartView(
 
   // Draw lines for each power
   for (const power of powers) {
-    console.log(`Drawing line for power: ${power}`);
 
     // Create path for this power
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -622,7 +611,6 @@ export function renderRelationshipHistoryChartView(
         const x = xScale(i);
         const y = yScale(relationValue);
 
-        console.log(`  Point ${i}: (${x}, ${y}) for value ${relationValue}`);
         dataPoints++;
 
         if (!hasData) {
@@ -634,8 +622,6 @@ export function renderRelationshipHistoryChartView(
       }
     }
 
-    console.log(`  Total data points for ${power}: ${dataPoints}, has data: ${hasData}`);
-    console.log(`  Path data: ${pathData.length > 100 ? pathData.substring(0, 100) + '...' : pathData}`);
 
     if (hasData) {
       path.setAttribute("d", pathData);
@@ -643,7 +629,6 @@ export function renderRelationshipHistoryChartView(
       path.setAttribute("stroke-width", "2");
       path.setAttribute("fill", "none");
       chart.appendChild(path);
-      console.log(`  Added path to chart for ${power}`);
     } else {
       console.log(`  No path data for ${power}, not adding to chart`);
     }
@@ -695,10 +680,4 @@ export function renderRelationshipHistoryChartView(
   // Add the SVG to the container
   container.appendChild(svg);
 
-  // Add phase info
-  const phaseInfo = document.createElement('div');
-  phaseInfo.style.fontSize = '12px';
-  phaseInfo.style.marginTop = '5px';
-  phaseInfo.innerHTML = `Current phase: ${gameData.phases[currentPhaseIndex].name}`;
-  container.appendChild(phaseInfo);
 }
