@@ -4,13 +4,16 @@ import os
 from typing import Dict, List, Tuple, Set, Optional
 from diplomacy import Game
 import csv
-from typing import TYPE_CHECKING
+# TYPE_CHECKING for BaseModelClient removed as it's obsolete.
+# from typing import TYPE_CHECKING
+# if TYPE_CHECKING:
+    # from .agent import DiplomacyAgent # Keep if DiplomacyAgent hint is still needed elsewhere
+import llm # Import the llm library
+import re
+import ast
+import json
+from .prompt_constructor import construct_order_generation_prompt
 
-# Avoid circular import for type hinting
-if TYPE_CHECKING:
-    from .clients import BaseModelClient
-    # If DiplomacyAgent is used for type hinting for an 'agent' parameter:
-    # from .agent import DiplomacyAgent 
 
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
@@ -24,34 +27,37 @@ def assign_models_to_powers() -> Dict[str, str]:
     Example usage: define which model each power uses.
     Return a dict: { power_name: model_id, ... }
     POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
-    Models supported: o3-mini, o4-mini, o3, gpt-4o, gpt-4o-mini
-                    claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022, claude-3-7-sonnet-20250219 
-                    gemini-2.0-flash, gemini-2.5-flash-preview-04-17, gemini-2.5-pro-preview-03-25, 
-                    deepseek-chat, deepseek-reasoner
-                    openrouter-meta-llama/llama-3.3-70b-instruct, openrouter-qwen/qwen3-235b-a22b, openrouter-microsoft/phi-4-reasoning-plus:free, openrouter-deepseek/deepseek-prover-v2:free, openrouter-meta-llama/llama-4-maverick:free, openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free, openrouter-google/gemma-3-12b-it:free
+    
+    Model IDs should now be compatible with the `llm` library. Examples:
+    - OpenAI: "gpt-4o", "gpt-3.5-turbo"
+    - Anthropic (via llm-claude): "claude-3.5-sonnet", "claude-3-opus"
+    - Google Gemini (via llm-gemini): "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"
+    - Ollama (via llm-ollama): "ollama/llama3", "ollama/mistral"
+    - Llama.cpp (via llm-llama-cpp): "llama-cpp/path-to-model.gguf" or an alias.
+    - OpenRouter (via llm-openrouter): "openrouter/meta-llama/llama-3-70b-instruct"
     """
     
-    # POWER MODELS
+    # POWER MODELS (updated for llm library compatibility)
     return {
-        "AUSTRIA": "gemini-2.5-pro-preview-05-06",
-        "ENGLAND": "claude-3-5-sonnet-latest",
-        "FRANCE": "gpt-4.1",
-        "GERMANY": "openrouter-meta-llama/llama-4-maverick",
-        "ITALY": "openrouter-google/gemini-2.5-flash-preview-05-20",
-        "RUSSIA": "openrouter-x-ai/grok-3-beta",
-        "TURKEY": "o3",
+        "AUSTRIA": "gemini-1.5-pro-latest",     # Example: Using Google Gemini
+        "ENGLAND": "claude-3.5-sonnet",         # Example: Using Anthropic Claude
+        "FRANCE": "gpt-4o",                     # Example: Using OpenAI GPT-4o
+        "GERMANY": "openrouter/meta-llama/llama-3-70b-instruct", # Example: OpenRouter
+        "ITALY": "ollama/llama3",               # Example: Ollama Llama3 (ensure llm-ollama is configured)
+        "RUSSIA": "openrouter/mistralai/mistral-large-latest", # Example: Another OpenRouter model
+        "TURKEY": "gpt-3.5-turbo",              # Example: OpenAI GPT-3.5 Turbo (replaced "o3")
     }
     
-    # TEST MODELS
+    # TEST MODELS (updated for llm library compatibility)
     """
     return {
-        "AUSTRIA": "openrouter-google/gemini-2.5-flash-preview",
-        "ENGLAND": "openrouter-google/gemini-2.5-flash-preview",
-        "FRANCE": "openrouter-google/gemini-2.5-flash-preview",
-        "GERMANY": "openrouter-google/gemini-2.5-flash-preview",
-        "ITALY": "openrouter-google/gemini-2.5-flash-preview",  
-        "RUSSIA": "openrouter-google/gemini-2.5-flash-preview",
-        "TURKEY": "openrouter-google/gemini-2.5-flash-preview",
+        "AUSTRIA": "ollama/mistral",
+        "ENGLAND": "ollama/mistral",
+        "FRANCE": "ollama/mistral",
+        "GERMANY": "ollama/mistral",
+        "ITALY": "ollama/mistral",  
+        "RUSSIA": "ollama/mistral",
+        "TURKEY": "ollama/mistral",
     }
     """
 
@@ -67,113 +73,257 @@ def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
         result[loc] = all_possible.get(loc, [])
     return result
 
+# Helper function to provide fallback orders (all units HOLD)
+def _fallback_orders_utility(possible_orders: Dict[str, List[str]]) -> List[str]:
+    """Generates a list of HOLD orders for all units if possible, else first option."""
+    fallback = []
+    for loc, orders_list in possible_orders.items():
+        if orders_list:
+            holds = [o for o in orders_list if o.endswith(" H")]
+            fallback.append(holds[0] if holds else orders_list[0])
+    return fallback
+
+# Helper function to extract moves from LLM response (adapted from BaseModelClient)
+def _extract_moves_from_llm_response(raw_response: str, power_name: str, model_id: str) -> Optional[List[str]]:
+    """
+    Attempt multiple parse strategies to find JSON array of moves.
+    """
+    logger.debug(f"[{model_id}] Attempting to extract moves for {power_name} from raw response: {raw_response[:300]}...")
+    # Regex for "PARSABLE OUTPUT:{...}"
+    pattern = r"PARSABLE OUTPUT:\s*(\{[\s\S]*\})"
+    matches = re.search(pattern, raw_response, re.DOTALL)
+
+    if not matches:
+        logger.debug(f"[{model_id}] Regex for 'PARSABLE OUTPUT:' failed for {power_name}. Trying alternative patterns.")
+        pattern_alt = r"PARSABLE OUTPUT\s*\{(.*?)\}\s*$" # Check for inline JSON
+        matches = re.search(pattern_alt, raw_response, re.DOTALL)
+
+    if not matches: # Check for triple-backtick code fences
+        logger.debug(f"[{model_id}] Regex for inline 'PARSABLE OUTPUT' failed. Trying triple-backtick code fences for {power_name}.")
+        code_fence_pattern = r"```json\n(.*?)\n```"
+        matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
+        if matches: logger.debug(f"[{model_id}] Found triple-backtick JSON block for {power_name}.")
+
+    json_text = None
+    if matches:
+        json_text = matches.group(1).strip()
+        if not json_text.startswith("{"): # Ensure it's a valid JSON object start
+             json_text = "{" + json_text # Add missing brace if needed (e.g. from pattern_alt)
+        if not json_text.endswith("}"):
+             json_text = json_text + "}"
+    
+    if not json_text:
+        logger.debug(f"[{model_id}] No JSON text found in LLM response for {power_name}.")
+        return None
+
+    try:
+        data = json.loads(json_text)
+        return data.get("orders", None)
+    except json.JSONDecodeError as e:
+        logger.warning(f"[{model_id}] JSON decode failed for {power_name}: {e}. JSON text was: '{json_text}'. Trying bracket fallback.")
+        bracket_pattern = r'["\']orders["\']\s*:\s*\[([^\]]*)\]' # orders: ['A BUD H']
+        bracket_match = re.search(bracket_pattern, json_text, re.DOTALL)
+        if bracket_match:
+            try:
+                raw_list_str = "[" + bracket_match.group(1).strip() + "]"
+                moves = ast.literal_eval(raw_list_str)
+                if isinstance(moves, list):
+                    logger.debug(f"[{model_id}] Bracket fallback parse succeeded for {power_name}.")
+                    return moves
+            except Exception as e2:
+                logger.warning(f"[{model_id}] Bracket fallback parse also failed for {power_name}: {e2}")
+    
+    logger.warning(f"[{model_id}] All move extraction attempts failed for {power_name}.")
+    return None
+
+# Helper function to validate extracted orders (adapted from BaseModelClient)
+def _validate_extracted_orders(
+    game: Game, # Added game parameter for validation
+    power_name: str,
+    model_id: str, # For logging
+    moves: List[str], 
+    possible_orders: Dict[str, List[str]],
+    fallback_utility_fn # Function to call for fallback orders
+) -> List[str]:
+    """
+    Filter out invalid moves, fill missing with HOLD, else fallback.
+    Returns a list of orders to be set for the power.
+    """
+    if not isinstance(moves, list):
+        logger.warning(f"[{model_id}] Proposed moves for {power_name} not a list: {moves}. Using fallback.")
+        return fallback_utility_fn(possible_orders)
+
+    logger.debug(f"[{model_id}] Validating LLM proposed moves for {power_name}: {moves}")
+    validated = []
+    invalid_moves_found = []
+    used_locs = set()
+
+    for move_str in moves:
+        if not move_str or not isinstance(move_str, str) or move_str.strip() == "": # Skip empty or non-string moves
+            continue
+        
+        # Check if it's in possible orders (simple check, game.is_valid_order is more robust)
+        # if any(move_str in loc_orders for loc_orders in possible_orders.values()):
+        #     validated.append(move_str)
+        #     parts = move_str.split()
+        #     if len(parts) >= 2:
+        #         used_locs.add(parts[1][:3]) #  e.g., 'A PAR H' -> 'PAR'
+        # else:
+        #     logger.debug(f"[{model_id}] Invalid move from LLM for {power_name} (not in possible_orders): {move_str}")
+        #     invalid_moves_found.append(move_str)
+            
+        # More robust validation using game object
+        tokens = move_str.split(" ", 2)
+        is_valid_order_flag = False
+        if len(tokens) >= 3:
+            unit_token = " ".join(tokens[:2])
+            order_part_token = tokens[2]
+            try:
+                # game._valid_order is not public, use game.is_valid_order if available and suitable,
+                # or rely on the possible_orders list which should be pre-validated by the engine.
+                # For now, let's check against possible_orders for simplicity if direct validation is tricky.
+                # A more robust solution would be to use game.get_all_possible_orders() and check against that.
+                if any(move_str == po for loc_orders in possible_orders.values() for po in loc_orders):
+                    is_valid_order_flag = True
+                else: # Try direct validation if diplomacy.py version supports is_valid_order well
+                    if hasattr(game, 'is_valid_order') and callable(game.is_valid_order):
+                         is_valid_order_flag = game.is_valid_order(power_name, move_str) # This might need adaptation based on exact signature
+                    else: # Fallback to old _valid_order logic if is_valid_order not available
+                        is_valid_order_flag = (game._valid_order(game.powers[power_name], unit_token, order_part_token, report=0) == 1)
+
+
+            except Exception as e_val:
+                logger.warning(f"[{model_id}] Error validating order '{move_str}' for {power_name}: {e_val}")
+                is_valid_order_flag = False
+        
+        if is_valid_order_flag:
+            validated.append(move_str)
+            if len(tokens) >=2: used_locs.add(tokens[1][:3]) # Add unit location
+        else:
+            logger.debug(f"[{model_id}] Invalid move from LLM for {power_name}: {move_str}")
+            invalid_moves_found.append(move_str)
+
+
+    # Fill missing with hold
+    for loc, orders_list in possible_orders.items():
+        unit_loc_prefix = loc.split(" ")[1][:3] if " " in loc else loc[:3] # e.g. "A PAR" -> PAR
+        if unit_loc_prefix not in used_locs and orders_list:
+            hold_candidates = [o for o in orders_list if o.endswith(" H")]
+            validated.append(hold_candidates[0] if hold_candidates else orders_list[0])
+            logger.debug(f"[{model_id}] Added HOLD for unassigned unit at {loc} for {power_name}.")
+
+    if not validated and invalid_moves_found:
+        logger.warning(f"[{model_id}] All LLM moves for {power_name} were invalid. Using fallback. Invalid: {invalid_moves_found}")
+        return fallback_utility_fn(possible_orders)
+    elif not validated: # No moves from LLM, and no invalid ones (e.g. LLM returned empty list)
+        logger.warning(f"[{model_id}] No valid LLM moves provided for {power_name} and no invalid ones to report. Using fallback.")
+        return fallback_utility_fn(possible_orders)
+
+    if invalid_moves_found: # Some valid, some invalid
+         logger.info(f"[{model_id}] Some LLM-proposed moves for {power_name} were invalid. Using validated subset and fallbacks for missing. Invalid: {invalid_moves_found}")
+    
+    return validated
+
 
 async def get_valid_orders(
     game: Game,
-    client, # This is the BaseModelClient instance
-    board_state,
-    power_name: str,
-    possible_orders: Dict[str, List[str]],
-    game_history, # This is GameHistory instance
-    model_error_stats: Dict[str, Dict[str, int]],
-    agent_goals: Optional[List[str]] = None,
-    agent_relationships: Optional[Dict[str, str]] = None,
-    agent_private_diary_str: Optional[str] = None, # Added new parameter
-    log_file_path: str = None,
-    phase: str = None,
+    model_id: str, # Changed from client
+    agent_system_prompt: Optional[str], # Added system prompt
+    board_state, # Already present
+    power_name: str, # Already present
+    possible_orders: Dict[str, List[str]], # Already present
+    game_history, # Already present, assumed to be GameHistory instance
+    model_error_stats: Dict[str, Dict[str, int]], # Already present
+    agent_goals: Optional[List[str]] = None, # Already present
+    agent_relationships: Optional[Dict[str, str]] = None, # Already present
+    agent_private_diary_str: Optional[str] = None, # Already present
+    log_file_path: str = None, # Already present
+    phase: str = None, # Already present
 ) -> List[str]:
     """
-    Tries up to 'max_retries' to generate and validate orders.
-    If invalid, we append the error feedback to the conversation
-    context for the next retry. If still invalid, return fallback.
+    Generates orders using the specified LLM model, then validates and returns them.
+    If generation or validation fails, returns fallback orders.
     """
-
-    # Ask the LLM for orders
-    orders = await client.get_orders(
-        game=game,
-        board_state=board_state,
-        power_name=power_name,
-        possible_orders=possible_orders,
-        conversation_text=game_history, # Pass GameHistory instance
-        model_error_stats=model_error_stats,
-        agent_goals=agent_goals,
-        agent_relationships=agent_relationships,
-        agent_private_diary_str=agent_private_diary_str, # Pass the diary string
-        log_file_path=log_file_path,
-        phase=phase,
-    )
+    prompt_text = ""
+    raw_response_text = ""
+    success_status = "FALSE: Initialized" 
     
-    # Initialize list to track invalid order information
-    invalid_info = []
-    
-    # Validate each order
-    all_valid = True
-    valid_orders = []
-    
-    if not isinstance(orders, list): # Ensure orders is a list before iterating
-        logger.warning(f"[{power_name}] Orders received from LLM is not a list: {orders}. Using fallback.")
-        model_error_stats[client.model_name]["order_decoding_errors"] += 1 # Use client.model_name
-        return client.fallback_orders(possible_orders)
+    try:
+        model = llm.get_model(model_id)
+        
+        # Construct the prompt for order generation
+        # The system_prompt argument in construct_order_generation_prompt is the agent's specific system prompt.
+        prompt_text = construct_order_generation_prompt(
+            system_prompt=agent_system_prompt, # Pass agent's system prompt here
+            game=game,
+            board_state=board_state,
+            power_name=power_name,
+            possible_orders=possible_orders,
+            game_history=game_history,
+            agent_goals=agent_goals,
+            agent_relationships=agent_relationships,
+            agent_private_diary_str=agent_private_diary_str,
+        )
 
-    for move in orders:
-        # Skip empty orders
-        if not move or move.strip() == "":
-            continue
-            
-        # Handle special case for WAIVE
-        if move.upper() == "WAIVE":
-            valid_orders.append(move)
-            continue
-            
-        # Example move: "A PAR H" -> unit="A PAR", order_part="H"
-        tokens = move.split(" ", 2)
-        if len(tokens) < 3:
-            invalid_info.append(f"Order '{move}' is malformed; expected 'A PAR H' style.")
-            all_valid = False
-            continue
-            
-        unit = " ".join(tokens[:2])  # e.g. "A PAR"
-        order_part = tokens[2]  # e.g. "H" or "S A MAR"
+        logger.debug(f"[{model_id}] Order generation prompt for {power_name}:\n{prompt_text[:500]}...")
+        
+        # LLM call using llm library (system prompt is part of prompt_text from constructor)
+        llm_response = await model.async_prompt(prompt_text)
+        raw_response_text = llm_response.text()
+        
+        logger.debug(f"[{model_id}] Raw LLM response for {power_name} orders:\n{raw_response_text[:300]}")
 
-        # Use the internal game validation method
-        if order_part == "B": # Build orders
-            validity = 1  # hack because game._valid_order doesn't support 'B'
-        elif order_part == "D": # Disband orders
-             # Check if the unit is actually one of the power's units
-            if unit in game.powers[power_name].units:
-                validity = 1 # Simple check, engine handles full validation
-            else:
-                validity = 0
-        else: # Movement, Support, Hold, Convoy, Retreat
-            try:
-                validity = game._valid_order(
-                    game.powers[power_name], unit, order_part, report=1
-                )
-            except Exception as e:
-                logger.warning(f"Error validating order '{move}': {e}")
-                invalid_info.append(f"Order '{move}' caused an error: {e}")
-                validity = 0
-                all_valid = False
+        extracted_moves = _extract_moves_from_llm_response(raw_response_text, power_name, model_id)
 
-        if validity == 1:
-            valid_orders.append(move)
+        if not extracted_moves:
+            logger.warning(f"[{model_id}] Could not extract moves for {power_name}. Using fallback.")
+            model_error_stats.setdefault(model_id, {}).setdefault("order_decoding_errors", 0)
+            model_error_stats[model_id]["order_decoding_errors"] += 1
+            success_status = "FALSE: NoMovesExtracted" # Standardized
+            final_orders = _fallback_orders_utility(possible_orders)
         else:
-            invalid_info.append(f"Order '{move}' is invalid for {power_name}")
-            all_valid = False
-    
-    # Log validation results
-    if invalid_info:
-        logger.debug(f"[{power_name}] Invalid orders: {', '.join(invalid_info)}")
-    
-    if all_valid and valid_orders:
-        logger.debug(f"[{power_name}] All orders valid: {valid_orders}")
-        return valid_orders
-    else:
-        logger.debug(f"[{power_name}] Some orders invalid, using fallback.")
-        # Use client.model_name for stats key, as power_name might not be unique if multiple agents use same model
-        model_error_stats[client.model_name]["order_decoding_errors"] += 1
-        fallback = client.fallback_orders(possible_orders)
-        return fallback
+            final_orders = _validate_extracted_orders(game, power_name, model_id, extracted_moves, possible_orders, _fallback_orders_utility)
+            
+            is_fallback = True
+            fallback_comparison = _fallback_orders_utility(possible_orders)
+            if len(final_orders) == len(fallback_comparison):
+                for i in range(len(final_orders)):
+                    if final_orders[i] != fallback_comparison[i]:
+                        is_fallback = False
+                        break
+            else:
+                is_fallback = False
+
+            if is_fallback and extracted_moves: # Check if it's fallback despite having extracted moves
+                 success_status = "FALSE: ValidationLedToFallback" # Standardized
+                 model_error_stats.setdefault(model_id, {}).setdefault("order_validation_fallback", 0)
+                 model_error_stats[model_id]["order_validation_fallback"] += 1
+            elif not final_orders and extracted_moves: 
+                success_status = "FALSE: AllExtractedMovesInvalid" # Standardized
+            elif not extracted_moves and not final_orders: # No moves from LLM and no valid orders (e.g. empty possible_orders)
+                success_status = "FALSE: NoMovesPossibleOrExtracted"
+            else:
+                 success_status = "TRUE" # Orders are from LLM and at least some are valid
+
+    except Exception as e:
+        logger.error(f"[{model_id}] LLM error for {power_name} in get_valid_orders: {e}", exc_info=True)
+        success_status = f"FALSE: LLMException ({type(e).__name__})" # Standardized
+        model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
+        model_error_stats[model_id]["llm_api_errors"] += 1
+        final_orders = _fallback_orders_utility(possible_orders)
+    finally:
+        if log_file_path:
+            log_llm_response(
+                log_file_path=log_file_path,
+                model_name=model_id,
+                power_name=power_name,
+                phase=phase if phase else "UnknownPhase",
+                response_type="order_generation",
+                raw_input_prompt=prompt_text,
+                raw_response=raw_response_text,
+                success=success_status
+            )
+    return final_orders
 
 
 def normalize_and_compare_orders(
@@ -317,21 +467,6 @@ def log_llm_response(
         logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)
 
 
-# == New Async LLM Wrapper with Logging ==
-async def run_llm_and_log(
-    client: 'BaseModelClient',
-    prompt: str,
-    log_file_path: str,  # Kept for context, but not used for logging here
-    power_name: Optional[str], # Kept for context, but not used for logging here
-    phase: str, # Kept for context, but not used for logging here
-    response_type: str, # Kept for context, but not used for logging here
-) -> str:
-    """Calls the client's generate_response and returns the raw output. Logging is handled by the caller."""
-    raw_response = "" # Initialize in case of error
-    try:
-        raw_response = await client.generate_response(prompt)
-    except Exception as e:
-        # Log the API call error. The caller will decide how to log this in llm_responses.csv
-        logger.error(f"API Error during LLM call for {client.model_name}/{power_name}/{response_type} in phase {phase}: {e}", exc_info=True)
-        # raw_response remains "" indicating failure to the caller
-    return raw_response
+# run_llm_and_log is now obsolete and removed.
+# LLM calls are made directly using llm.get_model().async_prompt()
+# and logging is handled by calling log_llm_response() immediately after.

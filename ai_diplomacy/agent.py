@@ -5,11 +5,11 @@ import json
 import re
 import json_repair
 import json5  # More forgiving JSON parser
+import llm # Import the llm library
 
-# Assuming BaseModelClient is importable from clients.py in the same directory
-from .clients import BaseModelClient, load_model_client 
-# Import load_prompt and the new logging wrapper from utils
-from .utils import load_prompt, run_llm_and_log, log_llm_response
+# BaseModelClient, load_model_client, and run_llm_and_log are obsolete.
+# from .clients import BaseModelClient, load_model_client 
+from .utils import load_prompt, log_llm_response # run_llm_and_log removed
 from .prompt_constructor import build_context_prompt # Added import
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class DiplomacyAgent:
     def __init__(
         self, 
         power_name: str, 
-        client: BaseModelClient, 
+        model_id: str, # Changed from client: BaseModelClient
         initial_goals: Optional[List[str]] = None,
         initial_relationships: Optional[Dict[str, str]] = None,
     ):
@@ -53,7 +53,7 @@ class DiplomacyAgent:
 
         Args:
             power_name: The name of the power this agent represents (e.g., 'FRANCE').
-            client: An instance of a BaseModelClient subclass for LLM interaction.
+            model_id: The llm-compatible model ID string for LLM interaction.
             initial_goals: An optional list of initial strategic goals.
             initial_relationships: An optional dictionary mapping other power names to 
                                      relationship statuses (e.g., 'ALLY', 'ENEMY', 'NEUTRAL').
@@ -62,9 +62,18 @@ class DiplomacyAgent:
             raise ValueError(f"Invalid power name: {power_name}. Must be one of {ALL_POWERS}")
 
         self.power_name: str = power_name
-        self.client: BaseModelClient = client
-        # Initialize goals as empty list, will be populated by initialize_agent_state
+        self.model_id: str = model_id # Store model_id instead of client
+        # self.client: BaseModelClient = client # Removed
+        
         self.goals: List[str] = initial_goals if initial_goals is not None else [] 
+        
+        if initial_relationships is None:
+            self.relationships: Dict[str, str] = {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
+        else:
+            self.relationships: Dict[str, str] = initial_relationships
+        self.private_journal: List[str] = []
+        self.private_diary: List[str] = [] # New private diary
+
         # Initialize relationships to Neutral if not provided
         if initial_relationships is None:
             self.relationships: Dict[str, str] = {p: "Neutral" for p in ALL_POWERS if p != self.power_name}
@@ -73,30 +82,26 @@ class DiplomacyAgent:
         self.private_journal: List[str] = []
         self.private_diary: List[str] = [] # New private diary
 
-        # --- Load and set the appropriate system prompt ---
-        # Get the directory containing the current file (agent.py)
+        # --- Load and store the system prompt ---
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Construct path relative to the current file's directory
-        prompts_dir = os.path.join(current_dir, "prompts") 
+        prompts_dir = os.path.join(current_dir, "prompts")
         power_prompt_filename = os.path.join(prompts_dir, f"{power_name.lower()}_system_prompt.txt")
         default_prompt_filename = os.path.join(prompts_dir, "system_prompt.txt")
 
-        system_prompt_content = load_prompt(power_prompt_filename)
+        system_prompt_content = load_prompt(power_prompt_filename) # load_prompt needs to handle full path
 
         if not system_prompt_content:
             logger.warning(f"Power-specific prompt '{power_prompt_filename}' not found or empty. Loading default system prompt.")
-            # system_prompt_content = load_prompt("system_prompt.txt")
             system_prompt_content = load_prompt(default_prompt_filename)
         else:
-             logger.info(f"Loaded power-specific system prompt for {power_name}.")
-        # ----------------------------------------------------
-
-        if system_prompt_content: # Ensure we actually have content before setting
-             self.client.set_system_prompt(system_prompt_content)
-        else:
-             logger.error(f"Could not load default system prompt either! Agent {power_name} may not function correctly.")
-        logger.info(f"Initialized DiplomacyAgent for {self.power_name} with goals: {self.goals}")
-        self.add_journal_entry(f"Agent initialized. Initial Goals: {self.goals}")
+            logger.info(f"Loaded power-specific system prompt for {power_name}.")
+        
+        self.system_prompt: Optional[str] = system_prompt_content
+        if not self.system_prompt:
+            logger.error(f"Could not load default system prompt either! Agent {power_name} may not function correctly.")
+        
+        logger.info(f"Initialized DiplomacyAgent for {self.power_name} with model_id {self.model_id} and goals: {self.goals}")
+        self.add_journal_entry(f"Agent initialized with model {self.model_id}. Initial Goals: {self.goals}")
 
     def _extract_json_from_text(self, text: str) -> dict:
         """Extract and parse JSON from text, handling common LLM response formats."""
@@ -365,22 +370,18 @@ class DiplomacyAgent:
         success_status = "FALSE"
         
         try:
-            # Use Gemini 2.5 Flash for consolidation if available
-            consolidation_client = load_model_client("openrouter-google/gemini-2.5-flash-preview")
-            if not consolidation_client:
-                consolidation_client = self.client  # Fallback to agent's own client
-                logger.warning(f"[{self.power_name}] Using agent's own model for consolidation instead of Gemini Flash")
-            
-            # Use the enhanced wrapper with retry logic
-            from .utils import run_llm_and_log
-            raw_response = await run_llm_and_log(
-                client=consolidation_client,
-                prompt=prompt,
-                log_file_path=log_file_path,
-                power_name=self.power_name,
-                phase=game.current_short_phase,
-                response_type='diary_consolidation',
-            )
+            # Use a specific model for consolidation, e.g., a fast Gemini Flash model via OpenRouter
+            # Adjust model ID as per llm library conventions for OpenRouter
+            consolidation_model_id = "openrouter/google/gemini-1.5-flash-latest" 
+            try:
+                consolidation_model = llm.get_model(consolidation_model_id)
+            except Exception as e_model_load:
+                logger.warning(f"[{self.power_name}] Failed to load consolidation model {consolidation_model_id}: {e_model_load}. Falling back to agent's model {self.model_id}.")
+                consolidation_model = llm.get_model(self.model_id)
+                consolidation_model_id = self.model_id # For logging
+
+            llm_response = await consolidation_model.async_prompt(prompt, system=self.system_prompt) # Or a generic system prompt for consolidation
+            raw_response = llm_response.text()
             
             if raw_response and raw_response.strip():
                 consolidated_entry = raw_response.strip()
@@ -429,7 +430,7 @@ class DiplomacyAgent:
             if log_file_path:
                 log_llm_response(
                     log_file_path=log_file_path,
-                    model_name=consolidation_client.model_name if 'consolidation_client' in locals() else self.client.model_name,
+                    model_name=consolidation_model_id if 'consolidation_model_id' in locals() else self.model_id,
                     power_name=self.power_name,
                     phase=game.current_short_phase,
                     response_type='diary_consolidation',
@@ -535,18 +536,10 @@ class DiplomacyAgent:
             
             logger.debug(f"[{self.power_name}] Negotiation diary prompt:\n{full_prompt[:500]}...")
 
-
-            logger.debug(f"[{self.power_name}] Negotiation diary prompt:\n{full_prompt[:500]}...")
-
-            raw_response = await run_llm_and_log(
-                client=self.client,
-                prompt=full_prompt,
-                log_file_path=log_file_path, # Pass the main log file path
-                power_name=self.power_name,
-                phase=game.current_short_phase,
-                response_type='negotiation_diary_raw', # For run_llm_and_log context
-            )
-
+            model = llm.get_model(self.model_id)
+            llm_response = await model.async_prompt(full_prompt, system=self.system_prompt)
+            raw_response = llm_response.text()
+            
             logger.debug(f"[{self.power_name}] Raw negotiation diary response: {raw_response[:300]}...")
 
             parsed_data = None
@@ -630,10 +623,10 @@ class DiplomacyAgent:
             if log_file_path: # Ensure log_file_path is provided
                 log_llm_response(
                     log_file_path=log_file_path,
-                    model_name=self.client.model_name if self.client else "UnknownModel",
+                    model_name=self.model_id, # Use agent's model_id
                     power_name=self.power_name,
                     phase=game.current_short_phase if game else "UnknownPhase",
-                    response_type="negotiation_diary", # Specific type for CSV logging
+                    response_type="negotiation_diary", 
                     raw_input_prompt=full_prompt,
                     raw_response=raw_response,
                     success=success_status
@@ -702,26 +695,20 @@ class DiplomacyAgent:
 
         
         response_data = None
-        raw_response = None # Initialize raw_response
+        raw_response = "" # Initialize raw_response
+        success_status = "FALSE"
         try:
-            raw_response = await run_llm_and_log(
-                client=self.client,
-                prompt=prompt, 
-                log_file_path=log_file_path,
-                power_name=self.power_name,
-                phase=game.current_short_phase,
-                response_type='order_diary',
-            )
-
-            success_status = "FALSE"
+            model = llm.get_model(self.model_id)
+            llm_response = await model.async_prompt(prompt, system=self.system_prompt)
+            raw_response = llm_response.text()
+            
             response_data = None
-            actual_diary_text = None # Variable to hold the final diary text
+            actual_diary_text = None 
 
             if raw_response:
                 try:
                     response_data = self._extract_json_from_text(raw_response)
-                    if response_data:
-                        # Directly attempt to get 'order_summary' as per the prompt
+                    if response_data and isinstance(response_data, dict): # Ensure response_data is a dict
                         diary_text_candidate = response_data.get("order_summary")
                         if isinstance(diary_text_candidate, str) and diary_text_candidate.strip():
                             actual_diary_text = diary_text_candidate
@@ -729,23 +716,25 @@ class DiplomacyAgent:
                             logger.info(f"[{self.power_name}] Successfully extracted 'order_summary' for order diary entry.")
                         else:
                             logger.warning(f"[{self.power_name}] 'order_summary' missing, invalid, or empty. Value was: {diary_text_candidate}")
-                            success_status = "FALSE" # Explicitly set false if not found or invalid
+                            # success_status remains "FALSE"
                     else:
-                        # response_data is None (JSON parsing failed)
-                        logger.warning(f"[{self.power_name}] Failed to parse JSON from order diary LLM response.")
-                        success_status = "FALSE"
-                except Exception as e:
+                        logger.warning(f"[{self.power_name}] Failed to parse JSON or got non-dict data from order diary LLM response. Raw: {raw_response[:100]}")
+                        # success_status remains "FALSE"
+                except Exception as e: # Catch any error during JSON processing
                     logger.error(f"[{self.power_name}] Error processing order diary JSON: {e}. Raw response: {raw_response[:200]} ", exc_info=False)
-                    success_status = "FALSE"
+                    # success_status remains "FALSE"
+            else: # raw_response is empty or None
+                logger.warning(f"[{self.power_name}] Empty response from LLM for order diary.")
+                # success_status remains "FALSE"
 
             log_llm_response(
                 log_file_path=log_file_path,
-                model_name=self.client.model_name,
+                model_name=self.model_id,
                 power_name=self.power_name,
                 phase=game.current_short_phase,
                 response_type='order_diary',
-                raw_input_prompt=prompt, # ENSURED
-                raw_response=raw_response if raw_response else "",
+                raw_input_prompt=prompt, 
+                raw_response=raw_response if raw_response else "", # Ensure raw_response is not None
                 success=success_status
             )
 
@@ -753,27 +742,26 @@ class DiplomacyAgent:
                 self.add_diary_entry(actual_diary_text, game.current_short_phase)
                 logger.info(f"[{self.power_name}] Order diary entry generated and added.")
             else:
-                fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (LLM failed to generate a specific diary entry)"
+                fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (LLM failed to generate a specific diary entry, status: {success_status})"
                 self.add_diary_entry(fallback_diary, game.current_short_phase)
-                logger.warning(f"[{self.power_name}] Failed to generate specific order diary entry. Added fallback.")
+                logger.warning(f"[{self.power_name}] Failed to generate specific order diary entry. Added fallback. Status: {success_status}")
 
         except Exception as e:
-            # Ensure prompt is defined or handled if it might not be (it should be in this flow)
-            current_prompt = prompt if 'prompt' in locals() else "[prompt_unavailable_in_exception]"
-            current_raw_response = raw_response if 'raw_response' in locals() and raw_response is not None else f"Error: {e}"
+            current_prompt_for_exc = prompt if 'prompt' in locals() else "[prompt_unavailable_in_exception]"
+            current_raw_response_for_exc = raw_response if 'raw_response' in locals() and raw_response is not None else f"Error: {e}"
             log_llm_response(
                 log_file_path=log_file_path,
-                model_name=self.client.model_name if hasattr(self, 'client') else "UnknownModel",
+                model_name=self.model_id,
                 power_name=self.power_name,
                 phase=game.current_short_phase if 'game' in locals() and hasattr(game, 'current_short_phase') else "order_phase",
                 response_type='order_diary_exception',
-                raw_input_prompt=current_prompt, # ENSURED (using current_prompt for safety)
-                raw_response=current_raw_response,
-                success="FALSE"
+                raw_input_prompt=current_prompt_for_exc,
+                raw_response=current_raw_response_for_exc,
+                success="EXCEPTION" # Indicate exception specifically
             )
-            fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (Critical error in diary generation process)"
+            fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (Critical error in diary generation process: {type(e).__name__})"
             self.add_diary_entry(fallback_diary, game.current_short_phase)
-            logger.warning(f"[{self.power_name}] Added fallback order diary entry due to critical error.")
+            logger.error(f"[{self.power_name}] Added fallback order diary entry due to critical error.", exc_info=True)
         # Rest of the code remains the same
 
     async def generate_phase_result_diary_entry(
@@ -842,36 +830,31 @@ class DiplomacyAgent:
         success_status = "FALSE"
         
         try:
-            raw_response = await run_llm_and_log(
-                client=self.client,
-                prompt=prompt,
-                log_file_path=log_file_path,
-                power_name=self.power_name,
-                phase=game.current_short_phase,
-                response_type='phase_result_diary',
-            )
+            model = llm.get_model(self.model_id)
+            llm_response = await model.async_prompt(prompt, system=self.system_prompt)
+            raw_response = llm_response.text()
             
             if raw_response and raw_response.strip():
-                # The response should be plain text diary entry
+                diary_entry = raw_response.strip()
                 diary_entry = raw_response.strip()
                 self.add_diary_entry(diary_entry, game.current_short_phase)
                 success_status = "TRUE"
                 logger.info(f"[{self.power_name}] Phase result diary entry generated and added.")
             else:
-                fallback_diary = f"Phase {game.current_short_phase} completed. Orders executed as: {your_orders_str}. (Failed to generate detailed analysis)"
+                fallback_diary = f"Phase {game.current_short_phase} completed. Orders executed as: {your_orders_str}. (Failed to generate detailed analysis or empty LLM response)"
                 self.add_diary_entry(fallback_diary, game.current_short_phase)
-                logger.warning(f"[{self.power_name}] Empty response from LLM. Added fallback phase result diary.")
-                success_status = "FALSE"
+                logger.warning(f"[{self.power_name}] Empty or no response from LLM. Added fallback phase result diary.")
+                success_status = "FALSE_EMPTY_RESPONSE"
                 
         except Exception as e:
             logger.error(f"[{self.power_name}] Error generating phase result diary: {e}", exc_info=True)
-            fallback_diary = f"Phase {game.current_short_phase} completed. Unable to analyze results due to error."
+            fallback_diary = f"Phase {game.current_short_phase} completed. Unable to analyze results due to error: {type(e).__name__}."
             self.add_diary_entry(fallback_diary, game.current_short_phase)
-            success_status = f"FALSE: {type(e).__name__}"
+            success_status = f"EXCEPTION: {type(e).__name__}"
         finally:
             log_llm_response(
                 log_file_path=log_file_path,
-                model_name=self.client.model_name,
+                model_name=self.model_id,
                 power_name=self.power_name,
                 phase=game.current_short_phase,
                 response_type='phase_result_diary',
@@ -956,26 +939,19 @@ class DiplomacyAgent:
             )
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
-            # Use the client's raw generation capability - AWAIT the async call USING THE WRAPPER
-            
-            response = await run_llm_and_log(
-                client=self.client,
-                prompt=prompt,
-                log_file_path=log_file_path,
-                power_name=power_name,
-                phase=current_phase,
-                response_type='state_update',
-            )
-            logger.debug(f"[{power_name}] Raw LLM response for state update: {response}")
+            model = llm.get_model(self.model_id)
+            llm_response_obj = await model.async_prompt(prompt, system=self.system_prompt)
+            raw_llm_response_text = llm_response_obj.text()
+            logger.debug(f"[{power_name}] Raw LLM response for state update: {raw_llm_response_text}")
 
-            log_entry_response_type = 'state_update' # Default for log_llm_response
-            log_entry_success = "FALSE" # Default
-            update_data = None # Initialize
+            log_entry_response_type = 'state_update' 
+            log_entry_success = "FALSE" 
+            update_data = None 
 
-            if response is not None and response.strip(): # Check if response is not None and not just whitespace
+            if raw_llm_response_text and raw_llm_response_text.strip():
                 try:
-                    update_data = self._extract_json_from_text(response)
-                    logger.debug(f"[{power_name}] Successfully parsed JSON: {update_data}")
+                    update_data = self._extract_json_from_text(raw_llm_response_text)
+                    logger.debug(f"[{power_name}] Successfully parsed JSON for state update: {update_data}")
                     
                     # Ensure update_data is a dictionary
                     if not isinstance(update_data, dict):
@@ -983,116 +959,86 @@ class DiplomacyAgent:
                         update_data = {}
                     
                     # Check if essential data ('updated_goals' or 'goals') is present AND is a list (for goals)
-                    # For relationships, check for 'updated_relationships' or 'relationships' AND is a dict.
-                    # Consider it TRUE if at least one of the primary data structures (goals or relationships) is present and correctly typed.
-                    goals_present_and_valid = isinstance(update_data.get('updated_goals'), list) or isinstance(update_data.get('goals'), list)
-                    rels_present_and_valid = isinstance(update_data.get('updated_relationships'), dict) or isinstance(update_data.get('relationships'), dict)
-
-                    if update_data and (goals_present_and_valid or rels_present_and_valid):
-                        log_entry_success = "TRUE"
-                    elif update_data: # Parsed, but maybe not all essential data there or not correctly typed
-                        log_entry_success = "PARTIAL" 
-                        log_entry_response_type = 'state_update_partial_data'
-                    else: # Parsed to None or empty dict/list, or data not in expected format
-                        log_entry_success = "FALSE"
-                        log_entry_response_type = 'state_update_parsing_empty_or_invalid_data'
-                except json.JSONDecodeError as e:
-                    logger.error(f"[{power_name}] Failed to parse JSON response for state update: {e}. Raw response: {response}")
-                    log_entry_response_type = 'state_update_json_error' 
+                    
+                    if not isinstance(update_data, dict): # Ensure it's a dict
+                        logger.warning(f"[{power_name}] Extracted data for state update is not a dictionary, type: {type(update_data)}. Raw: {raw_llm_response_text[:100]}")
+                        update_data = {} # Force to empty dict to prevent further errors
+                        log_entry_success = "FALSE_INVALID_JSON_STRUCTURE"
+                    else:
+                        goals_present_and_valid = isinstance(update_data.get('updated_goals'), list) or isinstance(update_data.get('goals'), list)
+                        rels_present_and_valid = isinstance(update_data.get('updated_relationships'), dict) or isinstance(update_data.get('relationships'), dict)
+                        if goals_present_and_valid or rels_present_and_valid:
+                            log_entry_success = "TRUE"
+                        else:
+                            log_entry_success = "PARTIAL_DATA_MISSING"
+                            logger.warning(f"[{power_name}] State update JSON parsed but missing valid goals or relationships. Data: {update_data}")
+                
+                except Exception as e: # Catch JSON parsing or other errors
+                    logger.error(f"[{power_name}] Failed to parse JSON for state update: {e}. Raw response: {raw_llm_response_text[:200]}", exc_info=True)
+                    log_entry_response_type = 'state_update_json_error'
                     # log_entry_success remains "FALSE"
-                except Exception as e:
-                    logger.error(f"[{power_name}] Unexpected error parsing state update: {e}")
-                    log_entry_response_type = 'state_update_unexpected_error'
-                    update_data = {}
-                    # log_entry_success remains "FALSE"
-            else: # response was None or empty/whitespace
+            
+            else: # raw_llm_response_text was None or empty
                 logger.error(f"[{power_name}] No valid response (None or empty) received from LLM for state update.")
                 log_entry_response_type = 'state_update_no_response'
                 # log_entry_success remains "FALSE"
 
-            # Log the attempt and its outcome
             log_llm_response(
                 log_file_path=log_file_path, 
-                model_name=self.client.model_name,
+                model_name=self.model_id, # Use agent's model_id
                 power_name=power_name,
                 phase=current_phase,
                 response_type=log_entry_response_type,
-                raw_input_prompt=prompt, # ENSURED
-                raw_response=response if response is not None else "", # Handle if response is None
+                raw_input_prompt=prompt, 
+                raw_response=raw_llm_response_text if raw_llm_response_text else "", 
                 success=log_entry_success
             )
 
-            # Fallback logic if update_data is still None or not usable
-            if not update_data or not (isinstance(update_data.get('updated_goals'), list) or isinstance(update_data.get('goals'), list) or isinstance(update_data.get('updated_relationships'), dict) or isinstance(update_data.get('relationships'), dict)):
-                 logger.warning(f"[{power_name}] update_data is None or missing essential valid structures after LLM call. Using existing goals and relationships as fallback.")
-                 update_data = {
-                    "updated_goals": self.goals, 
-                    "updated_relationships": self.relationships,
-                 }
-                 logger.warning(f"[{power_name}] Using existing goals and relationships as fallback: {update_data}")
-
-            # Check for both possible key names (prompt uses "goals"/"relationships", 
-            # but code was expecting "updated_goals"/"updated_relationships")
-            updated_goals = update_data.get('updated_goals')
-            if updated_goals is None:
-                updated_goals = update_data.get('goals')
-                if updated_goals is not None:
-                    logger.debug(f"[{power_name}] Using 'goals' key instead of 'updated_goals'")
+            if not update_data: # If update_data is None or became empty dict due to parsing failure
+                 logger.warning(f"[{power_name}] update_data is None or empty after LLM call and parsing for state update. No state changes will be applied.")
+                 # No need to create fallback here, just skip updates if data is bad
             
-            updated_relationships = update_data.get('updated_relationships')
-            if updated_relationships is None:
-                updated_relationships = update_data.get('relationships')
-                if updated_relationships is not None:
-                    logger.debug(f"[{power_name}] Using 'relationships' key instead of 'updated_relationships'")
+            # Process goals and relationships if update_data is a valid dictionary
+            if isinstance(update_data, dict): # Check again as it might have been reset if parsing failed badly
+                updated_goals = update_data.get('updated_goals', update_data.get('goals'))
+                if isinstance(updated_goals, list):
+                    self.goals = updated_goals
+                    self.add_journal_entry(f"[{game.current_short_phase}] Goals updated based on {last_phase_name}: {self.goals}")
+                else:
+                    logger.warning(f"[{power_name}] LLM did not provide valid 'updated_goals' or 'goals' list in state update. Current goals remain: {self.goals}")
 
-            if isinstance(updated_goals, list):
-                # Simple overwrite for now, could be more sophisticated (e.g., merging)
-                self.goals = updated_goals
-                self.add_journal_entry(f"[{game.current_short_phase}] Goals updated based on {last_phase_name}: {self.goals}")
-            else:
-                logger.warning(f"[{power_name}] LLM did not provide valid 'updated_goals' list in state update.")
-                # Keep current goals, no update needed
-
-            if isinstance(updated_relationships, dict):
-                # Validate and update relationships
-                valid_new_relationships = {}
-                invalid_count = 0
-                
-                for p, r in updated_relationships.items():
-                    # Convert power name to uppercase for case-insensitive matching
-                    p_upper = p.upper()
-                    if p_upper in ALL_POWERS and p_upper != power_name:
-                        # Check against allowed labels (case-insensitive)
-                        r_title = r.title() if isinstance(r, str) else r  # Convert "enemy" to "Enemy" etc.
-                        if r_title in ALLOWED_RELATIONSHIPS:
-                            valid_new_relationships[p_upper] = r_title
-                        else:
+                updated_relationships = update_data.get('updated_relationships', update_data.get('relationships'))
+                if isinstance(updated_relationships, dict):
+                    valid_new_relationships = {}
+                    invalid_count = 0
+                    for p, r_status in updated_relationships.items():
+                        p_upper = str(p).upper()
+                        if p_upper in ALL_POWERS and p_upper != power_name:
+                            r_title = str(r_status).title() if isinstance(r_status, str) else r_status
+                            if r_title in ALLOWED_RELATIONSHIPS:
+                                valid_new_relationships[p_upper] = r_title
+                            else:
+                                invalid_count += 1
+                                if invalid_count <= 2: logger.warning(f"[{power_name}] Received invalid relationship label '{r_status}' for '{p}'. Ignoring.")
+                        elif p_upper != self.power_name : # Avoid logging self as invalid
                             invalid_count += 1
-                            if invalid_count <= 2:  # Only log first few to reduce noise
-                                logger.warning(f"[{power_name}] Received invalid relationship label '{r}' for '{p}'. Ignoring.")
-                    else:
-                        invalid_count += 1
-                        if invalid_count <= 2 and not p_upper.startswith(power_name):  # Only log first few to reduce noise
-                            logger.warning(f"[{power_name}] Received relationship for invalid/own power '{p}' (normalized: {p_upper}). Ignoring.")
-                
-                # Summarize if there were many invalid entries
-                if invalid_count > 2:
-                    logger.warning(f"[{power_name}] {invalid_count} total invalid relationships were ignored.")
+                            if invalid_count <= 2: logger.warning(f"[{power_name}] Received relationship for invalid/own power '{p}'. Ignoring.")
+                    if invalid_count > 2: logger.warning(f"[{power_name}] {invalid_count} total invalid relationships were ignored.")
                     
-                # Update relationships if the dictionary is not empty after validation
-                if valid_new_relationships:
-                    self.relationships.update(valid_new_relationships)
-                    self.add_journal_entry(f"[{game.current_short_phase}] Relationships updated based on {last_phase_name}: {valid_new_relationships}")
-                elif updated_relationships: # Log if the original dict wasn't empty but validation removed everything
-                    logger.warning(f"[{power_name}] Found relationships in LLM response but none were valid after normalization. Using defaults.")
-                else: # Log if the original dict was empty
-                     logger.warning(f"[{power_name}] LLM did not provide valid 'updated_relationships' dict in state update.")
-                     # Keep current relationships, no update needed
+                    if valid_new_relationships:
+                        self.relationships.update(valid_new_relationships)
+                        self.add_journal_entry(f"[{game.current_short_phase}] Relationships updated based on {last_phase_name}: {valid_new_relationships}")
+                    elif updated_relationships: 
+                        logger.warning(f"[{power_name}] Found relationships in LLM response but none were valid after normalization. Current relationships remain: {self.relationships}")
+                else:
+                    logger.warning(f"[{power_name}] LLM did not provide valid 'updated_relationships' or 'relationships' dict in state update. Current relationships remain: {self.relationships}")
+            else: # update_data was not a dict (e.g. parsing failed completely)
+                logger.warning(f"[{power_name}] State update data was not a dictionary. No updates applied. Data: {update_data}")
+
 
         except FileNotFoundError:
             logger.error(f"[{power_name}] state_update_prompt.txt not found. Skipping state update.")
         except Exception as e:
-            # Catch any other unexpected errors during the update process
             logger.error(f"[{power_name}] Error during state analysis/update for phase {game.current_short_phase}: {e}", exc_info=True)
 
         self.log_state(f"After State Update ({game.current_short_phase})")
@@ -1114,24 +1060,66 @@ class DiplomacyAgent:
 
     def get_agent_state_summary(self) -> str:
         """Returns a string summary of the agent's current state."""
-        summary = f"Agent State for {self.power_name}:\n"
+        summary = f"Agent State for {self.power_name} (Model: {self.model_id}):\n" # Added model_id
         summary += f"  Goals: {self.goals}\n"
         summary += f"  Relationships: {self.relationships}\n"
         summary += f"  Journal Entries: {len(self.private_journal)}"
-        # Optionally include last few journal entries
-        # if self.private_journal:
-        #    summary += f"\n  Last Journal Entry: {self.private_journal[-1]}"
         return summary
 
-    def generate_plan(self, game: 'Game', board_state: dict, game_history: 'GameHistory') -> str:
-        """Generates a strategic plan using the client and logs it."""
-        logger.info(f"Agent {self.power_name} generating strategic plan...")
+    async def generate_plan(self, game: 'Game', game_history: 'GameHistory', log_file_path: str) -> str:
+        """Generates a strategic plan using the llm library and logs it."""
+        logger.info(f"Agent {self.power_name} (model: {self.model_id}) generating strategic plan for phase {game.current_short_phase}...")
+        
+        prompt_template = _load_prompt_file('planning_prompt.txt') # Assuming a generic planning prompt
+        if not prompt_template:
+            logger.error(f"[{self.power_name}] Could not load planning_prompt.txt. Cannot generate plan.")
+            return "Error: Planning prompt file not found."
+
+        board_state = game.get_state() # Get current board state
+        possible_orders_for_context = {} # For planning, detailed orders might not be needed for context
+
+        # Re-use build_context_prompt if it's suitable for planning context
+        context_prompt_text = build_context_prompt(
+            game,
+            board_state,
+            self.power_name,
+            possible_orders_for_context, 
+            game_history,
+            agent_goals=self.goals,
+            agent_relationships=self.relationships,
+            agent_private_diary=self.format_private_diary_for_prompt(),
+        )
+        
+        full_prompt = f"{context_prompt_text}\n\n{prompt_template}"
+
+        raw_response = ""
+        success_status = "Failure: Initialized"
+        plan_to_return = f"Error: Plan generation failed for {self.power_name} (initial state)"
+
         try:
-            plan = self.client.get_plan(game, board_state, self.power_name, game_history)
-            self.add_journal_entry(f"Generated plan for phase {game.current_phase}:\n{plan}")
-            logger.info(f"Agent {self.power_name} successfully generated plan.")
-            return plan
+            model = llm.get_model(self.model_id)
+            llm_response = await model.async_prompt(full_prompt, system=self.system_prompt)
+            raw_response = llm_response.text()
+            
+            logger.debug(f"[{self.power_name}] Raw LLM response for plan generation:\n{raw_response}")
+            plan_to_return = raw_response.strip() if raw_response else "LLM returned empty plan."
+            success_status = "Success" if raw_response and raw_response.strip() else "Failure: Empty LLM response"
+            self.add_journal_entry(f"Generated plan for phase {game.current_short_phase}:\n{plan_to_return[:200]}...") # Log a preview
         except Exception as e:
-            logger.error(f"Agent {self.power_name} failed to generate plan: {e}")
-            self.add_journal_entry(f"Failed to generate plan for phase {game.current_phase} due to error: {e}")
-            return "Error: Failed to generate plan."
+            logger.error(f"Agent {self.power_name} failed to generate plan: {e}", exc_info=True)
+            success_status = f"Failure: Exception ({type(e).__name__})"
+            plan_to_return = f"Error: Failed to generate plan for {self.power_name} due to exception: {e}"
+            self.add_journal_entry(f"Failed to generate plan for phase {game.current_short_phase} due to error: {e}")
+        finally:
+            if log_file_path:
+                log_llm_response(
+                    log_file_path=log_file_path,
+                    model_name=self.model_id,
+                    power_name=self.power_name,
+                    phase=game.current_short_phase if game else "UnknownPhase",
+                    response_type="plan_generation",
+                    raw_input_prompt=full_prompt,
+                    raw_response=raw_response,
+                    success=success_status
+                )
+        return plan_to_return

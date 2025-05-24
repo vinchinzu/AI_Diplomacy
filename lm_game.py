@@ -19,7 +19,8 @@ from diplomacy import Game
 from diplomacy.engine.message import GLOBAL, Message
 from diplomacy.utils.export import to_saved_game_format
 
-from ai_diplomacy.clients import load_model_client
+# load_model_client is obsolete and removed.
+# from ai_diplomacy.clients import load_model_client 
 from ai_diplomacy.utils import (
     get_valid_orders,
     gather_possible_orders,
@@ -72,8 +73,9 @@ def parse_arguments():
         type=str,
         default="",
         help=(
-            "Comma-separated list of model names to assign to powers in order. "
-            "The order is: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY."
+            "Comma-separated list of llm-compatible model IDs to assign to powers. "
+            "Order: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY. "
+            "E.g., 'gpt-4o,ollama/llama3,...'"
         ),
     )
     parser.add_argument(
@@ -161,15 +163,21 @@ async def main():
     for power_name, model_id in game.power_model_map.items():
         if not game.powers[power_name].is_eliminated(): # Only create for active powers initially
             try:
-                client = load_model_client(model_id)
-                # TODO: Potentially load initial goals/relationships from config later
-                agent = DiplomacyAgent(power_name=power_name, client=client) 
+                # client = load_model_client(model_id) # OLD WAY
+                # In the next subtask, this will be:
+                # model_instance = llm.get_model(model_id)
+                # agent = DiplomacyAgent(power_name=power_name, model_id=model_id, llm_model=model_instance)
+                # For now, we'll create the agent with the model_id.
+                # The DiplomacyAgent will need to be adapted to use this model_id with llm.get_model() internally,
+                # or be passed the llm.Model instance directly.
+                # Let's assume DiplomacyAgent is adapted to take model_id for now and handles llm.get_model internally or in a later step.
+                agent = DiplomacyAgent(power_name=power_name, model_id=model_id) # Pass model_id
                 agents[power_name] = agent
-                logger.info(f"Preparing initialization task for {power_name} with model {model_id}")
+                logger.info(f"Preparing initialization task for {power_name} with model_id {model_id}")
                 # Pass log path to initialization
                 initialization_tasks.append(initialize_agent_state_ext(agent, game, game_history, llm_log_file_path))
             except Exception as e:
-                logger.error(f"Failed to create agent or client for {power_name} with model {model_id}: {e}", exc_info=True)
+                logger.error(f"Failed to create agent for {power_name} with model_id {model_id}: {e}", exc_info=True)
         else:
              logger.info(f"Skipping agent initialization for eliminated power: {power_name}")
     
@@ -317,27 +325,33 @@ async def main():
                 continue
 
             order_power_names.append(power_name)
-            # NOTE: get_valid_orders is in utils, we assume it calls client.get_orders
-            # Need to modify get_valid_orders signature in utils.py later
             
             # Debug logging for diary
             diary_preview = agent.format_private_diary_for_prompt()
             logger.info(f"[{power_name}] Passing diary to get_valid_orders. Preview: {diary_preview[:200]}...")
+
+            # The `agent.client` attribute will be removed/changed.
+            # `get_valid_orders` will need to be refactored to use `llm.Model` instance.
+            # For now, this call will likely break in the next subtask when `agent.client` is gone.
+            # We are deferring the full refactor of get_valid_orders and LLM calls.
+            # A placeholder for the future client/model object to be passed:
+            # llm_model_placeholder = agent.model_id # Or eventually agent.llm_model instance
             
             order_tasks.append(
                 get_valid_orders(
                     # --- Positional Arguments --- 
-                    game,                    
-                    agent.client,            
-                    board_state,             
-                    power_name,              
-                    possible_orders,         
-                    game_history,            
-                    model_error_stats,       
+                    game, 
+                    model_id=agent.model_id, # Pass model_id
+                    agent_system_prompt=agent.system_prompt, # Pass agent's system_prompt
+                    board_state=board_state,             
+                    power_name=power_name,              
+                    possible_orders=possible_orders,         
+                    game_history=game_history,            
+                    model_error_stats=model_error_stats,       
                     # --- Keyword Arguments --- 
                     agent_goals=agent.goals,
                     agent_relationships=agent.relationships,
-                    agent_private_diary_str=diary_preview,  # Fixed: Added missing diary parameter, now using pre-formatted value
+                    agent_private_diary_str=diary_preview,
                     log_file_path=llm_log_file_path,
                     phase=current_phase,     
                 )
@@ -355,24 +369,20 @@ async def main():
         for i, result in enumerate(order_results):
             p_name = order_power_names[i]
             agent = agents[p_name] # Get agent for logging/stats if needed
-            model_name = agent.client.model_name
+            # model_name = agent.client.model_name # This will change to agent.model_id
+            model_id_for_stats = agent.model_id
 
             if isinstance(result, Exception):
                 logger.error(f"Error during get_valid_orders for {p_name}: {result}", exc_info=result)
-                # Log error stats (consider if fallback orders should be set here)
-                if model_name in model_error_stats:
-                    model_error_stats[model_name].setdefault("order_generation_errors", 0)
-                    model_error_stats[model_name]["order_generation_errors"] += 1
-                # Optionally set fallback orders here if needed, e.g., game.set_orders(p_name, []) or specific fallback
-                game.set_orders(p_name, []) # Set empty orders on error for now
+                # Log error stats
+                # The structure of model_error_stats might need adjustment based on model_id instead of model_name.
+                model_error_stats.setdefault(model_id_for_stats, defaultdict(int))["order_generation_errors"] += 1
+                game.set_orders(p_name, []) 
                 logger.warning(f"Setting empty orders for {p_name} due to generation error.")
             elif result is None:
-                # Handle case where get_valid_orders might theoretically return None
                 logger.warning(f"get_valid_orders returned None for {p_name}. Setting empty orders.")
                 game.set_orders(p_name, [])
-                if model_name in model_error_stats:
-                    model_error_stats[model_name].setdefault("order_generation_errors", 0)
-                    model_error_stats[model_name]["order_generation_errors"] += 1
+                model_error_stats.setdefault(model_id_for_stats, defaultdict(int))["order_generation_errors"] += 1
             else:
                 # Result is the list of validated orders
                 orders = result

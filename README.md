@@ -23,7 +23,8 @@ Each power is represented by a `DiplomacyAgent` with:
 - BFS pathfinding for movement analysis
 - Context-aware order selection with nearest threats/opportunities
 - Fallback logic for robustness
-- Support for multiple LLM providers (OpenAI, Claude, Gemini, DeepSeek, OpenRouter)
+- Integrates with Simon Willison's `llm` library for flexible and unified access to various language models.
+- Support for multiple LLM providers (OpenAI, Claude, Gemini, DeepSeek, OpenRouter, and local models via Ollama/llama.cpp through `llm` plugins)
 
 ### 📊 Advanced Game Analysis
 - Custom phase summaries with success/failure categorization
@@ -194,10 +195,9 @@ graph TB
    - State update logic based on game outcomes
 
 3. **`ai_diplomacy/clients.py`** - LLM abstraction layer
-   - `BaseModelClient` interface for all LLM providers
-   - Implementations for OpenAI, Claude, Gemini, DeepSeek, OpenRouter
-   - Prompt construction and response parsing
-   - Retry logic and error handling
+   - The old client system (`ai_diplomacy/clients.py`) has been deprecated.
+   - LLM interaction is now managed via Simon Willison's `llm` library and its plugins.
+   - The `DiplomacyAgent` directly uses `llm.get_model()` and `model.async_prompt()` for LLM calls.
 
 4. **`ai_diplomacy/possible_order_context.py`** - Strategic analysis
    - BFS pathfinding on game map
@@ -233,7 +233,8 @@ python lm_game.py --max_year 1910 --num_negotiation_rounds 3
 python lm_game.py --max_year 1910 --planning_phase --num_negotiation_rounds 2
 
 # Custom model assignment (order: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY)
-python lm_game.py --models "claude-3-5-sonnet-20241022,gpt-4o,claude-3-5-sonnet-20241022,gpt-4o,claude-3-5-sonnet-20241022,gpt-4o,claude-3-5-sonnet-20241022"
+# Model IDs should be compatible with the `llm` library.
+python lm_game.py --models "claude-3.5-sonnet,gpt-4o,ollama/llama3,openrouter/google/gemini-pro,gpt-3.5-turbo,claude-3-opus,gemini-1.5-flash-latest"
 
 # Output to specific file
 python lm_game.py --output results/my_game.json
@@ -241,14 +242,42 @@ python lm_game.py --output results/my_game.json
 
 ### Environment Setup
 
-Create a `.env` file with your API keys:
-```
-OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-GEMINI_API_KEY=your_key_here
-DEEPSEEK_API_KEY=your_key_here
-OPENROUTER_API_KEY=your_key_here
-```
+1.  **Install Core Dependencies**:
+    ```bash
+    pip install -r requirements.txt 
+    # Ensure `llm` is included or install separately:
+    pip install llm
+    ```
+
+2.  **Install `llm` Plugins**:
+    This project uses the [llm library by Simon Willison](https://llm.datasette.io/) for interacting with language models. You'll need to install `llm` and its relevant plugins for the models you intend to use:
+    ```bash
+    # Example plugins (install those you need):
+    llm install llm-openai    # For OpenAI models (GPT-3.5, GPT-4, etc.)
+    llm install llm-claude    # For Anthropic Claude models
+    llm install llm-gemini    # For Google Gemini models
+    llm install llm-ollama    # For local models via Ollama
+    llm install llm-llama-cpp # For local models via llama.cpp (GGUF)
+    # Find more plugins at https://llm.datasette.io/en/latest/plugins.html#community-plugins
+    ```
+
+3.  **API Key Setup (using `llm` library)**:
+    Set your API keys using the `llm` command-line tool. This securely stores your keys for use by the library.
+    ```bash
+    llm keys set openai YOUR_OPENAI_API_KEY
+    llm keys set anthropic YOUR_ANTHROPIC_API_KEY
+    llm keys set gemini YOUR_GEMINI_API_KEY
+    llm keys set openrouter YOUR_OPENROUTER_API_KEY 
+    # Add other keys as needed for installed plugins.
+    ```
+    For services accessed via an OpenAI-compatible endpoint (like a local `llama.cpp` server not using `llm-llama-cpp`), you might still use an environment variable like `OPENAI_API_BASE_URL` if you are using the `llm-openai` plugin to target this custom endpoint. The `llm-llama-cpp` and `llm-ollama` plugins typically handle endpoint configuration automatically or through their own settings.
+
+    Create a `.env` file in the project root for any other specific environment variables (e.g., `OPENAI_API_BASE_URL` if needed for a custom OpenAI-compatible endpoint).
+    ```env
+    # .env (Example for a custom OpenAI-compatible endpoint)
+    # OPENAI_API_BASE_URL="http://localhost:8080/v1" 
+    # OPENAI_API_KEY="sk-dummy" # Often needed even if server doesn't check it
+    ```
 
 ### Game Output and Analysis
 
@@ -288,13 +317,14 @@ The complete documentation is available at [diplomacy.readthedocs.io](https://di
 
 ### Installation
 
-The latest version of the package can be installed with:
+The latest version of the base `diplomacy` package can be installed with:
 
-```python3
+```bash
 pip install diplomacy
 ```
+This project requires additional dependencies as listed in `requirements.txt` (including `llm` and potentially `llm` plugins). See "Environment Setup" above for details on setting up the AI components.
 
-The package is compatible with Python 3.5, 3.6, and 3.7.
+The package is compatible with Python 3.8+.
 
 ### Running a game
 
@@ -382,6 +412,7 @@ It is possible to visualize a game by using the "Load a game from disk" menu on 
 It is possible to join a game remotely over a network using websockets. The script below plays a game over a network.
 
 Note. The server must be started with `python -m diplomacy.server.run` for the script to work.
+The `network_lm_agent.py` script (part of this AI-Diplomacy project) also uses `llm`-compatible model IDs specified via the `--model_id` argument. Ensure the environment where each agent runs has `llm` installed, the necessary plugins, and API keys configured as described in the "Environment Setup" section. Refer to `docs/LOCAL_NETWORK_OLLAMA_SETUP.md` for detailed instructions on network play with local LLMs.
 
 ```python3
 import asyncio

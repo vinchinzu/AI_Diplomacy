@@ -7,9 +7,11 @@ if False: # TYPE_CHECKING
     from diplomacy import Game
     from diplomacy.models.game import GameHistory
     from .agent import DiplomacyAgent
+import llm # Import the llm library
 
 from .agent import ALL_POWERS, ALLOWED_RELATIONSHIPS
-from .utils import run_llm_and_log, log_llm_response
+# run_llm_and_log is obsolete
+from .utils import log_llm_response 
 from .prompt_constructor import build_context_prompt
 
 logger = logging.getLogger(__name__)
@@ -59,41 +61,37 @@ async def initialize_agent_state_ext(
             agent_private_diary=formatted_diary, 
         )
         full_prompt = initial_prompt + "\n\n" + context
-
-        response = await run_llm_and_log(
-            client=agent.client,
-            prompt=full_prompt,
-            log_file_path=log_file_path,
-            power_name=power_name,
-            phase=current_phase,
-            response_type='initialization', # Context for run_llm_and_log internal error logging
-        )
-        logger.debug(f"[{power_name}] LLM response for initial state: {response[:300]}...") # Log a snippet
-
+        
+        raw_response_text = "" # Initialize for logging
         parsed_successfully = False
-        try:
-            update_data = agent._extract_json_from_text(response)
-            logger.debug(f"[{power_name}] Successfully parsed JSON: {update_data}")
-            parsed_successfully = True
-        except json.JSONDecodeError as e:
-            logger.error(f"[{power_name}] All JSON extraction attempts failed: {e}. Response snippet: {response[:300]}...")
-            success_status = "Failure: JSONDecodeError"
-            update_data = {} # Ensure update_data exists for fallback logic below
-            parsed_successfully = False # Explicitly set here too
-            # Fallback logic for goals/relationships will be handled later if update_data is empty
+        update_data = {} # Initialize to ensure it exists
 
-        # Defensive check for update_data type if parsing was initially considered successful
-        if parsed_successfully: 
-            if isinstance(update_data, str):
-                logger.error(f"[{power_name}] _extract_json_from_text returned a string, not a dict/list, despite not raising an exception. This indicates an unexpected parsing issue. String returned: {update_data[:300]}...")
-                update_data = {} # Treat as parsing failure
+        try:
+            model = llm.get_model(agent.model_id)
+            # Assuming build_context_prompt does not include the system prompt, 
+            # and agent.system_prompt is the one to use.
+            # If full_prompt from build_context_prompt already includes system prompt,
+            # then system=None or system=agent.system_prompt might need adjustment based on model behavior.
+            llm_response = await model.async_prompt(full_prompt, system=agent.system_prompt)
+            raw_response_text = llm_response.text()
+            logger.debug(f"[{power_name}] LLM response for initial state: {raw_response_text[:300]}...")
+
+            update_data = agent._extract_json_from_text(raw_response_text)
+            if not isinstance(update_data, dict): # Ensure it's a dict
+                logger.error(f"[{power_name}] _extract_json_from_text returned non-dict: {type(update_data)}. Treating as parsing failure. Data: {str(update_data)[:300]}")
+                update_data = {} # Reset to empty dict
+                success_status = "Failure: NotADictAfterParse"
                 parsed_successfully = False
-                success_status = "Failure: ParsedAsStr"
-            elif not isinstance(update_data, dict): # Expecting a dict from JSON object
-                logger.error(f"[{power_name}] _extract_json_from_text returned a non-dict type ({type(update_data)}), expected dict. Data: {str(update_data)[:300]}")
-                update_data = {} # Treat as parsing failure
-                parsed_successfully = False
-                success_status = "Failure: NotADict"
+            else:
+                logger.debug(f"[{power_name}] Successfully parsed JSON for initial state: {update_data}")
+                parsed_successfully = True # Parsed to a dict
+                # Success status will be refined based on whether data is applied
+        
+        except Exception as e_llm_call:
+            logger.error(f"[{power_name}] LLM call or parsing failed during initialization: {e_llm_call}", exc_info=True)
+            success_status = f"Failure: LLMErrorOrParse ({type(e_llm_call).__name__})"
+            # raw_response_text might be empty or from a failed call, log what we have.
+            # update_data remains {}
 
         initial_goals_applied = False
         initial_relationships_applied = False
@@ -146,37 +144,47 @@ async def initialize_agent_state_ext(
         
         if not initial_relationships_applied:
              # Check if relationships are still default-like before overriding
-            is_default_relationships = True
-            if agent.relationships: # Check if it's not empty
-                for p in ALL_POWERS:
-                    if p != power_name and agent.relationships.get(p) != "Neutral":
-                        is_default_relationships = False
-                        break
-            if is_default_relationships: 
+            is_default_relationships = True # Assume default unless proven otherwise
+            if agent.relationships: 
+                # Check if all existing relationships are "Neutral"
+                if not all(r == "Neutral" for r in agent.relationships.values()):
+                    is_default_relationships = False
+            
+            if is_default_relationships: # Only override if current state is effectively default
                 agent.relationships = {p: "Neutral" for p in ALL_POWERS if p != power_name}
                 agent.add_journal_entry(f"[{current_phase}] Set default neutral relationships as LLM provided none valid or parse failed.")
-                logger.info(f"[{power_name}] Default neutral relationships set.")
+                logger.info(f"[{power_name}] Default neutral relationships set (or kept).")
+            else:
+                logger.info(f"[{power_name}] Agent relationships were not default, retaining existing ones after failed/empty LLM update for relationships: {agent.relationships}")
 
-    except Exception as e:
-        logger.error(f"[{power_name}] Error during external agent state initialization: {e}", exc_info=True)
+
+    except Exception as e: # Catch-all for unexpected errors in the main try block
+        logger.error(f"[{power_name}] Critical error during external agent state initialization: {e}", exc_info=True)
         success_status = f"Failure: Exception ({type(e).__name__})"
-        # Fallback logic for goals/relationships if not already set by earlier fallbacks
-        if not agent.goals:
+        # Ensure fallback logic for goals/relationships if not already set
+        if not agent.goals: # If goals are still empty
             agent.goals = ["Survive and expand", "Form beneficial alliances", "Secure key territories"]
             logger.info(f"[{power_name}] Set fallback goals after top-level error: {agent.goals}")
-        if not agent.relationships or all(r == "Neutral" for r in agent.relationships.values()):
+        
+        # Check if relationships are empty or all Neutral
+        is_relationships_effectively_empty_or_default = True
+        if agent.relationships:
+            if not all(r == "Neutral" for r in agent.relationships.values()):
+                 is_relationships_effectively_empty_or_default = False
+        
+        if is_relationships_effectively_empty_or_default:
             agent.relationships = {p: "Neutral" for p in ALL_POWERS if p != power_name}
-            logger.info(f"[{power_name}] Set fallback neutral relationships after top-level error: {agent.relationships}")
+            logger.info(f"[{power_name}] Set/reset to fallback neutral relationships after top-level error: {agent.relationships}")
     finally:
-        if log_file_path: # Ensure log_file_path is provided
+        if log_file_path: 
             log_llm_response(
                 log_file_path=log_file_path,
-                model_name=agent.client.model_name if agent and agent.client else "UnknownModel",
+                model_name=agent.model_id, # Use agent's model_id
                 power_name=power_name,
                 phase=current_phase,
-                response_type="initial_state_setup", # Specific type for CSV logging
+                response_type="initial_state_setup", 
                 raw_input_prompt=full_prompt,
-                raw_response=response,
+                raw_response=raw_response_text, # Log the raw text from LLM
                 success=success_status
             )
 
