@@ -102,6 +102,15 @@ class GameHistory:
         logger.error(f"Phase {phase_name} not found in history.")
         return None
 
+    def get_phase_by_name(self, phase_name_to_find: str) -> Optional[Phase]:
+        """Finds and returns a phase by its exact name."""
+        for phase in self.phases:
+            if phase.name == phase_name_to_find:
+                return phase
+        # Optionally log if not found, or let caller handle None
+        # logger.warning(f"Phase with name '{phase_name_to_find}' not found in history.")
+        return None
+
     def add_plan(self, phase_name: str, power_name: str, plan: str):
         phase = self._get_phase(phase_name)
         if phase:

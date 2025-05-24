@@ -20,9 +20,19 @@ This document provides an analysis of key Python modules within the `ai_diplomac
 * `bfs_nearest_adjacent`: Finds shortest path to a territory adjacent to any territory in a target set.
 * `build_diplomacy_graph`: Constructs the graph representation from the game map.
 
+#### 1.2. Core Game Management Modules (NEW - Refactored from `lm_game.py`)
+These modules were created by refactoring core logic out of `lm_game.py` to improve modularity and maintainability.
+
+*   `game_config.py`: Manages game configuration parameters derived from arguments and provides centralized access to paths and settings.
+*   `logging_setup.py`: Centralizes application-wide logging configuration, including console and file handlers.
+*   `agent_manager.py`: Handles the lifecycle (creation, model assignment, initialization, storage) of `DiplomacyAgent` instances.
+*   `game_orchestrator.py`: Orchestrates the main game loop, phase transitions, agent actions (planning, negotiation, orders), and game state progression.
+*   `game_results.py`: Manages the processing and saving of final game data, including game state, history, and agent manifestos.
+*   `phase_summary.py`: (Refactored) Provides tools for generating detailed game phase summaries (e.g., `PhaseSummaryGenerator` used by the orchestrator).
+
 #### 1.3. `phase_summary.py` (COMPLETE, in lm_game.py)
 **Goal:** Generate concise, structured summaries of each game phase for post-game analysis.
-**Status:** Fully implemented via `phase_summary_callback` in `lm_game.py`.
+**Status:** Fully implemented via `phase_summary_callback` in `lm_game.py`. (Note: This entry describes the *original* state. The module has been refactored as listed above).
 
 **Key Components:**
 * Structured summaries with:
