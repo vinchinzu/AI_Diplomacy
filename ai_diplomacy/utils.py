@@ -252,7 +252,7 @@ async def get_valid_orders(
     success_status = "FALSE: Initialized" 
     
     try:
-        model = llm.get_model(model_id)
+        model = llm.get_async_model(model_id)
         
         # Construct the prompt for order generation
         # The system_prompt argument in construct_order_generation_prompt is the agent's specific system prompt.
@@ -271,8 +271,9 @@ async def get_valid_orders(
         logger.debug(f"[{model_id}] Order generation prompt for {power_name}:\n{prompt_text[:500]}...")
         
         # LLM call using llm library (system prompt is part of prompt_text from constructor)
-        llm_response = await model.async_prompt(prompt_text)
-        raw_response_text = llm_response.text()
+        response_obj = model.prompt(prompt_text)
+        llm_response = await response_obj.text()
+        raw_response_text = llm_response
         
         logger.debug(f"[{model_id}] Raw LLM response for {power_name} orders:\n{raw_response_text[:300]}")
 

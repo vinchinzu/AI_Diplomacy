@@ -382,16 +382,10 @@ class DiplomacyAgent:
         try:
             # Use a specific model for consolidation, e.g., a fast Gemini Flash model via OpenRouter
             # Adjust model ID as per llm library conventions for OpenRouter
-            consolidation_model_id = "openrouter/google/gemini-1.5-flash-latest" 
-            try:
-                consolidation_model = llm.get_model(consolidation_model_id)
-            except Exception as e_model_load:
-                logger.warning(f"[{self.power_name}] Failed to load consolidation model {consolidation_model_id}: {e_model_load}. Falling back to agent's model {self.model_id}.")
-                consolidation_model = llm.get_model(self.model_id)
-                consolidation_model_id = self.model_id # For logging
-
-            llm_response = await consolidation_model.async_prompt(prompt, system=self.system_prompt) # Or a generic system prompt for consolidation
-            raw_response = llm_response.text()
+            consolidation_model = llm.get_async_model(self.model_id)
+            response_obj = consolidation_model.prompt(prompt, system=self.system_prompt)
+            llm_response = await response_obj.text()
+            raw_response = llm_response
             
             if raw_response and raw_response.strip():
                 consolidated_entry = raw_response.strip()
@@ -440,7 +434,7 @@ class DiplomacyAgent:
             if log_file_path:
                 log_llm_response(
                     log_file_path=log_file_path,
-                    model_name=consolidation_model_id if 'consolidation_model_id' in locals() else self.model_id,
+                    model_name=self.model_id,
                     power_name=self.power_name,
                     phase=game.current_short_phase,
                     response_type='diary_consolidation',
@@ -546,9 +540,10 @@ class DiplomacyAgent:
             
             logger.debug(f"[{self.power_name}] Negotiation diary prompt:\n{full_prompt[:500]}...")
 
-            model = llm.get_model(self.model_id)
-            llm_response = await model.async_prompt(full_prompt, system=self.system_prompt)
-            raw_response = llm_response.text()
+            model = llm.get_async_model(self.model_id)
+            response_obj = model.prompt(full_prompt, system=self.system_prompt)
+            llm_response = await response_obj.text()
+            raw_response = llm_response
             
             logger.debug(f"[{self.power_name}] Raw negotiation diary response: {raw_response[:300]}...")
 
@@ -708,16 +703,16 @@ class DiplomacyAgent:
         raw_response = "" # Initialize raw_response
         success_status = "FALSE"
         try:
-            model = llm.get_model(self.model_id)
-            llm_response = await model.async_prompt(prompt, system=self.system_prompt)
-            raw_response = llm_response.text()
+            model = llm.get_async_model(self.model_id)
+            response_obj = model.prompt(prompt, system=self.system_prompt)
+            llm_response = await response_obj.text()
             
             response_data = None
             actual_diary_text = None 
 
-            if raw_response:
+            if llm_response:
                 try:
-                    response_data = self._extract_json_from_text(raw_response)
+                    response_data = self._extract_json_from_text(llm_response)
                     if response_data and isinstance(response_data, dict): # Ensure response_data is a dict
                         diary_text_candidate = response_data.get("order_summary")
                         if isinstance(diary_text_candidate, str) and diary_text_candidate.strip():
@@ -728,12 +723,12 @@ class DiplomacyAgent:
                             logger.warning(f"[{self.power_name}] 'order_summary' missing, invalid, or empty. Value was: {diary_text_candidate}")
                             # success_status remains "FALSE"
                     else:
-                        logger.warning(f"[{self.power_name}] Failed to parse JSON or got non-dict data from order diary LLM response. Raw: {raw_response[:100]}")
+                        logger.warning(f"[{self.power_name}] Failed to parse JSON or got non-dict data from order diary LLM response. Raw: {llm_response[:100]}")
                         # success_status remains "FALSE"
                 except Exception as e: # Catch any error during JSON processing
-                    logger.error(f"[{self.power_name}] Error processing order diary JSON: {e}. Raw response: {raw_response[:200]} ", exc_info=False)
+                    logger.error(f"[{self.power_name}] Error processing order diary JSON: {e}. Raw response: {llm_response[:200]} ", exc_info=False)
                     # success_status remains "FALSE"
-            else: # raw_response is empty or None
+            else: # llm_response is empty or None
                 logger.warning(f"[{self.power_name}] Empty response from LLM for order diary.")
                 # success_status remains "FALSE"
 
@@ -744,7 +739,7 @@ class DiplomacyAgent:
                 phase=game.current_short_phase,
                 response_type='order_diary',
                 raw_input_prompt=prompt, 
-                raw_response=raw_response if raw_response else "", # Ensure raw_response is not None
+                raw_response=llm_response if llm_response else "", # Ensure llm_response is not None
                 success=success_status
             )
 
@@ -758,7 +753,7 @@ class DiplomacyAgent:
 
         except Exception as e:
             current_prompt_for_exc = prompt if 'prompt' in locals() else "[prompt_unavailable_in_exception]"
-            current_raw_response_for_exc = raw_response if 'raw_response' in locals() and raw_response is not None else f"Error: {e}"
+            current_raw_response_for_exc = llm_response if 'llm_response' in locals() and llm_response is not None else f"Error: {e}"
             log_llm_response(
                 log_file_path=log_file_path,
                 model_name=self.model_id,
@@ -840,13 +835,13 @@ class DiplomacyAgent:
         success_status = "FALSE"
         
         try:
-            model = llm.get_model(self.model_id)
-            llm_response = await model.async_prompt(prompt, system=self.system_prompt)
-            raw_response = llm_response.text()
+            model = llm.get_async_model(self.model_id)
+            response_obj = model.prompt(prompt, system=self.system_prompt)
+            llm_response = await response_obj.text()
             
-            if raw_response and raw_response.strip():
-                diary_entry = raw_response.strip()
-                diary_entry = raw_response.strip()
+            if llm_response and llm_response.strip():
+                diary_entry = llm_response.strip()
+                diary_entry = llm_response.strip()
                 self.add_diary_entry(diary_entry, game.current_short_phase)
                 success_status = "TRUE"
                 logger.info(f"[{self.power_name}] Phase result diary entry generated and added.")
@@ -949,9 +944,10 @@ class DiplomacyAgent:
             )
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
-            model = llm.get_model(self.model_id)
-            llm_response_obj = await model.async_prompt(prompt, system=self.system_prompt)
-            raw_llm_response_text = llm_response_obj.text()
+            model = llm.get_async_model(self.model_id)
+            response_obj = model.prompt(prompt, system=self.system_prompt)
+            llm_response_obj = await response_obj.text()
+            raw_llm_response_text = llm_response_obj
             logger.debug(f"[{power_name}] Raw LLM response for state update: {raw_llm_response_text}")
 
             log_entry_response_type = 'state_update' 
@@ -1107,13 +1103,13 @@ class DiplomacyAgent:
         plan_to_return = f"Error: Plan generation failed for {self.power_name} (initial state)"
 
         try:
-            model = llm.get_model(self.model_id)
-            llm_response = await model.async_prompt(full_prompt, system=self.system_prompt)
-            raw_response = llm_response.text()
+            model = llm.get_async_model(self.model_id)
+            response_obj = model.prompt(full_prompt, system=self.system_prompt)
+            llm_response = await response_obj.text()
             
-            logger.debug(f"[{self.power_name}] Raw LLM response for plan generation:\n{raw_response}")
-            plan_to_return = raw_response.strip() if raw_response else "LLM returned empty plan."
-            success_status = "Success" if raw_response and raw_response.strip() else "Failure: Empty LLM response"
+            logger.debug(f"[{self.power_name}] Raw LLM response for plan generation:\n{llm_response}")
+            plan_to_return = llm_response.strip() if llm_response else "LLM returned empty plan."
+            success_status = "Success" if llm_response and llm_response.strip() else "Failure: Empty LLM response"
             self.add_journal_entry(f"Generated plan for phase {game.current_short_phase}:\n{plan_to_return[:200]}...") # Log a preview
         except Exception as e:
             logger.error(f"Agent {self.power_name} failed to generate plan: {e}", exc_info=True)
@@ -1251,10 +1247,10 @@ class DiplomacyAgent:
         extracted_messages: List[Dict[str, str]] = []
 
         try:
-            model = llm.get_model(self.model_id)
-            # The system_prompt is self.system_prompt
-            llm_response_obj = await model.async_prompt(full_prompt, system=self.system_prompt)
-            raw_llm_response = llm_response_obj.text()
+            model = llm.get_async_model(self.model_id)
+            response_obj = model.prompt(full_prompt, system=self.system_prompt)
+            llm_response = await response_obj.text()
+            raw_llm_response = llm_response
             logger.debug(f"[{self.power_name}] Raw LLM response for message generation: {raw_llm_response[:500]}...")
 
             if raw_llm_response and raw_llm_response.strip():

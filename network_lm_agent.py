@@ -461,46 +461,46 @@ if __name__ == "__main__":
     finally:
         logger.info("Network LM Agent shut down.")
         logging.shutdown()
-```
 
-This initial setup includes:
-*   Imports for `argparse`, `asyncio`, `logging`, `os`, `time`, `dotenv`.
-*   Imports for `connect`, `GameHistory`, `DiplomacyAgent`, `load_model_client`, and some utilities from `ai_diplomacy`. I've commented out specific negotiation/planning imports for now as their exact usage with `NetworkGame` needs to be confirmed.
-*   Argument parsing for all specified options, including constructing `args.log_dir`.
-*   The `play_network_game` async function skeleton:
-    *   Loads `.env`.
-    *   Sets up basic file and console logging, directing logs to the agent-specific `log_dir`.
-    *   Establishes connection and authenticates with the server.
-    *   Includes a loop to wait for and join the specified game.
-    *   Initializes `GameHistory`, `llm_client` (with Ollama URL override), and `DiplomacyAgent`.
-    *   Calls `initialize_agent_state_ext`.
-    *   Includes a placeholder for the main game loop.
-*   An `if __name__ == "__main__":` block to parse arguments and run `play_network_game`.
-*   Basic error handling for connection, authentication, and LLM client loading.
 
-Next, I will focus on implementing the main game loop logic within `play_network_game`. This will involve handling phases, negotiations, planning (if enabled), order generation, and waiting for phase progression. I'll also need to consider how `GameHistory` is updated in a network setting.
-I will now proceed to implement the game loop within the `play_network_game` function.
-This will involve:
-1.  Looping while `not game.is_game_done`.
-2.  Getting the current phase.
-3.  Implementing logic for negotiation, planning, and order submission based on the phase type.
-4.  Waiting for the game to advance to the next phase.
-5.  Updating game history and agent state after each phase.
+# This initial setup includes:
+# *   Imports for `argparse`, `asyncio`, `logging`, `os`, `time`, `dotenv`.
+# *   Imports for `connect`, `GameHistory`, `DiplomacyAgent`, `load_model_client`, and some utilities from `ai_diplomacy`. I've commented out specific negotiation/planning imports for now as their exact usage with `NetworkGame` needs to be confirmed.
+# *   Argument parsing for all specified options, including constructing `args.log_dir`.
+# *   The `play_network_game` async function skeleton:
+#     *   Loads `.env`.
+#     *   Sets up basic file and console logging, directing logs to the agent-specific `log_dir`.
+#     *   Establishes connection and authenticates with the server.
+#     *   Includes a loop to wait for and join the specified game.
+#     *   Initializes `GameHistory`, `llm_client` (with Ollama URL override), and `DiplomacyAgent`.
+#     *   Calls `initialize_agent_state_ext`.
+#     *   Includes a placeholder for the main game loop.
+# *   An `if __name__ == "__main__":` block to parse arguments and run `play_network_game`.
+# *   Basic error handling for connection, authentication, and LLM client loading.
 
-I will also need to ensure that the imported functions like `conduct_negotiations_phase` (I'll use this distinct name if I create/adapt a wrapper) and `planning_phase_action` are either compatible with `NetworkGame` or adapted. For now, I'll assume they can be called, and focus on the agent's interaction flow.
+# Next, I will focus on implementing the main game loop logic within `play_network_game`. This will involve handling phases, negotiations, planning (if enabled), order generation, and waiting for phase progression. I'll also need to consider how `GameHistory` is updated in a network setting.
+# I will now proceed to implement the game loop within the `play_network_game` function.
+# This will involve:
+# 1.  Looping while `not game.is_game_done`.
+# 2.  Getting the current phase.
+# 3.  Implementing logic for negotiation, planning, and order submission based on the phase type.
+# 4.  Waiting for the game to advance to the next phase.
+# 5.  Updating game history and agent state after each phase.
 
-I'll need to import `conduct_negotiations_phase` and `planning_phase_action` from `ai_diplomacy.utils` (or wherever they are defined, assuming they are the intended wrappers for network play). If they are not yet adapted for network play, this implementation will highlight the necessary interfaces.
+# I will also need to ensure that the imported functions like `conduct_negotiations_phase` (I'll use this distinct name if I create/adapt a wrapper) and `planning_phase_action` are either compatible with `NetworkGame` or adapted. For now, I'll assume they can be called, and focus on the agent's interaction flow.
 
-Let's refine the imports and then implement the loop.
-It seems `conduct_negotiations` and `planning_phase` are not directly in `ai_diplomacy.utils` but are higher-level concepts that might be part of `lm_game.py` or need to be new functions. I will assume for now that I need to implement simplified versions or call agent methods directly for some of these actions, and use placeholders where the exact function from `ai_diplomacy` is not clear or might need adaptation.
+# I'll need to import `conduct_negotiations_phase` and `planning_phase_action` from `ai_diplomacy.utils` (or wherever they are defined, assuming they are the intended wrappers for network play). If they are not yet adapted for network play, this implementation will highlight the necessary interfaces.
 
-For `conduct_negotiations`, the core is `agent.generate_negotiation_messages` and then sending them using `game.send_game_message`.
-For `planning_phase`, it's `agent.generate_plan`.
-For `get_valid_orders`, `ai_diplomacy.utils.get_valid_orders` is available.
-`initialize_agent_state_ext` is also available.Okay, I've created the initial structure for `network_lm_agent.py`, including argument parsing, logging setup, server connection, authentication, game joining, and initialization of `GameHistory` and `DiplomacyAgent`.
+# Let's refine the imports and then implement the loop.
+# It seems `conduct_negotiations` and `planning_phase` are not directly in `ai_diplomacy.utils` but are higher-level concepts that might be part of `lm_game.py` or need to be new functions. I will assume for now that I need to implement simplified versions or call agent methods directly for some of these actions, and use placeholders where the exact function from `ai_diplomacy` is not clear or might need adaptation.
 
-Now, I will implement the main game loop within the `play_network_game` function. This loop will handle different game phases, conduct negotiations, perform planning, generate orders, and update the agent's state and history.
+# For `conduct_negotiations`, the core is `agent.generate_negotiation_messages` and then sending them using `game.send_game_message`.
+# For `planning_phase`, it's `agent.generate_plan`.
+# For `get_valid_orders`, `ai_diplomacy.utils.get_valid_orders` is available.
+# `initialize_agent_state_ext` is also available.Okay, I've created the initial structure for `network_lm_agent.py`, including argument parsing, logging setup, server connection, authentication, game joining, and initialization of `GameHistory` and `DiplomacyAgent`.
 
-I will need to ensure the functions called (like for negotiation or planning) are compatible with the `NetworkGame` object. The `NetworkGame` object is expected to be updated by notifications from the server. The agent will primarily react to these changes and submit its decisions (messages, orders) back to the server.
+# Now, I will implement the main game loop within the `play_network_game` function. This loop will handle different game phases, conduct negotiations, perform planning, generate orders, and update the agent's state and history.
 
-Let's proceed with fleshing out the `play_network_game` function, specifically the game loop.
+# I will need to ensure the functions called (like for negotiation or planning) are compatible with the `NetworkGame` object. The `NetworkGame` object is expected to be updated by notifications from the server. The agent will primarily react to these changes and submit its decisions (messages, orders) back to the server.
+
+# Let's proceed with fleshing out the `play_network_game` function, specifically the game loop.

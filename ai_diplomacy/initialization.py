@@ -94,7 +94,7 @@ async def initialize_agent_state_ext(
         except Exception as e_llm_call:
             logger.error(f"[{power_name}] LLM call or parsing failed during initialization: {e_llm_call}", exc_info=True)
             success_status = f"Failure: LLMErrorOrParse ({type(e_llm_call).__name__})"
-            # response_text might be empty or from a failed call, log what we have.
+            response_text = ""  # Ensure response_text is always defined
             # update_data remains {}
 
         initial_goals_applied = False
