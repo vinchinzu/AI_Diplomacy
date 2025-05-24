@@ -38,14 +38,17 @@ def assign_models_to_powers() -> Dict[str, str]:
     """
     
     # POWER MODELS (updated for llm library compatibility)
+    # Defaulting all powers to ollama/gemma3:4b as requested.
+    # Ensure this model is available via your Ollama installation and llm-ollama plugin.
+    model_name = "ollama/gemma3:4b"
     return {
-        "AUSTRIA": "gemini-1.5-pro-latest",     # Example: Using Google Gemini
-        "ENGLAND": "claude-3.5-sonnet",         # Example: Using Anthropic Claude
-        "FRANCE": "gpt-4o",                     # Example: Using OpenAI GPT-4o
-        "GERMANY": "openrouter/meta-llama/llama-3-70b-instruct", # Example: OpenRouter
-        "ITALY": "ollama/llama3",               # Example: Ollama Llama3 (ensure llm-ollama is configured)
-        "RUSSIA": "openrouter/mistralai/mistral-large-latest", # Example: Another OpenRouter model
-        "TURKEY": "gpt-3.5-turbo",              # Example: OpenAI GPT-3.5 Turbo (replaced "o3")
+        "AUSTRIA": model_name,
+        "ENGLAND": model_name,
+        "FRANCE": model_name,
+        "GERMANY": model_name,
+        "ITALY": model_name,
+        "RUSSIA": model_name,
+        "TURKEY": model_name,
     }
     
     # TEST MODELS (updated for llm library compatibility)
@@ -408,21 +411,6 @@ def normalize_and_compare_orders(
             orders_not_issued[pwr] = missing_from_issued
 
     return orders_not_accepted, orders_not_issued
-
-
-# Helper to load prompt text from file relative to the expected 'prompts' dir
-def load_prompt(filename: str) -> str:
-    """Helper to load prompt text from file"""
-    # Assuming execution from the root or that the path resolves correctly
-    # Consider using absolute paths or pkg_resources if needed for robustness
-    prompt_path = os.path.join(os.path.dirname(__file__), 'prompts', filename)
-    try:
-        with open(prompt_path, "r", encoding='utf-8') as f: # Added encoding
-            return f.read().strip()
-    except FileNotFoundError:
-        logger.error(f"Prompt file not found: {prompt_path}")
-        # Return an empty string or raise an error, depending on desired handling
-        return ""
 
 
 # == New LLM Response Logging Function ==

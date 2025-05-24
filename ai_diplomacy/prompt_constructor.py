@@ -2,9 +2,11 @@
 Module for constructing prompts for LLM interactions in the Diplomacy game.
 """
 import logging
+import json
 from typing import Dict, List, Optional, Any # Added Any for game type placeholder
 
-from .utils import load_prompt
+# from .game_state import GameState # Removed unused import
+from .prompt_utils import load_prompt # Changed from .utils to .prompt_utils
 from .possible_order_context import generate_rich_order_context
 from .game_history import GameHistory # Assuming GameHistory is correctly importable
 
@@ -13,6 +15,9 @@ from .game_history import GameHistory # Assuming GameHistory is correctly import
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG) # Or inherit from parent logger
+
+# Load prompt components from files
+# ORDER_GENERATION_PROMPT_SYSTEM_COMMON = load_prompt("order_generation_system_common.txt") # Removed as file does not exist and variable is unused
 
 def build_context_prompt(
     game: Any, # diplomacy.Game object

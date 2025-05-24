@@ -7,6 +7,7 @@ import json
 import asyncio
 from collections import defaultdict
 import concurrent.futures
+import llm
 
 # Suppress Gemini/PaLM gRPC warnings
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"  # ERROR level only
@@ -31,6 +32,7 @@ from ai_diplomacy.planning import planning_phase
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.agent import DiplomacyAgent
 import ai_diplomacy.narrative
+from ai_diplomacy.narrative import NARRATIVE_MODEL_ID_FROM_ARGS
 from ai_diplomacy.initialization import initialize_agent_state_ext
 
 dotenv.load_dotenv()
@@ -156,6 +158,14 @@ async def main():
     else:
         game.power_model_map = assign_models_to_powers()
 
+    # Set the narrative model ID after power_model_map is populated
+    # Use AUSTRIA's model as the default for narrative generation
+    if game.power_model_map.get("AUSTRIA"):
+        ai_diplomacy.narrative.NARRATIVE_MODEL_ID_FROM_ARGS = game.power_model_map["AUSTRIA"]
+        logger.info(f"Narrative generation will use model: {ai_diplomacy.narrative.NARRATIVE_MODEL_ID_FROM_ARGS}")
+    else:
+        logger.warning("Could not set narrative model ID as AUSTRIA was not found in power_model_map.")
+
     # == Goal 1: Centralize Agent Instances ==
     agents = {}
     initialization_tasks = []
@@ -163,21 +173,17 @@ async def main():
     for power_name, model_id in game.power_model_map.items():
         if not game.powers[power_name].is_eliminated(): # Only create for active powers initially
             try:
-                # client = load_model_client(model_id) # OLD WAY
-                # In the next subtask, this will be:
-                # model_instance = llm.get_model(model_id)
-                # agent = DiplomacyAgent(power_name=power_name, model_id=model_id, llm_model=model_instance)
-                # For now, we'll create the agent with the model_id.
-                # The DiplomacyAgent will need to be adapted to use this model_id with llm.get_model() internally,
-                # or be passed the llm.Model instance directly.
-                # Let's assume DiplomacyAgent is adapted to take model_id for now and handles llm.get_model internally or in a later step.
-                agent = DiplomacyAgent(power_name=power_name, model_id=model_id) # Pass model_id
+                logger.info(f"Attempting to create agent for {power_name} with model_id '{model_id}'...")
+                agent = DiplomacyAgent(power_name=power_name, model_id=model_id)
                 agents[power_name] = agent
-                logger.info(f"Preparing initialization task for {power_name} with model_id {model_id}")
-                # Pass log path to initialization
+                logger.info(f"Successfully created agent for {power_name}. Preparing initialization task.")
                 initialization_tasks.append(initialize_agent_state_ext(agent, game, game_history, llm_log_file_path))
-            except Exception as e:
-                logger.error(f"Failed to create agent for {power_name} with model_id {model_id}: {e}", exc_info=True)
+            except llm.UnknownModelError as e_unknown_model:
+                logger.error(f"CRITICAL: Failed to create agent for {power_name} due to UnknownModelError: {e_unknown_model}. This model '{model_id}' is not recognized by the llm library. Ensure the model name is correct and any necessary llm plugins (e.g., llm-ollama, llm-openrouter) are installed and configured.")
+                raise # Re-raise to halt the game if an agent's model is invalid
+            except Exception as e_agent_create:
+                logger.error(f"CRITICAL: Failed to create agent for {power_name} with model_id {model_id} due to an unexpected error: {e_agent_create}", exc_info=True)
+                raise # Re-raise any other critical error during agent creation
         else:
              logger.info(f"Skipping agent initialization for eliminated power: {power_name}")
     

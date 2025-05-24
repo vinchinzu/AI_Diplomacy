@@ -7,7 +7,7 @@ Usage: simply import `ai_diplomacy.narrative` *before* the game loop starts
 
 1. The original (statistical) summary logic still runs.
 2. The returned text is stored in `GamePhaseData.statistical_summary`.
-3. A short narrative is produced via OpenAI `o3` and saved as the main
+3. A short narrative is produced via a configured LLM and saved as the main
    `.summary`.
 """
 from __future__ import annotations
@@ -15,8 +15,8 @@ from __future__ import annotations
 import logging
 import os
 from typing import Callable
+import llm # Import the llm library
 
-from openai import OpenAI  # Import the new OpenAI client
 from diplomacy.engine.game import Game
 
 LOGGER = logging.getLogger(__name__)
@@ -24,41 +24,62 @@ LOGGER = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-OPENAI_MODEL = os.getenv("AI_DIPLOMACY_NARRATIVE_MODEL", "gpt-o3")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# AI_DIPLOMACY_NARRATIVE_MODEL can be set to a specific llm-compatible model ID.
+# If not set, it will attempt to use the primary model from lm_game.py arguments.
+DEFAULT_NARRATIVE_MODEL_ID = os.getenv("AI_DIPLOMACY_NARRATIVE_MODEL")
 
-if not OPENAI_API_KEY:
-    LOGGER.warning("OPENAI_API_KEY not set – narrative summaries will be stubbed.")
+# Store the model ID passed from lm_game.py (or other entry point)
+# This needs to be set by the main script, e.g., lm_game.py, after parsing args.
+# For now, we make it a module-level variable that can be updated.
+NARRATIVE_MODEL_ID_FROM_ARGS: str | None = None 
 
 # ---------------------------------------------------------------------------
-# Helper to call the model synchronously
+# Helper to call the model synchronously (though llm calls can be async)
 # ---------------------------------------------------------------------------
 
-def _call_openai(statistical_summary: str, phase_key: str) -> str:
-    """Return a 2–4 sentence spectator-friendly narrative."""
-    if not OPENAI_API_KEY:
-        return "(Narrative generation disabled – missing API key)."
+def get_narrative_model_id() -> str | None:
+    """Determines the model ID to use for narrative generation."""
+    if DEFAULT_NARRATIVE_MODEL_ID: # Env var takes precedence
+        return DEFAULT_NARRATIVE_MODEL_ID
+    if NARRATIVE_MODEL_ID_FROM_ARGS: # Then model from script args
+        return NARRATIVE_MODEL_ID_FROM_ARGS
+    LOGGER.warning("Narrative model ID not configured via env var or script arguments. Narrative generation might fail or use llm default.")
+    return None # Or a very basic fallback model if llm has one by default without ID
 
-    system = (
+def _call_llm_for_narrative(statistical_summary: str, phase_key: str) -> str:
+    """Return a 2–4 sentence spectator-friendly narrative using the llm library."""
+    
+    model_id_to_use = get_narrative_model_id()
+
+    if not model_id_to_use:
+        LOGGER.warning("No model ID available for narrative generation. Returning stub.")
+        return "(Narrative generation disabled – model not configured)."
+
+    try:
+        model = llm.get_model(model_id_to_use)
+    except llm.UnknownModelError:
+        LOGGER.error(f"Narrative generation failed: Unknown model '{model_id_to_use}'. Check llm configuration and installed plugins.")
+        return f"(Narrative generation failed - unknown model: {model_id_to_use})"
+    except Exception as e:
+        LOGGER.error(f"Narrative generation failed: Error loading model '{model_id_to_use}': {e}")
+        return f"(Narrative generation failed - model load error: {model_id_to_use})"
+
+    system_prompt = (
         "You are an energetic e-sports commentator narrating a game of Diplomacy. "
         "Turn the provided phase recap into a concise, thrilling story (max 4 sentences). "
         "Highlight pivotal moves, supply-center swings, betrayals, and momentum shifts."
     )
-    user = f"PHASE {phase_key}\n\nSTATISTICAL SUMMARY:\n{statistical_summary}\n\nNow narrate this phase for spectators."
+    user_prompt = f"PHASE {phase_key}\n\nSTATISTICAL SUMMARY:\n{statistical_summary}\n\nNow narrate this phase for spectators."
 
     try:
-        # Initialize the OpenAI client with the API key
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        
-        # Use the new API format
-        resp = client.chat.completions.create(
-            model="o3",
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        )
-        return resp.choices[0].message.content.strip()
+        # Using prompt() for synchronous call as this is part of a patched synchronous method.
+        # If this patch were async, await model.async_prompt() would be used.
+        response = model.prompt(user_prompt, system=system_prompt)
+        narrative_text = response.text()
+        return narrative_text.strip()
     except Exception as exc:  # Broad – we only log and degrade gracefully
-        LOGGER.error("Narrative generation failed: %s", exc, exc_info=True)
-        return "(Narrative generation failed)"
+        LOGGER.error(f"Narrative generation failed with model '{model_id_to_use}': {exc}", exc_info=True)
+        return f"(Narrative generation failed with model {model_id_to_use})"
 
 # ---------------------------------------------------------------------------
 # Patch _generate_phase_summary
@@ -85,14 +106,16 @@ def _patched_generate_phase_summary(self: Game, phase_key, summary_callback=None
         LOGGER.warning("Could not retrieve phase_data or store statistical_summary for %s: %s", phase_key, exc)
 
     # 3) Generate narrative summary
-    narrative = _call_openai(statistical, phase_key)
+    narrative = _call_llm_for_narrative(statistical, phase_key)
 
     # 4) Save narrative as the canonical summary
     try:
-        if phase_data:
+        if phase_data and hasattr(phase_data, 'summary'): # Check if phase_data exists and has summary attribute
             phase_data.summary = narrative  # type: ignore[attr-defined]
-            self.phase_summaries[str(phase_key)] = narrative  # type: ignore[attr-defined]
+            self.phase_summaries[str(phase_key)] = narrative 
             LOGGER.debug(f"[{phase_key}] Narrative summary stored successfully.")
+        elif phase_data:
+            LOGGER.warning(f"[{phase_key}] phase_data exists but does not have attribute 'summary'. Cannot store narrative. Type: {type(phase_data)}")
         else:
              LOGGER.warning(f"[{phase_key}] Cannot store narrative summary because phase_data is None.")
     except Exception as exc:
@@ -103,4 +126,4 @@ def _patched_generate_phase_summary(self: Game, phase_key, summary_callback=None
 # Monkey-patch
 Game._generate_phase_summary = _patched_generate_phase_summary  # type: ignore[assignment]
 
-LOGGER.info("Game._generate_phase_summary patched with narrative generation.")
+LOGGER.info("Game._generate_phase_summary patched with narrative generation using the llm library.")

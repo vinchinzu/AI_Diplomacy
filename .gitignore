@@ -5,6 +5,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+.vscode/
+uv.lock
+.venv/
+
 # C extensions
 *.so
 

@@ -3,7 +3,6 @@ import logging
 import concurrent.futures
 from typing import Dict
 
-from .clients import load_model_client
 from .game_history import GameHistory
 from .agent import DiplomacyAgent
 

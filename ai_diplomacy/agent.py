@@ -6,10 +6,10 @@ import re
 import json_repair
 import json5  # More forgiving JSON parser
 import llm # Import the llm library
-
-# BaseModelClient, load_model_client, and run_llm_and_log are obsolete.
-# from .clients import BaseModelClient, load_model_client 
-from .utils import load_prompt, log_llm_response # run_llm_and_log removed
+from diplomacy import Game, Message
+from .game_history import GameHistory
+from .prompt_utils import load_prompt # Changed from .utils to .prompt_utils
+from .utils import log_llm_response # run_llm_and_log removed
 from .prompt_constructor import build_context_prompt # Added import
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,18 @@ class DiplomacyAgent:
             raise ValueError(f"Invalid power name: {power_name}. Must be one of {ALL_POWERS}")
 
         self.power_name: str = power_name
-        self.model_id: str = model_id # Store model_id instead of client
-        # self.client: BaseModelClient = client # Removed
+        self.model_id: str = model_id
+        
+        # Validate the model_id at initialization
+        try:
+            _ = llm.get_model(self.model_id) # Attempt to get the model to validate it
+            logger.info(f"Successfully validated model_id '{self.model_id}' for agent {self.power_name}.")
+        except llm.UnknownModelError as e:
+            logger.error(f"CRITICAL: Unknown model_id '{self.model_id}' for agent {self.power_name}. This agent will not function. Error: {e}")
+            raise # Re-raise the error to halt initialization if the model is unknown
+        except Exception as e:
+            logger.error(f"CRITICAL: Unexpected error validating model_id '{self.model_id}' for agent {self.power_name}: {e}")
+            raise # Re-raise any other critical error during model validation
         
         self.goals: List[str] = initial_goals if initial_goals is not None else [] 
         
@@ -1123,3 +1133,177 @@ class DiplomacyAgent:
                     success=success_status
                 )
         return plan_to_return
+
+    async def generate_messages(
+        self,
+        game: 'Game',
+        board_state: dict,
+        # power_name: str, # self.power_name can be used
+        possible_orders: Dict[str, List[str]], # For context, might not be directly used in prompt
+        game_history: 'GameHistory',
+        current_phase: str,
+        log_file_path: str,
+        active_powers: List[str],
+        # agent_goals, agent_relationships, agent_private_diary_str are available via self
+    ) -> List[Dict[str, str]]:
+        """
+        Generates messages to send to other powers during negotiations.
+        """
+        logger.info(f"[{self.power_name}] Generating messages for phase {current_phase}...")
+
+        prompt_template_conversation = _load_prompt_file('conversation_instructions.txt')
+        if not prompt_template_conversation:
+            logger.error(f"[{self.power_name}] Could not load conversation_instructions.txt. Cannot generate messages.")
+            return []
+
+        # Prepare context for the main prompt
+        # Note: possible_orders might be too verbose for general conversation context,
+        # but build_context_prompt handles it.
+        # build_context_prompt uses self.goals, self.relationships, self.format_private_diary_for_prompt()
+        context_prompt_text = build_context_prompt(
+            game=game,
+            board_state=board_state,
+            power_name=self.power_name,
+            possible_orders=possible_orders,
+            game_history=game_history,
+            agent_goals=self.goals,
+            agent_relationships=self.relationships,
+            agent_private_diary=self.format_private_diary_for_prompt(),
+        )
+
+        # Create the full prompt
+        # Add information about which powers are active for negotiation context
+        active_powers_str = ", ".join([p for p in active_powers if p != self.power_name])
+        
+        # Format the conversation prompt template
+        # Ensure all expected placeholders are present or handled if optional
+        # Example placeholders: {power_name}, {active_powers_str}, {allowed_message_types}, {output_format_example}
+        # These would need to be defined in 'conversation_instructions.txt'
+        # For now, let's assume a simple structure
+        
+        # Basic formatting example for prompt_template_conversation
+        # This part might need adjustment based on the actual content of 'conversation_instructions.txt'
+        # Assuming it takes active_powers_str and gives instructions.
+        # A more robust way would be to define expected keys and provide them.
+        try:
+            # This is a simplified formatting. If conversation_instructions.txt has complex needs,
+            # this will need to be more robust like other prompt formatting in this file.
+            
+            # A common pattern is to list available powers to talk to.
+            # The prompt should guide the LLM on how to address them (private/global).
+            
+            # Temporarily escape braces in context_prompt_text if it might contain them
+            # and they are not intended for the final outer formatting.
+            # However, build_context_prompt should produce text that is safe to include.
+            
+            # Add active_powers_str to the context, so it's available for the LLM
+            # The main instructions for message generation will come from prompt_template_conversation
+            
+            # Let's assume prompt_template_conversation primarily provides instructions
+            # and expects the context to be prepended.
+            
+            # Construct the full prompt string
+            # It's crucial that 'conversation_instructions.txt' defines how to use the context.
+            # Typically, the context comes first, then the specific instructions.
+            
+            # A common structure:
+            # 1. System Prompt (already handled by agent.system_prompt)
+            # 2. Context (board state, history, goals, relationships, diary)
+            # 3. Specific Task Instructions (from conversation_instructions.txt)
+            
+            # The conversation_instructions.txt should explain:
+            # - The goal (generate messages for negotiation)
+            # - Who to talk to (other active_powers)
+            # - How to format the output (JSON list of message objects)
+            # - Types of messages (private, global)
+            # - Strategic considerations for messages
+            
+            # For now, let's combine them simply. The system prompt is applied by the caller.
+            # We are constructing the "user" part of the prompt.
+            
+            # Add a section about active powers to the main context if not already there
+            # This makes it explicit for the conversation task.
+            
+            negotiation_context_enhancement = (
+                f"\n\n--- Negotiation Context ---\n"
+                f"You are {self.power_name}.\n"
+                f"Other active powers you can negotiate with: {active_powers_str}.\n"
+                f"Previous messages and game state are provided above.\n"
+                f"Your current goals: {self.goals}\n"
+                f"Your current relationships: {self.relationships}\n"
+                f"Review your private diary for reflections and plans.\n"
+                f"--- End Negotiation Context ---\n\n"
+            )
+
+            full_prompt = (
+                context_prompt_text +
+                negotiation_context_enhancement +
+                prompt_template_conversation # This should contain the core instructions for message generation
+            )
+            
+        except KeyError as e:
+            logger.error(f"[{self.power_name}] Missing key for conversation_instructions.txt formatting: {e}. Prompt: {prompt_template_conversation[:300]}")
+            return []
+
+
+        raw_llm_response = ""
+        success_status = "FAILURE_INIT"
+        extracted_messages: List[Dict[str, str]] = []
+
+        try:
+            model = llm.get_model(self.model_id)
+            # The system_prompt is self.system_prompt
+            llm_response_obj = await model.async_prompt(full_prompt, system=self.system_prompt)
+            raw_llm_response = llm_response_obj.text()
+            logger.debug(f"[{self.power_name}] Raw LLM response for message generation: {raw_llm_response[:500]}...")
+
+            if raw_llm_response and raw_llm_response.strip():
+                parsed_data = self._extract_json_from_text(raw_llm_response)
+                
+                if isinstance(parsed_data, dict) and "messages" in parsed_data and isinstance(parsed_data["messages"], list):
+                    extracted_messages = parsed_data["messages"]
+                    # Basic validation of message structure
+                    valid_messages = []
+                    for msg in extracted_messages:
+                        if isinstance(msg, dict) and "recipient" in msg and "content" in msg and "message_type" in msg:
+                             # Further validation for recipient and message_type can be added here
+                            valid_messages.append(msg)
+                        else:
+                            logger.warning(f"[{self.power_name}] Invalid message structure in LLM response: {msg}")
+                    extracted_messages = valid_messages
+                    success_status = "SUCCESS_PARSED" if extracted_messages else "FAILURE_PARSED_NO_VALID_MESSAGES"
+                    logger.info(f"[{self.power_name}] Extracted {len(extracted_messages)} valid messages.")
+                elif isinstance(parsed_data, list): # If LLM directly returns a list of messages
+                    extracted_messages = parsed_data
+                    valid_messages = []
+                    for msg in extracted_messages:
+                        if isinstance(msg, dict) and "recipient" in msg and "content" in msg and "message_type" in msg:
+                            valid_messages.append(msg)
+                        else:
+                            logger.warning(f"[{self.power_name}] Invalid message structure in LLM response (direct list): {msg}")
+                    extracted_messages = valid_messages
+                    success_status = "SUCCESS_PARSED_DIRECT_LIST" if extracted_messages else "FAILURE_PARSED_NO_VALID_MESSAGES_IN_LIST"
+                    logger.info(f"[{self.power_name}] Extracted {len(extracted_messages)} valid messages from direct list.")
+                else:
+                    logger.warning(f"[{self.power_name}] LLM response for messages was not a list under 'messages' key or a direct list. Parsed: {parsed_data}")
+                    success_status = "FAILURE_INVALID_JSON_STRUCTURE"
+            else:
+                logger.warning(f"[{self.power_name}] Empty response from LLM for message generation.")
+                success_status = "FAILURE_EMPTY_RESPONSE"
+
+        except Exception as e:
+            logger.error(f"[{self.power_name}] Error during message generation: {e}", exc_info=True)
+            success_status = f"FAILURE_EXCEPTION_{type(e).__name__}"
+        finally:
+            log_llm_response(
+                log_file_path=log_file_path,
+                model_name=self.model_id,
+                power_name=self.power_name,
+                phase=current_phase,
+                response_type="message_generation",
+                raw_input_prompt=full_prompt,
+                raw_response=raw_llm_response,
+                success=success_status,
+            )
+        
+        return extracted_messages

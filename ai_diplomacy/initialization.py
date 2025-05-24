@@ -67,16 +67,20 @@ async def initialize_agent_state_ext(
         update_data = {} # Initialize to ensure it exists
 
         try:
-            model = llm.get_model(agent.model_id)
+            model = llm.get_async_model(agent.model_id) # Use get_async_model for async operations
             # Assuming build_context_prompt does not include the system prompt, 
             # and agent.system_prompt is the one to use.
             # If full_prompt from build_context_prompt already includes system prompt,
             # then system=None or system=agent.system_prompt might need adjustment based on model behavior.
-            llm_response = await model.async_prompt(full_prompt, system=agent.system_prompt)
-            raw_response_text = llm_response.text()
-            logger.debug(f"[{power_name}] LLM response for initial state: {raw_response_text[:300]}...")
+            logger.debug(f"Full prompt for {agent.power_name}: {full_prompt}")
 
-            update_data = agent._extract_json_from_text(raw_response_text)
+            # model.prompt() is called synchronously for async models from llm-ollama,
+            # it returns a response object whose methods (like .text()) are awaitable.
+            prompt_response_obj = model.prompt(full_prompt, system=agent.system_prompt)
+            response_text = await prompt_response_obj.text() # Await the .text() method
+            logger.debug(f"[{power_name}] LLM response for initial state: {response_text[:300]}...")
+
+            update_data = agent._extract_json_from_text(response_text)
             if not isinstance(update_data, dict): # Ensure it's a dict
                 logger.error(f"[{power_name}] _extract_json_from_text returned non-dict: {type(update_data)}. Treating as parsing failure. Data: {str(update_data)[:300]}")
                 update_data = {} # Reset to empty dict
@@ -90,7 +94,7 @@ async def initialize_agent_state_ext(
         except Exception as e_llm_call:
             logger.error(f"[{power_name}] LLM call or parsing failed during initialization: {e_llm_call}", exc_info=True)
             success_status = f"Failure: LLMErrorOrParse ({type(e_llm_call).__name__})"
-            # raw_response_text might be empty or from a failed call, log what we have.
+            # response_text might be empty or from a failed call, log what we have.
             # update_data remains {}
 
         initial_goals_applied = False
@@ -184,7 +188,7 @@ async def initialize_agent_state_ext(
                 phase=current_phase,
                 response_type="initial_state_setup", 
                 raw_input_prompt=full_prompt,
-                raw_response=raw_response_text, # Log the raw text from LLM
+                raw_response=response_text, # Log the raw text from LLM
                 success=success_status
             )
 

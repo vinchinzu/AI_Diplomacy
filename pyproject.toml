@@ -1,5 +1,37 @@
-[tool.ruff]
-exclude = [
-    "diplomacy",
-    "docs"
+[project]
+name = "ai-diplomacy"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=0.52.0",
+    "asyncio>=3.4.3",
+    "bcrypt>=4.3.0",
+    "coloredlogs>=15.0.1",
+    "diplomacy>=1.1.2",
+    "dotenv>=0.9.9",
+    "execnet>=2.1.1",
+    "google-genai>=1.16.1",
+    "json-repair>=0.46.0",
+    "json5>=0.12.0",
+    "llm>=0.25",
+    "llm-anthropic>=0.16",
+    "llm-gemini>=0.20",
+    "llm-gguf>=0.2",
+    "llm-grok>=1.0",
+    "llm-mistral>=0.13",
+    "llm-ollama>=0.10.0",
+    "openai>=1.82.0",
+    "pylint>=3.3.7",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+    "python-dateutil>=2.9.0.post0",
+    "pytz>=2025.2",
+    "sphinx>=8.2.3",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-rtd-theme>=3.0.2",
+    "tornado>=6.5.1",
+    "tqdm>=4.67.1",
+    "ujson>=5.10.0",
 ]
