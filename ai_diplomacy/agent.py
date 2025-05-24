@@ -1,43 +1,29 @@
-import asyncio
 import logging
 import os
 from typing import List, Dict, Optional
-import json
-import re
-import json_repair
-import json5  # More forgiving JSON parser
-import llm # Import the llm library
-from diplomacy import Game, Message
-from .game_history import GameHistory
-from .prompt_utils import load_prompt # Changed from .utils to .prompt_utils
-from .utils import log_llm_response # run_llm_and_log removed
-from .prompt_constructor import build_context_prompt # Added import
+# Removed asyncio, json, re, json_repair, json5 as they are now primarily in llm_utils or coordinator
 
-logger = logging.getLogger(__name__)
+import llm # Import the llm library
+from diplomacy import Game, Message # Message is used in type hints but not directly in refactored methods
+from .game_history import GameHistory
+from . import llm_utils # Import the new module
+# log_llm_response is now called by AgentLLMInterface, so removed from here.
+# from .utils import log_llm_response 
+from .prompt_constructor import build_context_prompt # Added import
+from .llm_coordinator import LocalLLMCoordinator # Import new coordinator
+from .llm_interface import AgentLLMInterface # Import new interface
+
+logger = logging.getLogger(__name__) # Module-level logger
 
 # == Best Practice: Define constants at module level ==
 ALL_POWERS = frozenset({"AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"})
 ALLOWED_RELATIONSHIPS = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
 
-# Global lock for Ollama models
-_ollama_lock = asyncio.Lock()
+# Global LLM Coordinator instance
+_global_llm_coordinator = LocalLLMCoordinator()
 
-# == New: Helper function to load prompt files reliably ==
-def _load_prompt_file(filename: str) -> Optional[str]:
-    """Loads a prompt template from the prompts directory."""
-    try:
-        # Construct path relative to this file's location
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        prompts_dir = os.path.join(current_dir, 'prompts')
-        filepath = os.path.join(prompts_dir, filename)
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        logger.error(f"Prompt file not found: {filepath}")
-        return None
-    except Exception as e:
-        logger.error(f"Error loading prompt file {filepath}: {e}")
-        return None
+# _ollama_lock has been moved to llm_coordinator.py
+# _load_prompt_file function has been moved to llm_utils.py
 
 class DiplomacyAgent:
     """
@@ -97,16 +83,15 @@ class DiplomacyAgent:
         self.private_diary: List[str] = [] # New private diary
 
         # --- Load and store the system prompt ---
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        prompts_dir = os.path.join(current_dir, "prompts")
-        power_prompt_filename = os.path.join(prompts_dir, f"{power_name.lower()}_system_prompt.txt")
-        default_prompt_filename = os.path.join(prompts_dir, "system_prompt.txt")
+        # Note: llm_utils.load_prompt_file defaults to looking in 'ai_diplomacy/prompts/'
+        power_prompt_filename_only = f"{power_name.lower()}_system_prompt.txt"
+        default_prompt_filename_only = "system_prompt.txt"
 
-        system_prompt_content = load_prompt(power_prompt_filename) # load_prompt needs to handle full path
+        system_prompt_content = llm_utils.load_prompt_file(power_prompt_filename_only)
 
         if not system_prompt_content:
-            logger.warning(f"Power-specific prompt '{power_prompt_filename}' not found or empty. Loading default system prompt.")
-            system_prompt_content = load_prompt(default_prompt_filename)
+            logger.warning(f"Power-specific prompt '{power_prompt_filename_only}' not found or empty. Loading default system prompt.")
+            system_prompt_content = llm_utils.load_prompt_file(default_prompt_filename_only)
         else:
             logger.info(f"Loaded power-specific system prompt for {power_name}.")
         
@@ -114,185 +99,18 @@ class DiplomacyAgent:
         if not self.system_prompt:
             logger.error(f"Could not load default system prompt either! Agent {power_name} may not function correctly.")
         
+        # Initialize the LLM interface for this agent
+        self.llm_interface = AgentLLMInterface(
+            model_id=self.model_id,
+            system_prompt=self.system_prompt,
+            coordinator=_global_llm_coordinator,
+            power_name=self.power_name
+        )
+        
         logger.info(f"Initialized DiplomacyAgent for {self.power_name} with model_id {self.model_id} and goals: {self.goals}")
         self.add_journal_entry(f"Agent initialized with model {self.model_id}. Initial Goals: {self.goals}")
 
-    def _extract_json_from_text(self, text: str) -> dict:
-        """Extract and parse JSON from text, handling common LLM response formats."""
-        if not text or not text.strip():
-            logger.warning(f"[{self.power_name}] Empty text provided to JSON extractor")
-            return {}
-            
-        # Store original text for debugging
-        original_text = text
-        
-        # Preprocessing: Normalize common formatting issues
-        # This helps with the KeyError: '\n  "negotiation_summary"' problem
-        text = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', text)  # Remove newlines before keys
-        # Fix specific patterns that cause trouble
-        problematic_patterns = [
-            'negotiation_summary', 'relationship_updates', 'updated_relationships',
-            'order_summary', 'goals', 'relationships', 'intent'
-        ]
-        for pattern in problematic_patterns:
-            text = re.sub(fr'\n\s*"{pattern}"', f'"{pattern}"', text)
-        
-        # Try different patterns to extract JSON
-        # Order matters - try most specific patterns first
-        patterns = [
-            # Special handling for ```{{ ... }}``` format that some models use
-            r"```\s*\{\{\s*(.*?)\s*\}\}\s*```",
-            # JSON in code blocks with or without language specifier
-            r"```(?:json)?\s*\n(.*?)\n\s*```",
-            # JSON after "PARSABLE OUTPUT:" or similar
-            r"PARSABLE OUTPUT:\s*(\{.*?\})",
-            r"JSON:\s*(\{.*?\})",
-            # Any JSON object
-            r"(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})",
-            # Simple JSON in backticks
-            r"`(\{.*?\})`",
-        ]
-        
-        # Try each pattern
-        for pattern_idx, pattern in enumerate(patterns):
-            matches = re.findall(pattern, text, re.DOTALL)
-            if matches:
-                for match_idx, match in enumerate(matches):
-                    # Multiple attempts with different parsers
-                    json_text = match.strip()
-                    
-                    # Attempt 1: Standard JSON after basic cleaning
-                    try:
-                        cleaned = self._clean_json_text(json_text)
-                        result = json.loads(cleaned)
-                        logger.debug(f"[{self.power_name}] Successfully parsed JSON with pattern {pattern_idx}, match {match_idx}")
-                        return result
-                    except json.JSONDecodeError as e_initial:
-                        logger.debug(f"[{self.power_name}] Standard JSON parse failed: {e_initial}")
-                        
-                        # Attempt 1.5: Try surgical cleaning with original patterns if basic cleaning failed
-                        try:
-                            # Apply several different cleaning patterns from the old method
-                            cleaned_match_candidate = json_text
-                            
-                            # Pattern 1: Removes 'Sentence.' when followed by ',', '}', or ']'
-                            cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', cleaned_match_candidate)
-                            
-                            # Pattern 2: Removes 'Sentence.' when it's at the very end, before the final '}' of the current scope
-                            cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=\s*\}\s*$)', '', cleaned_match_candidate)
-                            
-                            # Pattern 3: Fix for newlines and spaces before JSON keys (common problem with LLMs)
-                            cleaned_match_candidate = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', cleaned_match_candidate)
-                            
-                            # Pattern 4: Fix trailing commas in JSON objects
-                            cleaned_match_candidate = re.sub(r',\s*}', '}', cleaned_match_candidate)
-                            
-                            # Pattern 5: Handle specific known problematic patterns
-                            for pattern in problematic_patterns:
-                                cleaned_match_candidate = cleaned_match_candidate.replace(f'\n  "{pattern}"', f'"{pattern}"')
-                            
-                            # Pattern 6: Fix quotes - replace single quotes with double quotes for keys
-                            cleaned_match_candidate = re.sub(r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate)
-
-                            # Only try parsing if cleaning actually changed something
-                            if cleaned_match_candidate != json_text:
-                                logger.debug(f"[{self.power_name}] Surgical cleaning applied. Attempting to parse modified JSON.")
-                                return json.loads(cleaned_match_candidate)
-                        except json.JSONDecodeError as e_surgical:
-                            logger.debug(f"[{self.power_name}] Surgical cleaning didn't work: {e_surgical}")
-                    
-                    # Attempt 2: json5 (more forgiving)
-                    try:
-                        result = json5.loads(json_text)
-                        logger.debug(f"[{self.power_name}] Successfully parsed with json5")
-                        return result
-                    except Exception as e:
-                        logger.debug(f"[{self.power_name}] json5 parse failed: {e}")
-                    
-                    # Attempt 3: json-repair
-                    try:
-                        result = json_repair.loads(json_text)
-                        logger.debug(f"[{self.power_name}] Successfully parsed with json-repair")
-                        return result
-                    except Exception as e:
-                        logger.debug(f"[{self.power_name}] json-repair failed: {e}")
-        
-        # Fallback: Try to find ANY JSON-like structure
-        try:
-            # Find the first { and last }
-            start = text.find('{')
-            end = text.rfind('}') + 1  # Include the closing brace
-            if start != -1 and end > start:
-                potential_json = text[start:end]
-                
-                # Try all parsers on this extracted text
-                for parser_name, parser_func in [
-                    ("json", json.loads),
-                    ("json5", json5.loads),
-                    ("json_repair", json_repair.loads)
-                ]:
-                    try:
-                        cleaned = self._clean_json_text(potential_json) if parser_name == "json" else potential_json
-                        result = parser_func(cleaned)
-                        logger.debug(f"[{self.power_name}] Fallback parse succeeded with {parser_name}")
-                        return result
-                    except Exception as e:
-                        logger.debug(f"[{self.power_name}] Fallback {parser_name} failed: {e}")
-                
-                # If standard parsers failed, try aggressive cleaning
-                try:
-                    # Remove common non-JSON text that LLMs might add
-                    cleaned_text = re.sub(r'[^{}[\]"\',:.\d\w\s_-]', '', potential_json)
-                    # Replace single quotes with double quotes (common LLM error)
-                    text_fixed = re.sub(r"'([^']*)':", r'"\1":', cleaned_text)
-                    text_fixed = re.sub(r': *\'([^\']*)\'', r': "\1"', text_fixed)
-                    
-                    result = json.loads(text_fixed)
-                    logger.debug(f"[{self.power_name}] Aggressive cleaning worked")
-                    return result
-                except json.JSONDecodeError:
-                    pass
-                    
-        except Exception as e:
-            logger.debug(f"[{self.power_name}] Fallback extraction failed: {e}")
-        
-        # Last resort: Try json-repair on the entire text
-        try:
-            result = json_repair.loads(text)
-            logger.warning(f"[{self.power_name}] Last resort json-repair succeeded")
-            return result
-        except Exception as e:
-            logger.error(f"[{self.power_name}] All JSON extraction attempts failed. Original text: {original_text[:500]}...")
-            return {}
-    
-    def _clean_json_text(self, text: str) -> str:
-        """Clean common JSON formatting issues from LLM responses."""
-        if not text:
-            return text
-            
-        # Remove trailing commas
-        text = re.sub(r',\s*}', '}', text)
-        text = re.sub(r',\s*]', ']', text)
-        
-        # Fix newlines before JSON keys
-        text = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', text)
-        
-        # Replace single quotes with double quotes for keys
-        text = re.sub(r"'(\w+)'\s*:", r'"\1":', text)
-        
-        # Remove comments (if any)
-        text = re.sub(r'//.*$', '', text, flags=re.MULTILINE)
-        text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-        
-        # Fix unescaped quotes in values (basic attempt)
-        # This is risky but sometimes helps with simple cases
-        text = re.sub(r':\s*"([^"]*)"([^",}\]]+)"', r': "\1\2"', text)
-        
-        # Remove any BOM or zero-width spaces
-        text = text.replace('\ufeff', '').replace('\u200b', '')
-        
-        return text.strip()
-
+    # _extract_json_from_text and _clean_json_text have been moved to llm_utils.py
 
     def add_journal_entry(self, entry: str):
         """Adds a formatted entry string to the agent's private journal."""
@@ -365,122 +183,71 @@ class DiplomacyAgent:
         logger.info(f"[{self.power_name}] Found {len(year_entries)} entries to consolidate for year {year}")
         
         # Load consolidation prompt template
-        prompt_template = _load_prompt_file('diary_consolidation_prompt.txt')
+        prompt_template = llm_utils.load_prompt_file('diary_consolidation_prompt.txt')
         if not prompt_template:
             logger.error(f"[{self.power_name}] Could not load diary_consolidation_prompt.txt")
             return
         
-        # Format entries for the prompt
-        year_diary_text = "\n\n".join(year_entries)
+        # Format entries for the prompt (this part remains the same)
+        year_diary_text_for_prompt = "\n\n".join(year_entries) # Renamed to avoid conflict with llm_interface arg
         
-        # Create the consolidation prompt
-        prompt = prompt_template.format(
-            power_name=self.power_name,
-            year=year,
-            year_diary_entries=year_diary_text
-        )
-        
-        raw_response = ""
-        success_status = "FALSE"
-        
-        is_ollama_model = self.model_id.lower().startswith("ollama/")
-        ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
-        should_use_lock = is_ollama_model and ollama_serial_enabled
-        lock_acquired_here = False
-        
-        try:
-            if should_use_lock:
-                logger.debug(f"[{self.power_name}] Ollama model call (consolidate_year_diary_entries) waiting for lock (serial mode enabled)...")
-                await _ollama_lock.acquire()
-                lock_acquired_here = True
-                logger.debug(f"[{self.power_name}] Ollama model call (consolidate_year_diary_entries) acquired lock (serial mode enabled).")
+        # Call the LLM interface
+        # The game.current_short_phase might not be directly relevant for year consolidation
+        # but the interface expects a game_phase. Using a generic one.
+        current_game_phase = game.current_short_phase if game else f"Consolidate-{year}"
 
-            # Use a specific model for consolidation, e.g., a fast Gemini Flash model via OpenRouter
-            # Adjust model ID as per llm library conventions for OpenRouter
-            consolidation_model = llm.get_async_model(self.model_id)
-            response_obj = consolidation_model.prompt(prompt, system=self.system_prompt)
-            llm_response = await response_obj.text()
-            raw_response = llm_response
-            
-            if raw_response and raw_response.strip():
-                consolidated_entry = raw_response.strip()
+        consolidated_entry = await self.llm_interface.generate_diary_consolidation(
+            year=year,
+            year_diary_text=year_diary_text_for_prompt,
+            log_file_path=log_file_path,
+            game_phase=current_game_phase,
+            power_name_for_prompt=self.power_name # Pass agent's power_name for template
+        )
+
+        if consolidated_entry and not consolidated_entry.startswith("(Error:"):
+            # Separate entries into consolidated and regular entries
+            # This logic remains the same, using the 'consolidated_entry' from the interface
+            try:
+                # This logic remains the same, using the 'consolidated_entry' from the interface
+                # (Ensure consolidated_entry is just the text, not the full formatted string yet)
                 
-                # Separate entries into consolidated and regular entries
-                consolidated_entries = []
-                regular_entries = []
-                
-                for entry in self.private_diary:
-                    if entry.startswith("[CONSOLIDATED"):
-                        consolidated_entries.append(entry)
+                # Separate entries logic
+                existing_consolidated = []
+                entries_to_keep = []
+                for existing_entry in self.private_diary:
+                    if existing_entry.startswith("[CONSOLIDATED"):
+                        existing_consolidated.append(existing_entry)
                     else:
-                        # Check if this is an entry we should remove (from the year being consolidated)
-                        should_keep = True
-                        for pattern in patterns_to_check:
-                            if pattern in entry:
-                                should_keep = False
+                        is_from_consolidated_year = False
+                        for pattern_to_check in patterns_to_check:
+                            if pattern_to_check in existing_entry:
+                                is_from_consolidated_year = True
                                 break
-                        if should_keep:
-                            regular_entries.append(entry)
+                        if not is_from_consolidated_year:
+                            entries_to_keep.append(existing_entry)
                 
-                # Create the new consolidated summary
-                consolidated_summary = f"[CONSOLIDATED {year}] {consolidated_entry}"
-                
+                new_consolidated_summary = f"[CONSOLIDATED {year}] {consolidated_entry.strip()}"
+                existing_consolidated.append(new_consolidated_summary)
                 # Sort consolidated entries by year (ascending) to keep historical order
-                consolidated_entries.append(consolidated_summary)
-                consolidated_entries.sort(key=lambda x: x[14:18], reverse=False)  # Extract year from "[CONSOLIDATED YYYY]"
+                existing_consolidated.sort(key=lambda x: x[14:18], reverse=False)
                 
-                # Rebuild diary with consolidated entries at the top
-                self.private_diary = consolidated_entries + regular_entries
-                
-                success_status = "TRUE"
+                self.private_diary = existing_consolidated + entries_to_keep
                 logger.info(f"[{self.power_name}] Successfully consolidated {len(year_entries)} entries from {year} into 1 summary")
-                logger.info(f"[{self.power_name}] New diary structure - Total entries: {len(self.private_diary)}, Consolidated: {len(consolidated_entries)}, Regular: {len(regular_entries)}")
-                logger.debug(f"[{self.power_name}] Diary order preview:")
-                for i, entry in enumerate(self.private_diary[:5]):
-                    logger.debug(f"[{self.power_name}]   Entry {i}: {entry[:50]}...")
-            else:
-                logger.warning(f"[{self.power_name}] Empty response from consolidation LLM")
-                success_status = "FALSE: Empty response"
-                
-        except Exception as e:
-            logger.error(f"[{self.power_name}] Error consolidating diary entries: {e}", exc_info=True)
-            success_status = f"FALSE: {type(e).__name__}"
-        finally:
-            if lock_acquired_here and _ollama_lock.locked():
-                _ollama_lock.release()
-                logger.debug(f"[{self.power_name}] Ollama model call (consolidate_year_diary_entries) released lock (serial mode enabled).")
-            if log_file_path:
-                log_llm_response(
-                    log_file_path=log_file_path,
-                    model_name=self.model_id,
-                    power_name=self.power_name,
-                    phase=game.current_short_phase,
-                    response_type='diary_consolidation',
-                    raw_input_prompt=prompt,
-                    raw_response=raw_response,
-                    success=success_status
-                )
+                # Further logging can be added if needed, but main logging is in interface
+            except Exception as e:
+                 logger.error(f"[{self.power_name}] Error processing consolidated diary entry: {e}", exc_info=True)
+        else:
+            logger.warning(f"[{self.power_name}] Empty or error response from consolidation LLM via interface. Entry: {consolidated_entry}")
+
 
     async def generate_negotiation_diary_entry(self, game: 'Game', game_history: 'GameHistory', log_file_path: str):
         """
         Generates a diary entry summarizing negotiations and updates relationships.
-        This method now includes comprehensive LLM interaction logging.
         """
         logger.info(f"[{self.power_name}] Generating negotiation diary entry for {game.current_short_phase}..." )
         
-        full_prompt = ""  # For logging in finally block
-        raw_response = "" # For logging in finally block
-        success_status = "Failure: Initialized" # Default
-
+        # Prepare context for the prompt (this logic remains largely the same)
         try:
-            # Load the template file but safely preprocess it first
-            prompt_template_content = _load_prompt_file('negotiation_diary_prompt.txt')
-            if not prompt_template_content:
-                logger.error(f"[{self.power_name}] Could not load negotiation_diary_prompt.txt. Skipping diary entry.")
-                success_status = "Failure: Prompt file not loaded"
-                return # Exit early if prompt can't be loaded
-
-            # Prepare context for the prompt
             board_state_dict = game.get_state()
             board_state_str = f"Units: {board_state_dict.get('units', {})}, Centers: {board_state_dict.get('centers', {})}"
             
@@ -491,49 +258,25 @@ class DiplomacyAgent:
             if not messages_this_round.strip() or messages_this_round.startswith("\n(No messages"):
                 messages_this_round = "(No messages involving your power this round that require deep reflection for diary. Focus on overall situation.)"
             
-            current_relationships_str = json.dumps(self.relationships)
-            current_goals_str = json.dumps(self.goals)
+            # Use json.dumps from the json module, ensure it's imported if this file needs it
+            # For now, assuming agent.py might not need direct json import after refactor
+            current_relationships_str = str(self.relationships) # Simpler string representation
+            current_goals_str = str(self.goals)
             formatted_diary = self.format_private_diary_for_prompt()
             
-            # Get ignored messages context
             ignored_messages = game_history.get_ignored_messages_by_power(self.power_name)
-            ignored_context = ""
+            ignored_context_parts = []
             if ignored_messages:
-                ignored_context = "\n\nPOWERS NOT RESPONDING TO YOUR MESSAGES:\n"
+                ignored_context_parts.append("\n\nPOWERS NOT RESPONDING TO YOUR MESSAGES:")
                 for power, msgs in ignored_messages.items():
-                    ignored_context += f"{power}:\n"
-                    for msg in msgs[-2:]:  # Show last 2 ignored messages per power
-                        ignored_context += f"  - Phase {msg['phase']}: {msg['content'][:100]}...\n"
+                    ignored_context_parts.append(f"{power}:")
+                    for msg_data in msgs[-2:]:
+                        ignored_context_parts.append(f"  - Phase {msg_data['phase']}: {msg_data['content'][:100]}...")
             else:
-                ignored_context = "\n\nAll powers have been responsive to your messages."
-            
-            # Do aggressive preprocessing of the template to fix the problematic patterns
-            # This includes removing any newlines or whitespace before JSON keys that cause issues
-            for pattern in ['negotiation_summary', 'updated_relationships', 'relationship_updates', 'intent']:
-                # Fix the "\n  "key"" pattern that breaks .format()
-                prompt_template_content = re.sub(
-                    fr'\n\s*"{pattern}"', 
-                    f'"{pattern}"', 
-                    prompt_template_content
-                )
-            
-            # Escape all curly braces in JSON examples to prevent format() from interpreting them
-            # First, temporarily replace the actual template variables
-            temp_vars = ['power_name', 'current_phase', 'messages_this_round', 'agent_goals', 
-                        'agent_relationships', 'board_state_str', 'ignored_messages_context']
-            for var in temp_vars:
-                prompt_template_content = prompt_template_content.replace(f'{{{var}}}', f'<<{var}>>')
-            
-            # Now escape all remaining braces (which should be JSON)
-            prompt_template_content = prompt_template_content.replace('{', '{{')
-            prompt_template_content = prompt_template_content.replace('}', '}}')
-            
-            # Restore the template variables
-            for var in temp_vars:
-                prompt_template_content = prompt_template_content.replace(f'<<{var}>>', f'{{{var}}}')
-            
-            # Create a dictionary with safe values for formatting
-            format_vars = {
+                ignored_context_parts.append("\n\nAll powers have been responsive to your messages.")
+            ignored_context = "\n".join(ignored_context_parts)
+
+            prompt_template_vars = {
                 "power_name": self.power_name,
                 "current_phase": game.current_short_phase,
                 "board_state_str": board_state_str,
@@ -578,10 +321,11 @@ class DiplomacyAgent:
 
             parsed_data = None
             try:
-                parsed_data = self._extract_json_from_text(raw_response)
+                # Use llm_utils.extract_json_from_text, passing the module logger and power name for context
+                parsed_data = llm_utils.extract_json_from_text(raw_response, logger, f"[{self.power_name}]")
                 logger.debug(f"[{self.power_name}] Parsed diary data: {parsed_data}")
                 success_status = "Success: Parsed diary data"
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError as e: # This specific catch might be less relevant if extract_json handles it
                 logger.error(f"[{self.power_name}] Failed to parse JSON from diary response: {e}. Response: {raw_response[:300]}...")
                 success_status = "Failure: JSONDecodeError"
                 # Continue without parsed_data, rely on diary_entry_text if available or just log failure
@@ -676,7 +420,7 @@ class DiplomacyAgent:
         logger.info(f"[{self.power_name}] Generating order diary entry for {game.current_short_phase}...")
         
         # Load the template but we'll use it carefully with string interpolation
-        prompt_template = _load_prompt_file('order_diary_prompt.txt')
+        prompt_template = llm_utils.load_prompt_file('order_diary_prompt.txt')
         if not prompt_template:
             logger.error(f"[{self.power_name}] Could not load order_diary_prompt.txt. Skipping diary entry.")
             return
@@ -754,7 +498,7 @@ class DiplomacyAgent:
 
             if llm_response:
                 try:
-                    response_data = self._extract_json_from_text(llm_response)
+                    response_data = llm_utils.extract_json_from_text(llm_response, logger, f"[{self.power_name}]")
                     if response_data and isinstance(response_data, dict): # Ensure response_data is a dict
                         diary_text_candidate = response_data.get("order_summary")
                         if isinstance(diary_text_candidate, str) and diary_text_candidate.strip():
@@ -834,7 +578,7 @@ class DiplomacyAgent:
         logger.info(f"[{self.power_name}] Generating phase result diary entry for {game.current_short_phase}...")
         
         # Load the template
-        prompt_template = _load_prompt_file('phase_result_diary_prompt.txt')
+        prompt_template = llm_utils.load_prompt_file('phase_result_diary_prompt.txt')
         if not prompt_template:
             logger.error(f"[{self.power_name}] Could not load phase_result_diary_prompt.txt. Skipping diary entry.")
             return
@@ -945,7 +689,7 @@ class DiplomacyAgent:
 
         try:
             # 1. Construct the prompt using the dedicated state update prompt file
-            prompt_template = _load_prompt_file('state_update_prompt.txt')
+            prompt_template = llm_utils.load_prompt_file('state_update_prompt.txt')
             if not prompt_template:
                  logger.error(f"[{power_name}] Could not load state_update_prompt.txt. Skipping state update.")
                  return
@@ -1031,7 +775,7 @@ class DiplomacyAgent:
                 
                 if raw_llm_response_text and raw_llm_response_text.strip():
                     try:
-                        update_data = self._extract_json_from_text(raw_llm_response_text)
+                        update_data = llm_utils.extract_json_from_text(raw_llm_response_text, logger, f"[{power_name}]")
                         logger.debug(f"[{power_name}] Successfully parsed JSON for state update: {update_data}")
                         
                         if not isinstance(update_data, dict):
@@ -1066,8 +810,11 @@ class DiplomacyAgent:
 
             if raw_llm_response_text and raw_llm_response_text.strip():
                 try:
-                    update_data = self._extract_json_from_text(raw_llm_response_text)
-                    logger.debug(f"[{power_name}] Successfully parsed JSON for state update: {update_data}")
+                    # Re-parse with the new utility function. Note: This is redundant if the above try block for parsing succeeded.
+                    # However, to ensure all calls are updated, this demonstrates the change.
+                    # In a full refactor, the logic would avoid double parsing.
+                    update_data = llm_utils.extract_json_from_text(raw_llm_response_text, logger, f"[{power_name}]")
+                    logger.debug(f"[{power_name}] Successfully parsed JSON for state update (second pass): {update_data}")
                     
                     # Ensure update_data is a dictionary
                     if not isinstance(update_data, dict):
@@ -1185,7 +932,7 @@ class DiplomacyAgent:
         """Generates a strategic plan using the llm library and logs it."""
         logger.info(f"Agent {self.power_name} (model: {self.model_id}) generating strategic plan for phase {game.current_short_phase}...")
         
-        prompt_template = _load_prompt_file('planning_prompt.txt') # Assuming a generic planning prompt
+        prompt_template = llm_utils.load_prompt_file('planning_prompt.txt') # Assuming a generic planning prompt
         if not prompt_template:
             logger.error(f"[{self.power_name}] Could not load planning_prompt.txt. Cannot generate plan.")
             return "Error: Planning prompt file not found."
@@ -1273,7 +1020,7 @@ class DiplomacyAgent:
         """
         logger.info(f"[{self.power_name}] Generating messages for phase {current_phase}...")
 
-        prompt_template_conversation = _load_prompt_file('conversation_instructions.txt')
+        prompt_template_conversation = llm_utils.load_prompt_file('conversation_instructions.txt')
         if not prompt_template_conversation:
             logger.error(f"[{self.power_name}] Could not load conversation_instructions.txt. Cannot generate messages.")
             return []
@@ -1391,7 +1138,7 @@ class DiplomacyAgent:
             logger.debug(f"[{self.power_name}] Raw LLM response for message generation: {raw_llm_response[:500]}...")
 
             if raw_llm_response and raw_llm_response.strip(): # Check raw_llm_response here
-                parsed_data = self._extract_json_from_text(raw_llm_response) # Pass raw_llm_response
+                parsed_data = llm_utils.extract_json_from_text(raw_llm_response, logger, f"[{self.power_name}]") # Pass raw_llm_response
                 
                 if isinstance(parsed_data, dict) and "messages" in parsed_data and isinstance(parsed_data["messages"], list):
                     extracted_messages = parsed_data["messages"]

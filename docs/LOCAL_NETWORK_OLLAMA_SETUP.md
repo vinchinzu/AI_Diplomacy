@@ -228,38 +228,39 @@ If you need more control over game creation (e.g., specific variants, deadlines)
 
 ## Part 5: Performance and Advanced Configuration
 
-### Serial Ollama Requests
+### Serializing Local LLM Requests
 
-If you are running a local Ollama instance on a machine with limited resources (e.g., low RAM or a less powerful GPU/CPU), you might encounter errors, timeouts, or instability if multiple AI agents (or multiple internal processes within an agent) attempt to contact the Ollama API simultaneously. This is because each request can consume a significant amount of memory and processing power.
+If you are running local LLM instances (such as Ollama or a llama.cpp server) on a machine with limited resources (e.g., low RAM or a less powerful GPU/CPU), you might encounter errors, timeouts, or instability if multiple AI agents (or multiple internal processes within an agent) attempt to contact these local LLM APIs simultaneously. Each request can consume a significant amount of memory and processing power.
 
-To mitigate this, you can configure the system to process requests to Ollama models serially (one at a time). This feature uses a locking mechanism to ensure that only one request is sent to an Ollama model at any given moment, with subsequent requests waiting for the current one to complete.
+To mitigate this and manage resource usage, you can configure the system to process requests to these local LLM services serially (one at a time). This feature uses a unified locking mechanism to ensure that only one request is sent to any of the configured local LLM types at any given moment, with subsequent requests waiting for the current one to complete.
 
-**How to enable serial requests:**
+**How to enable serial requests for local LLMs:**
 
-Set the `OLLAMA_SERIAL_REQUESTS` environment variable to `true`. For example, in your terminal:
+Set the `SERIALIZE_LOCAL_LLMS` environment variable to `true`. For example, in your terminal:
 
 ```bash
-export OLLAMA_SERIAL_REQUESTS=true
+export SERIALIZE_LOCAL_LLMS=true
 ```
 Or add it to your `.env` file:
 ```env
-OLLAMA_SERIAL_REQUESTS=true
+SERIALIZE_LOCAL_LLMS=true
 ```
 
 **Behavior:**
 
-*   When `OLLAMA_SERIAL_REQUESTS` is set to `true`, all API calls destined for Ollama models will be queued and processed one by one. An Ollama model is identified if its model ID string starts with `ollama/` (case-insensitive), for example, `ollama/llama3` or `ollama/Mistral`.
-*   If this environment variable is not set, or if it's set to any value other than `true` (e.g., `false`), requests to Ollama models will be made concurrently, which is the default behavior.
-*   This setting only affects models identified as Ollama models. Requests to other LLM providers (e.g., OpenAI, Anthropic, llama.cpp servers) will remain concurrent regardless of this setting.
+*   When `SERIALIZE_LOCAL_LLMS` is set to `true`, all API calls destined for models identified by specific prefixes (e.g., `ollama/` for Ollama models, `llamacpp/` or `llama-cpp/` for llama.cpp server models) will be queued and processed one by one using a single, shared lock.
+*   The system identifies these local models if their model ID string starts with one of the configured prefixes (case-insensitive). Currently, these prefixes include `ollama/` and `llamacpp/` (or `llama-cpp/`).
+*   If this environment variable is not set, or if it's set to any value other than `true` (e.g., `false`), requests to these local LLM services will be made concurrently, which is the default behavior.
+*   This setting only affects models identified by the specified local prefixes. Requests to other LLM providers (e.g., official OpenAI API, Anthropic, Gemini) will remain concurrent regardless of this setting.
 
 **When to use:**
 
 Consider enabling this option if you observe:
-*   Errors related to your local Ollama instance when under load from multiple agents or simultaneous requests.
-*   High memory usage leading to system instability or Ollama crashes.
-*   Timeouts when communicating with Ollama during periods of heavy use.
+*   Errors related to your local LLM instances (Ollama, llama.cpp server) when under load from multiple agents or simultaneous requests.
+*   High memory usage leading to system instability or crashes of your local LLM services.
+*   Timeouts when communicating with these local LLMs during periods of heavy use.
 
-Enabling serial requests can significantly improve stability in resource-constrained environments at the cost of potentially lower overall throughput if Ollama could have handled some level of concurrency.
+Enabling serial requests for local LLMs can significantly improve stability in resource-constrained environments by preventing multiple local services from being overwhelmed simultaneously. However, it might reduce overall throughput if your local setup could have handled some level of concurrent requests to different local services (e.g., one call to Ollama and one to a llama.cpp server). Since it's a unified lock, if one local LLM is being accessed, others (also local) will wait.
 
 ## Part 6: Troubleshooting Common Issues
 
