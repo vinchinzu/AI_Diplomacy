@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from typing import List, Dict, Optional
@@ -17,6 +18,9 @@ logger = logging.getLogger(__name__)
 # == Best Practice: Define constants at module level ==
 ALL_POWERS = frozenset({"AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"})
 ALLOWED_RELATIONSHIPS = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
+
+# Global lock for Ollama models
+_ollama_lock = asyncio.Lock()
 
 # == New: Helper function to load prompt files reliably ==
 def _load_prompt_file(filename: str) -> Optional[str]:
@@ -379,7 +383,18 @@ class DiplomacyAgent:
         raw_response = ""
         success_status = "FALSE"
         
+        is_ollama_model = self.model_id.lower().startswith("ollama/")
+        ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+        should_use_lock = is_ollama_model and ollama_serial_enabled
+        lock_acquired_here = False
+        
         try:
+            if should_use_lock:
+                logger.debug(f"[{self.power_name}] Ollama model call (consolidate_year_diary_entries) waiting for lock (serial mode enabled)...")
+                await _ollama_lock.acquire()
+                lock_acquired_here = True
+                logger.debug(f"[{self.power_name}] Ollama model call (consolidate_year_diary_entries) acquired lock (serial mode enabled).")
+
             # Use a specific model for consolidation, e.g., a fast Gemini Flash model via OpenRouter
             # Adjust model ID as per llm library conventions for OpenRouter
             consolidation_model = llm.get_async_model(self.model_id)
@@ -431,6 +446,9 @@ class DiplomacyAgent:
             logger.error(f"[{self.power_name}] Error consolidating diary entries: {e}", exc_info=True)
             success_status = f"FALSE: {type(e).__name__}"
         finally:
+            if lock_acquired_here and _ollama_lock.locked():
+                _ollama_lock.release()
+                logger.debug(f"[{self.power_name}] Ollama model call (consolidate_year_diary_entries) released lock (serial mode enabled).")
             if log_file_path:
                 log_llm_response(
                     log_file_path=log_file_path,
@@ -540,6 +558,17 @@ class DiplomacyAgent:
             
             logger.debug(f"[{self.power_name}] Negotiation diary prompt:\n{full_prompt[:500]}...")
 
+            is_ollama_model = self.model_id.lower().startswith("ollama/")
+            ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+            should_use_lock = is_ollama_model and ollama_serial_enabled
+            lock_acquired_here = False
+
+            if should_use_lock:
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_negotiation_diary_entry) waiting for lock (serial mode enabled)...")
+                await _ollama_lock.acquire()
+                lock_acquired_here = True
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_negotiation_diary_entry) acquired lock (serial mode enabled).")
+            
             model = llm.get_async_model(self.model_id)
             response_obj = model.prompt(full_prompt, system=self.system_prompt)
             llm_response = await response_obj.text()
@@ -625,6 +654,9 @@ class DiplomacyAgent:
             # Add a fallback diary entry in case of general error
             self.add_diary_entry(f"(Error generating diary entry: {type(e).__name__})", game.current_short_phase)
         finally:
+            if lock_acquired_here and _ollama_lock.locked():
+                _ollama_lock.release()
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_negotiation_diary_entry) released lock (serial mode enabled).")
             if log_file_path: # Ensure log_file_path is provided
                 log_llm_response(
                     log_file_path=log_file_path,
@@ -702,13 +734,23 @@ class DiplomacyAgent:
         response_data = None
         raw_response = "" # Initialize raw_response
         success_status = "FALSE"
+        is_ollama_model = self.model_id.lower().startswith("ollama/")
+        ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+        should_use_lock = is_ollama_model and ollama_serial_enabled
+        lock_acquired_here = False
         try:
+            if should_use_lock:
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_order_diary_entry) waiting for lock (serial mode enabled)...")
+                await _ollama_lock.acquire()
+                lock_acquired_here = True
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_order_diary_entry) acquired lock (serial mode enabled).")
+
             model = llm.get_async_model(self.model_id)
             response_obj = model.prompt(prompt, system=self.system_prompt)
             llm_response = await response_obj.text()
             
             response_data = None
-            actual_diary_text = None 
+            actual_diary_text = None
 
             if llm_response:
                 try:
@@ -754,6 +796,10 @@ class DiplomacyAgent:
         except Exception as e:
             current_prompt_for_exc = prompt if 'prompt' in locals() else "[prompt_unavailable_in_exception]"
             current_raw_response_for_exc = llm_response if 'llm_response' in locals() and llm_response is not None else f"Error: {e}"
+            # Ensure lock is released even if logging fails or other issues occur in exception handling
+            # However, the primary release is in the finally block that *should* always run.
+            # This is more of a safeguard if something truly bizarre happens before finally.
+            # Generally, not strictly needed if finally is well-structured.
             log_llm_response(
                 log_file_path=log_file_path,
                 model_name=self.model_id,
@@ -767,6 +813,10 @@ class DiplomacyAgent:
             fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (Critical error in diary generation process: {type(e).__name__})"
             self.add_diary_entry(fallback_diary, game.current_short_phase)
             logger.error(f"[{self.power_name}] Added fallback order diary entry due to critical error.", exc_info=True)
+        finally:
+            if lock_acquired_here and _ollama_lock.locked():
+                _ollama_lock.release()
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_order_diary_entry) released lock (serial mode enabled).")
         # Rest of the code remains the same
 
     async def generate_phase_result_diary_entry(
@@ -833,14 +883,24 @@ class DiplomacyAgent:
         
         raw_response = ""
         success_status = "FALSE"
+        is_ollama_model = self.model_id.lower().startswith("ollama/")
+        ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+        should_use_lock = is_ollama_model and ollama_serial_enabled
+        lock_acquired_here = False
         
         try:
+            if should_use_lock:
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_phase_result_diary_entry) waiting for lock (serial mode enabled)...")
+                await _ollama_lock.acquire()
+                lock_acquired_here = True
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_phase_result_diary_entry) acquired lock (serial mode enabled).")
+
             model = llm.get_async_model(self.model_id)
             response_obj = model.prompt(prompt, system=self.system_prompt)
             llm_response = await response_obj.text()
+            raw_response = llm_response # Assign raw_response here for logging in finally
             
             if llm_response and llm_response.strip():
-                diary_entry = llm_response.strip()
                 diary_entry = llm_response.strip()
                 self.add_diary_entry(diary_entry, game.current_short_phase)
                 success_status = "TRUE"
@@ -857,6 +917,9 @@ class DiplomacyAgent:
             self.add_diary_entry(fallback_diary, game.current_short_phase)
             success_status = f"EXCEPTION: {type(e).__name__}"
         finally:
+            if lock_acquired_here and _ollama_lock.locked():
+                _ollama_lock.release()
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_phase_result_diary_entry) released lock (serial mode enabled).")
             log_llm_response(
                 log_file_path=log_file_path,
                 model_name=self.model_id,
@@ -944,15 +1007,62 @@ class DiplomacyAgent:
             )
             logger.debug(f"[{power_name}] State update prompt:\n{prompt}")
 
-            model = llm.get_async_model(self.model_id)
-            response_obj = model.prompt(prompt, system=self.system_prompt)
-            llm_response_obj = await response_obj.text()
-            raw_llm_response_text = llm_response_obj
-            logger.debug(f"[{power_name}] Raw LLM response for state update: {raw_llm_response_text}")
+            is_ollama_model = self.model_id.lower().startswith("ollama/")
+            ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+            should_use_lock = is_ollama_model and ollama_serial_enabled
+            lock_acquired_here = False
+            raw_llm_response_text = "" # Initialize for logging
+            log_entry_response_type = 'state_update'
+            log_entry_success = "FALSE"
+            update_data = None
 
-            log_entry_response_type = 'state_update' 
-            log_entry_success = "FALSE" 
-            update_data = None 
+            try:
+                if should_use_lock:
+                    logger.debug(f"[{power_name}] Ollama model call (analyze_phase_and_update_state) waiting for lock (serial mode enabled)...")
+                    await _ollama_lock.acquire()
+                    lock_acquired_here = True
+                    logger.debug(f"[{power_name}] Ollama model call (analyze_phase_and_update_state) acquired lock (serial mode enabled).")
+
+                model = llm.get_async_model(self.model_id)
+                response_obj = model.prompt(prompt, system=self.system_prompt)
+                llm_response_obj_text = await response_obj.text() # Renamed to avoid conflict
+                raw_llm_response_text = llm_response_obj_text     # Assign to outer scope var
+                logger.debug(f"[{power_name}] Raw LLM response for state update: {raw_llm_response_text}")
+                
+                if raw_llm_response_text and raw_llm_response_text.strip():
+                    try:
+                        update_data = self._extract_json_from_text(raw_llm_response_text)
+                        logger.debug(f"[{power_name}] Successfully parsed JSON for state update: {update_data}")
+                        
+                        if not isinstance(update_data, dict):
+                            logger.warning(f"[{power_name}] Extracted data is not a dictionary, type: {type(update_data)}")
+                            update_data = {} # Force to empty dict
+                        
+                        goals_present_and_valid = isinstance(update_data.get('updated_goals'), list) or isinstance(update_data.get('goals'), list)
+                        rels_present_and_valid = isinstance(update_data.get('updated_relationships'), dict) or isinstance(update_data.get('relationships'), dict)
+                        if goals_present_and_valid or rels_present_and_valid:
+                            log_entry_success = "TRUE"
+                        else:
+                            log_entry_success = "PARTIAL_DATA_MISSING"
+                            logger.warning(f"[{power_name}] State update JSON parsed but missing valid goals or relationships. Data: {update_data}")
+                    
+                    except Exception as e: 
+                        logger.error(f"[{power_name}] Failed to parse JSON for state update: {e}. Raw response: {raw_llm_response_text[:200]}", exc_info=True)
+                        log_entry_response_type = 'state_update_json_error'
+                
+                else: 
+                    logger.error(f"[{power_name}] No valid response (None or empty) received from LLM for state update.")
+                    log_entry_response_type = 'state_update_no_response'
+
+            except Exception as e: # Catch errors during LLM call or initial processing
+                logger.error(f"[{power_name}] Error during LLM call for state update: {e}", exc_info=True)
+                log_entry_success = f"EXCEPTION_IN_LLM_CALL: {type(e).__name__}"
+                # raw_llm_response_text might not be set if error is before .text()
+                if not raw_llm_response_text: raw_llm_response_text = f"Error: {e}"
+            finally:
+                if lock_acquired_here and _ollama_lock.locked():
+                    _ollama_lock.release()
+                    logger.debug(f"[{power_name}] Ollama model call (analyze_phase_and_update_state) released lock (serial mode enabled).")
 
             if raw_llm_response_text and raw_llm_response_text.strip():
                 try:
@@ -982,16 +1092,15 @@ class DiplomacyAgent:
                 except Exception as e: # Catch JSON parsing or other errors
                     logger.error(f"[{power_name}] Failed to parse JSON for state update: {e}. Raw response: {raw_llm_response_text[:200]}", exc_info=True)
                     log_entry_response_type = 'state_update_json_error'
-                    # log_entry_success remains "FALSE"
-            
-            else: # raw_llm_response_text was None or empty
-                logger.error(f"[{power_name}] No valid response (None or empty) received from LLM for state update.")
-                log_entry_response_type = 'state_update_no_response'
-                # log_entry_success remains "FALSE"
+            # This log_llm_response call is now inside the main try block's scope,
+            # but it's better placed after the finally that releases the lock,
+            # or ensure that raw_llm_response_text and other vars are correctly passed.
+            # The current structure with try/except/finally for lock and then logging seems fine.
+            # The key is that raw_llm_response_text is available.
 
             log_llm_response(
-                log_file_path=log_file_path, 
-                model_name=self.model_id, # Use agent's model_id
+                log_file_path=log_file_path,
+                model_name=self.model_id,
                 power_name=power_name,
                 phase=current_phase,
                 response_type=log_entry_response_type,
@@ -1101,11 +1210,23 @@ class DiplomacyAgent:
         raw_response = ""
         success_status = "Failure: Initialized"
         plan_to_return = f"Error: Plan generation failed for {self.power_name} (initial state)"
+        is_ollama_model = self.model_id.lower().startswith("ollama/")
+        ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+        should_use_lock = is_ollama_model and ollama_serial_enabled
+        lock_acquired_here = False
+        llm_response = "" # Initialize for logging in finally
 
         try:
+            if should_use_lock:
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_plan) waiting for lock (serial mode enabled)...")
+                await _ollama_lock.acquire()
+                lock_acquired_here = True
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_plan) acquired lock (serial mode enabled).")
+
             model = llm.get_async_model(self.model_id)
             response_obj = model.prompt(full_prompt, system=self.system_prompt)
-            llm_response = await response_obj.text()
+            llm_response = await response_obj.text() # Assign to llm_response in this scope
+            raw_response = llm_response # For logging
             
             logger.debug(f"[{self.power_name}] Raw LLM response for plan generation:\n{llm_response}")
             plan_to_return = llm_response.strip() if llm_response else "LLM returned empty plan."
@@ -1115,8 +1236,13 @@ class DiplomacyAgent:
             logger.error(f"Agent {self.power_name} failed to generate plan: {e}", exc_info=True)
             success_status = f"Failure: Exception ({type(e).__name__})"
             plan_to_return = f"Error: Failed to generate plan for {self.power_name} due to exception: {e}"
+            # Ensure raw_response has a value for logging in case of early exception
+            if not raw_response: raw_response = f"Error: {e}"
             self.add_journal_entry(f"Failed to generate plan for phase {game.current_short_phase} due to error: {e}")
         finally:
+            if lock_acquired_here and _ollama_lock.locked():
+                _ollama_lock.release()
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_plan) released lock (serial mode enabled).")
             if log_file_path:
                 log_llm_response(
                     log_file_path=log_file_path,
@@ -1245,16 +1371,27 @@ class DiplomacyAgent:
         raw_llm_response = ""
         success_status = "FAILURE_INIT"
         extracted_messages: List[Dict[str, str]] = []
+        is_ollama_model = self.model_id.lower().startswith("ollama/")
+        ollama_serial_enabled = os.environ.get("OLLAMA_SERIAL_REQUESTS", "false").lower() == "true"
+        should_use_lock = is_ollama_model and ollama_serial_enabled
+        lock_acquired_here = False
+        llm_response_text = "" # Initialize for logging
 
         try:
+            if should_use_lock:
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_messages) waiting for lock (serial mode enabled)...")
+                await _ollama_lock.acquire()
+                lock_acquired_here = True
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_messages) acquired lock (serial mode enabled).")
+
             model = llm.get_async_model(self.model_id)
             response_obj = model.prompt(full_prompt, system=self.system_prompt)
-            llm_response = await response_obj.text()
-            raw_llm_response = llm_response
+            llm_response_text = await response_obj.text() # Use new variable name
+            raw_llm_response = llm_response_text # Assign for logging
             logger.debug(f"[{self.power_name}] Raw LLM response for message generation: {raw_llm_response[:500]}...")
 
-            if raw_llm_response and raw_llm_response.strip():
-                parsed_data = self._extract_json_from_text(raw_llm_response)
+            if raw_llm_response and raw_llm_response.strip(): # Check raw_llm_response here
+                parsed_data = self._extract_json_from_text(raw_llm_response) # Pass raw_llm_response
                 
                 if isinstance(parsed_data, dict) and "messages" in parsed_data and isinstance(parsed_data["messages"], list):
                     extracted_messages = parsed_data["messages"]
@@ -1290,7 +1427,11 @@ class DiplomacyAgent:
         except Exception as e:
             logger.error(f"[{self.power_name}] Error during message generation: {e}", exc_info=True)
             success_status = f"FAILURE_EXCEPTION_{type(e).__name__}"
+            if not raw_llm_response: raw_llm_response = f"Error: {e}" # Ensure raw_llm_response has content for logging
         finally:
+            if lock_acquired_here and _ollama_lock.locked():
+                _ollama_lock.release()
+                logger.debug(f"[{self.power_name}] Ollama model call (generate_messages) released lock (serial mode enabled).")
             log_llm_response(
                 log_file_path=log_file_path,
                 model_name=self.model_id,

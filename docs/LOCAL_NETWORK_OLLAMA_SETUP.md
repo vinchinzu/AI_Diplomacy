@@ -226,7 +226,42 @@ If you need more control over game creation (e.g., specific variants, deadlines)
     *   Refer to `ai_diplomacy/clients.py` for model ID patterns (e.g., `claude-3-opus-20240229`, `gemini-1.5-flash`, `openrouter/mistralai/mistral-7b-instruct`).
     *   Require their respective API keys (e.g., `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`) to be set in the `.env` file.
 
-## Part 5: Troubleshooting Common Issues
+## Part 5: Performance and Advanced Configuration
+
+### Serial Ollama Requests
+
+If you are running a local Ollama instance on a machine with limited resources (e.g., low RAM or a less powerful GPU/CPU), you might encounter errors, timeouts, or instability if multiple AI agents (or multiple internal processes within an agent) attempt to contact the Ollama API simultaneously. This is because each request can consume a significant amount of memory and processing power.
+
+To mitigate this, you can configure the system to process requests to Ollama models serially (one at a time). This feature uses a locking mechanism to ensure that only one request is sent to an Ollama model at any given moment, with subsequent requests waiting for the current one to complete.
+
+**How to enable serial requests:**
+
+Set the `OLLAMA_SERIAL_REQUESTS` environment variable to `true`. For example, in your terminal:
+
+```bash
+export OLLAMA_SERIAL_REQUESTS=true
+```
+Or add it to your `.env` file:
+```env
+OLLAMA_SERIAL_REQUESTS=true
+```
+
+**Behavior:**
+
+*   When `OLLAMA_SERIAL_REQUESTS` is set to `true`, all API calls destined for Ollama models will be queued and processed one by one. An Ollama model is identified if its model ID string starts with `ollama/` (case-insensitive), for example, `ollama/llama3` or `ollama/Mistral`.
+*   If this environment variable is not set, or if it's set to any value other than `true` (e.g., `false`), requests to Ollama models will be made concurrently, which is the default behavior.
+*   This setting only affects models identified as Ollama models. Requests to other LLM providers (e.g., OpenAI, Anthropic, llama.cpp servers) will remain concurrent regardless of this setting.
+
+**When to use:**
+
+Consider enabling this option if you observe:
+*   Errors related to your local Ollama instance when under load from multiple agents or simultaneous requests.
+*   High memory usage leading to system instability or Ollama crashes.
+*   Timeouts when communicating with Ollama during periods of heavy use.
+
+Enabling serial requests can significantly improve stability in resource-constrained environments at the cost of potentially lower overall throughput if Ollama could have handled some level of concurrency.
+
+## Part 6: Troubleshooting Common Issues
 
 *   **Connection Refused (Game Server or LLM Server)**:
     *   Ensure the server (Diplomacy game server, Ollama, or llama.cpp) is running.
