@@ -1,0 +1,1408 @@
+model,power,phase,response_type,raw_input,raw_response,success
+gemma3:latest,AUSTRIA,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is AUSTRIA. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: AUSTRIA
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are AUSTRIA.
+Other active powers you can negotiate with: ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'FRANCE': 'Neutral', 'ITALY': 'Neutral', 'GERMANY': 'Neutral', 'ENGLAND': 'Neutral', 'RUSSIA': 'Neutral', 'TURKEY': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+","Error: Async execution failed: POST predict: Post ""http://127.0.0.1:36255/completion"": EOF (status code: -1)",FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,GERMANY,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is GERMANY. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: GERMANY
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are GERMANY.
+Other active powers you can negotiate with: AUSTRIA, ENGLAND, FRANCE, ITALY, RUSSIA, TURKEY.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'FRANCE': 'Neutral', 'AUSTRIA': 'Neutral', 'ITALY': 'Neutral', 'ENGLAND': 'Neutral', 'RUSSIA': 'Neutral', 'TURKEY': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+","Error: Async execution failed: POST predict: Post ""http://127.0.0.1:36255/completion"": EOF (status code: -1)",FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,ENGLAND,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is ENGLAND. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: ENGLAND
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are ENGLAND.
+Other active powers you can negotiate with: AUSTRIA, FRANCE, GERMANY, ITALY, RUSSIA, TURKEY.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'FRANCE': 'Neutral', 'AUSTRIA': 'Neutral', 'ITALY': 'Neutral', 'GERMANY': 'Neutral', 'RUSSIA': 'Neutral', 'TURKEY': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+","Error: Async execution failed: POST predict: Post ""http://127.0.0.1:36255/completion"": EOF (status code: -1)",FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,TURKEY,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is TURKEY. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: TURKEY
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are TURKEY.
+Other active powers you can negotiate with: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, RUSSIA.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'FRANCE': 'Neutral', 'AUSTRIA': 'Neutral', 'ITALY': 'Neutral', 'GERMANY': 'Neutral', 'ENGLAND': 'Neutral', 'RUSSIA': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+","Error: Async execution failed: health resp: Get ""http://127.0.0.1:36255/health"": read tcp 127.0.0.1:52110->127.0.0.1:36255: read: connection reset by peer (status code: -1)",FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,ITALY,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is ITALY. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: ITALY
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- AUSTRIA: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are ITALY.
+Other active powers you can negotiate with: AUSTRIA, ENGLAND, FRANCE, GERMANY, RUSSIA, TURKEY.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'FRANCE': 'Neutral', 'AUSTRIA': 'Neutral', 'GERMANY': 'Neutral', 'ENGLAND': 'Neutral', 'RUSSIA': 'Neutral', 'TURKEY': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+","Error: Async execution failed: health resp: Get ""http://127.0.0.1:36255/health"": read tcp 127.0.0.1:52106->127.0.0.1:36255: read: connection reset by peer (status code: -1)",FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,RUSSIA,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is RUSSIA. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: RUSSIA
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- TURKEY: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are RUSSIA.
+Other active powers you can negotiate with: AUSTRIA, ENGLAND, FRANCE, GERMANY, ITALY, TURKEY.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'FRANCE': 'Neutral', 'AUSTRIA': 'Neutral', 'ITALY': 'Neutral', 'GERMANY': 'Neutral', 'ENGLAND': 'Neutral', 'TURKEY': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+","Error: Async execution failed: health resp: Get ""http://127.0.0.1:36255/health"": read tcp 127.0.0.1:52108->127.0.0.1:36255: read: connection reset by peer (status code: -1)",FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,FRANCE,S1901M,message_generation,"You are playing the board game Diplomacy. Your power is FRANCE. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: FRANCE
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages recorded for current phase: S1901M)
+
+END MESSAGES
+
+--- Negotiation Context ---
+You are FRANCE.
+Other active powers you can negotiate with: AUSTRIA, ENGLAND, GERMANY, ITALY, RUSSIA, TURKEY.
+Previous messages and game state are provided above.
+Your current goals: []
+Your current relationships: {'AUSTRIA': 'Neutral', 'ITALY': 'Neutral', 'GERMANY': 'Neutral', 'ENGLAND': 'Neutral', 'RUSSIA': 'Neutral', 'TURKEY': 'Neutral'}
+Review your private diary for reflections and plans.
+--- End Negotiation Context ---
+
+NEGOTIATION MESSAGES
+
+TASK
+Generate one or more strategic messages to advance your interests.
+Always prioritize responding to the messages in the ""RECENT MESSAGES REQUIRING YOUR ATTENTION"" section.
+
+Consider:
+- Your current goals
+- Relationships with other powers
+- Ongoing conversations and the need to maintain consistent threads
+- Messages that need direct responses in the ""REQUIRING YOUR ATTENTION"" section
+- Powers that have been ignoring your messages (adjust your approach accordingly)
+
+When dealing with non-responsive powers:
+- Ask direct questions that demand yes/no answers
+- Make public statements that force them to clarify their position
+- Shift diplomatic efforts to more receptive powers
+- Consider their silence as potentially hostile
+
+Message purposes can include:
+- Responding to specific requests or inquiries (highest priority)
+- Proposing alliances or support moves
+- Issuing warnings or making threats
+- Gathering intelligence about other powers' intentions
+- Coordinating moves and suggesting tactical options
+- Strategic deception when appropriate to your goals
+
+RESPONSE FORMAT
+Return ONLY JSON objects. One or more messages, each as a separate JSON object.
+Do not include any text outside the JSON.
+
+Required JSON structure:
+{
+  ""message_type"": ""global"" or ""private"",
+  ""content"": ""Your message text""
+}
+
+For private messages, also include:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""POWER_NAME"",
+  ""content"": ""Your message text""
+}
+
+EXAMPLES
+
+1. Global warning:
+{
+  ""message_type"": ""global"",
+  ""content"": ""COUNTRY's aggression in the south will not go unanswered.""
+}
+
+2. Private cooperation proposal:
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""Perhaps we can coordinate against our mutual COUNTRY problem?""
+}
+
+3. Multiple messages:
+{
+  ""message_type"": ""global"",
+  ""content"": ""Let's focus on maintaining stability this turn.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""GERMANY"",
+  ""content"": ""Secretly, I'm planning to move against COUNTRY. Can you support?""
+}
+
+4. Private inquiry and subtle warning (as Austria to Italy, suspecting Italy might eye Trieste):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""ITALY"",
+  ""content"": ""Greetings, esteemed colleague. I trust your preparations for the season are going well. I'm currently evaluating my defensive needs, particularly around Tyrolia and Trieste. Any insights you might share on the general stability in our shared neighborhood would be most appreciated. A peaceful southern flank benefits us both, wouldn't you agree?""
+}
+
+5. Public statement of intent and private follow-up (as England, after taking North Sea and Norwegian Sea, aiming for St. Petersburg but wanting to appear non-threatening to Germany initially):
+{
+  ""message_type"": ""global"",
+  ""content"": ""England reaffirms its commitment to maritime security and the free passage of all neutral shipping in northern waters. Our recent naval deployments are purely to ensure these principles are upheld.""
+}
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""RUSSIA"",
+  ""content"": ""My friend, your northern ports are looking rather exposed. While my public stance is one of general peace, perhaps we could discuss ways to ensure *your* security in the region? I have no desire for conflict with you, but an unguarded St. Petersburg is a tempting target for others. Maybe a mutual understanding could be beneficial?""
+}
+
+6. Direct response to a specific proposal (as Italy responding to Austria's question about stability in the region):
+{
+  ""message_type"": ""private"",
+  ""recipient"": ""AUSTRIA"",
+  ""content"": ""Thank you for your inquiry about regional stability. Regarding your concerns about Tyrolia and Trieste, I want to assure you that my army in Venice has purely defensive intentions. I agree that a peaceful southern flank benefits us both. In fact, I would propose we formalize this with a demilitarized zone agreement along our border, allowing both of us to focus elsewhere. Would you be amenable to such an arrangement?""
+}
+
+Your response must contain at least one valid JSON message block.
+- Ensure recipient names are spelled correctly if sending private messages.
+- Think strategically about *why* you are sending each message and what outcome you hope to achieve.
+- When responding to a message, explicitly acknowledge what was said and reference specific points.
+- For ongoing conversations, maintain thread continuity by referencing previous exchanges.
+- If another power has made a specific proposal or request, address it directly in your response.
+- When making agreements, be clear about what you are committing to and what you expect in return.
+- If you need to quote something, only use single quotes in the actual messages so as not to interfere with the JSON structure.
+</ImportantReminders>
+
+JSON ONLY BELOW (DO NOT PREPEND WITH ```json or ``` or any other text)
+",Error: Async execution failed: an error was encountered while running the model: unexpected EOF (status code: -1),FAILURE_EXCEPTION_RuntimeError
+gemma3:latest,AUSTRIA,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: AUSTRIA
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- FRANCE: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+""order_summary"": ""No orders submitted. Maintaining neutral relations across the board. Prioritizing consolidation of existing supply centers (BUD, VIE, TRI) and assessing opportunities for expansion, particularly toward Germany and Italy. Continued vigilance against potential Russian aggression.""
+}
+```",TRUE
+gemma3:latest,ENGLAND,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: ENGLAND
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+  ""order_summary"": ""No orders issued. Maintaining neutral stance with all powers. Prioritizing coastal expansion and assessing opportunities to pressure FRANCE or RUSSIA for favorable positions. Monitoring Germany’s movements.""
+}
+```",TRUE
+gemma3:latest,FRANCE,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: FRANCE
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+  ""order_summary"": ""No orders were issued this phase. Maintaining neutral relationships with all powers while assessing the shifting situation. Prioritizing securing Belgium and consolidating control over the Rhineland. Monitoring Germany's movements closely.""
+}
+```",TRUE
+gemma3:latest,GERMANY,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: GERMANY
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+  ""order_summary"": ""No orders issued. Maintaining neutral relationships. Evaluating opportunities to expand East, prioritizing securing supply centers in Poland and the Balkans. Watching Russia closely.""
+}
+```",TRUE
+gemma3:latest,ITALY,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: ITALY
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- FRANCE: Neutral
+- AUSTRIA: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+- TURKEY: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+  ""order_summary"": ""No immediate orders. Maintaining neutral relations across the board. Focusing on consolidating control of Naples, Rome, and Venice. Monitoring German movements and assessing opportunities for expansion in the Balkans, particularly regarding Austria and Russia.”
+}
+```",TRUE
+gemma3:latest,RUSSIA,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: RUSSIA
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- TURKEY: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+""order_summary"": ""No orders submitted. Maintaining neutrality across the board while assessing the shifting landscape. Prioritizing securing supply centers in the North and South, with a watchful eye on Germany’s movements. Awaiting opportunities for expansion.""
+}
+```",TRUE
+gemma3:latest,TURKEY,S1901M,order_diary,"ORDER DIARY ENTRY
+Power: TURKEY
+Phase: S1901M
+
+ORDERS ISSUED
+No orders submitted.
+
+CURRENT STATUS
+Game State:
+Units: {'AUSTRIA': ['A BUD', 'A VIE', 'F TRI'], 'ENGLAND': ['F EDI', 'F LON', 'A LVP'], 'FRANCE': ['F BRE', 'A MAR', 'A PAR'], 'GERMANY': ['F KIE', 'A BER', 'A MUN'], 'ITALY': ['F NAP', 'A ROM', 'A VEN'], 'RUSSIA': ['A WAR', 'A MOS', 'F SEV', 'F STP/SC'], 'TURKEY': ['F ANK', 'A CON', 'A SMY']}, Centers: {'AUSTRIA': ['BUD', 'TRI', 'VIE'], 'ENGLAND': ['EDI', 'LON', 'LVP'], 'FRANCE': ['BRE', 'MAR', 'PAR'], 'GERMANY': ['BER', 'KIE', 'MUN'], 'ITALY': ['NAP', 'ROM', 'VEN'], 'RUSSIA': ['MOS', 'SEV', 'STP', 'WAR'], 'TURKEY': ['ANK', 'CON', 'SMY']}
+
+Goals:
+None
+
+Relationships:
+- FRANCE: Neutral
+- AUSTRIA: Neutral
+- ITALY: Neutral
+- GERMANY: Neutral
+- ENGLAND: Neutral
+- RUSSIA: Neutral
+
+TASK
+Write a concise diary note summarizing your orders.
+
+RESPONSE FORMAT
+Return ONLY a JSON object with this structure:
+{""order_summary"": ""Brief summary of orders and strategic intent""
+}
+
+Do not include any text outside the JSON.","```json
+{
+  ""order_summary"": ""No orders submitted. Maintaining neutral stance, assessing Russian and Austrian naval strength. Prioritizing securing control of Smyrna and Constantinople for strategic positioning.""
+}
+```",TRUE

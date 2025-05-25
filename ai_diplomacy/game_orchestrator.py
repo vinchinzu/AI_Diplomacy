@@ -2,14 +2,21 @@ import logging
 import asyncio
 import random
 from typing import Optional, List, Dict, Set, Callable, Coroutine, TYPE_CHECKING, Any
+from enum import Enum
 
-from diplomacy import Game, Phase as DiplomacyPhase # Renamed to avoid clash
+from diplomacy import Game  # Removed Phase import
 from diplomacy.utils.export import to_saved_game_format
+from .phase_summary import PhaseSummaryGenerator
+
+# Add a local Enum for phase types
+class PhaseType(Enum):
+    MVT = "M"
+    RET = "R"
+    BLD = "A"
 
 if TYPE_CHECKING:
     from .game_config import GameConfig
     from .agent_manager import AgentManager
-    from .phase_summary import PhaseSummaryGenerator
     from .game_history import GameHistory, Message as GameHistoryMessage # Phase already imported as DiplomacyPhase
     from .agent import DiplomacyAgent
 
@@ -25,6 +32,14 @@ class GamePhaseOrchestrator:
     Orchestrates the main game loop, including phase transitions, agent actions,
     negotiations, order submissions, and game processing.
     """
+
+    @staticmethod
+    def get_phase_type_from_game(game: 'Game') -> str:
+        """Extracts the phase type character from the current phase string (e.g., 'M', 'R', 'A')."""
+        phase = game.get_current_phase()
+        if not phase or phase in ("FORMING", "COMPLETED"):
+            return "-"
+        return phase[-1]
 
     def __init__(
         self, 
@@ -68,11 +83,12 @@ class GamePhaseOrchestrator:
 
             all_orders_for_phase: Dict[str, List[str]] = {}
 
-            if game.get_phase_type() == DiplomacyPhase.MVT:
+            phase_type = self.get_phase_type_from_game(game)
+            if phase_type == PhaseType.MVT.value:
                 all_orders_for_phase = await self._execute_movement_phase_actions(game, game_history)
-            elif game.get_phase_type() == DiplomacyPhase.RET:
+            elif phase_type == PhaseType.RET.value:
                 all_orders_for_phase = await self._execute_retreat_phase_actions(game, game_history)
-            elif game.get_phase_type() == DiplomacyPhase.BLD:
+            elif phase_type == PhaseType.BLD.value:
                 all_orders_for_phase = await self._execute_build_phase_actions(game, game_history)
             else:
                 logger.error(f"Unknown phase type: {game.get_phase_type()}. Skipping.")
@@ -86,9 +102,9 @@ class GamePhaseOrchestrator:
 
             # Check for max years condition
             if self.config.max_years and game.year >= self.config.max_years :
-                current_phase_type = game.get_phase_type()
+                current_phase_type = self.get_phase_type_from_game(game)
                 # End after the last build phase of the max_year or if it's winter and game is done
-                if (current_phase_type == DiplomacyPhase.BLD and "WINTER" in current_phase_name.upper()) or \
+                if (current_phase_type == PhaseType.BLD.value and "WINTER" in current_phase_name.upper()) or \
                    ("WINTER" in current_phase_name.upper() and game.is_game_done):
                     logger.info(f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_name}.")
                     break
@@ -222,14 +238,24 @@ class GamePhaseOrchestrator:
     ) -> List[str]:
         """Helper to call the passed get_valid_orders_func."""
         # The get_valid_orders_func is expected to be the function from lm_game.py (or its refactored equivalent)
-        # Its signature was: async def get_valid_orders(current_game, power_name, agent_llm_interface, game_history, game_config, num_negotiation_rounds)
+        # Its signature is: async def get_valid_orders(game, model_id, agent_system_prompt, board_state, power_name, possible_orders, game_history, model_error_stats, agent_goals, agent_relationships, agent_private_diary_str, log_file_path, phase)
+        model_error_stats: dict = {}
+        board_state = game.get_state()
+        possible_orders = agent.llm_interface.coordinator.gather_possible_orders(game, power_name) if hasattr(agent.llm_interface.coordinator, 'gather_possible_orders') else game.get_all_possible_orders()
         return await self.get_valid_orders_func(
-            game, 
-            power_name, 
-            agent.llm_interface, # Pass the agent's LLM interface
-            game_history, 
-            self.config,
-            num_negotiation_rounds # This might be simplified if get_valid_orders is part of agent
+            game,
+            agent.model_id,
+            agent.system_prompt,
+            board_state,
+            power_name,
+            possible_orders,
+            game_history,
+            model_error_stats,
+            agent.goals,
+            agent.relationships,
+            agent.format_private_diary_for_prompt(),
+            self.config.llm_log_path,
+            game.get_current_phase(),
         )
 
     async def _process_phase_results_and_updates(
@@ -359,8 +385,11 @@ class GamePhaseOrchestrator:
         await asyncio.gather(*update_tasks, return_exceptions=True) # Wait for all state updates
 
         # Consolidate old diary entries (e.g., if a year is 2+ years in the past)
-        current_year = game.year
-        if current_year > 1902: # Example: start consolidating from end of 1903 for year 1901
+        current_phase = game.get_current_phase()
+        current_year = None
+        if current_phase and len(current_phase) >= 5 and current_phase[1:5].isdigit():
+            current_year = int(current_phase[1:5])
+        if current_year is not None and current_year > 1902:
             year_to_consolidate = str(current_year - 2)
             logger.info(f"Checking for diary consolidation for year {year_to_consolidate}.")
             consolidation_tasks = []

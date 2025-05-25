@@ -1,14 +1,14 @@
 import logging
 import os
 from typing import List, Dict, Optional
+import re
 # Removed asyncio, json, re, json_repair, json5 as they are now primarily in llm_utils or coordinator
 
 import llm # Import the llm library
 from diplomacy import Game, Message # Message is used in type hints but not directly in refactored methods
 from .game_history import GameHistory
 from . import llm_utils # Import the new module
-# log_llm_response is now called by AgentLLMInterface, so removed from here.
-# from .utils import log_llm_response 
+from .utils import log_llm_response
 from .prompt_constructor import build_context_prompt # Added import
 from .llm_coordinator import LocalLLMCoordinator # Import new coordinator
 from .llm_interface import AgentLLMInterface # Import new interface
@@ -290,8 +290,11 @@ class DiplomacyAgent:
             
             # Now try to use the template after preprocessing
             try:
-                # Apply format with our set of variables
-                full_prompt = prompt_template_content.format(**format_vars)
+                # Fix: Use the correct template string variable
+                prompt_template_content = prompt_template_vars.get('template', None)
+                if prompt_template_content is None:
+                    prompt_template_content = "{content}"  # fallback to a minimal template
+                full_prompt = prompt_template_content.format(**prompt_template_vars)
                 logger.info(f"[{self.power_name}] Successfully formatted prompt template after preprocessing.")
                 success_status = "Using prompt file with preprocessing"                
             except KeyError as e:

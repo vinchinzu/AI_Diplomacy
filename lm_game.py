@@ -137,7 +137,8 @@ async def main():
     # GameConfig now handles deriving log paths, game_id etc.
     # It also converts args.fixed_models and args.exclude_powers from CSV strings to lists.
     if args.fixed_models:
-        args.fixed_models = [m.strip() for m in args.fixed_models.split(',')]
+        # Remove spaces after commas for robustness
+        args.fixed_models = [m.strip() for m in args.fixed_models.replace(' ', '').split(',')]
     if args.exclude_powers:
         args.exclude_powers = [p.strip().upper() for p in args.exclude_powers.split(',')]
         

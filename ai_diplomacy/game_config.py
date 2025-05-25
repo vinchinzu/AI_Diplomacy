@@ -54,7 +54,8 @@ class GameConfig:
         # Configure paths
         self.base_log_dir: str = os.path.join(os.getcwd(), "logs") # Default base log dir
         # Allow overriding base_log_dir if provided in args (e.g. from network_lm_agent)
-        self.base_log_dir = getattr(args, 'log_dir', self.base_log_dir)
+        if getattr(args, 'log_dir', None) is not None:
+            self.base_log_dir = args.log_dir
         
         # If log_dir in args was a full path for a specific game, adjust base_log_dir
         # This logic assumes log_dir from args might be game-specific or a base.

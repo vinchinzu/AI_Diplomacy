@@ -1,5 +1,8 @@
 import pytest
 import llm
+import asyncio
+from ai_diplomacy.llm_interface import AgentLLMInterface
+from ai_diplomacy.llm_coordinator import LocalLLMCoordinator
 
 MODEL_ID = "gemma3:latest" # Or your specific model
 
@@ -34,3 +37,30 @@ def test_get_model_and_prompt():
     # Note: We'll need an event loop to run this part of the test if it's not already managed by pytest-asyncio
     # For now, let's assume the main issue is with model loading or the basic prompt method.
     # If `model.prompt` works, `await model.prompt(...)` should also work in an async context. 
+
+class DummyCoordinator(LocalLLMCoordinator):
+    async def request(self, model_id, prompt_text, system_prompt_text, request_identifier="request"):
+        # Simulate a successful LLM response
+        return "This is a dummy LLM response."
+
+def test_agent_llm_interface_llm_call(monkeypatch):
+    """
+    Test that AgentLLMInterface can make an LLM call using a dummy coordinator, mimicking agent usage.
+    """
+    model_id = "dummy/model"
+    system_prompt = "You are a test agent."
+    power_name = "FRANCE"
+    dummy_coordinator = DummyCoordinator()
+    interface = AgentLLMInterface(model_id, system_prompt, dummy_coordinator, power_name)
+
+    async def run():
+        result = await interface._make_llm_call(
+            prompt_text="Say something clever.",
+            log_file_path="/tmp/llm_test_log.csv",
+            game_phase="S1901M",
+            response_type_for_logging="test",
+            expect_json=False
+        )
+        assert result == "This is a dummy LLM response."
+
+    asyncio.run(run()) 
