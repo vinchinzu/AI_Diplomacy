@@ -374,3 +374,14 @@ class GameHistory:
             return "\n(No relevant previous game history to display)\n"
 
         return game_history_str.strip()
+
+    def get_messages_by_phase(self, phase_name: str) -> List[dict]:
+        """Return all messages for a given phase as a list of dicts."""
+        phase = self.get_phase_by_name(phase_name)
+        if not phase:
+            logger.error(f"Phase {phase_name} not found in history.")
+            return []
+        return [
+            {"sender": m.sender, "recipient": m.recipient, "content": m.content}
+            for m in phase.messages
+        ]

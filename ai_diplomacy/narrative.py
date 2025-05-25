@@ -56,7 +56,7 @@ def _call_llm_for_narrative(statistical_summary: str, phase_key: str) -> str:
         return "(Narrative generation disabled – model not configured)."
 
     try:
-        model = llm.get_model(model_id_to_use)
+        model = llm.get_model(model_id_to_use, options={"host": os.environ.get("OLLAMA_HOST")})
     except llm.UnknownModelError:
         LOGGER.error(f"Narrative generation failed: Unknown model '{model_id_to_use}'. Check llm configuration and installed plugins.")
         return f"(Narrative generation failed - unknown model: {model_id_to_use})"

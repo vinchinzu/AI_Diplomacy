@@ -59,6 +59,16 @@ class GamePhaseOrchestrator:
         else:
             logger.warning("GameConfig.powers_and_models not set when GamePhaseOrchestrator is initialized. Active powers list will be empty initially.")
 
+    def _extract_year_from_phase(self, phase_name: str) -> Optional[int]:
+        """Extracts the year as int from a phase string like 'S1901M' or 'SPRING 1901 MOVEMENT'."""
+        # Try short format: S1901M, F1902R, etc.
+        if phase_name and len(phase_name) >= 5 and phase_name[1:5].isdigit():
+            return int(phase_name[1:5])
+        # Try long format: SPRING 1901 MOVEMENT
+        parts = phase_name.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            return int(parts[1])
+        return None
 
     async def run_game_loop(self, game: 'Game', game_history: 'GameHistory'):
         """
@@ -67,50 +77,69 @@ class GamePhaseOrchestrator:
         logger.info(f"Starting game loop for game ID: {self.config.game_id}")
         self.config.game_instance = game # Store game instance in config for access by other components
 
-        while not game.is_game_done:
-            current_phase_name = game.get_current_phase()
-            logger.info(f"--- Current Phase: {current_phase_name} ---")
-            game_history.add_phase(current_phase_name)
+        try:
+            while True:
+                current_phase_val = getattr(game, 'phase', "Unknown")
+                # Extract year safely
+                current_year = getattr(game, 'year', None)
+                if current_year is None:
+                    current_year = self._extract_year_from_phase(current_phase_val)
 
-            # Update active powers based on game state (e.g. eliminated powers)
-            self.active_powers = [
-                p for p in game.powers if p in self.config.powers_and_models and not game.powers[p].is_eliminated()
-            ]
-            if not self.active_powers:
-                logger.info("No active LLM-controlled powers remaining. Ending game.")
-                break
-            logger.info(f"Active LLM-controlled powers for this phase: {self.active_powers}")
-
-            all_orders_for_phase: Dict[str, List[str]] = {}
-
-            phase_type = self.get_phase_type_from_game(game)
-            if phase_type == PhaseType.MVT.value:
-                all_orders_for_phase = await self._execute_movement_phase_actions(game, game_history)
-            elif phase_type == PhaseType.RET.value:
-                all_orders_for_phase = await self._execute_retreat_phase_actions(game, game_history)
-            elif phase_type == PhaseType.BLD.value:
-                all_orders_for_phase = await self._execute_build_phase_actions(game, game_history)
-            else:
-                logger.error(f"Unknown phase type: {game.get_phase_type()}. Skipping.")
-                # This case should ideally not be reached in a standard game.
-                # Consider how to handle unexpected phase types if they can occur.
-                # For now, processing the phase as if it had no orders.
-                game.process() # Process to advance the phase
-                continue 
-
-            await self._process_phase_results_and_updates(game, game_history, all_orders_for_phase, current_phase_name)
-
-            # Check for max years condition
-            if self.config.max_years and game.year >= self.config.max_years :
-                current_phase_type = self.get_phase_type_from_game(game)
-                # End after the last build phase of the max_year or if it's winter and game is done
-                if (current_phase_type == PhaseType.BLD.value and "WINTER" in current_phase_name.upper()) or \
-                   ("WINTER" in current_phase_name.upper() and game.is_game_done):
-                    logger.info(f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_name}.")
+                # Check for max_years condition
+                if self.config.max_years and current_year is not None and current_year >= self.config.max_years:
+                    logger.info(f"Reached max_year {self.config.max_years}. Ending game.")
                     break
-        
-        logger.info(f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}")
-        # Final state logging or result processing can be triggered here or by the caller of run_game_loop
+
+                if game.is_game_done:
+                    logger.info("Game is done. Exiting game loop.")
+                    break
+
+                logger.info(f"--- Current Phase: {current_phase_val} ---")
+                game_history.add_phase(current_phase_val)
+
+                # Update active powers based on game state (e.g. eliminated powers)
+                self.active_powers = [
+                    p for p in game.powers if p in self.config.powers_and_models and not game.powers[p].is_eliminated()
+                ]
+                if not self.active_powers:
+                    logger.info("No active LLM-controlled powers remaining. Ending game.")
+                    break
+                logger.info(f"Active LLM-controlled powers for this phase: {self.active_powers}")
+
+                all_orders_for_phase: Dict[str, List[str]] = {}
+
+                phase_type = self.get_phase_type_from_game(game)
+                if phase_type == PhaseType.MVT.value:
+                    all_orders_for_phase = await self._execute_movement_phase_actions(game, game_history)
+                elif phase_type == PhaseType.RET.value:
+                    all_orders_for_phase = await self._execute_retreat_phase_actions(game, game_history)
+                elif phase_type == PhaseType.BLD.value:
+                    all_orders_for_phase = await self._execute_build_phase_actions(game, game_history)
+                else:
+                    logger.error(f"Unknown phase type: {game.get_phase_type()}. Skipping.")
+                    game.process() # Process to advance the phase
+                    continue 
+
+                await self._process_phase_results_and_updates(game, game_history, all_orders_for_phase, current_phase_val)
+
+                # Check for max years condition
+                # Use safe year extraction again
+                current_year = getattr(game, 'year', None)
+                if current_year is None:
+                    current_year = self._extract_year_from_phase(current_phase_val)
+                if self.config.max_years and current_year is not None and current_year >= self.config.max_years:
+                    current_phase_type = self.get_phase_type_from_game(game)
+                    if (current_phase_type == PhaseType.BLD.value and "WINTER" in current_phase_val.upper()) or \
+                       ("WINTER" in current_phase_val.upper() and game.is_game_done):
+                        logger.info(f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_val}.")
+                        break
+            logger.info(f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}")
+        except AttributeError as e:
+            logger.error(f"AttributeError in game loop: {e}. This might indicate an issue with the game object's structure.", exc_info=True)
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during the game loop: {e}", exc_info=True)
+        finally:
+            logger.info("Game loop finished or interrupted. Processing final results...")
 
     async def _execute_movement_phase_actions(self, game: 'Game', game_history: 'GameHistory') -> Dict[str, List[str]]:
         logger.info("Executing Movement Phase actions...")
@@ -122,34 +151,32 @@ class GamePhaseOrchestrator:
         await self._perform_negotiation_rounds(game, game_history)
 
         orders_by_power: Dict[str, List[str]] = {}
-        order_tasks = []
 
+        # SERIALIZE order generation instead of running concurrently
         for power_name in self.active_powers:
             agent = self.agent_manager.get_agent(power_name)
             if agent:
-                # Pass agent.llm_interface to get_valid_orders_func
-                order_tasks.append(
-                    self._get_orders_for_power(game, power_name, agent, game_history, self.config.num_negotiation_rounds)
-                )
+                logger.info(f"Generating orders for {power_name}...")
+                try:
+                    orders = await self._get_orders_for_power(game, power_name, agent, game_history, self.config.num_negotiation_rounds)
+                    orders_by_power[power_name] = orders
+                    logger.info(f"✅ {power_name}: Generated {len(orders)} orders")
+                except Exception as e:
+                    logger.error(f"❌ Error getting orders for {power_name}: {e}", exc_info=e)
+                    orders_by_power[power_name] = [] # Submit no orders on error
             else: # Should not happen if active_powers is derived from agent_manager.agents
                 logger.warning(f"No agent found for active power {power_name} during order generation.")
                 orders_by_power[power_name] = [] # Submit no orders
-
-        # Gather all orders concurrently
-        results = await asyncio.gather(*order_tasks, return_exceptions=True)
-        
-        for i, power_name in enumerate(self.active_powers):
-            if isinstance(results[i], Exception):
-                logger.error(f"Error getting orders for {power_name}: {results[i]}", exc_info=results[i])
-                orders_by_power[power_name] = [] # Submit no orders on error
-            else:
-                orders_by_power[power_name] = results[i]
             
             game_history.add_orders(current_phase_name, power_name, orders_by_power[power_name])
-            # Add order diary entry
-            agent = self.agent_manager.get_agent(power_name)
+            
+            # Generate order diary entry
             if agent: # Agent should exist if orders were successfully generated
-                await agent.generate_order_diary_entry(game, orders_by_power[power_name], self.config.llm_log_path)
+                try:
+                    await agent.generate_order_diary_entry(game, orders_by_power[power_name], self.config.llm_log_path)
+                    logger.info(f"✅ {power_name}: Generated order diary entry")
+                except Exception as e:
+                    logger.error(f"❌ Error generating order diary for {power_name}: {e}", exc_info=e)
         
         return orders_by_power
 
@@ -331,58 +358,47 @@ class GamePhaseOrchestrator:
         phase_events_summary_text = f"Summary of events for {processed_phase_name}: All orders processed. New SCs: {game.get_state()['centers']}"
         # A better summary would come from game.get_phase_history_log() if available and formatted.
 
-
-        summary_tasks = []
+        # SERIALIZE summary generation instead of running concurrently
         for power_name in self.active_powers:
             agent = self.agent_manager.get_agent(power_name)
             if agent:
-                # The PhaseSummaryGenerator is initialized with the specific agent's llm_interface
-                # So, we need one generator per agent, or pass the interface to the generator.
-                # The current plan has one PhaseSummaryGenerator passed to orchestrator.
-                # This means PhaseSummaryGenerator needs to be flexible.
-                # The __init__ of PhaseSummaryGenerator takes an llm_interface.
-                # This implies the orchestrator should iterate agents and use *their* llm_interface
-                # to initialize a temporary PhaseSummaryGenerator or the generator needs to be power-agnostic
-                # and take the interface as a method argument.
-                # Let's assume PhaseSummaryGenerator is created *per agent interaction* or takes llm_interface.
-                # The current PhaseSummaryGenerator constructor takes ONE llm_interface.
-                # This means we should call it using the agent's specific interface.
-                
-                # Re-instantiate PhaseSummaryGenerator with the current agent's interface
-                # This is not ideal. PhaseSummaryGenerator should ideally take llm_interface in its method.
-                # Or orchestrator has a way to get a summary_generator for a specific agent.
-                # For now, let's follow the current PhaseSummaryGenerator structure.
-                # This implies the passed phase_summary_generator is generic or for a specific agent.
-                # The plan states "phase_summary_generator: PhaseSummaryGenerator" is passed to __init__.
-                # This is problematic if it's tied to one agent's interface.
-                # Let's assume the passed phase_summary_generator can handle different powers,
-                # perhaps by taking the agent's llm_interface as an argument to its method.
-                #
-                # Revisiting PhaseSummaryGenerator: it's init with ONE llm_interface.
-                # This means the orchestrator would need a dict of these, or create them on the fly.
-                # The latter is more flexible.
-                current_agent_summary_generator = PhaseSummaryGenerator(agent.llm_interface, self.config)
+                logger.info(f"Generating phase summary for {power_name}...")
+                try:
+                    # Re-instantiate PhaseSummaryGenerator with the current agent's interface
+                    # This is not ideal. PhaseSummaryGenerator should ideally take llm_interface in its method.
+                    # Or orchestrator has a way to get a summary_generator for a specific agent.
+                    # For now, let's follow the current PhaseSummaryGenerator structure.
+                    # This implies the passed phase_summary_generator is generic or for a specific agent.
+                    # The plan states "phase_summary_generator: PhaseSummaryGenerator" is passed to __init__.
+                    # This is problematic if it's tied to one agent's interface.
+                    # Let's assume the passed phase_summary_generator can handle different powers,
+                    # perhaps by taking the agent's llm_interface as an argument to its method.
+                    #
+                    # Revisiting PhaseSummaryGenerator: it's init with ONE llm_interface.
+                    # This means the orchestrator would need a dict of these, or create them on the fly.
+                    # The latter is more flexible.
+                    current_agent_summary_generator = PhaseSummaryGenerator(agent.llm_interface, self.config)
 
-                summary_tasks.append(
-                    current_agent_summary_generator.generate_and_record_phase_summary(
+                    await current_agent_summary_generator.generate_and_record_phase_summary(
                         game, game_history, processed_phase_name, phase_events_summary_text, all_orders_for_phase
                     )
-                )
-        
-        await asyncio.gather(*summary_tasks, return_exceptions=True) # Wait for all summaries
+                    logger.info(f"✅ {power_name}: Generated phase summary")
+                except Exception as e:
+                    logger.error(f"❌ Error generating phase summary for {power_name}: {e}", exc_info=e)
 
-        # Update agent states (goals, relationships)
-        update_tasks = []
+        # SERIALIZE agent state updates instead of running concurrently
         for power_name in self.active_powers:
             agent = self.agent_manager.get_agent(power_name)
             if agent:
-                # The phase_summary here is the "observer" summary, not agent's generated one.
-                update_tasks.append(
-                    agent.analyze_phase_and_update_state(
+                logger.info(f"Updating state for {power_name}...")
+                try:
+                    # The phase_summary here is the "observer" summary, not agent's generated one.
+                    await agent.analyze_phase_and_update_state(
                         game, game.get_state(), phase_events_summary_text, game_history, self.config.llm_log_path
                     )
-                )
-        await asyncio.gather(*update_tasks, return_exceptions=True) # Wait for all state updates
+                    logger.info(f"✅ {power_name}: Updated state")
+                except Exception as e:
+                    logger.error(f"❌ Error updating state for {power_name}: {e}", exc_info=e)
 
         # Consolidate old diary entries (e.g., if a year is 2+ years in the past)
         current_phase = game.get_current_phase()
@@ -392,109 +408,108 @@ class GamePhaseOrchestrator:
         if current_year is not None and current_year > 1902:
             year_to_consolidate = str(current_year - 2)
             logger.info(f"Checking for diary consolidation for year {year_to_consolidate}.")
-            consolidation_tasks = []
+            
+            # SERIALIZE diary consolidation instead of running concurrently
             for power_name in self.active_powers:
                 agent = self.agent_manager.get_agent(power_name)
                 if agent:
-                    consolidation_tasks.append(
-                        agent.consolidate_year_diary_entries(year_to_consolidate, game, self.config.llm_log_path)
-                    )
-            await asyncio.gather(*consolidation_tasks, return_exceptions=True)
+                    logger.info(f"Consolidating diary for {power_name} (year {year_to_consolidate})...")
+                    try:
+                        await agent.consolidate_year_diary_entries(year_to_consolidate, game, self.config.llm_log_path)
+                        logger.info(f"✅ {power_name}: Consolidated diary entries")
+                    except Exception as e:
+                        logger.error(f"❌ Error consolidating diary for {power_name}: {e}", exc_info=e)
 
 
     async def _perform_planning_phase(self, game: 'Game', game_history: 'GameHistory'):
         logger.info("Performing planning phase...")
-        planning_tasks = []
+        
+        # SERIALIZE planning instead of running concurrently
         for power_name in self.active_powers:
             agent = self.agent_manager.get_agent(power_name)
             if agent:
-                async def generate_and_store_plan(current_agent, current_game, current_history, current_config):
-                    plan = await current_agent.generate_plan(current_game, current_history, current_config.llm_log_path)
-                    current_history.add_plan(current_game.get_current_phase(), current_agent.power_name, plan)
-                    logger.info(f"Plan for {current_agent.power_name}: {plan[:100]}...")
-                
-                planning_tasks.append(generate_and_store_plan(agent, game, game_history, self.config))
-        
-        await asyncio.gather(*planning_tasks, return_exceptions=True)
+                logger.info(f"Generating plan for {power_name}...")
+                try:
+                    plan = await agent.generate_plan(game, game_history, self.config.llm_log_path)
+                    game_history.add_plan(game.get_current_phase(), agent.power_name, plan)
+                    logger.info(f"✅ {power_name}: Generated plan - {plan[:100]}...")
+                except Exception as e:
+                    logger.error(f"❌ Error generating plan for {power_name}: {e}", exc_info=e)
 
     async def _perform_negotiation_rounds(self, game: 'Game', game_history: 'GameHistory'):
         current_phase_name = game.get_current_phase()
         logger.info(f"Performing negotiation rounds for phase: {current_phase_name}")
 
-        for round_num in range(1, self.config.num_negotiation_rounds + 1):
-            logger.info(f"Negotiation Round {round_num}/{self.config.num_negotiation_rounds}")
+        # Enforce at least 1 negotiation round
+        num_rounds = max(1, getattr(self.config, 'num_negotiation_rounds', 1))
+
+        for round_num in range(1, num_rounds + 1):
+            logger.info(f"Negotiation Round {round_num}/{num_rounds}")
             
             all_proposed_messages: Dict[str, List[Dict[str, str]]] = {} # power_name -> list of message dicts
-            message_generation_tasks = []
 
             for power_name in self.active_powers:
                 agent = self.agent_manager.get_agent(power_name)
                 if agent:
-                    # Define a task for each agent to generate messages
-                    async def generate_msgs_for_agent(p_name, ag, gm, gh, phase, log_path, active_pws):
-                        # Ensure board_state is current for this negotiation round
-                        board_state = gm.get_state() 
-                        # possible_orders might be too much for negotiation, pass empty or simplified
-                        possible_orders_for_negotiation = {} # Or fetch if truly needed by prompt
-
-                        return await ag.generate_messages(
-                            game=gm, 
-                            board_state=board_state, 
-                            possible_orders=possible_orders_for_negotiation,
-                            game_history=gh,
-                            current_phase=phase, # current_phase_name
-                            log_file_path=log_path,
-                            active_powers=active_pws # list of other active powers
+                    logger.info(f"[Negotiation] Starting message generation for {power_name} (round {round_num})...")
+                    try:
+                        board_state = game.get_state() 
+                        possible_orders_for_negotiation = {}
+                        # Add a timeout to prevent infinite waits
+                        import asyncio
+                        messages = await asyncio.wait_for(
+                            agent.generate_messages(
+                                game=game, 
+                                board_state=board_state, 
+                                possible_orders=possible_orders_for_negotiation,
+                                game_history=game_history,
+                                current_phase=current_phase_name,
+                                log_file_path=self.config.llm_log_path,
+                                active_powers=[p for p in self.active_powers if p != power_name]
+                            ),
+                            timeout=60.0
                         )
-                    
-                    message_generation_tasks.append(
-                        generate_msgs_for_agent(
-                            power_name, agent, game, game_history, current_phase_name, 
-                            self.config.llm_log_path, 
-                            [p for p in self.active_powers if p != power_name]
-                        )
-                    )
-                else: # Should not happen for active powers
-                    all_proposed_messages[power_name] = []
-
-            # Gather all generated messages
-            results = await asyncio.gather(*message_generation_tasks, return_exceptions=True)
-            
-            for i, power_name in enumerate(self.active_powers):
-                if isinstance(results[i], Exception):
-                    logger.error(f"Error generating messages for {power_name}: {results[i]}", exc_info=results[i])
-                    all_proposed_messages[power_name] = []
+                        all_proposed_messages[power_name] = messages
+                        logger.info(f"✅ {power_name}: Generated {len(messages)} messages (round {round_num})")
+                    except asyncio.TimeoutError:
+                        logger.error(f"❌ Timeout generating messages for {power_name} (round {round_num})")
+                        all_proposed_messages[power_name] = []
+                    except Exception as e:
+                        logger.error(f"❌ Error generating messages for {power_name}: {e}", exc_info=e)
+                        all_proposed_messages[power_name] = []
                 else:
-                    all_proposed_messages[power_name] = results[i]
+                    all_proposed_messages[power_name] = []
 
             # Distribute messages for this round (add to game_history)
             for sender_power, messages_to_send in all_proposed_messages.items():
                 for msg_dict in messages_to_send:
                     recipient = msg_dict.get("recipient", "GLOBAL").upper()
                     content = msg_dict.get("content", "")
-                    
-                    # Validate recipient (must be an active power or GLOBAL)
                     if recipient != "GLOBAL" and recipient not in self.active_powers:
                         logger.warning(f"[{sender_power}] Tried to send message to invalid/inactive recipient '{recipient}'. Skipping.")
                         continue
-                        
                     game_history.add_message(current_phase_name, sender_power, recipient, content)
                     logger.info(f"Message from {sender_power} to {recipient}: {content[:75]}...")
-            
+
             # After messages are "sent" (recorded), agents generate negotiation diary entries
-            diary_tasks = []
             for power_name in self.active_powers:
                 agent = self.agent_manager.get_agent(power_name)
                 if agent:
-                    diary_tasks.append(
-                        agent.generate_negotiation_diary_entry(game, game_history, self.config.llm_log_path)
-                    )
-            await asyncio.gather(*diary_tasks, return_exceptions=True)
+                    try:
+                        await asyncio.wait_for(
+                            agent.generate_negotiation_diary_entry(game, game_history, self.config.llm_log_path),
+                            timeout=60.0
+                        )
+                        logger.info(f"✅ {power_name}: Generated negotiation diary entry (round {round_num})")
+                    except asyncio.TimeoutError:
+                        logger.error(f"❌ Timeout generating diary entry for {power_name} (round {round_num})")
+                    except Exception as e:
+                        logger.error(f"❌ Error generating diary entry for {power_name}: {e}", exc_info=e)
 
-            if round_num < self.config.num_negotiation_rounds:
-                 logger.info(f"End of Negotiation Round {round_num}. Next round starting...")
+            if round_num < num_rounds:
+                logger.info(f"End of Negotiation Round {round_num}. Next round starting...")
             else:
-                 logger.info(f"Final Negotiation Round {round_num} completed.")
+                logger.info(f"Final Negotiation Round {round_num} completed.")
 
 if __name__ == '__main__':
     # This is for example usage/testing of GamePhaseOrchestrator

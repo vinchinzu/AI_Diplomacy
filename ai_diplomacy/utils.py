@@ -247,15 +247,16 @@ async def get_valid_orders(
     Generates orders using the specified LLM model, then validates and returns them.
     If generation or validation fails, returns fallback orders.
     """
+    # Import the coordinator here to avoid circular imports
+    from .llm_coordinator import LocalLLMCoordinator
+    
+    coordinator = LocalLLMCoordinator()
     prompt_text = ""
     raw_response_text = ""
     success_status = "FALSE: Initialized" 
     
     try:
-        model = llm.get_async_model(model_id)
-        
         # Construct the prompt for order generation
-        # The system_prompt argument in construct_order_generation_prompt is the agent's specific system prompt.
         prompt_text = construct_order_generation_prompt(
             system_prompt=agent_system_prompt, # Pass agent's system prompt here
             game=game,
@@ -270,10 +271,13 @@ async def get_valid_orders(
 
         logger.debug(f"[{model_id}] Order generation prompt for {power_name}:\n{prompt_text[:500]}...")
         
-        # LLM call using llm library (system prompt is part of prompt_text from constructor)
-        response_obj = model.prompt(prompt_text)
-        llm_response = await response_obj.text()
-        raw_response_text = llm_response
+        # Use the centralized coordinator with retry logic
+        raw_response_text = await coordinator.call_llm_with_retry(
+            model_id=model_id,
+            prompt=prompt_text,
+            system_prompt=agent_system_prompt,
+            request_identifier=f"{power_name}-order_generation"
+        )
         
         logger.debug(f"[{model_id}] Raw LLM response for {power_name} orders:\n{raw_response_text[:300]}")
 
@@ -283,7 +287,7 @@ async def get_valid_orders(
             logger.warning(f"[{model_id}] Could not extract moves for {power_name}. Using fallback.")
             model_error_stats.setdefault(model_id, {}).setdefault("order_decoding_errors", 0)
             model_error_stats[model_id]["order_decoding_errors"] += 1
-            success_status = "FALSE: NoMovesExtracted" # Standardized
+            success_status = "FALSE: NoMovesExtracted"
             final_orders = _fallback_orders_utility(possible_orders)
         else:
             final_orders = _validate_extracted_orders(game, power_name, model_id, extracted_moves, possible_orders, _fallback_orders_utility)
@@ -298,23 +302,23 @@ async def get_valid_orders(
             else:
                 is_fallback = False
 
-            if is_fallback and extracted_moves: # Check if it's fallback despite having extracted moves
-                 success_status = "FALSE: ValidationLedToFallback" # Standardized
+            if is_fallback and extracted_moves:
+                 success_status = "FALSE: ValidationLedToFallback"
                  model_error_stats.setdefault(model_id, {}).setdefault("order_validation_fallback", 0)
                  model_error_stats[model_id]["order_validation_fallback"] += 1
             elif not final_orders and extracted_moves: 
-                success_status = "FALSE: AllExtractedMovesInvalid" # Standardized
-            elif not extracted_moves and not final_orders: # No moves from LLM and no valid orders (e.g. empty possible_orders)
+                success_status = "FALSE: AllExtractedMovesInvalid"
+            elif not extracted_moves and not final_orders:
                 success_status = "FALSE: NoMovesPossibleOrExtracted"
             else:
-                 success_status = "TRUE" # Orders are from LLM and at least some are valid
-
+                 success_status = "TRUE"
     except Exception as e:
-        logger.error(f"[{model_id}] LLM error for {power_name} in get_valid_orders: {e}", exc_info=True)
-        success_status = f"FALSE: LLMException ({type(e).__name__})" # Standardized
+        logger.error(f"[{model_id}] Unexpected error for {power_name} in get_valid_orders: {e}", exc_info=True)
+        success_status = f"FALSE: UnexpectedException ({type(e).__name__})"
         model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
         model_error_stats[model_id]["llm_api_errors"] += 1
         final_orders = _fallback_orders_utility(possible_orders)
+        raw_response_text = f"Exception: {str(e)}"
     finally:
         if log_file_path:
             log_llm_response(
@@ -421,39 +425,24 @@ def log_llm_response(
     power_name: Optional[str], # Optional for non-power-specific calls like summary
     phase: str,
     response_type: str,
-    raw_input_prompt: str, # Added new parameter for the raw input
+    raw_input_prompt: str, # Kept for compatibility, but will not be logged
     raw_response: str,
     success: str,  # Changed from bool to str
 ):
-    """Appends a raw LLM response to a CSV log file."""
-    try:
-        # Ensure the directory exists
-        log_dir = os.path.dirname(log_file_path)
-        if log_dir: # Ensure log_dir is not empty (e.g., if path is just a filename)
-             os.makedirs(log_dir, exist_ok=True)
-
-        # Check if file exists to write header
-        file_exists = os.path.isfile(log_file_path)
-
-        with open(log_file_path, "a", newline="", encoding="utf-8") as csvfile:
-            # Added "raw_input" to fieldnames
-            fieldnames = ["model", "power", "phase", "response_type", "raw_input", "raw_response", "success"]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-            if not file_exists:
-                writer.writeheader()  # Write header only if file is new
-
-            writer.writerow({
-                "model": model_name,
-                "power": power_name if power_name else "game", # Use 'game' if no specific power
-                "phase": phase,
-                "response_type": response_type,
-                "raw_input": raw_input_prompt, # Added raw_input to the row
-                "raw_response": raw_response,
-                "success": success,
-            })
-    except Exception as e:
-        logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)
+    """
+    Log only the LLM response and minimal metadata to the CSV. Do NOT log the full prompt/context to avoid huge files.
+    """
+    import csv
+    import os
+    # Only log minimal fields
+    log_fields = ["model", "power", "phase", "response_type", "raw_response", "success"]
+    log_row = [model_name, power_name or "", phase, response_type, raw_response, success]
+    file_exists = os.path.isfile(log_file_path)
+    with open(log_file_path, mode="a", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        if not file_exists:
+            writer.writerow(log_fields)
+        writer.writerow(log_row)
 
 
 # run_llm_and_log is now obsolete and removed.

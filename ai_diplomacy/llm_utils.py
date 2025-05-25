@@ -2,13 +2,16 @@ import os
 import logging
 import re
 import json
-from typing import Optional, Dict # Added Dict for type hint
+from typing import Optional, Dict, Any
 
 import json_repair
 import json5
 
 # Logger for this module
 logger = logging.getLogger(__name__)
+
+# Constants for relationship extraction
+REL_KEYS = ('updated_relationships', 'relationships', 'relationship_updates')
 
 # Renamed from _load_prompt_file and moved from agent.py
 def load_prompt_file(filename: str, base_prompts_dir: Optional[str] = None) -> Optional[str]:
@@ -189,6 +192,44 @@ def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_f
     except Exception as e:
         logger_param.error(f"{identifier_for_log} All JSON extraction attempts failed. Original text: {original_text[:500]}... Error: {e}")
         return {}
+
+def extract_relationships(data: dict) -> Optional[Dict[str, str]]:
+    """
+    Extract relationships from LLM response data, handling various key names.
+    
+    Args:
+        data: Parsed JSON data from LLM response
+        
+    Returns:
+        Dictionary of relationships if found, None otherwise
+    """
+    if not isinstance(data, dict):
+        return None
+        
+    for key in REL_KEYS:
+        if key in data and isinstance(data[key], dict):
+            return data[key]
+    return None
+
+def extract_goals(data: dict) -> Optional[list]:
+    """
+    Extract goals from LLM response data, handling various key names.
+    
+    Args:
+        data: Parsed JSON data from LLM response
+        
+    Returns:
+        List of goals if found, None otherwise
+    """
+    if not isinstance(data, dict):
+        return None
+        
+    # Check various possible key names for goals
+    goal_keys = ('updated_goals', 'goals', 'goal_updates')
+    for key in goal_keys:
+        if key in data and isinstance(data[key], list):
+            return data[key]
+    return None
 
 # Example usage (optional, for testing)
 if __name__ == '__main__':

@@ -1,0 +1,312 @@
+model,power,phase,response_type,raw_input,raw_response,success
+gemma3:latest,GERMANY,S1901M,order_generation,"**SYSTEM PROMPT: GERMANY**
+
+You are playing as GERMANY in the game of Diplomacy. Your primary goal is to control 18 supply centers on the map to achieve victory.
+
+**Personality:** You are a strong central land power with naval ambitions, often viewed as industrious and militaristic. You seek to dominate central Europe and value alliances that allow expansion East or West while securing your other flank.
+
+**General Strategic Principles for Victory:**
+
+*   **Proactive Expansion:** Diplomacy is a game of conquest. Prioritize securing new supply centers, especially in the early game. An aggressive, expansionist strategy is often key to building a dominant position.
+*   **Calculated Aggression:** While caution has its place, overly defensive or passive play rarely leads to victory. Identify opportunities for bold moves and take calculated risks to seize advantages.
+*   **Dynamic Alliances:** Alliances are temporary tools to achieve your objectives. Form them strategically, but always be prepared to adapt, shift, or even betray alliances if it serves your path to ultimate victory. Do not become overly reliant on any single power.
+*   **Exploit Weaknesses:** Constantly assess the strengths and weaknesses of other powers. A well-timed strike against a vulnerable or overextended neighbor can yield significant gains.
+*   **Focus on Winning:** The ultimate goal is to control 18 supply centers. Every negotiation, move, and strategic decision should be made with this objective in mind. Aim for outright victory, not just survival or a stalemate.
+*   **Adapt and Overcome:** Be flexible in your strategy. The political landscape will change rapidly. Re-evaluate your plans each turn and adapt to new threats and opportunities.
+
+Remember to adapt your strategy based on the evolving game state and interactions with other powers. Your ultimate loyalty is to the advancement of GERMANY.
+
+
+You are playing the board game Diplomacy. Your power is GERMANY. The S1901M phase. 
+Your primary goal is to control 18 supply centers.
+Use the information below to inform your approach.
+
+
+Power: GERMANY
+Phase: S1901M
+
+PLAYER STATUS
+Current Goals: None specified
+Relationships: - FRANCE: Neutral
+- TURKEY: Neutral
+- RUSSIA: Neutral
+- ITALY: Neutral
+- AUSTRIA: Neutral
+- ENGLAND: Neutral
+
+RECENT PRIVATE DIARY ENTRIES (Your inner thoughts and plans):
+(No diary entries yet)
+
+GAME MAP
+Unit Locations:
+  AUSTRIA: ['A BUD', 'A VIE', 'F TRI']
+  ENGLAND: ['F EDI', 'F LON', 'A LVP']
+  FRANCE: ['F BRE', 'A MAR', 'A PAR']
+  GERMANY: ['F KIE', 'A BER', 'A MUN']
+  ITALY: ['F NAP', 'A ROM', 'A VEN']
+  RUSSIA: ['A WAR', 'A MOS', 'F SEV', 'F STP/SC']
+  TURKEY: ['F ANK', 'A CON', 'A SMY']
+
+Supply Centers:
+  AUSTRIA: ['BUD', 'TRI', 'VIE']
+  ENGLAND: ['EDI', 'LON', 'LVP']
+  FRANCE: ['BRE', 'MAR', 'PAR']
+  GERMANY: ['BER', 'KIE', 'MUN']
+  ITALY: ['NAP', 'ROM', 'VEN']
+  RUSSIA: ['MOS', 'SEV', 'STP', 'WAR']
+  TURKEY: ['ANK', 'CON', 'SMY']
+
+POSSIBLE ORDERS FOR S1901M
+<PossibleOrdersContext>
+  <UnitContext loc=""BER"">
+    <UnitInformation>
+      Strategic territory held by GERMANY: BER (COAST) (Controls SC)
+      Units present: A BER (GERMANY)
+    </UnitInformation>
+    <PossibleMoves>
+      Possible moves:
+        A BER S A MUN
+        A BER S A MUN - KIE
+        A BER S A WAR - PRU
+        A BER - MUN
+        A BER - SIL
+        A BER S A WAR - SIL
+        A BER - PRU
+        A BER H
+        A BER - KIE
+        A BER S F KIE
+        A BER S A MUN - SIL
+    </PossibleMoves>
+    <NearestEnemyUnits>
+      Nearest units (not ours):
+        A WAR (RUSSIA), path=[BER→PRU→WAR]
+        A BUD (AUSTRIA), path=[BER→SIL→GAL→BUD]
+        A VIE (AUSTRIA), path=[BER→MUN→BOH→VIE]
+    </NearestEnemyUnits>
+    <NearestUncontrolledSupplyCenters>
+      Nearest supply centers (not controlled by us):
+        DEN (Ctrl: None), dist=2, path=[BER→KIE→DEN]
+        HOL (Ctrl: None), dist=2, path=[BER→KIE→HOL]
+        WAR (Ctrl: RUSSIA), dist=2, path=[BER→PRU→WAR]
+    </NearestUncontrolledSupplyCenters>
+    <AdjacentTerritories>
+      Adjacent territories (including units that can support/move to the adjacent territory):
+          KIE (COAST) SC Control: GERMANY Units: F KIE (GERMANY)
+            => Can support/move to: A MUN (GERMANY)
+          MUN (LAND) SC Control: GERMANY Units: A MUN (GERMANY)
+            => Can support/move to: F KIE (GERMANY)
+          PRU (COAST)
+            => Can support/move to: A WAR (RUSSIA)
+          SIL (LAND)
+            => Can support/move to: A MUN (GERMANY), A WAR (RUSSIA)
+    </AdjacentTerritories>
+  </UnitContext>
+  <UnitContext loc=""KIE"">
+    <UnitInformation>
+      Strategic territory held by GERMANY: KIE (COAST) (Controls SC)
+      Units present: F KIE (GERMANY)
+    </UnitInformation>
+    <PossibleMoves>
+      Possible moves:
+        F KIE H
+        F KIE - HOL
+        F KIE S A MUN - BER
+        F KIE - BER
+        F KIE - DEN
+        F KIE - HEL
+        F KIE - BAL
+        F KIE S A BER
+    </PossibleMoves>
+    <NearestEnemyUnits>
+      Nearest units (not ours):
+        F EDI (ENGLAND), path=[KIE→DEN→NTH→EDI]
+        F LON (ENGLAND), path=[KIE→DEN→NTH→LON]
+        F STP/SC (RUSSIA), path=[KIE→BAL→BOT→STP]
+    </NearestEnemyUnits>
+    <NearestUncontrolledSupplyCenters>
+      Nearest supply centers (not controlled by us):
+        DEN (Ctrl: None), dist=1, path=[KIE→DEN]
+        HOL (Ctrl: None), dist=1, path=[KIE→HOL]
+        BEL (Ctrl: None), dist=2, path=[KIE→HOL→BEL]
+    </NearestUncontrolledSupplyCenters>
+    <AdjacentTerritories>
+      Adjacent territories (including units that can support/move to the adjacent territory):
+          BAL (WATER)
+            => Can support/move to: A BER (GERMANY)
+          BER (COAST) SC Control: GERMANY Units: A BER (GERMANY)
+            => Can support/move to: A MUN (GERMANY)
+          DEN (COAST)
+          HEL (WATER)
+          HOL (COAST)
+    </AdjacentTerritories>
+  </UnitContext>
+  <UnitContext loc=""MUN"">
+    <UnitInformation>
+      Strategic territory held by GERMANY: MUN (LAND) (Controls SC)
+      Units present: A MUN (GERMANY)
+    </UnitInformation>
+    <PossibleMoves>
+      Possible moves:
+        A MUN - BER
+        A MUN - KIE
+        A MUN S A VEN - TYR
+        A MUN S A VIE - BOH
+        A MUN - TYR
+        A MUN - SIL
+        A MUN S A VIE - TYR
+        A MUN - BUR
+        A MUN S A BER - KIE
+        A MUN S A WAR - SIL
+        A MUN - BOH
+        A MUN S F KIE - BER
+        A MUN - RUH
+        A MUN H
+        A MUN S A MAR - BUR
+        A MUN S A PAR - BUR
+        A MUN S F KIE
+        A MUN S A BER - SIL
+        A MUN S A BER
+    </PossibleMoves>
+    <NearestEnemyUnits>
+      Nearest units (not ours):
+        A VIE (AUSTRIA), path=[MUN→BOH→VIE]
+        F TRI (AUSTRIA), path=[MUN→TYR→TRI]
+        A MAR (FRANCE), path=[MUN→BUR→MAR]
+    </NearestEnemyUnits>
+    <NearestUncontrolledSupplyCenters>
+      Nearest supply centers (not controlled by us):
+        BEL (Ctrl: None), dist=2, path=[MUN→BUR→BEL]
+        DEN (Ctrl: None), dist=2, path=[MUN→KIE→DEN]
+        HOL (Ctrl: None), dist=2, path=[MUN→KIE→HOL]
+    </NearestUncontrolledSupplyCenters>
+    <AdjacentTerritories>
+      Adjacent territories (including units that can support/move to the adjacent territory):
+          BER (COAST) SC Control: GERMANY Units: A BER (GERMANY)
+            => Can support/move to: F KIE (GERMANY)
+          BOH (LAND)
+            => Can support/move to: A VIE (AUSTRIA)
+          BUR (LAND)
+            => Can support/move to: A MAR (FRANCE), A PAR (FRANCE)
+          KIE (COAST) SC Control: GERMANY Units: F KIE (GERMANY)
+            => Can support/move to: A BER (GERMANY)
+          RUH (LAND)
+            => Can support/move to: F KIE (GERMANY)
+          SIL (LAND)
+            => Can support/move to: A BER (GERMANY), A WAR (RUSSIA)
+          TYR (LAND)
+            => Can support/move to: A VEN (ITALY), A VIE (AUSTRIA), F TRI (AUSTRIA)
+    </AdjacentTerritories>
+  </UnitContext>
+</PossibleOrdersContext>
+END POSSIBLE ORDERS
+
+MESSAGES THIS ROUND
+
+(No messages found for current phase: S1901M)
+
+END MESSAGES
+
+PRIMARY OBJECTIVE
+Control 18 supply centers. Nothing else will do.
+
+ORDER SUBMISSION PROCESS
+1. ANALYZE
+   - Review game state, orders, messages, and other powers' motivations
+   - Focus on expansion and capturing supply centers
+   - Be aggressive, not passive
+   - Take calculated risks for significant gains
+   - Find alternative paths if blocked
+
+2. REASON
+   - Write out your strategic thinking
+   - Explain goals and move choices
+   - Consider supports and holds
+
+3. FORMAT
+   Return orders in this exact format:
+   PARSABLE OUTPUT:
+   {{
+     ""orders"": [""order1"", ""order2"", ...]
+   }}
+
+CRITICAL RULES
+1. Only use orders from the provided possible_orders list
+2. Support orders must match actual moves (e.g., 'A PAR S F PIC - ENG' needs 'F PIC - ENG')
+3. Build orders (build phase only):
+   - Format: '[UnitType] [Location3LetterCode] B'
+   - UnitType: 'A' (Army) or 'F' (Fleet)
+   - Example: 'A PAR B', 'F LON B'
+4. Dual-coast provinces (STP, SPA, BUL):
+   - Specify coast when needed: 'F [PROVINCE]/[COAST_CODE]'
+   - Example: 'F STP/NC B', 'A MAR S F SPA/SC - WES'
+   - Coast codes: NC (North), SC (South), EC (East), WC (West)
+5. All orders resolve simultaneously
+6. Submit orders only, no messages
+
+EXAMPLES
+Reasoning:
+- Secure Burgundy against German threat
+- Mid-Atlantic move enables future convoys
+
+PARSABLE OUTPUT:
+{{
+  ""orders"": [
+    ""A PAR H"",
+    ""A MAR - BUR"",
+    ""F BRE - MAO""
+  ]
+}}
+
+Example 2: As Germany, Spring 1901, aiming for a swift expansion into DEN and HOL, while also securing home centers.
+
+Reasoning:
+- Denmark (DEN) and Holland (HOL) are key neutral centers for early German expansion.
+- Need to secure Berlin (BER) and Munich (MUN) against potential French or Russian incursions.
+- Kiel (KIE) fleet is best positioned for DEN, while an army from Ruhr (RUH) can take HOL.
+
+PARSABLE OUTPUT:
+{{
+  ""orders"": [
+    ""A BER H"",
+    ""A MUN H"",
+    ""F KIE - DEN"",
+    ""A RUH - HOL"",
+    ""A SIL - WAR"", // Opportunistic move towards Warsaw if Russia is weak or focused elsewhere
+    ""F HEL H""      // Hold Heligoland Bight for naval defense
+  ]
+}}
+
+Example 3: As Italy, Autumn 1902, after securing Tunis and trying to break into Austria, while also defending against a potential French naval attack. My units are A VEN, A ROM, F NAP, F ION, A APU. Austria has F TRI, A VIE, A BUD. France has F WES, F MAR.
+
+Reasoning:
+- My primary goal is to take Trieste (TRI) from Austria. Army in Venice (VEN) will attack, supported by Army in Apulia (APU).
+- Fleet in Ionian Sea (ION) will support the attack on Trieste from the sea.
+- Army in Rome (ROM) will hold to protect the capital.
+- Fleet in Naples (NAP) will move to Tyrrhenian Sea (TYS) to defend against a potential French move from Western Mediterranean (WES) towards Naples or Rome.
+
+PARSABLE OUTPUT:
+{{
+  ""orders"": [
+    ""A VEN - TRI"",
+    ""A APU S A VEN - TRI"",
+    ""F ION S A VEN - TRI"",
+    ""A ROM H"",
+    ""F NAP - TYS""
+  ]
+}}
+
+RESPOND WITH YOUR REASONING AND ORDERS (within PARSABLE OUTPUT) BELOW","Reasoning:
+- My primary objective is to rapidly expand into the Baltic Sea, securing key supply centers like Denmark and Holland, while simultaneously exerting pressure on Russia. Kiel (KIE) is strategically positioned to capture DEN, offering a quick route to more resources. Simultaneously, I’ll establish a foothold in Eastern Europe by moving into Poland (WAR). This denies resources to my enemies and presents opportunities for further expansion.
+- I will utilize my fleet to assist in securing Denmark.
+
+PARSABLE OUTPUT:
+```json
+{
+  ""orders"": [
+    ""F KIE - DEN"",
+    ""A BER H"",
+    ""A WAR - DEN"",
+    ""F BRE - MAO""
+  ]
+}
+```",TRUE

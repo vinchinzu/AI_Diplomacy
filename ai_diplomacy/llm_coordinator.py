@@ -1,9 +1,12 @@
 import asyncio
 import os
 import logging
-from typing import Optional # Added for type hinting
+from typing import Optional, Dict, Any, Union, ContextManager
+from contextlib import asynccontextmanager
+import json
 
 import llm # Assuming this is the llm library by Simon Willison
+from llm.models import Model # Import Model for type hinting
 
 logger = logging.getLogger(__name__)
 _local_llm_lock = asyncio.Lock()
@@ -11,6 +14,32 @@ _local_llm_lock = asyncio.Lock()
 # Case-insensitive check will be applied to these prefixes
 SERIAL_ACCESS_PREFIXES = ["ollama/", "llamacpp/"] # llama.cpp server can also be hit hard
 SERIALIZE_LOCAL_LLMS_ENV_VAR = "SERIALIZE_LOCAL_LLMS" # Users can set this to "true"
+
+
+class LLMCallResult:
+    """Structured result from an LLM call with parsing."""
+    def __init__(
+        self, 
+        raw_response: str, 
+        parsed_json: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: str = ""
+    ):
+        self.raw_response = raw_response
+        self.parsed_json = parsed_json
+        self.success = success
+        self.error_message = error_message
+
+    def get_field(self, *field_names: str) -> Optional[Any]:
+        """Get the first available field from the parsed JSON."""
+        if not self.parsed_json:
+            return None
+        
+        for field_name in field_names:
+            if field_name in self.parsed_json:
+                return self.parsed_json[field_name]
+        return None
+
 
 class LocalLLMCoordinator:
     """
@@ -25,6 +54,201 @@ class LocalLLMCoordinator:
         """
         pass
 
+    @asynccontextmanager
+    async def serial_access(self, model_id: str, request_identifier: str = "request"):
+        """
+        Context manager for handling serial access to local LLMs.
+        
+        Local LLMs (ollama/, llamacpp/) are ALWAYS locked to prevent concurrent
+        streaming requests that can cause EOF errors.
+        
+        Args:
+            model_id: The ID of the LLM model
+            request_identifier: Identifier for logging
+            
+        Usage:
+            async with coordinator.serial_access(model_id, "MyAgent-Planning"):
+                # Your LLM call here - lock automatically handled for local LLMs
+        """
+        model_id_lower = model_id.lower()
+        requires_serial_access = any(model_id_lower.startswith(prefix) for prefix in SERIAL_ACCESS_PREFIXES)
+        
+        if requires_serial_access:
+            logger.debug(f"[{request_identifier}] LLM call to '{model_id}' waiting for serial access lock (local LLM)...")
+            async with _local_llm_lock:
+                logger.debug(f"[{request_identifier}] LLM call to '{model_id}' acquired serial access lock.")
+                yield
+                logger.debug(f"[{request_identifier}] LLM call to '{model_id}' released serial access lock.")
+        else:
+            # Non-local models don't need the lock
+            yield
+
+    async def _single_llm_call(self, model_id: str, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """
+        Makes a single LLM call without retry logic.
+        
+        Args:
+            model_id: The LLM model identifier
+            prompt: The prompt text
+            system_prompt: Optional system prompt
+            
+        Returns:
+            The raw response text
+            
+        Raises:
+            Exception: Any error from the LLM call
+        """
+        model = llm.get_async_model(model_id)
+        response_obj = model.prompt(prompt, system=system_prompt)
+        return await response_obj.text()
+
+    async def call_llm_with_retry(
+        self,
+        model_id: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        request_identifier: str = "request",
+        max_retries: int = 3
+    ) -> str:
+        """
+        Makes an LLM call with retry logic for EOF and other transient errors.
+        
+        Args:
+            model_id: The LLM model identifier
+            prompt: The prompt text
+            system_prompt: Optional system prompt
+            request_identifier: Identifier for logging
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            The raw response text
+            
+        Raises:
+            Exception: If all retries fail
+        """
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                async with self.serial_access(model_id, request_identifier):
+                    return await self._single_llm_call(model_id, prompt, system_prompt)
+                    
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                
+                # Check for recoverable errors (EOF, connection issues, etc.)
+                is_recoverable = any(keyword in error_str for keyword in [
+                    "unexpected eof", "eof", "connection", "timeout", "stream"
+                ])
+                
+                if not is_recoverable or attempt == max_retries - 1:
+                    # Don't retry for non-recoverable errors or on final attempt
+                    logger.error(f"[{request_identifier}] LLM call failed on attempt {attempt + 1}/{max_retries}: {e}")
+                    raise
+                
+                # Exponential backoff: 1.5s, 3s, 4.5s, etc.
+                sleep_time = 1.5 * (attempt + 1)
+                logger.warning(f"[{request_identifier}] LLM call failed on attempt {attempt + 1}/{max_retries} with recoverable error: {e}. Retrying in {sleep_time}s...")
+                await asyncio.sleep(sleep_time)
+        
+        # This should never be reached due to the raise in the loop, but just in case
+        raise last_error or Exception("All retries failed")
+
+    async def call_llm_with_json_parsing(
+        self,
+        model_id: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        request_identifier: str = "request",
+        expected_json_fields: Optional[list] = None,
+        log_file_path: Optional[str] = None,
+        power_name: Optional[str] = None,
+        phase: Optional[str] = None,
+        response_type: str = "llm_call"
+    ) -> LLMCallResult:
+        """
+        Centralized LLM call with automatic JSON parsing and error handling.
+        
+        Args:
+            model_id: LLM model identifier
+            prompt: The main prompt text
+            system_prompt: Optional system prompt
+            request_identifier: Identifier for logging
+            expected_json_fields: List of expected JSON field names for validation
+            log_file_path: Path for logging the response
+            power_name: Power name for logging
+            phase: Game phase for logging
+            response_type: Type of response for logging
+            
+        Returns:
+            LLMCallResult with parsed data or error information
+        """
+        from . import llm_utils  # Import here to avoid circular imports
+        from .utils import log_llm_response
+        
+        result = LLMCallResult("", None, False, "Not initialized")
+        
+        try:
+            # Use the new retry logic instead of manual lock handling
+            raw_response = await self.call_llm_with_retry(
+                model_id=model_id,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                request_identifier=request_identifier
+            )
+            
+            result.raw_response = raw_response
+            
+            if raw_response and raw_response.strip():
+                try:
+                    # Parse JSON using the existing utility
+                    parsed_data = llm_utils.extract_json_from_text(
+                        raw_response, logger, f"[{request_identifier}]"
+                    )
+                    result.parsed_json = parsed_data
+                    result.success = True
+                    result.error_message = ""
+                    
+                    # Validate expected fields if provided
+                    if expected_json_fields and isinstance(parsed_data, dict):
+                        missing_fields = [field for field in expected_json_fields 
+                                        if field not in parsed_data]
+                        if missing_fields:
+                            result.success = False
+                            result.error_message = f"Missing expected fields: {missing_fields}"
+                    
+                except Exception as e:
+                    logger.error(f"[{request_identifier}] JSON parsing failed: {e}")
+                    result.success = False
+                    result.error_message = f"JSON parsing error: {e}"
+            else:
+                result.success = False
+                result.error_message = "Empty or no response from LLM"
+                
+        except Exception as e:
+            logger.error(f"[{request_identifier}] LLM call failed: {e}", exc_info=True)
+            result.success = False
+            result.error_message = f"LLM call error: {e}"
+            if not result.raw_response:
+                result.raw_response = f"Error: {e}"
+        
+        # Log the response if logging parameters are provided
+        if log_file_path and power_name and phase:
+            success_status = "TRUE" if result.success else f"FALSE: {result.error_message}"
+            log_llm_response(
+                log_file_path=log_file_path,
+                model_name=model_id,
+                power_name=power_name,
+                phase=phase,
+                response_type=response_type,
+                raw_input_prompt=prompt,
+                raw_response=result.raw_response,
+                success=success_status
+            )
+        
+        return result
+
     async def request(
         self, 
         model_id: str, 
@@ -33,11 +257,68 @@ class LocalLLMCoordinator:
         request_identifier: str = "request" # For more specific logging
     ) -> str:
         """
-        Makes a request to the specified LLM.
+        Makes a request to the specified LLM with automatic retry for transient errors.
 
-        If the model_id matches known local server types (Ollama, Llama.cpp)
-        and the SERIALIZE_LOCAL_LLMS_ENV_VAR is set to "true",
-        requests will be serialized using an asyncio.Lock.
+        Local LLMs (ollama/, llamacpp/) are automatically serialized to prevent
+        concurrent streaming requests that can cause EOF errors.
+
+        Args:
+            model_id: The ID of the LLM to use (e.g., "ollama/llama3", "gpt-4o").
+            prompt_text: The main prompt text for the LLM.
+            system_prompt_text: Optional system prompt text.
+            request_identifier: An identifier for logging purposes (e.g., power name + request type).
+
+        Returns:
+            The text response from the LLM.
+
+        Raises:
+            Exception: Propagates exceptions from the llm.get_async_model or model.prompt calls after retries.
+        """
+        # Only log ENV/connection info at DEBUG level
+        logger.debug(f"[LLMCoordinator] Using model_id: {model_id}, system_prompt: {system_prompt_text}")
+        logger.debug(f"[LLMCoordinator] Prompt: {prompt_text[:200]}...")
+        logger.debug(f"[{request_identifier}] Sending prompt to '{model_id}'. System prompt length: {len(system_prompt_text) if system_prompt_text else 0}. Prompt length: {len(prompt_text)}")
+        
+        try:
+            # Use the new retry logic which handles lock management automatically
+            response_text = await self.call_llm_with_retry(
+                model_id=model_id,
+                prompt=prompt_text,
+                system_prompt=system_prompt_text,
+                request_identifier=request_identifier
+            )
+            
+            # Only log LLM call result at INFO level
+            logger.info(f"[LLMCoordinator] LLM call for {model_id} ({request_identifier}) succeeded.")
+            logger.debug(f"[{request_identifier}] Received response from '{model_id}'. Response length: {len(response_text)}")
+            return response_text
+            
+        except Exception as e:
+            # Log the error with context and re-raise
+            logger.error(f"[{request_identifier}] Error during LLM request to '{model_id}': {type(e).__name__}: {e}", exc_info=True)
+            raise
+
+    async def get_model_for_power(self, power_name: str, model_id: str) -> Model:
+        """Retrieves an LLM model instance."""
+        logger.debug(f"[{power_name}] Requesting model: {model_id}")
+        try:
+            # Get model instance - let any exceptions propagate up
+            model_obj = llm.get_async_model(model_id)
+            logger.debug(f"[{power_name}] Successfully retrieved model: {model_id}")
+            return model_obj
+        except Exception as e:
+            logger.error(f"[{power_name}] Failed to get model {model_id}: {e}")
+            raise
+
+    async def execute_llm_call(
+        self,
+        model_id: str,
+        prompt_text: str,
+        system_prompt_text: Optional[str],
+        request_identifier: str = "request"
+    ) -> str:
+        """
+        Executes an LLM call with the specified parameters.
 
         Args:
             model_id: The ID of the LLM to use (e.g., "ollama/llama3", "gpt-4o").
@@ -51,53 +332,7 @@ class LocalLLMCoordinator:
         Raises:
             Exception: Propagates exceptions from the llm.get_async_model or model.prompt calls.
         """
-        
-        model_id_lower = model_id.lower()
-        requires_serial_access = any(model_id_lower.startswith(prefix) for prefix in SERIAL_ACCESS_PREFIXES)
-        
-        serialization_enabled = os.environ.get(SERIALIZE_LOCAL_LLMS_ENV_VAR, "false").lower() == "true"
-        
-        should_use_lock = requires_serial_access and serialization_enabled
-        lock_acquired_here = False
-        
-        # Prepare model instance (can raise llm.UnknownModelError)
-        try:
-            model_obj = llm.get_async_model(model_id)
-        except llm.UnknownModelError as e:
-            logger.error(f"[{request_identifier}] Unknown model_id '{model_id}': {e}")
-            raise # Re-raise to be handled by the caller
-        except Exception as e:
-            logger.error(f"[{request_identifier}] Unexpected error getting model '{model_id}': {e}")
-            raise # Re-raise to be handled by the caller
-
-        try:
-            if should_use_lock:
-                logger.debug(f"[{request_identifier}] LLM call to '{model_id}' waiting for serial access lock (SERIALIZE_LOCAL_LLMS enabled)...")
-                await _local_llm_lock.acquire()
-                lock_acquired_here = True
-                logger.debug(f"[{request_identifier}] LLM call to '{model_id}' acquired serial access lock.")
-            else:
-                if requires_serial_access: # Log if it's a local model but serialization is off
-                    logger.debug(f"[{request_identifier}] LLM call to '{model_id}' proceeding concurrently (SERIALIZE_LOCAL_LLMS not enabled or not 'true').")
-                # For non-local models, no special logging here, just proceed.
-
-            logger.debug(f"[{request_identifier}] Sending prompt to '{model_id}'. System prompt length: {len(system_prompt_text) if system_prompt_text else 0}. Prompt length: {len(prompt_text)}")
-            
-            response_obj = await model_obj.prompt(prompt_text, system=system_prompt_text)
-            llm_response_text = await response_obj.text()
-            
-            logger.debug(f"[{request_identifier}] Received response from '{model_id}'. Response length: {len(llm_response_text)}")
-            return llm_response_text
-            
-        except Exception as e:
-            # Log the error with context
-            logger.error(f"[{request_identifier}] Error during LLM request to '{model_id}': {type(e).__name__}: {e}", exc_info=True)
-            # Propagate the error to the caller to handle (e.g., log with log_llm_response, return fallback)
-            raise
-        finally:
-            if lock_acquired_here and _local_llm_lock.locked():
-                _local_llm_lock.release()
-                logger.debug(f"[{request_identifier}] LLM call to '{model_id}' released serial access lock.")
+        return await self.request(model_id, prompt_text, system_prompt_text, request_identifier)
 
 if __name__ == '__main__':
     # Example Usage (requires 'llm' library and potentially an LLM server like Ollama)

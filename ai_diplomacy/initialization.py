@@ -1,20 +1,27 @@
 # ai_diplomacy/initialization.py
 import logging
 import json
+import os # Add os import
+import asyncio
+import llm
 
 # Forward declaration for type hinting, actual imports in function if complex
-if False: # TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple, Coroutine
+if TYPE_CHECKING:
     from diplomacy import Game
     from diplomacy.models.game import GameHistory
     from .agent import DiplomacyAgent
-import llm # Import the llm library
 
 from .agent import ALL_POWERS, ALLOWED_RELATIONSHIPS
 # run_llm_and_log is obsolete
 from .utils import log_llm_response 
 from .prompt_constructor import build_context_prompt
+from .llm_coordinator import _local_llm_lock # Import the lock
 
 logger = logging.getLogger(__name__)
+
+# Placeholder for Power enum if you have one, otherwise use strings
+ALL_POWERS = ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]
 
 async def initialize_agent_state_ext(
     agent: 'DiplomacyAgent', 
@@ -67,7 +74,13 @@ async def initialize_agent_state_ext(
         update_data = {} # Initialize to ensure it exists
 
         try:
-            model = llm.get_async_model(agent.model_id) # Use get_async_model for async operations
+            # Validate model ID by attempting to get the model
+            # Use get_async_model for async operations
+            model = llm.get_async_model(agent.model_id, options={"host": os.environ.get("OLLAMA_HOST")}) 
+            if not model: # Should not happen if get_async_model raises on error
+                raise llm.UnknownModelError(f"Model {agent.model_id} could not be retrieved.")
+            logger.info(f"Successfully validated model {agent.model_id} for {agent.power_name}.")
+
             # Assuming build_context_prompt does not include the system prompt, 
             # and agent.system_prompt is the one to use.
             # If full_prompt from build_context_prompt already includes system prompt,
@@ -91,11 +104,15 @@ async def initialize_agent_state_ext(
                 parsed_successfully = True # Parsed to a dict
                 # Success status will be refined based on whether data is applied
         
-        except Exception as e_llm_call:
-            logger.error(f"[{power_name}] LLM call or parsing failed during initialization: {e_llm_call}", exc_info=True)
-            success_status = f"Failure: LLMErrorOrParse ({type(e_llm_call).__name__})"
-            response_text = ""  # Ensure response_text is always defined
-            # update_data remains {}
+        except llm.UnknownModelError as e:
+            logger.error(f"Agent {agent.power_name} has unknown model_id: {agent.model_id}. Error: {e}")
+            # Potentially skip this agent or raise an error to stop initialization
+            # For now, we'll log and continue, but the agent might fail later.
+            # Consider adding a 'failed_agents' list or similar handling.
+            continue # Skip to the next agent if model validation fails
+        except Exception as e:
+            logger.error(f"Unexpected error validating model for agent {agent.power_name} ({agent.model_id}): {e}")
+            continue # Skip to the next agent
 
         initial_goals_applied = False
         initial_relationships_applied = False
@@ -194,3 +211,155 @@ async def initialize_agent_state_ext(
 
     # Final log of state after initialization attempt
     logger.info(f"[{power_name}] Post-initialization state: Goals={agent.goals}, Relationships={agent.relationships}")
+
+async def initialize_agent_state_concurrently(
+    agent: 'DiplomacyAgent',
+    game: 'Game', # diplomacy.Game object
+    game_history: 'GameHistory',
+    power_name: str,
+    initial_prompt_template: str
+) -> Tuple[str, bool, str, Dict[str, Any]]:
+    logger.info(f"[{power_name}] Initializing state with LLM...")
+    full_prompt = "" # Initialize full_prompt
+    update_data = {}
+    success_status = "Unknown" # Default status
+    response_text = "" # Initialize response_text
+
+    try:
+        # Ensure the prompt template is a string and not None
+        if initial_prompt_template is None or not isinstance(initial_prompt_template, str):
+            logger.error(f"[{power_name}] Initial prompt template is not a valid string or is None.")
+            success_status = "Failure: InvalidPromptTemplate"
+            return power_name, False, success_status, update_data
+
+        full_prompt = initial_prompt_template.format(
+            power_name=power_name,
+            game_state=game.get_state(),
+            all_powers=", ".join(ALL_POWERS),
+            # Assuming game_history has a method to get a summary or relevant parts for the prompt
+            negotiation_history_summary=game_history.get_negotiation_summary(power_name) if game_history else "No negotiation history available."
+        )
+
+        # Log the prompt being sent for initialization (optional, can be verbose)
+        logger.debug(f"[{power_name}] Initialization prompt:\\n{full_prompt}")
+
+        async with _local_llm_lock:
+            if os.environ.get("OLLAMA_SERIAL_MODE", "false").lower() == "true":
+                 logger.debug(f"[{power_name}] Ollama model call (initialize_agent_state_concurrently) acquired lock (serial mode enabled)...")
+
+            model = llm.get_async_model(agent.model_id, options={"host": os.environ.get("OLLAMA_HOST")}) # Use get_async_model for async operations
+            response_obj = model.prompt(full_prompt, system=agent.system_prompt)
+            response_text = await response_obj.text() # Assign to response_text
+
+        logger.info(f"[{power_name}] LLM response received for initialization.")
+        logger.debug(f"[{power_name}] Raw LLM response for state initialization: {response_text}")
+
+        # Attempt to parse the JSON response
+        try:
+            # First, try to find JSON within ```json ... ``` or ``` ... ```
+            json_match = agent.extract_json_from_text(response_text)
+            if json_match:
+                parsed_data = json.loads(json_match)
+                logger.info(f"[{power_name}] Successfully parsed JSON from LLM response for initialization.")
+                update_data = parsed_data # Store parsed data
+                success_status = "Success: Parsed"
+            else:
+                logger.warning(f"[{power_name}] No JSON block found in LLM response for initialization. Trying direct parse.")
+                # Try parsing the whole response as JSON if no block is found
+                try:
+                    parsed_data = json.loads(response_text)
+                    logger.info(f"[{power_name}] Successfully parsed entire LLM response as JSON for initialization.")
+                    update_data = parsed_data
+                    success_status = "Success: ParsedDirectly"
+                except json.JSONDecodeError:
+                    logger.error(f"[{power_name}] Failed to parse LLM response as JSON directly for initialization.")
+                    success_status = "Failure: JSONDecode"
+        except json.JSONDecodeError as e_json:
+            logger.error(f"[{power_name}] JSON parsing failed for initialization: {e_json}", exc_info=True)
+            success_status = "Failure: JSONDecode"
+        except Exception as e_parse: # Catch any other parsing related errors
+            logger.error(f"[{power_name}] An unexpected error occurred during LLM response parsing for initialization: {e_parse}", exc_info=True)
+            success_status = "Failure: ParseError"
+
+    except llm.UnknownModelError as e_model:
+        logger.error(f"[{power_name}] Unknown model error during initialization: {e_model}", exc_info=True)
+        success_status = f"Failure: UnknownModel ({agent.model_id})"
+    except Exception as e_llm_call:
+        logger.error(f"[{power_name}] LLM call or parsing failed during initialization: {e_llm_call}", exc_info=True)
+        success_status = f"Failure: LLMErrorOrParse ({type(e_llm_call).__name__})"
+        # response_text is already defined
+
+    return power_name, True if "Success" in success_status else False, success_status, update_data
+
+
+async def initialize_agents_concurrently(
+    agents: Dict[str, 'DiplomacyAgent'],
+    game: 'Game',
+    game_history: 'GameHistory',
+    initial_prompt_template_str: str # Assuming this is the correct signature
+) -> None:
+    """
+    Initializes multiple agents concurrently by calling their LLMs for initial state.
+    """
+    tasks = []
+    for power_name, agent_instance in agents.items():
+        logger.info(f"Preparing initialization task for {power_name}...")
+        try:
+            # Validate model ID by attempting to get the model
+            # This should be done before adding the task, so if it fails, the agent isn't added.
+            # Note: llm.get_async_model might not raise an error immediately for all plugins
+            # if the model doesn't exist; it might only raise when an operation is attempted.
+            # A more robust check might involve a quick health check or info call if available.
+            _ = llm.get_async_model(agent_instance.model_id, options={"host": os.environ.get("OLLAMA_HOST")})
+            logger.info(f"Model {agent_instance.model_id} seems valid for {power_name} (get_async_model succeeded). Scheduling state initialization.")
+
+            task = initialize_agent_state_ext( 
+                agent_instance,
+                game,
+                game_history,
+                # log_file_path parameter was removed from initialize_agent_state_ext, ensure it's not needed or re-add if required.
+                # For now, assuming it uses agent_instance.config or similar if needed.
+                power_name, # Pass power_name, it was missing in the call signature of initialize_agent_state_ext
+                initial_prompt_template_str # Pass initial_prompt_template_str
+            )
+            tasks.append(task)
+            logger.info(f"Task for {power_name} added to initialization queue.")
+        except llm.UnknownModelError as e:
+            logger.error(f"Skipping initialization for {power_name}: Unknown model_id '{agent_instance.model_id}'. Error: {e}")
+            continue # Skip to the next agent if model validation fails during get_async_model
+        except Exception as e:
+            logger.error(f"Skipping initialization for {power_name} due to unexpected error validating model '{agent_instance.model_id}': {e}", exc_info=True)
+            continue # Skip to the next agent
+
+    if not tasks:
+        logger.warning("No agent tasks were created for initialization. Check model configurations or errors during validation.")
+        return
+
+    logger.info(f"Starting concurrent initialization for {len(tasks)} agents...")
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    logger.info("Concurrent initialization tasks completed.")
+
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"An exception occurred during an agent's initialization task: {result}", exc_info=result)
+            # Handle individual task exception (e.g., log, mark agent as failed)
+            continue
+
+        power_name, success, status_detail, update_data_from_llm = result
+        agent_to_update = agents.get(power_name)
+
+        if agent_to_update:
+            if success and update_data_from_llm:
+                logger.info(f"Applying initial state update for {power_name}. Status: {status_detail}")
+                logger.debug(f"[{power_name}] Data for state update from LLM: {update_data_from_llm}")
+                agent_to_update.update_state_from_llm(update_data_from_llm, game.current_phase)
+                # Log confirmation of state update based on parsed data
+                initial_goals_applied = 'goals' in update_data_from_llm or 'updated_goals' in update_data_from_llm
+                initial_rels_applied = 'relationships' in update_data_from_llm or 'updated_relationships' in update_data_from_llm
+                logger.info(f"[{power_name}] Initial goals applied: {initial_goals_applied}, Initial relationships applied: {initial_rels_applied}")
+
+            else:
+                logger.error(f"Initialization failed or no data returned for {power_name}. Status: {status_detail}. Raw response was: (Check prior logs for raw response if available)")
+                # Agent state remains default. Consider fallback or error state.
+        else:
+            logger.error(f"Agent {power_name} not found in agents dictionary after initialization task. This should not happen.")
