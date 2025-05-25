@@ -33,13 +33,13 @@ def assign_models_to_powers() -> Dict[str, str]:
     
     # POWER MODELS
     return {
-        "AUSTRIA": "gemini-2.5-pro-preview-05-06",
-        "ENGLAND": "claude-opus-4-20250514",
-        "FRANCE": "openrouter-meta-llama/llama-4-maverick",
-        "GERMANY": "o3",
-        "ITALY": "openrouter-google/gemini-2.5-flash-preview-05-20",
-        "RUSSIA": "claude-sonnet-4-20250514",
-        "TURKEY": "openrouter-mistralai/mistral-medium-3",
+        "AUSTRIA": "o3",
+        "ENGLAND": "openrouter-google/gemini-2.5-flash-preview-05-20",
+        "FRANCE": "claude-opus-4-20250514",
+        "GERMANY": "openrouter-meta-llama/llama-4-maverick",
+        "ITALY": "gemini-2.5-pro-preview-05-06",
+        "RUSSIA": "openrouter-nousresearch/deephermes-3-mistral-24b-preview:free",
+        "TURKEY": "claude-sonnet-4-20250514",
     }
     
     # TEST MODELS

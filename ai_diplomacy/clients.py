@@ -527,8 +527,37 @@ class BaseModelClient:
                             logger.warning(f"[{self.model_name}] Invalid message structure or missing keys in block {block_index} for {power_name}: {cleaned_block}")
                              
                     except json.JSONDecodeError as jde:
-                        json_decode_error_occurred = True
-                        logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name}. Error: {jde}. Block content:\n{block}")
+                        # Try to fix unescaped newlines and retry parsing
+                        try:
+                            # Fix unescaped newlines and other control characters in JSON strings
+                            def escape_json_string(match):
+                                # Get the string content (without quotes)
+                                string_content = match.group(1)
+                                # Escape newlines, tabs, and carriage returns
+                                string_content = string_content.replace('\n', '\\n')
+                                string_content = string_content.replace('\r', '\\r')
+                                string_content = string_content.replace('\t', '\\t')
+                                # Return with quotes
+                                return '"' + string_content + '"'
+                            
+                            # Apply escaping to all string values in the JSON
+                            fixed_block = re.sub(r'"([^"]*)"', escape_json_string, cleaned_block)
+                            
+                            # Try parsing again with fixed block
+                            parsed_message = json.loads(fixed_block)
+                            
+                            if isinstance(parsed_message, dict) and "message_type" in parsed_message and "content" in parsed_message:
+                                # Further validation, e.g., recipient for private messages
+                                if parsed_message["message_type"] == "private" and "recipient" not in parsed_message:
+                                    logger.warning(f"[{self.model_name}] Private message missing recipient for {power_name} in block {block_index}. Skipping: {fixed_block}")
+                                    continue # Skip this message
+                                parsed_messages.append(parsed_message)
+                                logger.info(f"[{self.model_name}] Successfully parsed JSON block {block_index} for {power_name} after fixing escape sequences")
+                            else:
+                                logger.warning(f"[{self.model_name}] Invalid message structure or missing keys in block {block_index} for {power_name} after escape fix: {fixed_block}")
+                        except json.JSONDecodeError as jde2:
+                            json_decode_error_occurred = True
+                            logger.warning(f"[{self.model_name}] Failed to decode JSON block {block_index} for {power_name} even after escape fixes. Error: {jde}. Block content:\n{block}")
 
                 if parsed_messages:
                     success_status = "Success: Messages extracted"
