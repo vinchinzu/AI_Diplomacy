@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, Union, ContextManager, AsyncIterator
 from contextlib import asynccontextmanager
 import json
 import sqlite3 # Added import
+import functools # Added import
 
 import llm # Assuming this is the llm library by Simon Willison
 from llm.models import Model as LLMModel # Renamed to avoid conflict, used for type hinting
@@ -116,9 +117,10 @@ async def llm_call_internal(
         response_obj = model_obj.prompt(prompt, **prompt_options)
         
         # Fire-and-forget logging of token usage
-        response_obj.on_done(
-            lambda r_obj: record_usage(game_id, agent_name, phase_str, r_obj)
-        )
+        # Use functools.partial to ensure the callback is recognized as async by llm library
+        record_usage_callback = functools.partial(record_usage, game_id, agent_name, phase_str)
+        response_obj.on_done(record_usage_callback)
+
         # Ensure we wait for the text to be fully generated.
         response_text = await response_obj.text()
         return response_text

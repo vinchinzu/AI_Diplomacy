@@ -8,6 +8,7 @@ __pycache__/
 .vscode/
 uv.lock
 logs/
+test_logs/
 
 # C extensions
 *.so
