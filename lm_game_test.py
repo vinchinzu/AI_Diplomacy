@@ -12,6 +12,7 @@ import sys
 import time
 import traceback
 from typing import Dict, List, Optional
+from unittest.mock import patch # Added import
 
 import dotenv
 from diplomacy import Game
@@ -20,10 +21,12 @@ from diplomacy import Game
 from ai_diplomacy.game_config import GameConfig
 from ai_diplomacy.logging_setup import setup_logging
 from ai_diplomacy.agent_manager import AgentManager
-from ai_diplomacy.game_orchestrator import GamePhaseOrchestrator
-from ai_diplomacy.game_results import GameResultsProcessor
+# from ai_diplomacy.game_orchestrator import GamePhaseOrchestrator # Not used in this file
+# from ai_diplomacy.game_results import GameResultsProcessor # Not used in this file
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.utils import get_valid_orders, gather_possible_orders
+from ai_diplomacy.llm_coordinator import LLMCallResult # Added import
+
 
 # Suppress warnings
 os.environ["GRPC_PYTHON_LOG_LEVEL"] = "40"
@@ -44,8 +47,8 @@ def parse_arguments() -> argparse.Namespace:
         help="Name of the primary power to control (e.g., FRANCE). Optional."
     )
     parser.add_argument(
-        "--model_id", type=str, default="gemma3:latest",
-        help="Model ID for the primary power's LLM. Default: gemma3:latest"
+        "--model_ids", type=str, default="gemma3:latest",
+        help="Comma-separated list of model IDs for test powers (e.g., 'ollama/llama3,gpt-4o'). Cycles if fewer models than powers."
     )
     parser.add_argument(
         "--num_players", type=int, default=1, 
@@ -84,21 +87,25 @@ def parse_arguments() -> argparse.Namespace:
         "--max_concurrent", type=int, default=2,
         help="Maximum concurrent calls to test. Default: 2"
     )
-
+    parser.add_argument(
+        "--use-mocks", action="store_true", default=False, 
+        help="Use mocked LLM responses instead of live calls."
+    )
     return parser.parse_args()
 
 class GameTester:
     """Test class for stepping through game functionality."""
     
-    def __init__(self, config: GameConfig):
+    def __init__(self, config: GameConfig): # config already has args, including use_mocks
         self.config = config
+        # self.use_mocks = config.args.use_mocks # Store use_mocks
         self.game = None
         self.game_history = None
         self.agent_manager = None
         
     async def setup_game(self):
         """Set up the game environment."""
-        logger.info("Setting up test game environment...")
+        logger.info(f"Setting up test game environment (Mocks: {self.config.args.use_mocks})...")
         
         # Create game and history
         self.game = Game()
@@ -111,12 +118,13 @@ class GameTester:
         
     async def test_single_round(self, test_powers: List[str]):
         """Test a single round of order generation."""
-        logger.info(f"Testing single round for powers: {test_powers}")
+        logger.info(f"Testing single round for powers: {test_powers} (Mocks: {self.config.args.use_mocks})")
         
         # Initialize agents for test powers
         powers_and_models = {}
-        for power in test_powers:
-            powers_and_models[power] = self.config.args.model_id
+        fixed_models_list = self.config.args.fixed_models
+        for i, power in enumerate(test_powers):
+            powers_and_models[power] = fixed_models_list[i]
             
         self.agent_manager.initialize_agents(powers_and_models)
         
@@ -153,75 +161,128 @@ class GameTester:
         
         return success_count == total_count
     
-    async def test_power_order_generation(self, power_name: str) -> bool:
-        """Test order generation for a specific power."""
-        try:
-            agent = self.agent_manager.agents[power_name]
-            
-            # Get current game state
-            board_state = self.game.get_state()
-            current_phase = self.game.current_short_phase
-            
-            # Get possible orders
-            possible_orders = gather_possible_orders(self.game, power_name)
-            
-            logger.info(f"Current phase: {current_phase}")
-            logger.info(f"Possible orders for {power_name}: {list(possible_orders.keys())}")
-            
-            # Create log file path
-            log_file_path = os.path.join(self.config.game_id_specific_log_dir, "test_orders.csv")
-            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-            
-            # Generate orders
-            model_error_stats = {}
-            
-            logger.info(f"🚀 Generating orders for {power_name}...")
-            start_time = time.time()
-            
-            orders = await get_valid_orders(
-                game=self.game,
-                model_id=agent.model_id,
-                agent_system_prompt=agent.system_prompt,
-                board_state=board_state,
-                power_name=power_name,
-                possible_orders=possible_orders,
-                game_history=self.game_history,
-                model_error_stats=model_error_stats,
-                agent_goals=agent.goals,
-                agent_relationships=agent.relationships,
-                agent_private_diary_str=agent.format_private_diary_for_prompt(),
-                log_file_path=log_file_path,
-                phase=current_phase
-            )
-            
-            end_time = time.time()
-            duration = end_time - start_time
-            
-            logger.info(f"⏱️  Order generation took {duration:.2f} seconds")
-            logger.info(f"📋 Generated orders: {orders}")
-            logger.info(f"📊 Model error stats: {model_error_stats}")
-            
-            # Validate orders
-            if orders and len(orders) > 0:
-                logger.info(f"✅ Successfully generated {len(orders)} orders for {power_name}")
-                for i, order in enumerate(orders):
-                    logger.info(f"   Order {i+1}: {order}")
-                return True
-            else:
-                logger.warning(f"⚠️  No orders generated for {power_name} (might be fallback)")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Exception during order generation for {power_name}: {e}", exc_info=True)
-            return False
     
+    async def _get_mocked_llm_call_internal(self, power_name_for_mock: str, *args, **kwargs):
+        """Helper to provide a mocked llm_call_internal behavior for a specific power."""
+        future = asyncio.Future()
+        # Default mock orders, assuming S1901M phase for relevant powers
+        # This can be made more sophisticated if tests need different responses for different powers
+        mock_orders_db = {
+            "FRANCE": ["A PAR H", "A MAR H", "F BRE H"],
+            "GERMANY": ["A BER H", "A MUN H", "F KIE H"],
+            "ENGLAND": ["F LON H", "F EDI H", "A LVP H"],
+            # Add other powers as needed for tests
+        }
+        selected_orders = mock_orders_db.get(power_name_for_mock, [f"A {power_name_for_mock[:3].upper()} H"]) # Generic fallback
+
+        mock_response_json_string = f'{{"orders": {selected_orders}}}'.replace("'", "\"") # Ensure valid JSON
+        
+        mock_result = LLMCallResult(
+            success=True,
+            raw_response=mock_response_json_string,
+            parsed_json={"orders": selected_orders},
+            error_message=None,
+            model_id="mocked_model", 
+            prompt_text="mocked_prompt",
+            system_prompt_text="mocked_system_prompt"
+        )
+        future.set_result(mock_result)
+        return future
+
+    async def test_power_order_generation(self, power_name: str) -> bool:
+        """Test order generation for a specific power, optionally using mocks."""
+        logger.info(f"Testing order generation for {power_name} (Mocks: {self.config.args.use_mocks})...")
+        
+        if power_name not in self.agent_manager.agents:
+            logger.error(f"❌ Agent for {power_name} not found")
+            return False
+        agent = self.agent_manager.agents[power_name]
+        
+        # Ensure game phase and units are set for consistent possible_orders
+        self.game.set_phase("S1901M") # Standard start phase
+        if not self.game.get_units(power_name):
+            # Basic default units for common powers if not set
+            default_units = {
+                "FRANCE": ["A PAR", "A MAR", "F BRE"], "GERMANY": ["A BER", "A MUN", "F KIE"],
+                "ENGLAND": ["F LON", "F EDI", "A LVP"], "ITALY": ["A ROM", "A VEN", "F NAP"],
+                "AUSTRIA": ["A VIE", "A BUD", "F TRI"], "RUSSIA": ["A MOS", "A WAR", "F STP/SC", "F SEV"],
+                "TURKEY": ["A CON", "A SMY", "F ANK"]
+            }
+            if power_name in default_units:
+                self.game.set_units(power_name, default_units[power_name])
+
+        board_state = self.game.get_state()
+        current_phase = self.game.current_short_phase
+        possible_orders = gather_possible_orders(self.game, power_name)
+        
+        logger.info(f"Current phase: {current_phase}")
+        logger.info(f"Possible orders for {power_name}: {list(possible_orders.keys())}")
+        
+        log_file_path = os.path.join(self.config.game_id_specific_log_dir, "test_orders.csv")
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+        
+        logger.info(f"🚀 Generating orders for {power_name}...")
+        start_time = time.time()
+        
+        orders_callable = get_valid_orders(
+            game=self.game, model_id=agent.model_id, agent_system_prompt=agent.system_prompt,
+            board_state=board_state, power_name=power_name, possible_orders=possible_orders,
+            game_history=self.game_history, game_id=self.config.game_id,
+            agent_goals=agent.goals, agent_relationships=agent.relationships,
+            agent_private_diary_str=agent.format_private_diary_for_prompt(),
+            log_file_path=log_file_path, phase=current_phase
+        )
+
+        orders = None
+        if self.config.args.use_mocks:
+            # Pass power_name to the mock provider
+            async def mock_side_effect(*args, **kwargs):
+                return await self._get_mocked_llm_call_internal(power_name, *args, **kwargs)
+
+            with patch('ai_diplomacy.llm_coordinator.LocalLLMCoordinator.llm_call_internal', 
+                       side_effect=mock_side_effect):
+                orders = await orders_callable
+        else:
+            orders = await orders_callable
+            
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        logger.info(f"⏱️  Order generation for {power_name} took {duration:.2f} seconds")
+        logger.info(f"📋 Generated orders for {power_name}: {orders}")
+
+        if self.config.args.use_mocks and orders is not None:
+            # Basic check: ensure orders are returned as expected by mock
+            # This relies on _get_mocked_llm_call_internal providing consistent mock data
+            mock_db = { "FRANCE": ["A PAR H", "A MAR H", "F BRE H"], "GERMANY": ["A BER H", "A MUN H", "F KIE H"], "ENGLAND": ["F LON H", "F EDI H", "A LVP H"]}
+            expected_mocked_orders = mock_db.get(power_name, [f"A {power_name[:3].upper()} H"])
+            self.assertEqual(sorted(orders), sorted(expected_mocked_orders))
+            
+        if orders and len(orders) > 0:
+            logger.info(f"✅ Successfully generated {len(orders)} orders for {power_name}")
+            return True
+        else:
+            logger.warning(f"⚠️  No orders generated for {power_name}")
+            return False
+
     async def test_sequential_calls(self, power_name: str, num_calls: int):
         """Test multiple sequential API calls."""
-        logger.info(f"Testing {num_calls} sequential calls for {power_name}")
+        logger.info(f"Testing {num_calls} sequential calls for {power_name} (Mocks: {self.config.args.use_mocks})")
         
         # Initialize single agent
-        powers_and_models = {power_name: self.config.args.model_id}
-        self.agent_manager.initialize_agents(powers_and_models)
+        # Use the first model from the list for sequential tests for this power
+        model_to_use_for_power = self.config.args.fixed_models[0] if self.config.args.fixed_models else "gemma3:latest"
+        # Find the index of power_name in test_powers to get its assigned model
+        try:
+            original_test_powers = [p.strip().upper() for p in self.config.args.test_powers.split(',')]
+            power_index = original_test_powers.index(power_name)
+            model_to_use_for_power = self.config.args.fixed_models[power_index]
+        except ValueError:
+            logger.warning(f"Power {power_name} not in test_powers list for model assignment in sequential. Using first model.")
+            # Fallback to first model if not found (should ideally be in list)
+        
+        powers_and_models = {power_name: model_to_use_for_power}
+        self.agent_manager.initialize_agents(powers_and_models) # Re-initialize for this specific agent
         
         if power_name not in self.agent_manager.agents:
             logger.error(f"❌ Failed to initialize agent for {power_name}")
@@ -232,127 +293,123 @@ class GameTester:
         for i in range(num_calls):
             logger.info(f"\n--- Sequential Call {i+1}/{num_calls} ---")
             
-            try:
-                success = await self.test_power_order_generation(power_name)
-                if success:
-                    success_count += 1
-                    logger.info(f"✅ Call {i+1} succeeded")
-                else:
-                    logger.warning(f"⚠️  Call {i+1} failed")
-                
-                # Small delay between calls
-                if i < num_calls - 1:  # Don't delay after last call
-                    await asyncio.sleep(1)
-                    
-            except Exception as e:
-                logger.error(f"❌ Call {i+1} threw exception: {e}")
+            # test_power_order_generation will use self.config.args.use_mocks internally
+            success = await self.test_power_order_generation(power_name)
+            if success:
+                success_count += 1
+                logger.info(f"✅ Call {i+1} for {power_name} succeeded")
+            else:
+                logger.warning(f"⚠️  Call {i+1} for {power_name} failed")
+            if i < num_calls - 1:
+                await asyncio.sleep(0.1 if self.config.args.use_mocks else 1) # Shorter sleep for mocks
         
         success_rate = (success_count / num_calls) * 100
-        logger.info(f"\n📊 Sequential test results: {success_count}/{num_calls} successful ({success_rate:.1f}%)")
-        
+        logger.info(f"\n📊 Sequential test results for {power_name}: {success_count}/{num_calls} successful ({success_rate:.1f}%)")
         return success_count == num_calls
-    
+
     async def test_concurrent_calls(self, test_powers: List[str], max_concurrent: int):
         """Test concurrent API calls."""
-        logger.info(f"Testing concurrent calls for powers: {test_powers[:max_concurrent]}")
+        logger.info(f"Testing concurrent calls for powers: {test_powers[:max_concurrent]} (Mocks: {self.config.args.use_mocks})")
         
-        # Initialize agents for all test powers
-        powers_and_models = {}
-        for power in test_powers[:max_concurrent]:
-            powers_and_models[power] = self.config.args.model_id
-            
-        self.agent_manager.initialize_agents(powers_and_models)
+        # Initialize agents for all test powers that will be used in this concurrent test run
+        concurrent_powers_to_test = test_powers[:max_concurrent]
+        powers_and_models_for_concurrent = {}
+        original_test_powers_from_args = [p.strip().upper() for p in self.config.args.test_powers.split(',')]
         
-        # Verify all agents initialized
-        for power in test_powers[:max_concurrent]:
-            if power not in self.agent_manager.agents:
-                logger.error(f"❌ Failed to initialize agent for {power}")
+        for power_name in concurrent_powers_to_test:
+            try:
+                idx = original_test_powers_from_args.index(power_name)
+                powers_and_models_for_concurrent[power_name] = self.config.args.fixed_models[idx]
+            except ValueError:
+                logger.warning(f"Power {power_name} not in original test_powers. Using first fixed model for concurrent test.")
+                powers_and_models_for_concurrent[power_name] = self.config.args.fixed_models[0] if self.config.args.fixed_models else "default/model"
+        
+        self.agent_manager.initialize_agents(powers_and_models_for_concurrent)
+
+        for power_name in concurrent_powers_to_test:
+            if power_name not in self.agent_manager.agents:
+                logger.error(f"❌ Failed to initialize agent for {power_name} in concurrent test")
                 return False
         
-        # Create concurrent tasks
-        tasks = []
-        for power in test_powers[:max_concurrent]:
-            task = asyncio.create_task(self.test_power_order_generation(power))
-            tasks.append((power, task))
+        tasks = [
+            asyncio.create_task(self.test_power_order_generation(p_name))
+            for p_name in concurrent_powers_to_test
+        ]
         
         logger.info(f"🚀 Starting {len(tasks)} concurrent API calls...")
         start_time = time.time()
         
-        # Wait for all tasks
-        results = {}
-        for power, task in tasks:
-            try:
-                result = await task
-                results[power] = result
-                logger.info(f"✅ {power}: {'Success' if result else 'Failed'}")
-            except Exception as e:
-                logger.error(f"❌ {power}: Exception - {e}")
-                results[power] = False
+        results_list = await asyncio.gather(*tasks) # gather returns list of results
         
         end_time = time.time()
         duration = end_time - start_time
         
-        success_count = sum(1 for success in results.values() if success)
-        total_count = len(results)
+        # Map results back to powers for logging
+        results_map = {power_name: result for power_name, result in zip(concurrent_powers_to_test, results_list)}
+        for p_name, res in results_map.items():
+            logger.info(f"🏁 Concurrent result for {p_name}: {'Success' if res else 'Failed'}")
+
+        success_count = sum(1 for res in results_list if res)
+        total_count = len(concurrent_powers_to_test)
         
         logger.info(f"\n📊 Concurrent test results: {success_count}/{total_count} successful in {duration:.2f}s")
-        
         return success_count == total_count
 
 async def main():
     args = parse_arguments()
     
-    # Parse test powers
     test_powers = [p.strip().upper() for p in args.test_powers.split(',')]
+    parsed_model_ids = [m.strip() for m in args.model_ids.split(',')]
+    args.model_ids = parsed_model_ids
     
-    # Create config
-    args.fixed_models = [args.model_id] * len(test_powers)
-    args.exclude_powers = None
-    args.max_years = None
-    args.perform_planning_phase = False
-    args.num_negotiation_rounds = 0
-    args.negotiation_style = "simultaneous"
-    args.randomize_fixed_models = False
+    num_models = len(args.model_ids)
+    args.fixed_models = [args.model_ids[i % num_models] for i in range(len(test_powers))]
+    
+    # Pass use_mocks to GameConfig by adding it to args if not already there by parse_arguments
+    if not hasattr(args, 'use_mocks'): # Should be there due to parse_arguments
+        args.use_mocks = False 
+
     args.game_id = f"{args.game_id_prefix}_{int(time.time())}"
+    # Ensure other required args for GameConfig are present (they are from parse_arguments)
+    args.exclude_powers = None # Default if not parsed
+    args.max_years = None # Default if not parsed
+    args.perform_planning_phase = False # Default if not parsed
+    args.num_negotiation_rounds = 0 # Default if not parsed
+    args.negotiation_style = "simultaneous" # Default if not parsed
+    args.randomize_fixed_models = False # Default if not parsed
+
+
+    config = GameConfig(args) # GameConfig now gets args including use_mocks
     
-    config = GameConfig(args)
-    
-    # Setup logging
     setup_logging(config)
     
-    logger.info(f"🧪 Starting Diplomacy game test: {config.game_id}")
+    logger.info(f"🧪 Starting Diplomacy game test: {config.game_id} (Mocks: {args.use_mocks})")
     logger.info(f"Test type: {args.test_type}")
     logger.info(f"Test powers: {test_powers}")
-    logger.info(f"Model ID: {args.model_id}")
+    logger.info(f"Model IDs: {args.model_ids}")
     
     start_time = time.time()
+    final_success = False
     
     try:
-        # Create tester
-        tester = GameTester(config)
+        tester = GameTester(config) # Pass the config object
         await tester.setup_game()
         
-        # Run the specified test
-        success = False
-        
         if args.test_type == "single_round":
-            success = await tester.test_single_round(test_powers)
-            
+            final_success = await tester.test_single_round(test_powers)
         elif args.test_type == "order_generation":
-            # Test just order generation for first power
             if test_powers:
-                powers_and_models = {test_powers[0]: args.model_id}
-                tester.agent_manager.initialize_agents(powers_and_models)
-                success = await tester.test_power_order_generation(test_powers[0])
-            
+                # For order_generation, initialize only the first agent
+                power_to_test = test_powers[0]
+                model_for_single_test = args.fixed_models[0] # Get its assigned model
+                tester.agent_manager.initialize_agents({power_to_test: model_for_single_test})
+                final_success = await tester.test_power_order_generation(power_to_test)
         elif args.test_type == "sequential_calls":
             if test_powers:
-                success = await tester.test_sequential_calls(test_powers[0], args.num_sequential)
-                
+                final_success = await tester.test_sequential_calls(test_powers[0], args.num_sequential)
         elif args.test_type == "concurrent_calls":
-            success = await tester.test_concurrent_calls(test_powers, args.max_concurrent)
+            final_success = await tester.test_concurrent_calls(test_powers, args.max_concurrent)
         
-        # Results
         end_time = time.time()
         duration = end_time - start_time
         
@@ -361,15 +418,15 @@ async def main():
         logger.info(f"{'='*50}")
         logger.info(f"Test type: {args.test_type}")
         logger.info(f"Duration: {duration:.2f} seconds")
-        logger.info(f"Result: {'✅ SUCCESS' if success else '❌ FAILED'}")
+        logger.info(f"Result: {'✅ SUCCESS' if final_success else '❌ FAILED'}")
         logger.info(f"Log directory: {config.game_id_specific_log_dir}")
         
-        if success:
-            logger.info("🎉 Test passed! API calls are working correctly.")
+        if final_success:
+            logger.info("🎉 Test passed!")
         else:
-            logger.error("💥 Test failed. Check the logs above for details.")
+            logger.error("💥 Test failed. Check logs for details.")
         
-        sys.exit(0 if success else 1)
+        sys.exit(0 if final_success else 1)
         
     except KeyboardInterrupt:
         logger.info("Test interrupted by user (KeyboardInterrupt)")
@@ -381,4 +438,4 @@ async def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

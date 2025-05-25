@@ -240,7 +240,7 @@ async def get_valid_orders(
     power_name: str, # Already present
     possible_orders: Dict[str, List[str]], # Already present
     game_history, # Already present, assumed to be GameHistory instance
-    model_error_stats: Dict[str, Dict[str, int]], # Already present
+    game_id: str, # Added game_id parameter
     agent_goals: Optional[List[str]] = None, # Already present
     agent_relationships: Optional[Dict[str, str]] = None, # Already present
     agent_private_diary_str: Optional[str] = None, # Already present
@@ -275,8 +275,8 @@ async def get_valid_orders(
 
     if not prompt:
         logger.error(f"[{model_id}] Prompt construction failed for {power_name}. Using fallback orders.")
-        model_error_stats.setdefault(model_id, {}).setdefault("prompt_errors", 0)
-        model_error_stats[model_id]["prompt_errors"] += 1
+        # model_error_stats.setdefault(model_id, {}).setdefault("prompt_errors", 0)
+        # model_error_stats[model_id]["prompt_errors"] += 1
         return _fallback_orders_utility(possible_orders)
 
     raw_response_text = "" # Initialize
@@ -286,7 +286,7 @@ async def get_valid_orders(
         request_identifier = f"{power_name}-{phase}-order_gen"
         # TODO: Replace placeholders for game_id, agent_name, and phase_str with actual values.
         # This might involve adding game_id as a parameter to get_valid_orders.
-        current_game_id_placeholder = "unknown_game_id_utils" # Placeholder
+        # current_game_id_placeholder = "unknown_game_id_utils" # Placeholder
         
         llm_call_result = await coordinator.call_llm_with_json_parsing(
             model_id=model_id,
@@ -295,7 +295,7 @@ async def get_valid_orders(
             request_identifier=request_identifier,
             expected_json_fields=["orders"], # Expecting a list of orders
             # --- Parameters for new llm_call_internal & file logging ---
-            game_id=current_game_id_placeholder, # Placeholder - needs proper game_id
+            game_id=game_id, # Replaced placeholder with game_id parameter
             agent_name=power_name, # Use power_name as agent_name
             phase_str=phase if phase else "unknown_phase_utils", # Use provided phase or placeholder
             response_type="order_generation",
@@ -317,15 +317,15 @@ async def get_valid_orders(
             raw_response_text = llm_call_result.raw_response
         else: # LLM call failed
             logger.error(f"[{model_id}] LLM call failed for {power_name} in get_valid_orders: {llm_call_result.error_message}")
-            model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
-            model_error_stats[model_id]["llm_api_errors"] += 1
+            # model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
+            # model_error_stats[model_id]["llm_api_errors"] += 1
             raw_response_text = llm_call_result.raw_response if llm_call_result.raw_response else f"Error: {llm_call_result.error_message}"
             extracted_moves = None # Ensure fallback if call failed
 
     except Exception as e:
         logger.error(f"[{model_id}] Unexpected error for {power_name} in get_valid_orders: {e}", exc_info=True)
-        model_error_stats.setdefault(model_id, {}).setdefault("unknown_errors", 0)
-        model_error_stats[model_id]["unknown_errors"] += 1
+        # model_error_stats.setdefault(model_id, {}).setdefault("unknown_errors", 0)
+        # model_error_stats[model_id]["unknown_errors"] += 1
         # Log the raw response if available, otherwise log the error
         # log_llm_response is now called by coordinator.call_llm_with_json_parsing
         return _fallback_orders_utility(possible_orders)

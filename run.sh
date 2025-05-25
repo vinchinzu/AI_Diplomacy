@@ -9,34 +9,57 @@ OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 OLLAMA_HOST="http://127.0.0.1:$OLLAMA_PORT"
 OLLAMA_BASE_URL="http://127.0.0.1:$OLLAMA_PORT"
 
-# Only check Ollama if the model name suggests it's an Ollama model
-if [[ "$MODEL_NAME" == ollama/* ]]; then
-  # Check if Ollama is running
-  if ! curl --silent --fail "$OLLAMA_HOST/api/tags" > /dev/null; then
-    echo "Ollama server is not running on $OLLAMA_HOST."
-    echo "Start it with: OLLAMA_PORT=$OLLAMA_PORT ollama serve"
-    exit 1
-  fi
-
-  # Extract the tag from the MODEL_NAME (e.g., "llama3" from "ollama/llama3")
-  OLLAMA_MODEL_TAG="${MODEL_NAME#ollama/}"
-  # Check if the model (without version tag) is available
-  if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${OLLAMA_MODEL_TAG%%:*}:latest" '.models[] | select(.name == $name)' > /dev/null;
-  then # Also check for the exact tag if it includes one
-    if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "$OLLAMA_MODEL_TAG" '.models[] | select(.name == $name)' > /dev/null;
-    then
-      echo "Model $MODEL_NAME (tag: $OLLAMA_MODEL_TAG) not found in Ollama. Pulling it now..."
-      ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $MODEL_NAME"; exit 1; }
-    fi
-  fi
-else
-  echo "Skipping Ollama check for non-Ollama model: $MODEL_NAME"
-fi
-
 # Export OLLAMA_HOST for the Python code
 export OLLAMA_HOST
 export OLLAMA_BASE_URL
 export OLLAMA_PORT
+
+# Function to check and pull Ollama models
+check_and_pull_ollama_model() {
+  local model_to_check="$1"
+  if [[ "$model_to_check" == ollama/* ]]; then
+    echo "Checking Ollama model: $model_to_check"
+    # Check if Ollama is running - do this once globally if possible, or per check if necessary
+    # For now, let's keep it in the function for encapsulation, though it might be slightly redundant
+    # if checking multiple ollama models in a row.
+    if ! curl --silent --fail "$OLLAMA_HOST/api/tags" > /dev/null; then
+      echo "Ollama server is not running on $OLLAMA_HOST."
+      echo "Please start it, e.g., with: OLLAMA_PORT=$OLLAMA_PORT ollama serve"
+      exit 1 # Exit if server not running, as no ollama operations will succeed
+    fi
+
+    OLLAMA_MODEL_TAG="${model_to_check#ollama/}"
+    # Check if the model (potentially with a version tag) is available
+    # First, try the exact tag
+    if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "$OLLAMA_MODEL_TAG" '.models[] | select(.name == $name)' > /dev/null; then
+      # If exact tag not found, and it has a version, try with ':latest' for the base model name
+      # This handles cases where e.g. "ollama/llama3" is requested but only "llama3:latest" exists or vice-versa
+      BASE_MODEL_NAME="${OLLAMA_MODEL_TAG%%:*}"
+      if [[ "$OLLAMA_MODEL_TAG" == *:* ]] && \
+         ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${BASE_MODEL_NAME}:latest" '.models[] | select(.name == $name)' > /dev/null; then
+        echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG) not found in Ollama. Pulling it now..."
+        ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $model_to_check"; exit 1; }
+        echo "Model $model_to_check pulled successfully."
+      elif [[ "$OLLAMA_MODEL_TAG" != *:* ]] && \
+           ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${OLLAMA_MODEL_TAG}:latest" '.models[] | select(.name == $name)' > /dev/null; then
+        # This case is for when no version tag is specified, and :latest isn't found (though previous check might have caught it)
+        # It's a bit redundant but ensures we try pulling if the simple name isn't there (ollama pull often defaults to :latest)
+        echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG, trying as :latest) not found in Ollama. Pulling it now..."
+        ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $model_to_check"; exit 1; }
+        echo "Model $model_to_check pulled successfully."
+      else
+        echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG or ${BASE_MODEL_NAME}:latest) found locally."
+      fi
+    else
+      echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG) found locally."
+    fi
+  else
+    echo "Skipping Ollama check for non-Ollama model: $model_to_check"
+  fi
+}
+
+# Initial check for the primary MODEL_NAME
+check_and_pull_ollama_model "$MODEL_NAME"
 
 # Parse command line arguments
 COMMAND=${1:-"full"}
@@ -85,6 +108,14 @@ case $COMMAND in
     # Ensure these models are accessible (Ollama models pulled, API keys set for API models).
     # Austria, England, France, Germany, Italy, Russia, Turkey
     FULL_GAME_MODELS_LIST="gpt-4o,ollama/llama3,gpt-4o-mini,ollama/mistral,gpt-3.5-turbo,ollama/gemma3:4b,ollama/phi3"
+
+    # Iterate through the FULL_GAME_MODELS_LIST and check/pull each model
+    echo "Checking all models for the full game..."
+    IFS=',' read -ra MODELS_ARRAY <<< "$FULL_GAME_MODELS_LIST"
+    for model_in_list in "${MODELS_ARRAY[@]}"; do
+      check_and_pull_ollama_model "$model_in_list"
+    done
+    echo "All models for the full game checked."
 
     python3 lm_game.py \
          --max_year 1905 \
