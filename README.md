@@ -237,6 +237,9 @@ python lm_game.py --models "claude-3-5-sonnet-20241022,gpt-4o,claude-3-5-sonnet-
 
 # Output to specific file
 python lm_game.py --output results/my_game.json
+
+# Run until game completion or specific year
+python lm_game.py --num_negotiation_rounds 2 --planning_phase
 ```
 
 ### Environment Setup
@@ -249,6 +252,28 @@ GEMINI_API_KEY=your_key_here
 DEEPSEEK_API_KEY=your_key_here
 OPENROUTER_API_KEY=your_key_here
 ```
+
+### Model Configuration
+
+Models can be assigned to powers in `ai_diplomacy/utils.py`:
+```python
+def assign_models_to_powers() -> Dict[str, str]:
+    return {
+        "AUSTRIA": "o3",
+        "ENGLAND": "claude-sonnet-4-20250514",
+        "FRANCE": "gpt-4.1",
+        "GERMANY": "gemini-2.5-pro-preview-05-06",
+        "ITALY": "openrouter-meta-llama/llama-4-maverick",
+        "RUSSIA": "claude-opus-4-20250514",
+        "TURKEY": "openrouter-google/gemini-2.5-flash-preview-05-20",
+    }
+```
+
+Supported models include:
+- OpenAI: `gpt-4o`, `gpt-4.1`, `o3`, `o4-mini`
+- Anthropic: `claude-3-5-sonnet-20241022`, `claude-opus-4-20250514`
+- Google: `gemini-2.0-flash`, `gemini-2.5-pro-preview`
+- OpenRouter: Various models including Llama, Qwen, DeepSeek
 
 ### Game Output and Analysis
 
@@ -264,6 +289,105 @@ The game JSON includes special fields for AI analysis:
 - `agent_relationships` - Diplomatic standings at each phase
 - `final_agent_states` - End-game goals and relationships
 
+### Post-Game Analysis Tools
+
+#### Strategic Moment Analysis
+
+Analyze games for key strategic moments including betrayals, collaborations, and brilliant strategies:
+
+```bash
+# Analyze a completed game
+python analyze_game_moments.py results/20250522_210700_o3vclaudes_o3win
+
+# Limit analysis to specific phases
+python analyze_game_moments.py results/game_folder --max-phases 20
+
+# Use a different analysis model
+python analyze_game_moments.py results/game_folder --model claude-3-5-sonnet-20241022
+```
+
+The analysis identifies:
+- **Betrayals**: When powers explicitly promise one action but take contradictory action
+- **Collaborations**: Successfully coordinated actions between powers
+- **Playing Both Sides**: Powers making conflicting promises to different parties
+- **Brilliant Strategies**: Exceptionally well-executed strategic maneuvers
+- **Strategic Blunders**: Major mistakes that significantly weaken a position
+
+Analysis outputs include:
+- **Markdown Report** (`game_moments/[game]_report_[timestamp].md`)
+  - AI-generated narrative of the entire game
+  - Summary statistics (betrayals, collaborations, etc.)
+  - Invalid move counts by model
+  - Lie analysis with intentional vs unintentional breakdown
+  - Top strategic moments with full context and diary entries
+- **JSON Data** (`game_moments/[game]_data_[timestamp].json`)
+  - Complete structured data of all detected moments
+  - Metadata including scores, categories, and relationships
+  - Raw lie detection data for further analysis
+
+Example output snippet:
+```markdown
+## Power Models
+- **TURKEY**: o3
+- **ENGLAND**: claude-sonnet-4-20250514
+- **RUSSIA**: claude-opus-4-20250514
+
+## Invalid Moves by Model
+- **o3**: 91 invalid moves
+- **claude-sonnet-4**: 67 invalid moves
+
+## Lies Analysis
+### Lies by Model
+- **o3**: 195 total lies (71 intentional, 124 unintentional)
+- **claude-opus-4**: 96 total lies (0 intentional, 96 unintentional)
+```
+
+#### Diplomatic Lie Detection
+
+The analysis system can detect lies by comparing:
+1. **Messages**: What powers promise to each other
+2. **Private Diaries**: What powers privately plan (from negotiation_diary entries)
+3. **Actual Orders**: What they actually do
+
+Lies are classified as:
+- **Intentional**: Diary shows planned deception (e.g., "mislead them", "while actually...")
+- **Unintentional**: No evidence of planned deception (likely misunderstandings)
+
+#### Animation and Visualization
+
+Visualize games with the interactive 3D animation system:
+
+```bash
+# Start the animation server
+cd ai_animation
+npm install
+npm run dev
+
+# Open http://localhost:5173 in your browser
+# Load a game JSON file to see animated playback
+```
+
+Features:
+- 3D map with unit movements and battles
+- Phase-by-phase playback controls
+- Chat window showing diplomatic messages
+- Standings board tracking supply centers
+- Sound effects and visual flourishes
+
+### Game Statistics and Patterns
+
+Analysis of hundreds of AI games reveals interesting patterns:
+
+#### Model Performance Characteristics
+- **Invalid Move Rates**: Some models (e.g., o3) generate more invalid moves but play aggressively
+- **Deception Patterns**: Models vary dramatically in honesty (0-100% intentional lie rates)
+- **Strategic Styles**: From defensive/honest to aggressive/deceptive playstyles
+
+#### Common Strategic Patterns
+- **Opening Gambits**: RT Juggernaut (Russia-Turkey), Western Triple, Lepanto
+- **Mid-game Dynamics**: Stab timing, alliance shifts, convoy operations
+- **Endgame Challenges**: Stalemate lines, forced draws, kingmaking
+
 ### Future Explorations
 
 - **Adaptive Negotiations**: Dynamic round count based on conversation flow
@@ -272,6 +396,8 @@ The game JSON includes special fields for AI analysis:
 - **Tournament Mode**: Automated multi-game competitions with ELO ratings
 - **Human-AI Hybrid**: Allow human players to compete against AI agents
 - **Real-time Commentary**: Live narrative generation for spectators
+- **Deception Training**: Models specifically trained to detect or execute lies
+- **Meta-Strategy Learning**: Agents that learn from previous games
 
 ---
 
@@ -283,6 +409,39 @@ The game JSON includes special fields for AI analysis:
 ## Documentation
 
 The complete documentation is available at [diplomacy.readthedocs.io](https://diplomacy.readthedocs.io/).
+
+## Available Analysis Scripts
+
+### 1. Strategic Moment Analysis (`analyze_game_moments.py`)
+
+Comprehensive analysis of game dynamics:
+```bash
+python analyze_game_moments.py results/game_folder [options]
+
+Options:
+  --model MODEL         Analysis model to use (default: gemini-2.5-flash)
+  --max-phases N        Analyze only first N phases
+  --max-concurrent N    Concurrent API calls (default: 5)
+  --report PATH         Output report path (auto-generated if not specified)
+  --json PATH           Output JSON path (auto-generated if not specified)
+```
+
+### 2. Focused Lie Detection (`analyze_lies_focused.py`)
+
+Detailed analysis of diplomatic deception:
+```bash
+python analyze_lies_focused.py results/game_folder [--output report.md]
+```
+
+### 3. Game Visualization (`ai_animation/`)
+
+Interactive 3D visualization of games:
+```bash
+cd ai_animation
+npm install
+npm run dev
+# Open http://localhost:5173 and load a game JSON
+```
 
 ## Getting Started
 

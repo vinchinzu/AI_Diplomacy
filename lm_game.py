@@ -678,10 +678,10 @@ async def main():
         current_board_state = game.get_state() # State *after* processing
 
         # Update state concurrently for active agents
-        active_agent_powers = [p for p in game.powers.items() if p[0] in agents] # Filter for powers with active agents
+        active_agent_powers = [p for p in game.powers.items() if p[0] in agents and not p[1].is_eliminated()] # Filter for powers with active agents AND not eliminated
         
         # Log active and eliminated powers for state updates
-        active_powers_for_state_update = [p[0] for p in active_agent_powers if not p[1].is_eliminated()]
+        active_powers_for_state_update = [p[0] for p in active_agent_powers]
         eliminated_powers_for_state_update = [p for p in agents.keys() if game.powers[p].is_eliminated()]
         
         logger.info(f"Active powers for state update: {active_powers_for_state_update}")
