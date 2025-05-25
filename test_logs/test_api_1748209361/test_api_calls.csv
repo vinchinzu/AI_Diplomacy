@@ -1,0 +1,2 @@
+model,power,phase,response_type,raw_response,success
+gemma3:latest,FRANCE,S1901M,order_generation,Exception: 'LocalLLMCoordinator' object has no attribute 'call_llm_with_retry',FALSE: UnexpectedException (AttributeError)

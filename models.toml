@@ -1,0 +1,44 @@
+# Configuration file for assigning LLM models to Diplomacy powers.
+
+# Optional: Default model to use if a power is not explicitly listed below,
+# or if a specified model is found to be invalid/unavailable during agent initialization.
+# If commented out or missing, AgentManager might use its own hardcoded fallback.
+default_model = "ollama/gemma3:4b" # Example: a generally available local model
+
+# --- Power-Specific Model Assignments ---
+# List each power and the llm-compatible model ID you want it to use.
+# Ensure Ollama models are prefixed with "ollama/" (e.g., "ollama/llama3").
+# API-based models should use their standard identifiers (e.g., "gpt-4o", "claude-3-opus-20240229").
+# Make sure any necessary API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) are set in your environment
+# or .env file, and that the `llm` library has the required plugins installed.
+
+[powers]
+AUSTRIA = "gpt-4o"
+ENGLAND = "ollama/llama3" # Assumes llama3 is pulled in your Ollama
+FRANCE = "gpt-4o-mini"
+GERMANY = "ollama/gemma3:4b" # Assumes mistral is pulled
+ITALY = "gpt-3.5-turbo"
+RUSSIA = "ollama/gemma3:4b"    # Assumes phi3 is pulled
+TURKEY = "ollama/gemma3:4b" # Example of using a specific tag for gemma
+
+# Example of how you might comment out a power to let it use the default_model:
+# ENGLAND = "ollama/codellama:7b-instruct"
+# GERMANY = # This would make Germany use default_model (if one is defined) or AgentManager's fallback
+
+# --- Advanced: Model Profiles (Illustrative - Not yet fully implemented in coordinator for per-model host/port) ---
+# This section is a placeholder for future enhancements if you need to specify
+# more than just the model ID (e.g., different Ollama server URLs per model).
+# Currently, the llm_coordinator uses the globally configured OLLAMA_HOST for all ollama models.
+
+# [model_profiles.ollama_server_A_mistral]
+# provider = "ollama"
+# model_id = "ollama/mistral"
+# base_url = "http://localhost:11435/api" # Example for a different Ollama instance
+
+# [model_profiles.openai_gpt4_turbo]
+# provider = "openai"
+# model_id = "gpt-4-turbo"
+
+# And then in [powers] you might reference them:
+# GERMANY = { profile = "ollama_server_A_mistral" }
+# AUSTRIA = { profile = "openai_gpt4_turbo" } 

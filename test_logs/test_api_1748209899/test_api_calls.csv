@@ -1,0 +1,18 @@
+model,power,phase,response_type,raw_response,success
+gemma3:latest,FRANCE,S1901M,order_generation,"Reasoning:
+My primary objective is to rapidly gain control of supply centers. Given the current situation, I will focus on aggressively exploiting opportunities in Scandinavia and the Low Countries. Denmark (DEN) and Holland (HOL) are undefended and present significant opportunities for expansion. Simultaneously, I’ll secure a foothold in the Low Countries to prepare for further operations in France.
+
+ORDER SUBMISSION PROCESS:
+1. ANALYZE: The situation presents a relatively open landscape in Scandinavia and the Low Countries. Germany is focused on expansion elsewhere. France’s fleet presence in the Western Mediterranean limits immediate naval pressure.
+2. REASON: Securing DEN and HOL offers immediate supply centers and strategic positions for future operations.  Moving into the Low Countries enables potential access to France later.
+3. FORMAT:
+```json
+{
+  ""orders"": [
+    ""A DEN - HOL"",
+    ""A HOL - DEN"",
+    ""A RUH - DEN"",
+    ""F LON - DEN""
+  ]
+}
+```",TRUE

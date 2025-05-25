@@ -13,6 +13,7 @@ import re
 import ast
 import json
 from .prompt_constructor import construct_order_generation_prompt
+from .llm_coordinator import LocalLLMCoordinator # Added import
 
 
 logger = logging.getLogger("utils")
@@ -22,47 +23,50 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 
-def assign_models_to_powers() -> Dict[str, str]:
+def assign_models_to_powers(fixed_models_str: Optional[str] = None) -> Dict[str, str]:
     """
-    Example usage: define which model each power uses.
-    Return a dict: { power_name: model_id, ... }
-    POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
+    DEPRECATED: Model assignment is now primarily handled by AgentManager using GameConfig
+    which loads from a TOML file and considers command-line arguments.
+    This function remains for potential standalone utilities that might not have a full GameConfig.
+    It provides a very basic assignment logic.
+    """
+    logger.warning(
+        "DEPRECATION WARNING: utils.assign_models_to_powers() is deprecated. "
+        "Model assignment is primarily handled by AgentManager and GameConfig. "
+        "This function provides a basic fallback and may be removed in the future."
+    )
+    powers = ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]
+    assigned_models: Dict[str, str] = {}
+    model_list: List[str] = []
+
+    # Simplified logic: Use fixed_models_str if provided, else a hardcoded default.
+    if fixed_models_str:
+        model_list = [m.strip() for m in fixed_models_str.split(',') if m.strip()]
+        logger.info(f"[Deprecated utils.assign_models] Using fixed_models_str: {model_list}")
     
-    Model IDs should now be compatible with the `llm` library. Examples:
-    - OpenAI: "gpt-4o", "gpt-3.5-turbo"
-    - Anthropic (via llm-claude): "claude-3.5-sonnet", "claude-3-opus"
-    - Google Gemini (via llm-gemini): "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"
-    - Ollama (via llm-ollama): "ollama/llama3", "ollama/mistral"
-    - Llama.cpp (via llm-llama-cpp): "llama-cpp/path-to-model.gguf" or an alias.
-    - OpenRouter (via llm-openrouter): "openrouter/meta-llama/llama-3-70b-instruct"
-    """
+    if not model_list:
+        # Try POWER_MODELS env var as a secondary fallback for this deprecated function
+        power_models_env = os.environ.get("POWER_MODELS")
+        if power_models_env:
+            model_list = [m.strip() for m in power_models_env.split(',') if m.strip()]
+            logger.info(f"[Deprecated utils.assign_models] Using POWER_MODELS env var: {model_list}")
+        else:
+            # Final fallback to a single model for all powers
+            default_model_for_util = os.environ.get("MODEL_NAME", "ollama/gemma3:4b")
+            logger.info(f"[Deprecated utils.assign_models] No fixed_models_str or POWER_MODELS. Defaulting all to: {default_model_for_util}")
+            for power in powers:
+                assigned_models[power] = default_model_for_util
+            return assigned_models
+
+    if not model_list: # Should not happen if default_model_for_util logic is hit
+        logger.error("[Deprecated utils.assign_models] Model list empty. Cannot assign.")
+        return {}
+
+    for i, power in enumerate(powers):
+        assigned_models[power] = model_list[i % len(model_list)]
     
-    # POWER MODELS (updated for llm library compatibility)
-    # Defaulting all powers to ollama/gemma3:4b as requested.
-    # Ensure this model is available via your Ollama installation and llm-ollama plugin.
-    model_name = "ollama/gemma3:4b"
-    return {
-        "AUSTRIA": model_name,
-        "ENGLAND": model_name,
-        "FRANCE": model_name,
-        "GERMANY": model_name,
-        "ITALY": model_name,
-        "RUSSIA": model_name,
-        "TURKEY": model_name,
-    }
-    
-    # TEST MODELS (updated for llm library compatibility)
-    """
-    return {
-        "AUSTRIA": "ollama/mistral",
-        "ENGLAND": "ollama/mistral",
-        "FRANCE": "ollama/mistral",
-        "GERMANY": "ollama/mistral",
-        "ITALY": "ollama/mistral",  
-        "RUSSIA": "ollama/mistral",
-        "TURKEY": "ollama/mistral",
-    }
-    """
+    logger.info(f"[Deprecated utils.assign_models] Final assignments: {assigned_models}")
+    return assigned_models
 
 def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
     """
@@ -247,91 +251,91 @@ async def get_valid_orders(
     Generates orders using the specified LLM model, then validates and returns them.
     If generation or validation fails, returns fallback orders.
     """
-    # Import the coordinator here to avoid circular imports
-    from .llm_coordinator import LocalLLMCoordinator
+    # Import the coordinator here to avoid circular imports - No longer needed if imported at top
+    # from .llm_coordinator import LocalLLMCoordinator 
     
+    # Instantiate or get a global coordinator instance
+    # For simplicity in this fix, let's assume one is instantiated here or globally available.
+    # If you have a single global instance (e.g., in agent.py or a central app module),
+    # you might need to pass it as a parameter to get_valid_orders.
+    # For now, creating a local instance to make it runnable:
     coordinator = LocalLLMCoordinator()
-    prompt_text = ""
-    raw_response_text = ""
-    success_status = "FALSE: Initialized" 
-    
+
+    prompt = construct_order_generation_prompt(
+        system_prompt=agent_system_prompt,
+        game=game,
+        board_state=board_state,
+        power_name=power_name,
+        possible_orders=possible_orders,
+        game_history=game_history,
+        agent_goals=agent_goals,
+        agent_relationships=agent_relationships,
+        agent_private_diary_str=agent_private_diary_str
+    )
+
+    if not prompt:
+        logger.error(f"[{model_id}] Prompt construction failed for {power_name}. Using fallback orders.")
+        model_error_stats.setdefault(model_id, {}).setdefault("prompt_errors", 0)
+        model_error_stats[model_id]["prompt_errors"] += 1
+        return _fallback_orders_utility(possible_orders)
+
+    raw_response_text = "" # Initialize
+    llm_call_result = None
+
     try:
-        # Construct the prompt for order generation
-        prompt_text = construct_order_generation_prompt(
-            system_prompt=agent_system_prompt, # Pass agent's system prompt here
-            game=game,
-            board_state=board_state,
-            power_name=power_name,
-            possible_orders=possible_orders,
-            game_history=game_history,
-            agent_goals=agent_goals,
-            agent_relationships=agent_relationships,
-            agent_private_diary_str=agent_private_diary_str,
-        )
-
-        logger.debug(f"[{model_id}] Order generation prompt for {power_name}:\n{prompt_text[:500]}...")
+        request_identifier = f"{power_name}-{phase}-order_gen"
+        # TODO: Replace placeholders for game_id, agent_name, and phase_str with actual values.
+        # This might involve adding game_id as a parameter to get_valid_orders.
+        current_game_id_placeholder = "unknown_game_id_utils" # Placeholder
         
-        # Use the centralized coordinator with retry logic
-        raw_response_text = await coordinator.call_llm_with_retry(
+        llm_call_result = await coordinator.call_llm_with_json_parsing(
             model_id=model_id,
-            prompt=prompt_text,
+            prompt=prompt,
             system_prompt=agent_system_prompt,
-            request_identifier=f"{power_name}-order_generation"
+            request_identifier=request_identifier,
+            expected_json_fields=["orders"], # Expecting a list of orders
+            # --- Parameters for new llm_call_internal & file logging ---
+            game_id=current_game_id_placeholder, # Placeholder - needs proper game_id
+            agent_name=power_name, # Use power_name as agent_name
+            phase_str=phase if phase else "unknown_phase_utils", # Use provided phase or placeholder
+            response_type="order_generation",
+            log_to_file_path=log_file_path
         )
-        
-        logger.debug(f"[{model_id}] Raw LLM response for {power_name} orders:\n{raw_response_text[:300]}")
 
-        extracted_moves = _extract_moves_from_llm_response(raw_response_text, power_name, model_id)
+        if llm_call_result.success and llm_call_result.parsed_json:
+            # The _extract_moves_from_llm_response logic might be redundant
+            # if call_llm_with_json_parsing already gives us the parsed "orders" field.
+            # We'll try to get "orders" directly from parsed_json first.
+            extracted_moves = llm_call_result.parsed_json.get("orders")
+            if extracted_moves is None: # Fallback to old extraction if "orders" not top-level
+                 logger.warning(f"[{model_id}] 'orders' field not found directly in parsed JSON for {power_name}. Trying raw response parsing.")
+                 extracted_moves = _extract_moves_from_llm_response(llm_call_result.raw_response, power_name, model_id)
+            raw_response_text = llm_call_result.raw_response # For logging or further debugging
+        elif llm_call_result.success: # Success but no JSON or "orders" field
+            logger.warning(f"[{model_id}] LLM call succeeded for {power_name} but no valid JSON 'orders' found. Raw: {llm_call_result.raw_response[:100]}...")
+            extracted_moves = _extract_moves_from_llm_response(llm_call_result.raw_response, power_name, model_id)
+            raw_response_text = llm_call_result.raw_response
+        else: # LLM call failed
+            logger.error(f"[{model_id}] LLM call failed for {power_name} in get_valid_orders: {llm_call_result.error_message}")
+            model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
+            model_error_stats[model_id]["llm_api_errors"] += 1
+            raw_response_text = llm_call_result.raw_response if llm_call_result.raw_response else f"Error: {llm_call_result.error_message}"
+            extracted_moves = None # Ensure fallback if call failed
 
-        if not extracted_moves:
-            logger.warning(f"[{model_id}] Could not extract moves for {power_name}. Using fallback.")
-            model_error_stats.setdefault(model_id, {}).setdefault("order_decoding_errors", 0)
-            model_error_stats[model_id]["order_decoding_errors"] += 1
-            success_status = "FALSE: NoMovesExtracted"
-            final_orders = _fallback_orders_utility(possible_orders)
-        else:
-            final_orders = _validate_extracted_orders(game, power_name, model_id, extracted_moves, possible_orders, _fallback_orders_utility)
-            
-            is_fallback = True
-            fallback_comparison = _fallback_orders_utility(possible_orders)
-            if len(final_orders) == len(fallback_comparison):
-                for i in range(len(final_orders)):
-                    if final_orders[i] != fallback_comparison[i]:
-                        is_fallback = False
-                        break
-            else:
-                is_fallback = False
-
-            if is_fallback and extracted_moves:
-                 success_status = "FALSE: ValidationLedToFallback"
-                 model_error_stats.setdefault(model_id, {}).setdefault("order_validation_fallback", 0)
-                 model_error_stats[model_id]["order_validation_fallback"] += 1
-            elif not final_orders and extracted_moves: 
-                success_status = "FALSE: AllExtractedMovesInvalid"
-            elif not extracted_moves and not final_orders:
-                success_status = "FALSE: NoMovesPossibleOrExtracted"
-            else:
-                 success_status = "TRUE"
     except Exception as e:
         logger.error(f"[{model_id}] Unexpected error for {power_name} in get_valid_orders: {e}", exc_info=True)
-        success_status = f"FALSE: UnexpectedException ({type(e).__name__})"
-        model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
-        model_error_stats[model_id]["llm_api_errors"] += 1
-        final_orders = _fallback_orders_utility(possible_orders)
-        raw_response_text = f"Exception: {str(e)}"
-    finally:
-        if log_file_path:
-            log_llm_response(
-                log_file_path=log_file_path,
-                model_name=model_id,
-                power_name=power_name,
-                phase=phase if phase else "UnknownPhase",
-                response_type="order_generation",
-                raw_input_prompt=prompt_text,
-                raw_response=raw_response_text,
-                success=success_status
-            )
-    return final_orders
+        model_error_stats.setdefault(model_id, {}).setdefault("unknown_errors", 0)
+        model_error_stats[model_id]["unknown_errors"] += 1
+        # Log the raw response if available, otherwise log the error
+        # log_llm_response is now called by coordinator.call_llm_with_json_parsing
+        return _fallback_orders_utility(possible_orders)
+
+    if not extracted_moves:
+        logger.warning(f"[{model_id}] No moves extracted for {power_name}. Using fallback. Raw response snippet: {raw_response_text[:200]}")
+        # log_llm_response is handled by call_llm_with_json_parsing
+        return _fallback_orders_utility(possible_orders)
+
+    return _validate_extracted_orders(game, power_name, model_id, extracted_moves, possible_orders, _fallback_orders_utility)
 
 
 def normalize_and_compare_orders(

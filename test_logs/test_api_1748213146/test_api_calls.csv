@@ -1,0 +1,29 @@
+model,power,phase,response_type,raw_response,success
+gpt-4o,FRANCE,S1901M,order_generation,"**Reasoning:**
+
+In the Spring 1901 opening, my primary objective is to establish a strong position for capturing new supply centers and securing my borders. Currently, my relationships with other powers are neutral and I need to take proactive steps to avoid any threats, particularly from England and Germany, while potentially setting up a strong alliance with one against the other. My strategic goals this turn are to:
+
+1. **Expand into Iberia:** Moving towards Spain and Portugal early will secure additional supply centers in the fall.
+2. **Position for Belgium:** I want to stay competitive for Belgium, a critical neutral centre that could strengthen my border.
+3. **Consider the English Channel:** Moving towards the English Channel will provide naval presence there, crucial for power projection and defense against England.
+
+**Orders:**
+
+- **Fleet in Brest (F BRE):** Move to the Mid-Atlantic Ocean (MAO). This positions my fleet to move into Portugal or Spain's South Coast in the fall, allowing flexibility and reinforcing my expansion into Iberia.
+
+- **Army in Marseilles (A MAR):** Move to Spain (SPA). This positions my army in Spain, ready to secure the supply center in the fall.
+
+- **Army in Paris (A PAR):** Move to Picardy (PIC). Moving to Picardy sets me up for a potential move into Belgium, if the diplomatic environment allows, or supports my defense against German or English aggression.
+
+These moves strategically position me to capture supply centers in Iberia while keeping my options open for the fall adjustment of territories. Additionally, the movement of the army to Picardy establishes a presence to potentially support or contest Belgium.
+
+**PARSABLE OUTPUT:**
+```json
+{
+  ""orders"": [
+    ""F BRE - MAO"",
+    ""A MAR - SPA"",
+    ""A PAR - PIC""
+  ]
+}
+```",TRUE

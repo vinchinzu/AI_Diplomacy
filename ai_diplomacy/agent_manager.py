@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Default model if not enough are specified or for remaining players
-DEFAULT_FALLBACK_MODEL = "gpt-3.5-turbo" # Or consider a local model like "ollama/mistral"
+DEFAULT_AGENT_MANAGER_FALLBACK_MODEL = "ollama/gemma3:4b" # More specific name
 
 class AgentManager:
     """
@@ -44,74 +44,102 @@ class AgentManager:
         Returns:
             A dictionary mapping power names to their assigned model IDs.
         """
-        logger.info("Assigning models to powers...")
+        logger.info("Assigning models to powers using TOML config and GameConfig overrides...")
         
-        powers_to_assign = list(all_game_powers)
-        if self.game_config.exclude_powers:
-            powers_to_assign = [p for p in powers_to_assign if p not in self.game_config.exclude_powers]
-            logger.info(f"Excluded powers: {self.game_config.exclude_powers}. Remaining for assignment: {powers_to_assign}")
+        # Start with TOML configurations from GameConfig
+        powers_and_models: Dict[str, str] = dict(self.game_config.power_model_assignments) 
+        default_model = self.game_config.default_model_from_config or DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
+        logger.info(f"Using default model: '{default_model}' (from TOML or AgentManager fallback)")
 
-        powers_and_models: Dict[str, str] = {}
-        assigned_powers: Set[str] = set()
+        # Determine powers that still need assignment (not in TOML or to be LLM controlled)
+        powers_needing_assignment_for_llm_control = []
+        for p in all_game_powers:
+            if p not in self.game_config.exclude_powers:
+                if p not in powers_and_models: # Not specified in TOML
+                    powers_needing_assignment_for_llm_control.append(p)
+                # If p is in powers_and_models, it means TOML explicitly assigned it.
+                # We will respect that, unless num_players limits LLM control.
 
-        # 1. Assign model to the primary agent if specified
+        # Override or fill in based on primary agent settings from GameConfig (CLI overrides)
         primary_agent_power = self.game_config.power_name
-        primary_agent_model = self.game_config.model_id
+        primary_agent_model_cli = self.game_config.model_id # Model specified via CLI for primary agent
 
-        if primary_agent_power and primary_agent_model:
-            if primary_agent_power in powers_to_assign:
-                powers_and_models[primary_agent_power] = primary_agent_model
-                assigned_powers.add(primary_agent_power)
-                logger.info(f"Assigned primary agent: {primary_agent_power} -> {primary_agent_model}")
+        if primary_agent_power and primary_agent_model_cli:
+            if primary_agent_power in self.game_config.exclude_powers:
+                logger.warning(f"Primary agent power {primary_agent_power} is excluded. Ignoring CLI model assignment.")
             else:
-                logger.warning(f"Primary agent power {primary_agent_power} is not in the list of assignable powers (possibly excluded).")
+                logger.info(f"CLI override: Assigning primary agent {primary_agent_power} -> {primary_agent_model_cli}")
+                powers_and_models[primary_agent_power] = primary_agent_model_cli
+        elif primary_agent_power and primary_agent_power not in powers_and_models:
+            # Primary power specified but no model via CLI, and not in TOML.
+            # Assign default model to it if it's not excluded.
+            if primary_agent_power not in self.game_config.exclude_powers:
+                 logger.info(f"Primary power {primary_agent_power} specified without model, assigning default: {default_model}")
+                 powers_and_models[primary_agent_power] = default_model
         
-        # 2. Prepare list of remaining powers that need models
-        remaining_powers = [p for p in powers_to_assign if p not in assigned_powers]
+        # Fill remaining LLM slots using fixed_models from CLI or default model
+        # Count how many LLM-controlled powers we have so far from TOML + primary CLI override.
+        current_llm_powers = {p for p, m in powers_and_models.items() if p not in self.game_config.exclude_powers}
+        num_llm_controlled_so_far = len(current_llm_powers)
         
-        # Determine how many more LLM players are needed based on num_players
-        # num_players defines the total number of LLM-controlled agents.
-        # If a primary agent was set, that's one LLM player.
-        num_additional_llm_players_needed = self.game_config.num_players
-        if primary_agent_power and primary_agent_power in powers_and_models:
-            num_additional_llm_players_needed -= 1
+        num_additional_llm_players_needed = self.game_config.num_players - num_llm_controlled_so_far
+
+        # Consider powers from TOML that are not excluded for this calculation
+        candidate_powers_for_filling_slots = [p for p in all_game_powers if p not in self.game_config.exclude_powers and p not in current_llm_powers]
         
-        # Ensure we don't try to assign more LLM players than available remaining powers
-        num_additional_llm_players_needed = min(num_additional_llm_players_needed, len(remaining_powers))
+        if self.game_config.randomize_fixed_models:
+            random.shuffle(candidate_powers_for_filling_slots)
 
-        if num_additional_llm_players_needed <= 0 and remaining_powers:
-            logger.info(f"Target number of LLM players ({self.game_config.num_players}) reached or exceeded. "
-                        f"Remaining powers ({len(remaining_powers)}) will not be LLM-controlled by this manager's assignment pass.")
-            # These remaining powers might be controlled by DipNet or other means later in game setup.
-
-        llm_powers_to_select = random.sample(remaining_powers, num_additional_llm_players_needed) \
-            if self.game_config.randomize_fixed_models or not self.game_config.fixed_models else remaining_powers[:num_additional_llm_players_needed]
-
-        # 3. Assign fixed models to the selected LLM powers
-        fixed_models_list = list(self.game_config.fixed_models) if self.game_config.fixed_models else []
-        if self.game_config.randomize_fixed_models and fixed_models_list:
-            random.shuffle(fixed_models_list)
-
-        for i, power_name in enumerate(llm_powers_to_select):
-            if fixed_models_list:
-                model_to_assign = fixed_models_list[i % len(fixed_models_list)] # Cycle through fixed models
-            else:
-                model_to_assign = DEFAULT_FALLBACK_MODEL # Fallback if no fixed models
-                logger.warning(f"No fixed models specified or list exhausted, assigning fallback {DEFAULT_FALLBACK_MODEL} to {power_name}")
+        fixed_models_cli_list = list(self.game_config.fixed_models) if self.game_config.fixed_models else []
+        if self.game_config.randomize_fixed_models and fixed_models_cli_list:
+            random.shuffle(fixed_models_cli_list)
+        
+        additional_llm_assigned_count = 0
+        for i, power_to_assign_additional_model in enumerate(candidate_powers_for_filling_slots):
+            if additional_llm_assigned_count >= num_additional_llm_players_needed:
+                break
             
-            powers_and_models[power_name] = model_to_assign
-            assigned_powers.add(power_name)
-            logger.info(f"Assigned LLM agent: {power_name} -> {model_to_assign}")
-            if i + 1 >= num_additional_llm_players_needed : # Check if we have assigned enough LLM players
-                 break
+            if fixed_models_cli_list: # Use CLI fixed_models first for these additional slots
+                model_to_assign = fixed_models_cli_list[additional_llm_assigned_count % len(fixed_models_cli_list)]
+            else: # If no CLI fixed_models, use the default (from TOML or AgentManager fallback)
+                model_to_assign = default_model
+            
+            powers_and_models[power_to_assign_additional_model] = model_to_assign
+            logger.info(f"Assigned additional LLM agent: {power_to_assign_additional_model} -> {model_to_assign} (num_players target)")
+            additional_llm_assigned_count += 1
 
+        # Final filter: ensure only num_players are LLM controlled, respecting exclusions
+        final_llm_assignments: Dict[str, str] = {}
+        powers_considered_for_final_llm_list = [p for p in all_game_powers if p not in self.game_config.exclude_powers]
+        
+        # Prioritize powers that have specific assignments (CLI primary, then TOML)
+        priority_order: List[str] = []
+        if primary_agent_power and primary_agent_power in powers_and_models and primary_agent_power not in self.game_config.exclude_powers:
+            priority_order.append(primary_agent_power)
+        for p in powers_and_models.keys(): # Iterate keys from TOML based assignments
+            if p not in priority_order and p not in self.game_config.exclude_powers:
+                priority_order.append(p)
+        for p in powers_considered_for_final_llm_list:
+            if p not in priority_order: # Add remaining non-excluded powers
+                priority_order.append(p)
 
-        logger.info(f"Final model assignments: {powers_and_models}")
-        logger.info(f"Total LLM-controlled powers assigned by AgentManager: {len(powers_and_models)}")
+        llm_slots_filled = 0
+        for power_name in priority_order:
+            if llm_slots_filled >= self.game_config.num_players:
+                break
+            if power_name in powers_and_models: # Has an assignment from TOML or CLI override or additional filling
+                final_llm_assignments[power_name] = powers_and_models[power_name]
+                llm_slots_filled +=1
+            elif power_name not in self.game_config.exclude_powers: # Needs a default because it wasn't specified earlier
+                final_llm_assignments[power_name] = default_model
+                logger.info(f"Assigning default model '{default_model}' to {power_name} to meet num_players target.")
+                llm_slots_filled +=1
+
+        logger.info(f"Final model assignments after considering num_players ({self.game_config.num_players}): {final_llm_assignments}")
         
         # Store in game_config as well
-        self.game_config.powers_and_models = powers_and_models
-        return powers_and_models
+        self.game_config.powers_and_models = final_llm_assignments
+        return final_llm_assignments
 
     def _initialize_agent_state_ext(self, agent: DiplomacyAgent):
         """

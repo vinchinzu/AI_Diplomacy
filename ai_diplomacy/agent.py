@@ -11,7 +11,7 @@ from .game_history import GameHistory
 from . import llm_utils # Import the new module
 from .utils import log_llm_response
 from .prompt_constructor import build_context_prompt # Added import
-from .llm_coordinator import LocalLLMCoordinator, _local_llm_lock, LLMCallResult # Removed SERIALIZE_LOCAL_LLMS_ENV_VAR since auto-locking is now enabled
+from .llm_coordinator import LocalLLMCoordinator, _local_lock, LLMCallResult # Corrected: _local_llm_lock to _local_lock
 from .llm_interface import AgentLLMInterface # Import new interface
 from ai_diplomacy.prompts import SYSTEM_PROMPT_TEMPLATE, POWER_SPECIFIC_PROMPTS, PLANNING_PROMPT_TEMPLATE, NEGOTIATION_DIARY_PROMPT_TEMPLATE, ORDER_SUBMISSION_PROMPT_TEMPLATE, ORDER_DIARY_PROMPT_TEMPLATE
 

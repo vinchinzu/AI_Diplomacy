@@ -2,22 +2,35 @@
 
 # note the summaries aren't actually used so the model doesn't matter here
 # Defaulting all models to ollama/gemma3:4b as requested.
-MODEL_NAME="gemma3:latest"
+MODEL_NAME="gpt-4o"
+export MODEL_NAME
+#MODEL_NAME="gemma3:latest"
 OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 OLLAMA_HOST="http://127.0.0.1:$OLLAMA_PORT"
 OLLAMA_BASE_URL="http://127.0.0.1:$OLLAMA_PORT"
 
-# Check if Ollama is running
-if ! curl --silent --fail "$OLLAMA_HOST/api/tags" > /dev/null; then
-  echo "Ollama server is not running on $OLLAMA_HOST."
-  echo "Start it with: OLLAMA_PORT=$OLLAMA_PORT ollama serve"
-  exit 1
-fi
+# Only check Ollama if the model name suggests it's an Ollama model
+if [[ "$MODEL_NAME" == ollama/* ]]; then
+  # Check if Ollama is running
+  if ! curl --silent --fail "$OLLAMA_HOST/api/tags" > /dev/null; then
+    echo "Ollama server is not running on $OLLAMA_HOST."
+    echo "Start it with: OLLAMA_PORT=$OLLAMA_PORT ollama serve"
+    exit 1
+  fi
 
-# Check if the model is available
-if ! curl --silent "$OLLAMA_HOST/api/tags" | grep -q "${MODEL_NAME%%:*}"; then
-  echo "Model $MODEL_NAME not found in Ollama. Pulling it now..."
-  ollama pull "${MODEL_NAME%%:*}" || { echo "Failed to pull model $MODEL_NAME"; exit 1; }
+  # Extract the tag from the MODEL_NAME (e.g., "llama3" from "ollama/llama3")
+  OLLAMA_MODEL_TAG="${MODEL_NAME#ollama/}"
+  # Check if the model (without version tag) is available
+  if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${OLLAMA_MODEL_TAG%%:*}:latest" '.models[] | select(.name == $name)' > /dev/null;
+  then # Also check for the exact tag if it includes one
+    if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "$OLLAMA_MODEL_TAG" '.models[] | select(.name == $name)' > /dev/null;
+    then
+      echo "Model $MODEL_NAME (tag: $OLLAMA_MODEL_TAG) not found in Ollama. Pulling it now..."
+      ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $MODEL_NAME"; exit 1; }
+    fi
+  fi
+else
+  echo "Skipping Ollama check for non-Ollama model: $MODEL_NAME"
 fi
 
 # Export OLLAMA_HOST for the Python code
@@ -68,10 +81,15 @@ case $COMMAND in
     #curl "$OLLAMA_HOST/api/generate" -d '{"model": "gemma3:latest", "prompt": "Hello, world!"}'
     # llm -m gemma3:latest "Hello, world!"
 
+    # Define a mixed list of models for the 7 powers for the full game.
+    # Ensure these models are accessible (Ollama models pulled, API keys set for API models).
+    # Austria, England, France, Germany, Italy, Russia, Turkey
+    FULL_GAME_MODELS_LIST="gpt-4o,ollama/llama3,gpt-4o-mini,ollama/mistral,gpt-3.5-turbo,ollama/gemma3:4b,ollama/phi3"
+
     python3 lm_game.py \
          --max_year 1905 \
          --num_negotiation_rounds 1 \
-         --fixed_models "$MODEL_NAME,$MODEL_NAME,$MODEL_NAME,$MODEL_NAME,$MODEL_NAME,$MODEL_NAME,$MODEL_NAME"
+         --fixed_models "$FULL_GAME_MODELS_LIST"
     ;;
   "help")
     echo "Usage: $0 [COMMAND]"

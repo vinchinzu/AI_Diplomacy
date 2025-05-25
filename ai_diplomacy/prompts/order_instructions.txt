@@ -68,6 +68,8 @@ PARSABLE OUTPUT:
   ]
 }}
 
+// Example 3 removed as it might be confusing the LLM
+/*
 Example 3: As Italy, Autumn 1902, after securing Tunis and trying to break into Austria, while also defending against a potential French naval attack. My units are A VEN, A ROM, F NAP, F ION, A APU. Austria has F TRI, A VIE, A BUD. France has F WES, F MAR.
 
 Reasoning:
@@ -86,5 +88,6 @@ PARSABLE OUTPUT:
     "F NAP - TYS"
   ]
 }}
+*/
 
 RESPOND WITH YOUR REASONING AND ORDERS (within PARSABLE OUTPUT) BELOW

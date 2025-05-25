@@ -3,6 +3,7 @@ import logging
 import argparse
 from datetime import datetime
 from typing import Optional, List, Dict, TYPE_CHECKING
+import toml
 
 # Import GameHistory and DiplomacyAgent only for type hinting if they are complex
 # to avoid circular dependencies at runtime.
@@ -44,6 +45,13 @@ class GameConfig:
         self.exclude_powers: Optional[List[str]] = getattr(args, 'exclude_powers', None)
         self.max_years: Optional[int] = getattr(args, 'max_years', None) # Added from lm_game.py logic
         self.log_to_file: bool = getattr(args, 'log_to_file', True) # Assuming default behavior
+
+        # --- Load Model Configuration from TOML ---
+        self.models_config_path: Optional[str] = getattr(args, 'models_config_file', "models.toml")
+        self.power_model_assignments: Dict[str, str] = {}
+        self.default_model_from_config: Optional[str] = None
+        self._load_models_config()
+        # --- End Model Configuration Loading ---
 
         # Generate game_id if not provided
         self.current_datetime_str = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -120,6 +128,31 @@ class GameConfig:
         if self.max_years:
             logger.info(f"  Maximum Game Years: {self.max_years}")
 
+    def _load_models_config(self):
+        """Loads model assignments from the TOML configuration file."""
+        if not self.models_config_path or not os.path.exists(self.models_config_path):
+            logger.warning(f"Models configuration file not found at '{self.models_config_path}'. Model assignments will rely on AgentManager defaults or command-line overrides.")
+            return
+
+        try:
+            config_data = toml.load(self.models_config_path)
+            self.default_model_from_config = config_data.get("default_model")
+            
+            if self.default_model_from_config:
+                logger.info(f"Loaded default model from config: {self.default_model_from_config}")
+
+            loaded_assignments = config_data.get("powers", {})
+            if isinstance(loaded_assignments, dict):
+                self.power_model_assignments = {str(k).upper(): str(v) for k, v in loaded_assignments.items()}
+                logger.info(f"Loaded power-specific model assignments from '{self.models_config_path}': {self.power_model_assignments}")
+            else:
+                logger.warning(f"'powers' section in '{self.models_config_path}' is not a valid dictionary. No power-specific models loaded from file.")
+
+        except toml.TomlDecodeError as e:
+            logger.error(f"Error decoding TOML from '{self.models_config_path}': {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error loading models configuration from '{self.models_config_path}': {e}", exc_info=True)
+
 # Example of how parse_arguments might look (to be kept in lm_game.py or similar entry point)
 # def parse_arguments_example() -> argparse.Namespace:
 #     parser = argparse.ArgumentParser(description="AI Diplomacy Game Runner")
@@ -149,7 +182,8 @@ if __name__ == '__main__':
         'game_id': None, # To test auto-generation
         'max_years': 1,
         'log_to_file': True,
-        'log_dir': None # Test default log directory creation
+        'log_dir': None, # Test default log directory creation
+        'models_config_file': None # Test default models configuration file
     }
     test_args = argparse.Namespace(**args_dict)
 

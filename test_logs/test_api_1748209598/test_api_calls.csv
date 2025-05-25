@@ -1,0 +1,15 @@
+model,power,phase,response_type,raw_response,success
+gemma3:latest,FRANCE,S1901M,order_generation,"Reasoning:
+My primary objective is to rapidly expand control of supply centers, prioritizing those within reach of my existing forces. Given my current position and the available orders, I will focus on securing Burgundy (F PIC - ENG) and then move to take Trieste (A VEN - TRI).  I'll use the fleet to provide naval support during this aggressive expansion. I'll also reinforce my existing holdings to deter any opportunistic attacks.
+
+PARSABLE OUTPUT:
+{{
+  ""orders"": [
+    ""A PAR S F PIC - ENG"",
+    ""A VEN - TRI"",
+    ""F ION S A VEN - TRI"",
+    ""A ROM H"",
+    ""F NAP - TYS""
+  ]
+}}
+",TRUE
