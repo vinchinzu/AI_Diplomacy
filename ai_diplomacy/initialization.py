@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, Any, Tuple
 
 if TYPE_CHECKING:
     from diplomacy import Game
-    from diplomacy.models.game import GameHistory
+    from .game_history import GameHistory
     from .agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)

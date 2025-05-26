@@ -3,7 +3,7 @@ Scripted agent implementation using hand-written heuristics.
 Useful for testing and as a baseline for LLM agent performance.
 """
 import random
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .base import BaseAgent, Order, Message, PhaseState
 
 
@@ -203,7 +203,7 @@ class ScriptedAgent(BaseAgent):
         
         return messages
     
-    def _choose_negotiation_target(self, phase: PhaseState) -> str:
+    def _choose_negotiation_target(self, phase: PhaseState) -> Optional[str]:
         """Choose which country to send a message to."""
         # Simple heuristic: message the strongest neighbor or a potential ally
         active_powers = [p for p in phase.powers if not phase.is_power_eliminated(p) and p != self.country]
@@ -235,6 +235,9 @@ class ScriptedAgent(BaseAgent):
         }
         
         personality_templates = templates.get(self.personality, templates["neutral"])
+        assert isinstance(personality_templates, list) # Should always be a list due to fallback
+        if not personality_templates: # Should not happen with the current templates dict
+            return "Holding my cards close for now."
         return random.choice(personality_templates)
     
     def _get_common_threat(self, target: str, phase: PhaseState) -> str:

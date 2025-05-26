@@ -159,7 +159,7 @@ if __name__ == '__main__':
     # Test 1: Logging to file and console, verbose_llm_debug = False
     print("\n--- Test 1: Logging (DEBUG level), verbose_llm_debug = False ---")
     config1 = MinimalGameConfig(log_level="DEBUG", game_id="log_test_verbose_false", verbose_llm_debug=False)
-    setup_logging(config1)
+    setup_logging(config1) # type: ignore
     logging.getLogger("ai_diplomacy.llm_coordinator").info("LLM Coordinator Prompt: This is a very long prompt...")
     logging.getLogger("ai_diplomacy.other_module").info("Other Info: Regular message.")
     logging.getLogger("ai_diplomacy.llm_coordinator").debug("LLM Coordinator DEBUG: Full details here.")
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     # Test 2: Logging to file and console, verbose_llm_debug = True
     print("\n--- Test 2: Logging (DEBUG level), verbose_llm_debug = True ---")
     config2 = MinimalGameConfig(log_level="DEBUG", game_id="log_test_verbose_true", verbose_llm_debug=True)
-    setup_logging(config2)
+    setup_logging(config2) # type: ignore
     logging.getLogger("ai_diplomacy.llm_coordinator").info("LLM Coordinator Prompt: This is a very long prompt...")
     logging.getLogger("ai_diplomacy.other_module").info("Other Info: Regular message.")
     logging.getLogger("ai_diplomacy.llm_coordinator").debug("LLM Coordinator DEBUG: Full details here.")
@@ -176,7 +176,7 @@ if __name__ == '__main__':
     # Test 3: Logging at INFO level, verbose_llm_debug = False
     print("\n--- Test 3: Logging (INFO level), verbose_llm_debug = False ---")
     config3 = MinimalGameConfig(log_level="INFO", game_id="log_test_info_verbose_false", verbose_llm_debug=False)
-    setup_logging(config3)
+    setup_logging(config3) # type: ignore
     logging.getLogger("ai_diplomacy.llm_coordinator").info("LLM Coordinator Prompt: This is a very long prompt...")
     logging.getLogger("ai_diplomacy.llm_coordinator").debug("LLM Coordinator DEBUG: This should not appear.")
 

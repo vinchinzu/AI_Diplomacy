@@ -1,10 +1,11 @@
 import logging
 from typing import Optional, Dict, List, TYPE_CHECKING, Any
+from .services.llm_coordinator import LLMCoordinator
+from . import llm_utils
 
 if TYPE_CHECKING:
     from diplomacy import Game
     from .game_history import GameHistory, Phase # Added Phase for type hint
-    from .llm_interface import AgentLLMInterface
     from .game_config import GameConfig
 
 logger = logging.getLogger(__name__)
@@ -15,20 +16,20 @@ class PhaseSummaryGenerator:
     This was previously handled by phase_summary_callback in lm_game.py.
     """
 
-    def __init__(self, llm_interface: 'AgentLLMInterface', game_config: 'GameConfig'):
+    def __init__(self, llm_coordinator: 'LLMCoordinator', game_config: 'GameConfig', power_name: str):
         """
         Initializes the PhaseSummaryGenerator.
 
         Args:
-            llm_interface: The LLM interface for the agent of the power for which
-                           the summary is being generated.
+            llm_coordinator: The LLM coordinator to use for API calls.
             game_config: The global game configuration object.
+            power_name: The name of the power for whom the summary/diary is being generated.
         """
-        self.llm_interface = llm_interface
+        self.llm_coordinator = llm_coordinator
         self.game_config = game_config
-        # The power_name is implicitly handled by the specific llm_interface instance passed.
-        self.power_name = self.llm_interface.power_name
-
+        self.power_name = power_name
+        # Load the prompt template
+        self.prompt_template = llm_utils.load_prompt_file("phase_result_diary_prompt.txt")
 
     def _get_all_orders_for_phase(self, game_history: 'GameHistory', phase_name: str) -> Dict[str, List[str]]:
         """
@@ -149,11 +150,32 @@ class PhaseSummaryGenerator:
             "your_actual_orders": your_orders_str
         }
         
-        generated_summary = await self.llm_interface.generate_phase_result_diary(
-            prompt_template_vars=prompt_template_vars,
-            log_file_path=self.game_config.llm_log_path, # Assuming game_config has this
-            game_phase=phase_to_summarize_name # The phase being summarized
-        )
+        prompt = self.prompt_template.format(**prompt_template_vars)
+
+        generated_summary = "(Error: LLM call not made due to refactoring)" # Default error
+        try:
+            # Make the LLM call via the coordinator
+            # Assuming a simple text response is expected for the summary/diary
+            # Ensure game_config has model_id and game_id if they are directly accessed.
+            # These might need to come from a specific agent's config if PhaseSummaryGenerator is generic.
+            # For now, assuming game_config has a general model_id for such tasks or this is adapted.
+            model_id_for_summary = self.game_config.model_id if hasattr(self.game_config, 'model_id') and self.game_config.model_id else "default_summary_model"
+            game_id_for_summary = self.game_config.game_id if hasattr(self.game_config, 'game_id') else "unknown_game"
+
+            generated_summary = await self.llm_coordinator.request(
+                model_id=model_id_for_summary, 
+                prompt_text=prompt,
+                system_prompt_text="You are a reflective diarist summarizing game events for your power.",
+                game_id=game_id_for_summary,
+                agent_name=self.power_name,
+                phase_str=phase_to_summarize_name,
+                request_identifier=f"{self.power_name}-{phase_to_summarize_name}-summary_gen"
+            )
+            logger.info(f"[{self.power_name}] LLM response for phase summary: {generated_summary[:100]}...")
+
+        except Exception as e:
+            logger.error(f"[{self.power_name}] Error during LLM call for phase summary: {e}", exc_info=True)
+            generated_summary = f"(Error: LLM call failed - {e})"
 
         if generated_summary and not generated_summary.startswith("(Error:"):
             # Record this generated summary (which is a diary entry reflecting on results)
@@ -291,7 +313,7 @@ if __name__ == '__main__':
         mock_llm_interface = MockLLMInterface(power_name=power_name_test)
         mock_game_config = MockGameConfig(power_name=power_name_test)
         
-        summary_generator = PhaseSummaryGenerator(mock_llm_interface, mock_game_config)
+        summary_generator = PhaseSummaryGenerator(mock_llm_interface, mock_game_config, power_name_test) # type: ignore
         
         mock_game = MockGame(current_phase_name="AUTUMN 1901M") # Phase after the one being summarized
         mock_history = MockGameHistory()
@@ -314,8 +336,8 @@ if __name__ == '__main__':
         
         # Generate summary
         generated_text = await summary_generator.generate_and_record_phase_summary(
-            game=mock_game,
-            game_history=mock_history,
+            game=mock_game, # type: ignore
+            game_history=mock_history, # type: ignore
             phase_to_summarize_name=phase_to_summarize,
             phase_events_summary_text=phase_events_text,
             all_orders_for_phase=all_orders_for_spring_1901

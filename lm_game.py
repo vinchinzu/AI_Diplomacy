@@ -183,7 +183,7 @@ async def main():
         # 6. Initialize GamePhaseOrchestrator
         # PhaseSummaryGenerator is now created on-the-fly by the orchestrator.
         orchestrator = GamePhaseOrchestrator(
-            game_config=config,
+            game_config=config, # type: ignore
             agent_manager=agent_manager,
             # Removed phase_summary_generator=None, as it's no longer an __init__ param
             get_valid_orders_func=get_valid_orders # Pass the existing function

@@ -10,7 +10,7 @@ import toml
 if TYPE_CHECKING:
     from diplomacy import Game
     from .game_history import GameHistory
-    from .agent import DiplomacyAgent # Assuming DiplomacyAgent is in agent.py
+    # from .agent import DiplomacyAgent # Assuming DiplomacyAgent is in agent.py - REMOVED
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class GameConfig:
         self.game_history: "GameHistory" = GameHistory()
         self.game_instance: Optional["Game"] = None
         self.powers_and_models: Optional[Dict[str, str]] = None
-        self.agents: Optional[Dict[str, "DiplomacyAgent"]] = None # Dict mapping power_name to DiplomacyAgent instance
+        self.agents: Optional[Dict[str, "BaseAgent"]] = None # Dict mapping power_name to BaseAgent instance
 
         self.log_configuration()
 

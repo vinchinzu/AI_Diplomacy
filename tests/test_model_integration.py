@@ -1,6 +1,5 @@
 import pytest
 import llm
-import asyncio
 # AgentLLMInterface was removed in refactor
 from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 
@@ -15,12 +14,13 @@ def test_get_model_and_prompt():
     """
     Tests if the specified LLM model can be loaded and can respond to a simple prompt.
     """
+    _fail = pytest.fail # Local alias for pytest.fail
     try:
         model = llm.get_model(MODEL_ID)
     except llm.UnknownModelError as e:
-        pytest.fail(f"Failed to get model '{MODEL_ID}'. Is it installed and configured correctly? Error: {e}")
+        _fail(f"Failed to get model '{MODEL_ID}'. Is it installed and configured correctly? Error: {e}")
     except Exception as e:
-        pytest.fail(f"An unexpected error occurred while getting the model: {e}")
+        _fail(f"An unexpected error occurred while getting the model: {e}")
 
     assert model is not None, f"Model '{MODEL_ID}' could not be loaded."
 
@@ -32,11 +32,11 @@ def test_get_model_and_prompt():
         print(f"Synchronous prompt successful with {MODEL_ID}. Response: {response.text()}")
     except AttributeError as e:
         if "async_prompt" in str(e) or "prompt" not in dir(model):
-             pytest.fail(f"The model object for '{MODEL_ID}' does not have a `prompt` method. Available methods: {dir(model)}. Error: {e}")
+             _fail(f"The model object for '{MODEL_ID}' does not have a `prompt` method. Available methods: {dir(model)}. Error: {e}")
         else:
-            pytest.fail(f"AttributeError during synchronous prompt: {e}")
+            _fail(f"AttributeError during synchronous prompt: {e}")
     except Exception as e:
-        pytest.fail(f"An error occurred during synchronous prompt with '{MODEL_ID}': {e}")
+        _fail(f"An error occurred during synchronous prompt with '{MODEL_ID}': {e}")
 
     # Test a simple asynchronous prompt if the synchronous one worked
     # Note: We'll need an event loop to run this part of the test if it's not already managed by pytest-asyncio

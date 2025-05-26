@@ -3,7 +3,7 @@ Configuration management using Pydantic for validation and type safety.
 Supports both game-level and agent-level configuration.
 """
 from typing import List, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import yaml
 import logging
 
@@ -18,8 +18,7 @@ class GameConfig(BaseModel):
     max_years: Optional[int] = None
     log_level: str = "INFO"
     
-    class Config:
-        extra = "allow"  # Allow additional fields for flexibility
+    model_config = {"extra": "allow"}  # Allow additional fields for flexibility
 
 
 class AgentConfig(BaseModel):
@@ -31,26 +30,28 @@ class AgentConfig(BaseModel):
     personality_prompt: Optional[str] = Field(None, description="Path to personality prompt template")
     tool_whitelist: List[str] = Field(default_factory=list, description="Allowed MCP tools")
     
-    @validator('country')
+    @field_validator('country')
+    @classmethod
     def country_uppercase(cls, v):
         return v.upper()
     
-    @validator('type')
+    @field_validator('type')
+    @classmethod
     def validate_agent_type(cls, v):
         allowed_types = {'llm', 'scripted', 'human'}
         if v not in allowed_types:
             raise ValueError(f"Agent type must be one of {allowed_types}")
         return v
     
-    @validator('context_provider')
+    @field_validator('context_provider')
+    @classmethod
     def validate_context_provider(cls, v):
         allowed_providers = {'inline', 'mcp', 'auto'}
         if v not in allowed_providers:
             raise ValueError(f"Context provider must be one of {allowed_providers}")
         return v
     
-    class Config:
-        extra = "allow"
+    model_config = {"extra": "allow"}
 
 
 class DiplomacyConfig(BaseModel):
@@ -58,7 +59,8 @@ class DiplomacyConfig(BaseModel):
     game: GameConfig = Field(default_factory=GameConfig)
     agents: List[AgentConfig] = Field(default_factory=list)
     
-    @validator('agents')
+    @field_validator('agents')
+    @classmethod
     def validate_unique_countries(cls, v):
         countries = [agent.country for agent in v]
         if len(countries) != len(set(countries)):
@@ -152,8 +154,9 @@ def resolve_context_provider(agent_config: AgentConfig) -> str:
     """Resolve 'auto' context provider to concrete implementation."""
     if agent_config.context_provider != 'auto':
         return agent_config.context_provider
-    
-    if agent_config.model_id and supports_tools(agent_config.model_id):
+
+    # Check if model_id is not None before calling supports_tools
+    if agent_config.model_id is not None and supports_tools(agent_config.model_id):
         return 'mcp'
     else:
         return 'inline'

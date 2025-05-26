@@ -38,7 +38,7 @@ def render_prompt(template_filename: str, **kwargs) -> str:
     try:
         template = jinja2.Template(template_string)
         return template.render(**kwargs)
-    except jinja2.exceptions.TemplateSyntaxError as e:
+    except jinja2.TemplateSyntaxError as e:
         # Log or handle syntax errors in templates
         # For now, re-raise to make it visible
         raise Exception(f"Jinja2 template syntax error in {template_filename}: {e}") from e

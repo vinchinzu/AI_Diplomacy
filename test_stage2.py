@@ -4,13 +4,13 @@ Test script for Stage 2 of the refactor.
 Verifies that the pluggable context provider system works correctly.
 """
 
-import asyncio # Keep for async tests and pytest-asyncio
 import logging
 import pytest # Add pytest
 from unittest.mock import patch
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
+from ai_diplomacy.agents.base import Order # Import Order
 from ai_diplomacy.services.config import DiplomacyConfig, AgentConfig, GameConfig
 from ai_diplomacy.services.context_provider import (
     ContextProviderFactory, 
@@ -183,8 +183,13 @@ async def test_agent_with_context_providers():
     auto_agent = factory.create_agent("auto-test", "ENGLAND", auto_config, "test-game")
     
     # Check that agents have correct context providers
+    assert isinstance(inline_agent, LLMAgent)
     assert inline_agent.resolved_context_provider_type == "inline"
+    
+    assert isinstance(mcp_agent, LLMAgent)
     assert mcp_agent.resolved_context_provider_type == "inline"  # Should fallback since MCP not available
+    
+    assert isinstance(auto_agent, LLMAgent)
     assert auto_agent.resolved_context_provider_type == "inline"  # Should fallback since MCP not available
     
     # Create test phase state
@@ -199,30 +204,27 @@ async def test_agent_with_context_providers():
     )
     
     # Test that agents can call decide_orders with context providers
-    mock_orders_return_value = ["A PAR H"]
+    mock_llm_orders_string_output = '{"orders": ["A PAR H"]}'
+    expected_agent_orders = [Order("A PAR H")]
 
     # Test inline_agent
-    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_orders_return_value) as mock_llm_call_inline:
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_llm_orders_string_output) as mock_llm_call_inline:
         orders = await inline_agent.decide_orders(phase_state)
-        assert orders == mock_orders_return_value
+        assert orders == expected_agent_orders
         assert mock_llm_call_inline.call_count == 1
         logger.info(f"Inline agent generated {len(orders)} orders with mock")
 
     # Test mcp_agent
-    # Even if it tries mcp_llm_call, it should eventually hit llm_call_internal or similar.
-    # If MCP was truly available and used a different path, this mock might not be hit as expected.
-    # However, given current fallbacks, this should work.
-    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_orders_return_value) as mock_llm_call_mcp:
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_llm_orders_string_output) as mock_llm_call_mcp:
         orders = await mcp_agent.decide_orders(phase_state)
-        assert orders == mock_orders_return_value
-        # If mcp_agent truly fell back to inline provider path that uses llm_call_internal
+        assert orders == expected_agent_orders
         assert mock_llm_call_mcp.call_count == 1 
         logger.info(f"MCP agent generated {len(orders)} orders with mock (expected fallback to inline)")
 
     # Test auto_agent
-    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_orders_return_value) as mock_llm_call_auto:
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_llm_orders_string_output) as mock_llm_call_auto:
         orders = await auto_agent.decide_orders(phase_state)
-        assert orders == mock_orders_return_value
+        assert orders == expected_agent_orders
         assert mock_llm_call_auto.call_count == 1
         logger.info(f"Auto agent generated {len(orders)} orders with mock (expected fallback to inline)")
     

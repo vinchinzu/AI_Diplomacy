@@ -67,7 +67,7 @@ def test_basic_assignment_two_llm_players_no_primary():
         assert power_name in manager1.agents
         agent = manager1.get_agent(power_name)
         assert agent is not None
-        assert agent.power_name == power_name
+        assert agent.country == power_name
         # Type check for LLMAgent to access model_id
         from ai_diplomacy.agents.llm_agent import LLMAgent
         assert isinstance(agent, LLMAgent)
@@ -110,7 +110,8 @@ def test_exclude_powers_randomize_fixed_models():
     assert "TURKEY" not in assigned3
     # Ensure assigned powers are not from the excluded list
     for power_name in assigned3.keys():
-        assert power_name not in config3.exclude_powers
+        if config3.exclude_powers is not None:
+            assert power_name not in config3.exclude_powers
 
     manager3.initialize_agents(assigned3)
     for power_name in assigned3.keys():

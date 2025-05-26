@@ -4,16 +4,15 @@ import os
 from typing import Dict, List, Tuple, Set, Optional, TYPE_CHECKING
 from diplomacy import Game
 import csv
-
-if TYPE_CHECKING:
-    from .game_config import GameConfig
-# Removed: import llm 
+from diplomacy.engine.map import Map as GameMap
 import re
 import ast
 import json
 from .prompt_constructor import construct_order_generation_prompt
 from .services.llm_coordinator import LLMCoordinator
 
+if TYPE_CHECKING:
+    from .game_config import GameConfig
 
 logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
@@ -307,8 +306,8 @@ async def get_valid_orders(
     agent_goals: Optional[List[str]] = None, # Already present
     agent_relationships: Optional[Dict[str, str]] = None, # Already present
     agent_private_diary_str: Optional[str] = None, # Already present
-    log_file_path: str = None, # Already present
-    phase: str = None, # Already present
+    log_file_path: Optional[str] = None, # Already present
+    phase: Optional[str] = None, # Already present
     # dev_mode: bool = False # Added dev_mode, now part of config
 ) -> List[str]:
     """
@@ -319,7 +318,7 @@ async def get_valid_orders(
     coordinator = LLMCoordinator()
 
     prompt = construct_order_generation_prompt(
-        system_prompt=agent_system_prompt,
+        system_prompt=agent_system_prompt if agent_system_prompt is not None else "",
         game=game,
         board_state=board_state,
         power_name=power_name,
@@ -350,8 +349,8 @@ async def get_valid_orders(
             system_prompt_text=agent_system_prompt,
             game_id=game_id,
             agent_name=power_name, # Using power_name as agent_name
-            phase_str=phase,       # Using phase as phase_str
-            request_identifier=f"{power_name}-{phase}-order_gen"
+            phase_str=phase if phase is not None else "UNKNOWN_PHASE",       # Using phase as phase_str
+            request_identifier=f"{power_name}-{phase if phase is not None else 'unknown'}-order_gen"
         )
 
         llm_proposed_moves = _extract_moves_from_llm_response(raw_response, power_name, model_id)
@@ -503,3 +502,22 @@ def log_llm_response(
 # run_llm_and_log is now obsolete and removed.
 # LLM calls are made directly using llm.get_model().async_prompt()
 # and logging is handled by calling log_llm_response() immediately after.
+
+def normalize_order_for_game_map(order: str, game_map: Optional[GameMap]) -> Optional[str]:
+    """Normalizes an order string using the game map, if available."""
+    if not game_map:
+        return order # Return original if no map
+    if not order or not isinstance(order, str):
+        return None # Or raise error, or return original order
+
+    try:
+        # Use map's normalization methods directly
+        normalized = game_map.norm(order)
+        # Further split and normalize parts for complex orders if necessary
+        # (This part might need refinement depending on how complex orders are handled
+        #  and represented after initial normalization by game_map.norm)
+        return normalized
+    except Exception as e:
+        logger.warning(f"Could not normalize order '{order}' using game_map.norm: {e}")
+        # Fallback if normalization fails
+        return order

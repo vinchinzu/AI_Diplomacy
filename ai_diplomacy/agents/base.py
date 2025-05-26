@@ -18,6 +18,16 @@ class Order:
     def __repr__(self) -> str:
         return f"Order('{self.order_text}')"
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Order):
+            return self.order_text == other.order_text
+        if isinstance(other, str):
+            return self.order_text == other
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self.order_text)
+
 
 class Message:
     """Represents a diplomatic message between powers."""
@@ -32,6 +42,19 @@ class Message:
             "content": self.content,
             "message_type": self.message_type
         }
+
+    def __repr__(self) -> str:
+        return f"Message(recipient='{self.recipient}', content='{self.content}', message_type='{self.message_type}')"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Message):
+            return (self.recipient == other.recipient and
+                    self.content == other.content and
+                    self.message_type == other.message_type)
+        return False
+
+    def __hash__(self) -> int:
+        return hash((self.recipient, self.content, self.message_type))
 
 
 class BaseAgent(ABC):

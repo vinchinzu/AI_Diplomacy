@@ -60,7 +60,7 @@ def build_context_prompt(
     # centers_info = board_state["centers"].get(power_name, [])
 
     # Get the current phase
-    year_phase = board_state["phase"]  # e.g. 'S1901M'
+    year_phase = board_state["name"]  # e.g. 'S1901M'
 
     possible_orders_context_str = generate_rich_order_context(game, power_name, possible_orders)
 

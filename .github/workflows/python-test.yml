@@ -1,37 +1,90 @@
-name: Python tests
+name: Python CI with uv and ruff
 
-on: 
+on:
   push:
     branches: [ dev ]
   pull_request:
     branches: [ dev ]
 
 jobs:
-  test:
+  test-and-lint:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.13'] # Specify stable Python versions
+        # Add '3.13' or '3.13-dev' if you really need to test against pre-releases.
+        # Example: python-version: ['3.11', '3.12', '3.13']
+      fail-fast: false # Don't cancel all jobs if one Python version fails
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4         # v4 supports 3.13
+    - name: Set up Python ${{ matrix.python-version }}
+      # This step makes the specified Python version available on the runner.
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.13'
+        python-version: ${{ matrix.python-version }}
 
-    - name: Install uv
-      run: |
-        pip install --upgrade pip           # optional but good hygiene
-        pip install uv
+    - name: Set up uv
+      # This action installs uv and sets up caching for uv's global cache.
+      # It can also create and activate a virtual environment.
+      uses: astral-sh/setup-uv@v1
+      with:
+        # Optional: Specify the uv version, e.g., "0.1.40" or leave for latest
+        # version: "0.1.40"
+        # This tells uv which Python to use for creating environments.
+        python-version: ${{ matrix.python-version }}
+        # To create and activate a venv named .venv in the workspace root:
+        # activate-environment: true # This will create a venv at ./.venv and activate it
 
-    - name: Install project & dev deps with uv
-      run: |
-        # install your package in editable mode
-        uv pip install --editable .
-        # install the "dev" extra declared in pyproject (includes pytest, ruff, etc.)
-        uv pip install --group dev
-        # if you have a requirements.txt instead:
-        # uv pip install -r requirements.txt
+    # If you don't use `activate-environment: true` in setup-uv,
+    # you might need to explicitly create/activate a venv or use `uv run`.
+    # Example of explicit venv creation if not using `activate-environment`:
+    # - name: Create virtual environment
+    #   run: uv venv .venv --python ${{ matrix.python-version }}
 
-    - name: Run unit‑tests
+    # - name: Activate virtual environment
+    #   if: runner.os != 'Windows'
+    #   run: source .venv/bin/activate
+    # - name: Activate virtual environment (Windows)
+    #   if: runner.os == 'Windows'
+    #   run: .venv\Scripts\activate
+
+    - name: Install project and development dependencies
       run: |
+        # If "dev" is an optional-dependency (extra) in pyproject.toml:
+        # uv pip install --editable ".[dev]"
+        #
+        # If "dev" is a dependency group (e.g., in Hatch, PDM, or PEP 621 tools)
+        # This seems to be what you intended from your original workflow.
+        uv pip install --editable . --group dev
+        #
+        # If you have a requirements.txt for dev dependencies:
+        # uv pip install --editable .
+        # uv pip install -r requirements-dev.txt
+        #
+        # Consider using --system if you are NOT activating a venv and want tools
+        # available directly (uv manages shims).
+        # e.g., uv pip install --system --editable . --group dev
+        # However, if setup-uv's activate-environment is true, or you manually activated,
+        # installing into the active venv is standard.
+
+    - name: Lint with Ruff
+      # This action installs ruff (respecting version in pyproject.toml) and runs it.
+      uses: astral-sh/ruff-action@v1
+      with:
+        # Optional: specify Ruff version, e.g., "0.4.0" or leave for auto-detection
+        # version: "0.4.0"
+        # To run linter and formatter (checking for changes):
+        args: "check --diff . && ruff format --check --diff ."
+        # Or just lint:
+        # args: "check ."
+
+    - name: Run unit tests with pytest
+      run: |
+        # If setup-uv used `activate-environment: true` or you manually activated a venv:
         pytest -q
+        #
+        # If no environment is globally activated, use `uv run`:
+        # uv run pytest -q

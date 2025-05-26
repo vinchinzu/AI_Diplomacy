@@ -3,13 +3,16 @@
 from collections import deque
 from typing import Dict, List, Callable, Optional, Any, Set, Tuple
 from diplomacy.engine.map import Map as GameMap
-from diplomacy.engine.game import Game as BoardState
+# from diplomacy.engine.game import Game as BoardState # BoardState will be Dict - REMOVED
 import logging
 
 # Placeholder for actual map type from diplomacy.engine.map.Map
 # GameMap = Any 
 # Type hint for board_state dictionary from game.get_state()
 # BoardState = Dict[str, Any]
+
+# Type Aliases
+BoardState = Dict[str, Any] # board_state is consistently a dict from game.get_state()
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ def build_diplomacy_graph(game_map: GameMap) -> Dict[str, Dict[str, List[str]]]:
 def bfs_shortest_path(
     graph: Dict[str, Dict[str, List[str]]], 
     board_state: BoardState, 
-    game_map: GameMap, # Added game_map
+    game_map: GameMap, 
     start_loc_full: str, # This is a FULL location name like 'VIE' or 'STP/SC'
     unit_type: str, 
     is_target_func: Callable[[str, BoardState], bool] # Expects SHORT name for loc
@@ -136,7 +139,7 @@ def bfs_shortest_path(
     return None
 
 # --- Helper functions for context generation ---
-def get_unit_at_location(board_state: BoardState, location: str) -> Optional[str]:
+def get_unit_at_location(board_state: Dict[str, Any], location: str) -> Optional[str]:
     """Returns the full unit string (e.g., 'A PAR (FRA)') if a unit is at the location, else None."""
     for power, unit_list in board_state.get('units', {}).items():
         for unit_str in unit_list: # e.g., "A PAR", "F STP/SC"
@@ -161,7 +164,7 @@ def get_sc_controller(game_map: GameMap, board_state: BoardState, location: str)
 def get_shortest_path_to_friendly_unit(
     board_state: BoardState, 
     graph: Dict[str, Dict[str, List[str]]],
-    game_map: GameMap, # Added game_map
+    game_map: GameMap, 
     power_name: str, 
     start_unit_loc_full: str, 
     start_unit_type: str
@@ -169,6 +172,7 @@ def get_shortest_path_to_friendly_unit(
     """Finds the shortest path to any friendly unit of the same power."""
     
     def is_target_friendly(loc_short: str, current_board_state: BoardState) -> bool:
+        assert isinstance(current_board_state, dict) # Ensure it's the dict state
         # loc_short is a short province name. Need to check all its full locations.
         full_locs_for_short = game_map.loc_coasts.get(loc_short, [loc_short])
         for full_loc_variant in full_locs_for_short:
@@ -195,7 +199,7 @@ def get_shortest_path_to_friendly_unit(
 def get_nearest_enemy_units(
     board_state: BoardState, 
     graph: Dict[str, Dict[str, List[str]]],
-    game_map: GameMap, # Added game_map
+    game_map: GameMap, 
     power_name: str, 
     start_unit_loc_full: str, 
     start_unit_type: str, 
@@ -221,12 +225,16 @@ def get_nearest_enemy_units(
 
     for target_enemy_loc_full, enemy_unit_str in all_enemy_unit_locations_full:
         target_enemy_loc_short = game_map.loc_name.get(target_enemy_loc_full, target_enemy_loc_full)
-        if '/' in target_enemy_loc_short:
-            target_enemy_loc_short = target_enemy_loc_short[:3]
-        if '/' not in target_enemy_loc_full:
-            target_enemy_loc_short = target_enemy_loc_full[:3]
-        else:
-            target_enemy_loc_short = target_enemy_loc_full[:3]
+        if target_enemy_loc_short: # Ensure it's not None
+            if '/' in target_enemy_loc_short:
+                target_enemy_loc_short = target_enemy_loc_short[:3]
+            # The following is redundant if the above is correct, game_map.loc_name.get should handle this.
+            # if '/' not in target_enemy_loc_full: # This check is on the wrong variable
+            #    target_enemy_loc_short = target_enemy_loc_full[:3]
+            # else:
+            #    target_enemy_loc_short = target_enemy_loc_full[:3]
+        else: # Should ideally not happen if target_enemy_loc_full is valid
+            target_enemy_loc_short = target_enemy_loc_full[:3] # Fallback, might be incorrect if target_enemy_loc_full is complex
             
         def is_specific_enemy_loc(loc_short: str, current_board_state: BoardState) -> bool:
             # Check if loc_short corresponds to target_enemy_loc_full
@@ -456,3 +464,36 @@ def generate_rich_order_context(game: Any, power_name: str, possible_orders_for_
 
     final_context_lines.append("</PossibleOrdersContext>")
     return "\n".join(final_context_lines)
+
+def get_enemy_unit_context_for_orders(
+    power_name: str, 
+    board_state: Dict[str, Any], 
+    game_map: GameMap, 
+    max_enemy_units_to_report: int = 10
+) -> str:
+    """Generates context about enemy units for the order generation prompt."""
+    all_enemy_unit_locations_full: List[Tuple[str,str]] = [] # (loc_full, unit_str_full)
+    # board_state.get("units", {}) has format: { "POWER_NAME": ["A PAR", "F BRE"], ... }
+    for p_name, unit_list_for_power in board_state.get("units", {}).items():
+        if p_name != power_name: # If it's an enemy power
+            for unit_repr_from_state in unit_list_for_power: # e.g., "A PAR" or "F STP/SC"
+                parts = unit_repr_from_state.split(" ")
+                if len(parts) == 2:
+                    loc_full = parts[1]       # 'PAR' or 'STP/SC'
+                    full_unit_str_with_power = get_unit_at_location(board_state, loc_full) # Use existing helper
+                    if full_unit_str_with_power:
+                        all_enemy_unit_locations_full.append((loc_full, full_unit_str_with_power))
+    
+    # Sort by location for consistent output, then take the top N
+    all_enemy_unit_locations_full.sort()
+    selected_enemy_units = all_enemy_unit_locations_full[:max_enemy_units_to_report]
+    
+    if not selected_enemy_units:
+        return "  No enemy units on the board or relevant to report."
+
+    context_lines = ["<EnemyUnitsContext>"]
+    context_lines.append(f"  Enemy units on board (up to {max_enemy_units_to_report}):")
+    for loc_full, unit_str_full in selected_enemy_units:
+        context_lines.append(f"    {unit_str_full} at {loc_full}")
+    context_lines.append("</EnemyUnitsContext>")
+    return "\n".join(context_lines)

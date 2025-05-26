@@ -2,7 +2,7 @@ import os
 import logging
 import re
 import json
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 import json_repair
 import json5
@@ -66,9 +66,10 @@ def clean_json_text(text: str) -> str:
     return text.strip()
 
 # Moved from DiplomacyAgent class in agent.py and adapted
-def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_for_log: str = "") -> Dict:
+def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_for_log: str = "") -> Any:
     """
     Extract and parse JSON from text, handling common LLM response formats.
+    Returns the parsed JSON object (usually a dict or list), or the original text if parsing fails.
 
     Args:
         text: The input string from which to extract JSON.
@@ -102,49 +103,61 @@ def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_f
         r"`(\{.*?\})`",
     ]
     
-    for pattern_idx, current_pattern in enumerate(patterns): # Renamed pattern to current_pattern
-        matches = re.findall(current_pattern, text, re.DOTALL)
-        if matches:
-            for match_idx, match in enumerate(matches):
-                json_text = match.strip()
-                
-                try:
-                    cleaned = clean_json_text(json_text) # Use standalone clean_json_text
-                    result = json.loads(cleaned)
-                    logger_param.debug(f"{identifier_for_log} Successfully parsed JSON with pattern {pattern_idx}, match {match_idx}")
-                    return result
-                except json.JSONDecodeError as e_initial:
-                    logger_param.debug(f"{identifier_for_log} Standard JSON parse failed: {e_initial}")
-                    
-                    try:
-                        cleaned_match_candidate = json_text
-                        cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', cleaned_match_candidate)
-                        cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=\s*\}\s*$)', '', cleaned_match_candidate)
-                        cleaned_match_candidate = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', cleaned_match_candidate)
-                        cleaned_match_candidate = re.sub(r',\s*}', '}', cleaned_match_candidate)
-                        for pp_key in problematic_patterns: # Renamed pattern to pp_key
-                            cleaned_match_candidate = cleaned_match_candidate.replace(f'\n  "{pp_key}"', f'"{pp_key}"')
-                        cleaned_match_candidate = re.sub(r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate)
+    for pattern_str in patterns:
+        match = re.search(pattern_str, text, re.DOTALL)
+        if match:
+            content_to_parse = match.group(1).strip()
 
-                        if cleaned_match_candidate != json_text:
-                            logger_param.debug(f"{identifier_for_log} Surgical cleaning applied. Attempting to parse modified JSON.")
-                            return json.loads(cleaned_match_candidate)
-                    except json.JSONDecodeError as e_surgical:
-                        logger_param.debug(f"{identifier_for_log} Surgical cleaning didn't work: {e_surgical}")
+            if pattern_str == patterns[0] and content_to_parse and \
+               not content_to_parse.startswith('{') and not content_to_parse.endswith('}'):
+                # If it's the content from {{...}} and it's not already a JSON object string
+                # try wrapping it to make it one. E.g. if content is '"key": "value"'
+                potential_json_obj_str = "{" + content_to_parse + "}"
+                try:
+                    data = json.loads(potential_json_obj_str)
+                    logger_param.debug(f"{identifier_for_log} Successfully parsed content from '{{{{...}}}}' by wrapping: {pattern_str}")
+                    return data
+                except json.JSONDecodeError:
+                    logger_param.debug(f"{identifier_for_log} Wrapping content from '{{{{...}}}}' did not result in valid JSON. Proceeding with original content for further parsing/repair.")
+                    # Fall through to try parsing content_to_parse as is, then repair etc. on original content_to_parse
+
+            try:
+                cleaned = clean_json_text(content_to_parse)
+                result = json.loads(cleaned)
+                logger_param.debug(f"{identifier_for_log} Successfully parsed JSON with pattern {pattern_str}")
+                return result
+            except json.JSONDecodeError as e_initial:
+                logger_param.debug(f"{identifier_for_log} Standard JSON parse failed: {e_initial}")
                 
                 try:
-                    result = json5.loads(json_text)
-                    logger_param.debug(f"{identifier_for_log} Successfully parsed with json5")
-                    return result
-                except Exception as e:
-                    logger_param.debug(f"{identifier_for_log} json5 parse failed: {e}")
-                
-                try:
-                    result = json_repair.loads(json_text)
-                    logger_param.debug(f"{identifier_for_log} Successfully parsed with json-repair")
-                    return result
-                except Exception as e:
-                    logger_param.debug(f"{identifier_for_log} json-repair failed: {e}")
+                    cleaned_match_candidate = content_to_parse
+                    cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=[,\}\]])', '', cleaned_match_candidate)
+                    cleaned_match_candidate = re.sub(r'\s*([A-Z][\w\s,]*?\.(?:\s+[A-Z][\w\s,]*?\.)*)\s*(?=\s*\}\s*$)', '', cleaned_match_candidate)
+                    cleaned_match_candidate = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', cleaned_match_candidate)
+                    cleaned_match_candidate = re.sub(r',\s*}', '}', cleaned_match_candidate)
+                    for pp_key in problematic_patterns: # Renamed pattern to pp_key
+                        cleaned_match_candidate = cleaned_match_candidate.replace(f'\n  "{pp_key}"', f'"{pp_key}"')
+                    cleaned_match_candidate = re.sub(r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate)
+
+                    if cleaned_match_candidate != content_to_parse:
+                        logger_param.debug(f"{identifier_for_log} Surgical cleaning applied. Attempting to parse modified JSON.")
+                        return json.loads(cleaned_match_candidate)
+                except json.JSONDecodeError as e_surgical:
+                    logger_param.debug(f"{identifier_for_log} Surgical cleaning didn't work: {e_surgical}")
+            
+            try:
+                result = json5.loads(content_to_parse)
+                logger_param.debug(f"{identifier_for_log} Successfully parsed with json5")
+                return result
+            except Exception as e:
+                logger_param.debug(f"{identifier_for_log} json5 parse failed: {e}")
+            
+            try:
+                result = json_repair.loads(content_to_parse)
+                logger_param.debug(f"{identifier_for_log} Successfully parsed with json-repair")
+                return result
+            except Exception as e:
+                logger_param.debug(f"{identifier_for_log} json-repair failed: {e}")
     
     try:
         start = text.find('{')

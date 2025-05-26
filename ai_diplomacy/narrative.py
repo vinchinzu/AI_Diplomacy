@@ -56,7 +56,7 @@ def _call_llm_for_narrative(statistical_summary: str, phase_key: str) -> str:
         return "(Narrative generation disabled – model not configured)."
 
     try:
-        model = llm.get_model(model_id_to_use, options={"host": os.environ.get("OLLAMA_HOST")})
+        model = llm.get_model(model_id_to_use)
     except llm.UnknownModelError:
         LOGGER.error(f"Narrative generation failed: Unknown model '{model_id_to_use}'. Check llm configuration and installed plugins.")
         return f"(Narrative generation failed - unknown model: {model_id_to_use})"
@@ -112,7 +112,7 @@ def _patched_generate_phase_summary(self: Game, phase_key, summary_callback=None
     try:
         if phase_data and hasattr(phase_data, 'summary'): # Check if phase_data exists and has summary attribute
             phase_data.summary = narrative  # type: ignore[attr-defined]
-            self.phase_summaries[str(phase_key)] = narrative 
+            # self.phase_summaries[str(phase_key)] = narrative 
             LOGGER.debug(f"[{phase_key}] Narrative summary stored successfully.")
         elif phase_data:
             LOGGER.warning(f"[{phase_key}] phase_data exists but does not have attribute 'summary'. Cannot store narrative. Type: {type(phase_data)}")

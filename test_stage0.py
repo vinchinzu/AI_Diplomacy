@@ -4,7 +4,6 @@ Test script for Stage 0 of the refactor.
 Verifies that the new directory structure and basic components work.
 """
 
-import asyncio # Keep for test_scripted_agent if it uses asyncio directly, or for pytest-asyncio
 import logging
 import pytest # Add pytest
 from ai_diplomacy.core.state import PhaseState

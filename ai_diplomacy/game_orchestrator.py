@@ -6,6 +6,7 @@ from enum import Enum
 
 from diplomacy import Game  # Removed Phase import
 # Removed: from diplomacy.utils.export import to_saved_game_format
+from .utils import gather_possible_orders # Import gather_possible_orders
 
 # Add a local Enum for phase types
 class PhaseType(Enum):
@@ -14,10 +15,12 @@ class PhaseType(Enum):
     BLD = "A"
 
 if TYPE_CHECKING:
-    from .game_config import GameConfig
+    from diplomacy import Game
     from .agent_manager import AgentManager
     from .game_history import GameHistory # Removed Message as GameHistoryMessage
-    from .agent import DiplomacyAgent
+    # from .agent import DiplomacyAgent - REMOVED
+    from .agents.base import BaseAgent # Added for LLMAgent hint
+    from .services.config import GameConfig
 
 
 logger = logging.getLogger(__name__)
@@ -122,10 +125,10 @@ class GamePhaseOrchestrator:
                     all_orders_for_phase = await self._execute_movement_phase_actions(game, game_history)
                 elif phase_type == PhaseType.RET.value:
                     all_orders_for_phase = await self._execute_retreat_phase_actions(game, game_history)
-                elif phase_type == PhaseType.BLD.value:
+                elif "BUILD" in game.phase.upper():
                     all_orders_for_phase = await self._execute_build_phase_actions(game, game_history)
                 else:
-                    logger.error(f"Unknown phase type: {game.get_phase_type()}. Skipping.")
+                    logger.error(f"Unknown phase type: {game.phase}. Skipping.")
                     game.process() # Process to advance the phase
                     continue 
 
@@ -280,29 +283,39 @@ class GamePhaseOrchestrator:
         return orders_by_power
 
     async def _get_orders_for_power(
-        self, game: 'Game', power_name: str, agent: 'DiplomacyAgent', game_history: 'GameHistory' # Removed num_negotiation_rounds
+        self, game: 'Game', power_name: str, agent: 'BaseAgent', game_history: 'GameHistory' # Removed num_negotiation_rounds
     ) -> List[str]:
         """Helper to call the passed get_valid_orders_func."""
-        # The get_valid_orders_func is expected to be the function from lm_game.py (or its refactored equivalent)
-        # The parameter num_negotiation_rounds was not used in this function.
-        # Its signature is: async def get_valid_orders(game, model_id, agent_system_prompt, board_state, power_name, possible_orders, game_history, model_error_stats, agent_goals, agent_relationships, agent_private_diary_str, log_file_path, phase)
-        model_error_stats: dict = {}
+        from .agents.llm_agent import LLMAgent # Local import for isinstance check
+
+        if not isinstance(agent, LLMAgent):
+            logger.error(f"_get_orders_for_power called with non-LLMAgent for {power_name}. Agent type: {type(agent)}. Returning empty orders.")
+            return []
+
+        # Now safe to access LLMAgent specific attributes
         board_state = game.get_state()
-        possible_orders = agent.llm_interface.coordinator.gather_possible_orders(game, power_name) if hasattr(agent.llm_interface.coordinator, 'gather_possible_orders') else game.get_all_possible_orders()
+        
+        # Gather possible orders using the coordinator from the agent if available, or fallback.
+        # This part is tricky as BaseAgent doesn't guarantee an llm_interface or coordinator.
+        # LLMAgent has self.llm_coordinator. For a generic BaseAgent, this is problematic.
+        # For now, we assume if it's an LLMAgent, it has what it needs for possible_orders.
+        # The get_valid_orders_func might also handle this. This needs review.
+        possible_orders = gather_possible_orders(game, power_name) # Defaulting to basic gather
+
         return await self.get_valid_orders_func(
             game,
-            agent.model_id,
-            agent.system_prompt,
+            agent.model_id, # model_id is on BaseAgent
+            agent.system_prompt, # LLMAgent specific
             board_state,
             power_name,
-            possible_orders,
+            possible_orders, 
             game_history,
-            model_error_stats,
-            agent.goals,
-            agent.relationships,
-            agent.format_private_diary_for_prompt(),
+            agent.goals, # LLMAgent specific
+            agent.relationships, # LLMAgent specific
+            agent.format_private_diary_for_prompt(), # LLMAgent specific
             self.config.llm_log_path,
             game.get_current_phase(),
+            self.config # Pass the whole GameConfig
         )
 
     async def _process_phase_results_and_updates(

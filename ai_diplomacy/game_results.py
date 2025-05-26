@@ -14,9 +14,6 @@ try:
     from diplomacy.utils.export import to_saved_game_format
 except ImportError:
     logging.error("Diplomacy library not found. GameResultsProcessor might not function correctly for 'Game' objects.")
-    # Define Game as a placeholder if not found, to allow type hinting to work somewhat
-    if 'Game' not in globals(): # Check if already defined by a previous attempt or TYPE_CHECKING block
-        Game = type('Game', (object,), {})
 
 
 if TYPE_CHECKING:
@@ -240,7 +237,7 @@ class GameResultsProcessor:
             logger.warning("No power information available for final results.")
 
         # Try to get winner information from game object
-        if hasattr(game_instance, 'get_winners'):
+        if hasattr(game_instance, 'get_winners') and callable(getattr(game_instance, 'get_winners')):
             try:
                 winners = game_instance.get_winners()
                 if winners:
@@ -248,7 +245,7 @@ class GameResultsProcessor:
             except Exception as e:
                 logger.warning(f"Could not determine winners: {e}")
         else:
-            logger.warning("Game object does not have 'get_winners' method to determine winner.")
+            logger.warning("Game object does not have a callable 'get_winners' method.")
 
         logger.info("-" * 26)
 
@@ -390,9 +387,9 @@ if __name__ == '__main__':
     mock_game_instance = MockDiplomacyGame()
     mock_game_history = MockGameHistoryResults()
     
-    # Test saving game state and history
+    # Test saving game state
     logger.info("\n--- Testing save_game_state ---")
-    results_processor.save_game_state(mock_game_instance, mock_game_history)
+    results_processor.save_game_state(mock_game_instance, mock_game_history) # type: ignore
     
     # Test saving agent manifestos
     logger.info("\n--- Testing save_agent_manifestos ---")
@@ -404,7 +401,7 @@ if __name__ == '__main__':
     
     # Test logging final results
     logger.info("\n--- Testing log_final_results ---")
-    results_processor.log_final_results(mock_game_instance)
+    results_processor.log_final_results(mock_game_instance) # type: ignore
 
     logger.info(f"\nCheck the directory '{test_config.game_id_specific_log_dir}' for output files.")
     logger.info("--- GameResultsProcessor Test Complete ---")

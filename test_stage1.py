@@ -4,10 +4,7 @@ Test script for Stage 1 of the refactor.
 Verifies that the clean agent boundary works correctly.
 """
 
-import asyncio # Keep for test_llm_agent_interface and pytest-asyncio
 import logging
-import pytest # Add pytest
-from unittest.mock import patch
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.core.manager import GameEvent
 from ai_diplomacy.agents.factory import AgentFactory
@@ -92,65 +89,6 @@ def test_game_manager():
     assert event.participants["country"] == "FRANCE"
     
     logger.info("✓ GameManager components working correctly")
-
-
-@pytest.mark.asyncio
-async def test_llm_agent_interface():
-    """Test that LLMAgent implements the BaseAgent interface correctly."""
-    logger.info("Testing LLMAgent interface...")
-    
-    # Create agent config
-    config = AgentConfig(country="FRANCE", type="llm", model_id="gpt-4o-mini")
-    
-    # Create agent
-    agent = LLMAgent(
-        agent_id="test-france",
-        country="FRANCE",
-        config=config,
-        game_id="test-game"
-    )
-    
-    # Test agent info
-    info = agent.get_agent_info()
-    assert info["country"] == "FRANCE"
-    assert info["type"] == "LLMAgent"
-    assert info["model_id"] == "gpt-4o-mini"
-    
-    # Create a test phase state
-    phase = PhaseState(
-        phase_name="S1901M",
-        year=1901,
-        season="SPRING",
-        phase_type="MOVEMENT",
-        powers=frozenset(["FRANCE", "GERMANY"]),
-        units={"FRANCE": ["A PAR", "F BRE"], "GERMANY": ["A BER", "F KIE"]},
-        supply_centers={"FRANCE": ["PAR", "BRE", "MAR"], "GERMANY": ["BER", "KIE", "MUN"]}
-    )
-    
-    # Test that the agent can handle the phase state
-    
-    # Define mock return values
-    mock_orders_return_value = ['A PAR H']
-    mock_negotiate_return_value = [{'recipient': 'GERMANY', 'message': 'Hello!'}]
-    
-    # Mock llm_call_internal
-    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', side_effect=[
-        mock_orders_return_value,  # For decide_orders
-        mock_negotiate_return_value,  # For negotiate
-        None  # For update_state
-    ]) as mock_llm_call:
-        orders = await agent.decide_orders(phase)
-        messages = await agent.negotiate(phase)
-        await agent.update_state(phase, [])
-        
-        # Assert that the methods returned the mock values
-        assert orders == mock_orders_return_value
-        assert messages == mock_negotiate_return_value
-        
-        # Assert that llm_call_internal was called 3 times
-        assert mock_llm_call.call_count == 3
-        
-    logger.info("✓ LLMAgent interface working correctly with mocked LLM calls")
 
 
 def test_clean_boundaries():

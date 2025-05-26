@@ -1,15 +1,16 @@
 import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
-from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 # AgentLLMInterface was removed in refactor
 from ai_diplomacy.game_config import GameConfig
 from diplomacy import Game
 from ai_diplomacy.game_history import GameHistory
-from ai_diplomacy.utils import get_valid_orders # Step 1: Import get_valid_orders
+from ai_diplomacy.utils import get_valid_orders, gather_possible_orders # Step 1: Import get_valid_orders and gather_possible_orders
 
 # Helper class for configuration, can be defined at module level
 class TestArgs:
+    __test__ = False # Prevent pytest from collecting this as a test class
+
     def __init__(self):
         self.power_name = "FRANCE"
         self.model_ids = ["test_model"]
@@ -31,7 +32,7 @@ class TestArgs:
 @pytest.fixture
 def common_mocks():
     args = TestArgs()
-    config = GameConfig(args)
+    config = GameConfig(args) # type: ignore
 
     game = Game()
     # game.phase = "S1901M" # Set phase directly - this is usually handled by game processing
@@ -40,8 +41,9 @@ def common_mocks():
     # However, diplomacy.Game() starts in S1901M by default.
 
     game_history = MagicMock(spec=GameHistory)
-    game_history.get_event_log_for_power.return_value = "Fake history log"
-    game_history.get_full_event_log.return_value = "Fake full history log"
+    # Removed obsolete mock setups for methods not on GameHistory spec or not used by current SUT
+    # game_history.get_event_log_for_power.return_value = "Fake history log"
+    # game_history.get_full_event_log.return_value = "Fake full history log"
     game_history.get_messages_this_round.return_value = "Fake messages for this round"
     
     # agent_interface is None in the original setup for these tests
@@ -79,7 +81,8 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
     # Ensure game phase is S1901M for get_all_possible_orders to be accurate
     # game.phase = "S1901M" # diplomacy.Game() starts in S1901M
     
-    possible_orders = game.get_all_possible_orders()
+    # Use power-specific possible orders
+    power_specific_possible_orders = gather_possible_orders(game, power_name)
 
     mock_response_json_string = '{"orders": ["A PAR H", "A MAR H", "F BRE H"]}'
     # llm_call_internal is async, so its mock should be awaitable or return an awaitable
@@ -96,7 +99,7 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
         agent_system_prompt="System prompt for FRANCE",
         board_state=game.get_state(), # board_state is phase dependent
         power_name=power_name,
-        possible_orders=possible_orders,
+        possible_orders=power_specific_possible_orders, # Use power-specific
         game_history=game_history,
         game_id=config.game_id,
         config=config,
@@ -107,7 +110,8 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
     )
 
     mock_llm_call_internal.assert_called_once()
-    assert orders == ["A PAR H", "A MAR H", "F BRE H"]
+    # Sort both lists for comparison as order is not guaranteed
+    assert sorted(orders) == sorted(["A PAR H", "A MAR H", "F BRE H"])
 
 @pytest.mark.asyncio
 @patch('ai_diplomacy.services.llm_coordinator.llm_call_internal')
@@ -120,19 +124,21 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
     game.set_units("FRANCE", ["A PAR", "A MAR", "F BRE"])
     # game.phase = "S1901M"
 
-    possible_orders_for_france = {
-        loc: game.get_all_possible_orders()[loc]
-        for loc in game.get_orderable_locations(power_name)
-    }
+    # Use power-specific possible orders
+    power_specific_possible_orders = gather_possible_orders(game, power_name)
+    
+    # expected_fallback_orders should be calculated based on these power_specific_possible_orders
     expected_fallback_orders = []
-    for loc in game.get_orderable_locations(power_name):
-        unit_type = loc.split()[0]
-        unit_loc = loc.split()[1]
-        hold_order = f"{unit_type} {unit_loc} H"
-        if hold_order in possible_orders_for_france[loc]:
-            expected_fallback_orders.append(hold_order)
-        elif possible_orders_for_france[loc]:
-            expected_fallback_orders.append(possible_orders_for_france[loc][0])
+    for loc_str_key in power_specific_possible_orders: # loc_str_key is like "A PAR"
+        orders_for_loc = power_specific_possible_orders[loc_str_key]
+        # unit_type = loc_str_key.split()[0] # Not needed if using holds[0] or orders_for_loc[0]
+        # unit_loc_name = loc_str_key.split()[1]
+        hold_order_candidates = [o for o in orders_for_loc if o.endswith(" H")]
+
+        if hold_order_candidates:
+            expected_fallback_orders.append(hold_order_candidates[0])
+        elif orders_for_loc: # If no hold, take the first available order
+            expected_fallback_orders.append(orders_for_loc[0])
     expected_fallback_orders.sort()
 
     mock_response_malformed_json_string = '{"orders": ["A PAR H", "A MAR H", "F BRE H"'
@@ -143,7 +149,8 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
     orders = await get_valid_orders(
         game=game, model_id="test_model", agent_system_prompt="System prompt",
         board_state=game.get_state(), power_name=power_name,
-        possible_orders=possible_orders_for_france, game_history=game_history, game_id=config.game_id,
+        possible_orders=power_specific_possible_orders, # Use power-specific
+        game_history=game_history, game_id=config.game_id,
         config=config,
         phase=game.phase
     )
@@ -163,19 +170,19 @@ async def test_mock_get_valid_orders_empty_response(mock_llm_call_internal, comm
     game.set_units("FRANCE", ["A PAR", "A MAR", "F BRE"])
     # game.phase = "S1901M"
 
-    possible_orders_for_france = {
-        loc: game.get_all_possible_orders()[loc]
-        for loc in game.get_orderable_locations(power_name)
-    }
+    # Use power-specific possible orders
+    power_specific_possible_orders = gather_possible_orders(game, power_name)
+
+    # expected_fallback_orders should be calculated based on these power_specific_possible_orders
     expected_fallback_orders = []
-    for loc in game.get_orderable_locations(power_name):
-        unit_type = loc.split()[0]
-        unit_loc = loc.split()[1]
-        hold_order = f"{unit_type} {unit_loc} H"
-        if hold_order in possible_orders_for_france[loc]:
-            expected_fallback_orders.append(hold_order)
-        elif possible_orders_for_france[loc]:
-            expected_fallback_orders.append(possible_orders_for_france[loc][0])
+    for loc_str_key in power_specific_possible_orders: # loc_str_key is like "A PAR"
+        orders_for_loc = power_specific_possible_orders[loc_str_key]
+        hold_order_candidates = [o for o in orders_for_loc if o.endswith(" H")]
+
+        if hold_order_candidates:
+            expected_fallback_orders.append(hold_order_candidates[0])
+        elif orders_for_loc: # If no hold, take the first available order
+            expected_fallback_orders.append(orders_for_loc[0])
     expected_fallback_orders.sort()
 
     mock_empty_response_string = ""
@@ -186,7 +193,8 @@ async def test_mock_get_valid_orders_empty_response(mock_llm_call_internal, comm
     orders = await get_valid_orders(
         game=game, model_id="test_model", agent_system_prompt="System prompt",
         board_state=game.get_state(), power_name=power_name,
-        possible_orders=possible_orders_for_france, game_history=game_history, game_id=config.game_id,
+        possible_orders=power_specific_possible_orders, # Use power-specific
+        game_history=game_history, game_id=config.game_id,
         config=config,
         phase=game.phase
     )
