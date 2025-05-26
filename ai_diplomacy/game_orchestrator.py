@@ -88,6 +88,16 @@ class GamePhaseOrchestrator:
                 # Check for max_years condition
                 if self.config.max_years and current_year is not None and current_year >= self.config.max_years:
                     logger.info(f"Reached max_year {self.config.max_years}. Ending game.")
+                    # Properly mark the game as completed
+                    try:
+                        game.draw()  # This sets status to COMPLETED and marks game as done
+                        logger.info("Game marked as completed via draw.")
+                    except Exception as e:
+                        logger.warning(f"Could not call game.draw(): {e}. Setting status manually.")
+                        if hasattr(game, 'set_status'):
+                            game.set_status('COMPLETED')
+                        if hasattr(game, 'phase'):
+                            game.phase = 'COMPLETED'
                     break
 
                 if game.is_game_done:
@@ -132,6 +142,16 @@ class GamePhaseOrchestrator:
                     if (current_phase_type == PhaseType.BLD.value and "WINTER" in current_phase_val.upper()) or \
                        ("WINTER" in current_phase_val.upper() and game.is_game_done):
                         logger.info(f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_val}.")
+                        # Properly mark the game as completed
+                        try:
+                            game.draw()  # This sets status to COMPLETED and marks game as done
+                            logger.info("Game marked as completed via draw.")
+                        except Exception as e:
+                            logger.warning(f"Could not call game.draw(): {e}. Setting status manually.")
+                            if hasattr(game, 'set_status'):
+                                game.set_status('COMPLETED')
+                            if hasattr(game, 'phase'):
+                                game.phase = 'COMPLETED'
                         break
             logger.info(f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}")
         except AttributeError as e:

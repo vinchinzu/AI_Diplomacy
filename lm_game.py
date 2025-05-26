@@ -167,7 +167,7 @@ async def main():
         # 5. Assign models and Initialize Agents
         # Use all powers from the game instance for assignment.
         all_game_powers = list(game.powers.keys())
-        powers_and_models_map = agent_manager.assign_models_to_powers(all_game_powers)
+        powers_and_models_map = agent_manager.assign_models(all_game_powers)
         
         if not powers_and_models_map:
             logger.error("No LLM-controlled powers were assigned. Exiting.")

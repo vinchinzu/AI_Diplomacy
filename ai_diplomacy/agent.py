@@ -37,6 +37,7 @@ class DiplomacyAgent:
         self, 
         power_name: str, 
         model_id: str, # Changed from client: BaseModelClient
+        game_id: str = "unknown_game",  # Add game_id parameter
         initial_goals: Optional[List[str]] = None,
         initial_relationships: Optional[Dict[str, str]] = None,
     ):
@@ -46,6 +47,7 @@ class DiplomacyAgent:
         Args:
             power_name: The name of the power this agent represents (e.g., 'FRANCE').
             model_id: The llm-compatible model ID string for LLM interaction.
+            game_id: The ID of the game this agent is playing in.
             initial_goals: An optional list of initial strategic goals.
             initial_relationships: An optional dictionary mapping other power names to 
                                      relationship statuses (e.g., 'ALLY', 'ENEMY', 'NEUTRAL').
@@ -55,6 +57,7 @@ class DiplomacyAgent:
 
         self.power_name: str = power_name
         self.model_id: str = model_id
+        self.game_id: str = game_id  # Store game_id
         
         # Validate the model_id at initialization
         try:
@@ -309,9 +312,10 @@ class DiplomacyAgent:
                 system_prompt=self.system_prompt,
                 request_identifier=f"{self.power_name}-negotiation_diary",
                 expected_json_fields=["negotiation_summary"],  # Main field we expect
-                log_file_path=log_file_path,
-                power_name=self.power_name,
-                phase=game.current_short_phase,
+                game_id=self.game_id,
+                agent_name=self.power_name,
+                phase_str=game.current_short_phase,
+                log_to_file_path=log_file_path,
                 response_type="negotiation_diary"
             )
 
@@ -440,9 +444,10 @@ class DiplomacyAgent:
             system_prompt=self.system_prompt,
             request_identifier=f"{self.power_name}-order_diary",
             expected_json_fields=["order_summary"],
-            log_file_path=log_file_path,
-            power_name=self.power_name,
-            phase=game.current_short_phase,
+            game_id=self.game_id,
+            agent_name=self.power_name,
+            phase_str=game.current_short_phase,
+            log_to_file_path=log_file_path,
             response_type="order_diary"
         )
 
@@ -527,9 +532,10 @@ class DiplomacyAgent:
             system_prompt=self.system_prompt,
             request_identifier=f"{self.power_name}-phase_result_diary",
             expected_json_fields=None,  # This might return plain text or JSON
-            log_file_path=log_file_path,
-            power_name=self.power_name,
-            phase=game.current_short_phase,
+            game_id=self.game_id,
+            agent_name=self.power_name,
+            phase_str=game.current_short_phase,
+            log_to_file_path=log_file_path,
             response_type="phase_result_diary"
         )
 
@@ -625,9 +631,10 @@ class DiplomacyAgent:
                 system_prompt=self.system_prompt,
                 request_identifier=f"{power_name}-state_update",
                 expected_json_fields=["reasoning", "relationships", "goals"],
-                log_file_path=log_file_path,
-                power_name=power_name,
-                phase=current_phase,
+                game_id=self.game_id,
+                agent_name=power_name,
+                phase_str=current_phase,
+                log_to_file_path=log_file_path,
                 response_type="state_update"
             )
 
@@ -734,9 +741,10 @@ class DiplomacyAgent:
             system_prompt=self.system_prompt,
             request_identifier=f"{self.power_name}-plan_generation",
             expected_json_fields=None,  # No JSON expected for planning
-            log_file_path=log_file_path,
-            power_name=self.power_name,
-            phase=game.current_short_phase,
+            game_id=self.game_id,
+            agent_name=self.power_name,
+            phase_str=game.current_short_phase,
+            log_to_file_path=log_file_path,
             response_type="plan_generation"
         )
 
@@ -810,9 +818,10 @@ class DiplomacyAgent:
             system_prompt=self.system_prompt,
             request_identifier=f"{self.power_name}-message_generation",
             expected_json_fields=None,  # Messages can have various formats
-            log_file_path=log_file_path,
-            power_name=self.power_name,
-            phase=current_phase,
+            game_id=self.game_id,
+            agent_name=self.power_name,
+            phase_str=current_phase,
+            log_to_file_path=log_file_path,
             response_type="message_generation"
         )
 

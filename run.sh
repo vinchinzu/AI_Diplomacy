@@ -17,44 +17,49 @@ export OLLAMA_PORT
 # Function to check and pull Ollama models
 check_and_pull_ollama_model() {
   local model_to_check="$1"
+  
+  # Handle both ollama/ prefixed models and direct model names
   if [[ "$model_to_check" == ollama/* ]]; then
     echo "Checking Ollama model: $model_to_check"
-    # Check if Ollama is running - do this once globally if possible, or per check if necessary
-    # For now, let's keep it in the function for encapsulation, though it might be slightly redundant
-    # if checking multiple ollama models in a row.
-    if ! curl --silent --fail "$OLLAMA_HOST/api/tags" > /dev/null; then
-      echo "Ollama server is not running on $OLLAMA_HOST."
-      echo "Please start it, e.g., with: OLLAMA_PORT=$OLLAMA_PORT ollama serve"
-      exit 1 # Exit if server not running, as no ollama operations will succeed
-    fi
-
     OLLAMA_MODEL_TAG="${model_to_check#ollama/}"
-    # Check if the model (potentially with a version tag) is available
-    # First, try the exact tag
-    if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "$OLLAMA_MODEL_TAG" '.models[] | select(.name == $name)' > /dev/null; then
-      # If exact tag not found, and it has a version, try with ':latest' for the base model name
-      # This handles cases where e.g. "ollama/llama3" is requested but only "llama3:latest" exists or vice-versa
-      BASE_MODEL_NAME="${OLLAMA_MODEL_TAG%%:*}"
-      if [[ "$OLLAMA_MODEL_TAG" == *:* ]] && \
-         ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${BASE_MODEL_NAME}:latest" '.models[] | select(.name == $name)' > /dev/null; then
-        echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG) not found in Ollama. Pulling it now..."
-        ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $model_to_check"; exit 1; }
-        echo "Model $model_to_check pulled successfully."
-      elif [[ "$OLLAMA_MODEL_TAG" != *:* ]] && \
-           ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${OLLAMA_MODEL_TAG}:latest" '.models[] | select(.name == $name)' > /dev/null; then
-        # This case is for when no version tag is specified, and :latest isn't found (though previous check might have caught it)
-        # It's a bit redundant but ensures we try pulling if the simple name isn't there (ollama pull often defaults to :latest)
-        echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG, trying as :latest) not found in Ollama. Pulling it now..."
-        ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $model_to_check"; exit 1; }
-        echo "Model $model_to_check pulled successfully."
-      else
-        echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG or ${BASE_MODEL_NAME}:latest) found locally."
-      fi
-    else
-      echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG) found locally."
-    fi
+  elif [[ "$model_to_check" == *:* ]] || [[ "$model_to_check" =~ ^(llama|gemma|mistral|qwen|deepseek) ]]; then
+    echo "Checking Ollama model: $model_to_check"
+    OLLAMA_MODEL_TAG="$model_to_check"
   else
     echo "Skipping Ollama check for non-Ollama model: $model_to_check"
+    return 0
+  fi
+  
+  # Check if Ollama is running
+  if ! curl --silent --fail "$OLLAMA_HOST/api/tags" > /dev/null; then
+    echo "Ollama server is not running on $OLLAMA_HOST."
+    echo "Please start it, e.g., with: OLLAMA_PORT=$OLLAMA_PORT ollama serve"
+    exit 1 # Exit if server not running, as no ollama operations will succeed
+  fi
+
+  # Check if the model (potentially with a version tag) is available
+  # First, try the exact tag
+  if ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "$OLLAMA_MODEL_TAG" '.models[] | select(.name == $name)' > /dev/null; then
+    # If exact tag not found, and it has a version, try with ':latest' for the base model name
+    # This handles cases where e.g. "llama3" is requested but only "llama3:latest" exists or vice-versa
+    BASE_MODEL_NAME="${OLLAMA_MODEL_TAG%%:*}"
+    if [[ "$OLLAMA_MODEL_TAG" == *:* ]] && \
+       ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${BASE_MODEL_NAME}:latest" '.models[] | select(.name == $name)' > /dev/null; then
+      echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG) not found in Ollama. Pulling it now..."
+      ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $model_to_check"; exit 1; }
+      echo "Model $model_to_check pulled successfully."
+    elif [[ "$OLLAMA_MODEL_TAG" != *:* ]] && \
+         ! curl --silent "$OLLAMA_HOST/api/tags" | jq -e --arg name "${OLLAMA_MODEL_TAG}:latest" '.models[] | select(.name == $name)' > /dev/null; then
+      # This case is for when no version tag is specified, and :latest isn't found (though previous check might have caught it)
+      # It's a bit redundant but ensures we try pulling if the simple name isn't there (ollama pull often defaults to :latest)
+      echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG, trying as :latest) not found in Ollama. Pulling it now..."
+      ollama pull "${OLLAMA_MODEL_TAG}" || { echo "Failed to pull model $model_to_check"; exit 1; }
+      echo "Model $model_to_check pulled successfully."
+    else
+      echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG or ${BASE_MODEL_NAME}:latest) found locally."
+    fi
+  else
+    echo "Model $model_to_check (tag: $OLLAMA_MODEL_TAG) found locally."
   fi
 }
 
@@ -107,7 +112,7 @@ case $COMMAND in
     # Define a mixed list of models for the 7 powers for the full game.
     # Ensure these models are accessible (Ollama models pulled, API keys set for API models).
     # Austria, England, France, Germany, Italy, Russia, Turkey
-    FULL_GAME_MODELS_LIST="gpt-4o,ollama/llama3,gpt-4o-mini,ollama/mistral,gpt-3.5-turbo,ollama/gemma3:4b,ollama/phi3"
+    FULL_GAME_MODELS_LIST="gpt-4o,llama3:latest,gpt-4o,gemma3:4b,gpt-4o,gemma3:4b,gemma3:4b"
 
     # Iterate through the FULL_GAME_MODELS_LIST and check/pull each model
     echo "Checking all models for the full game..."
@@ -118,7 +123,7 @@ case $COMMAND in
     echo "All models for the full game checked."
 
     python3 lm_game.py \
-         --max_year 1905 \
+         --max_years 1902 \
          --num_negotiation_rounds 1 \
          --fixed_models "$FULL_GAME_MODELS_LIST"
     ;;

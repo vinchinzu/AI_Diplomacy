@@ -385,3 +385,33 @@ class GameHistory:
             {"sender": m.sender, "recipient": m.recipient, "content": m.content}
             for m in phase.messages
         ]
+
+    def to_dict(self) -> dict:
+        """Convert GameHistory to a dictionary for JSON serialization."""
+        return {
+            "phases": [
+                {
+                    "name": phase.name,
+                    "plans": dict(phase.plans),
+                    "messages": [
+                        {
+                            "sender": msg.sender,
+                            "recipient": msg.recipient,
+                            "content": msg.content
+                        }
+                        for msg in phase.messages
+                    ],
+                    "orders_by_power": {
+                        power: list(orders) 
+                        for power, orders in phase.orders_by_power.items()
+                    },
+                    "results_by_power": {
+                        power: list(results) 
+                        for power, results in phase.results_by_power.items()
+                    },
+                    "phase_summaries": dict(phase.phase_summaries),
+                    "experience_updates": dict(phase.experience_updates)
+                }
+                for phase in self.phases
+            ]
+        }

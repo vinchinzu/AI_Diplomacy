@@ -143,6 +143,15 @@ def _extract_moves_from_llm_response(raw_response: str, power_name: str, model_i
     logger.warning(f"[{model_id}] All move extraction attempts failed for {power_name}.")
     return None
 
+class LLMInvalidOutputError(Exception):
+    """Custom exception for invalid or unparsable LLM output in development mode."""
+    def __init__(self, message, prompt=None, raw_response=None, proposed_moves=None, invalid_moves=None):
+        super().__init__(message)
+        self.prompt = prompt
+        self.raw_response = raw_response
+        self.proposed_moves = proposed_moves
+        self.invalid_moves = invalid_moves
+
 # Helper function to validate extracted orders (adapted from BaseModelClient)
 def _validate_extracted_orders(
     game: Game, # Added game parameter for validation
@@ -150,14 +159,26 @@ def _validate_extracted_orders(
     model_id: str, # For logging
     moves: List[str], 
     possible_orders: Dict[str, List[str]],
-    fallback_utility_fn # Function to call for fallback orders
+    fallback_utility_fn, # Function to call for fallback orders
+    dev_mode: bool = False, # Added dev_mode
+    # For detailed error reporting in dev_mode
+    original_prompt: Optional[str] = None,
+    raw_llm_response: Optional[str] = None
 ) -> List[str]:
     """
     Filter out invalid moves, fill missing with HOLD, else fallback.
+    In dev_mode, raises LLMInvalidOutputError on critical failures.
     Returns a list of orders to be set for the power.
     """
     if not isinstance(moves, list):
-        logger.warning(f"[{model_id}] Proposed moves for {power_name} not a list: {moves}. Using fallback.")
+        logger.warning(f"[{model_id}] Proposed moves for {power_name} not a list: {moves}.")
+        if dev_mode:
+            raise LLMInvalidOutputError(
+                f"LLM output for {power_name} ({model_id}) was not a list of moves.",
+                prompt=original_prompt,
+                raw_response=raw_llm_response,
+                proposed_moves=moves
+            )
         return fallback_utility_fn(possible_orders)
 
     logger.debug(f"[{model_id}] Validating LLM proposed moves for {power_name}: {moves}")
@@ -165,69 +186,108 @@ def _validate_extracted_orders(
     invalid_moves_found = []
     used_locs = set()
 
+    # Create a flat list of all possible orders for quick lookup
+    all_possible_orders = []
+    for loc_orders in possible_orders.values():
+        all_possible_orders.extend(loc_orders)
+    all_possible_orders_set = set(all_possible_orders)
+
     for move_str in moves:
         if not move_str or not isinstance(move_str, str) or move_str.strip() == "": # Skip empty or non-string moves
             continue
         
-        # Check if it's in possible orders (simple check, game.is_valid_order is more robust)
-        # if any(move_str in loc_orders for loc_orders in possible_orders.values()):
-        #     validated.append(move_str)
-        #     parts = move_str.split()
-        #     if len(parts) >= 2:
-        #         used_locs.add(parts[1][:3]) #  e.g., 'A PAR H' -> 'PAR'
-        # else:
-        #     logger.debug(f"[{model_id}] Invalid move from LLM for {power_name} (not in possible_orders): {move_str}")
-        #     invalid_moves_found.append(move_str)
-            
-        # More robust validation using game object
-        tokens = move_str.split(" ", 2)
-        is_valid_order_flag = False
-        if len(tokens) >= 3:
-            unit_token = " ".join(tokens[:2])
-            order_part_token = tokens[2]
-            try:
-                # game._valid_order is not public, use game.is_valid_order if available and suitable,
-                # or rely on the possible_orders list which should be pre-validated by the engine.
-                # For now, let's check against possible_orders for simplicity if direct validation is tricky.
-                # A more robust solution would be to use game.get_all_possible_orders() and check against that.
-                if any(move_str == po for loc_orders in possible_orders.values() for po in loc_orders):
-                    is_valid_order_flag = True
-                else: # Try direct validation if diplomacy.py version supports is_valid_order well
-                    if hasattr(game, 'is_valid_order') and callable(game.is_valid_order):
-                         is_valid_order_flag = game.is_valid_order(power_name, move_str) # This might need adaptation based on exact signature
-                    else: # Fallback to old _valid_order logic if is_valid_order not available
-                        is_valid_order_flag = (game._valid_order(game.powers[power_name], unit_token, order_part_token, report=0) == 1)
-
-
-            except Exception as e_val:
-                logger.warning(f"[{model_id}] Error validating order '{move_str}' for {power_name}: {e_val}")
-                is_valid_order_flag = False
+        move_str = move_str.strip()
         
-        if is_valid_order_flag:
+        # Check if the move is in the possible orders list (most reliable check)
+        if move_str in all_possible_orders_set:
             validated.append(move_str)
-            if len(tokens) >=2: used_locs.add(tokens[1][:3]) # Add unit location
+            # Extract unit location from the move (first two parts: "A PAR" from "A PAR H")
+            tokens = move_str.split()
+            if len(tokens) >= 2:
+                used_locs.add(tokens[1][:3]) # Add unit location (e.g., "PAR" from "A PAR H")
         else:
             logger.debug(f"[{model_id}] Invalid move from LLM for {power_name}: {move_str}")
             invalid_moves_found.append(move_str)
+            
+            # Additional diagnostic logging to help understand why the move is invalid
+            tokens = move_str.split()
+            if len(tokens) >= 2:
+                unit_type = tokens[0]  # A or F
+                unit_loc = tokens[1]   # PAR, BRE, etc.
+                
+                # Check if this power even has a unit at this location
+                board_state = game.get_state()
+                power_units = board_state.get("units", {}).get(power_name, [])
+                expected_unit = f"{unit_type} {unit_loc}"
+                
+                if expected_unit not in power_units:
+                    logger.warning(f"[{model_id}] {power_name} tried to order unit '{expected_unit}' but doesn't control it. {power_name} units: {power_units}")
+                else:
+                    logger.warning(f"[{model_id}] {power_name} has unit '{expected_unit}' but order '{move_str}' is not in possible orders for that unit.")
 
+    if invalid_moves_found:
+        logger.info(f"[{model_id}] Some LLM-proposed moves for {power_name} were invalid. Invalid: {invalid_moves_found}")
+        if dev_mode:
+            # Provide more detailed error information
+            board_state = game.get_state()
+            power_units = board_state.get("units", {}).get(power_name, [])
+            error_details = []
+            
+            for invalid_move in invalid_moves_found:
+                tokens = invalid_move.split()
+                if len(tokens) >= 2:
+                    unit_type = tokens[0]
+                    unit_loc = tokens[1]
+                    expected_unit = f"{unit_type} {unit_loc}"
+                    
+                    if expected_unit not in power_units:
+                        error_details.append(f"'{invalid_move}' - {power_name} doesn't control unit {expected_unit}")
+                    else:
+                        error_details.append(f"'{invalid_move}' - not a valid order for unit {expected_unit}")
+                else:
+                    error_details.append(f"'{invalid_move}' - malformed order")
+            
+            detailed_message = f"LLM for {power_name} ({model_id}) produced invalid moves:\n" + "\n".join(error_details)
+            detailed_message += f"\n\n{power_name} controls these units: {power_units}"
+            
+            raise LLMInvalidOutputError(
+                detailed_message,
+                prompt=original_prompt,
+                raw_response=raw_llm_response,
+                proposed_moves=moves,
+                invalid_moves=invalid_moves_found
+            )
+    
+    # Fill missing with hold (only if not in dev_mode or if no invalid_moves_found in dev_mode)
+    if not (dev_mode and invalid_moves_found):
+        for loc, orders_list in possible_orders.items():
+            # Extract unit location from the key (e.g., "A PAR" -> "PAR")
+            loc_parts = loc.split()
+            if len(loc_parts) >= 2:
+                unit_loc_prefix = loc_parts[1][:3]  # e.g., "PAR" from "A PAR"
+            else:
+                unit_loc_prefix = loc[:3]  # fallback
+                
+            if unit_loc_prefix not in used_locs and orders_list:
+                hold_candidates = [o for o in orders_list if o.endswith(" H")]
+                if hold_candidates:
+                    validated.append(hold_candidates[0])
+                    logger.debug(f"[{model_id}] Added HOLD for unassigned unit at {loc} for {power_name}.")
+                elif orders_list:
+                    validated.append(orders_list[0])
+                    logger.debug(f"[{model_id}] Added first available order for unassigned unit at {loc} for {power_name}.")
 
-    # Fill missing with hold
-    for loc, orders_list in possible_orders.items():
-        unit_loc_prefix = loc.split(" ")[1][:3] if " " in loc else loc[:3] # e.g. "A PAR" -> PAR
-        if unit_loc_prefix not in used_locs and orders_list:
-            hold_candidates = [o for o in orders_list if o.endswith(" H")]
-            validated.append(hold_candidates[0] if hold_candidates else orders_list[0])
-            logger.debug(f"[{model_id}] Added HOLD for unassigned unit at {loc} for {power_name}.")
-
-    if not validated and invalid_moves_found:
-        logger.warning(f"[{model_id}] All LLM moves for {power_name} were invalid. Using fallback. Invalid: {invalid_moves_found}")
+    if not validated:
+        logger.warning(f"[{model_id}] No valid orders could be confirmed for {power_name} after validation and hold fill. Using fallback.")
+        if dev_mode: # If dev_mode is on and we still have no validated orders (e.g., LLM returned empty, or all were invalid and caught above)
+             raise LLMInvalidOutputError(
+                f"LLM for {power_name} ({model_id}) resulted in no valid orders even after attempting hold fills (or holds were skipped due to prior errors in dev_mode).",
+                prompt=original_prompt,
+                raw_response=raw_llm_response,
+                proposed_moves=moves,
+                invalid_moves=invalid_moves_found
+            )
         return fallback_utility_fn(possible_orders)
-    elif not validated: # No moves from LLM, and no invalid ones (e.g. LLM returned empty list)
-        logger.warning(f"[{model_id}] No valid LLM moves provided for {power_name} and no invalid ones to report. Using fallback.")
-        return fallback_utility_fn(possible_orders)
-
-    if invalid_moves_found: # Some valid, some invalid
-         logger.info(f"[{model_id}] Some LLM-proposed moves for {power_name} were invalid. Using validated subset and fallbacks for missing. Invalid: {invalid_moves_found}")
     
     return validated
 
@@ -241,24 +301,21 @@ async def get_valid_orders(
     possible_orders: Dict[str, List[str]], # Already present
     game_history, # Already present, assumed to be GameHistory instance
     game_id: str, # Added game_id parameter
+    # --- New GameConfig dependent parameters ---
+    config: 'GameConfig', # Pass GameConfig for dev_mode and other settings
+    # --- End GameConfig dependent parameters ---
     agent_goals: Optional[List[str]] = None, # Already present
     agent_relationships: Optional[Dict[str, str]] = None, # Already present
     agent_private_diary_str: Optional[str] = None, # Already present
     log_file_path: str = None, # Already present
     phase: str = None, # Already present
+    # dev_mode: bool = False # Added dev_mode, now part of config
 ) -> List[str]:
     """
     Generates orders using the specified LLM model, then validates and returns them.
-    If generation or validation fails, returns fallback orders.
+    If generation or validation fails, returns fallback orders unless in dev_mode.
     """
-    # Import the coordinator here to avoid circular imports - No longer needed if imported at top
-    # from .llm_coordinator import LocalLLMCoordinator 
-    
-    # Instantiate or get a global coordinator instance
-    # For simplicity in this fix, let's assume one is instantiated here or globally available.
-    # If you have a single global instance (e.g., in agent.py or a central app module),
-    # you might need to pass it as a parameter to get_valid_orders.
-    # For now, creating a local instance to make it runnable:
+    dev_mode = config.dev_mode # Get dev_mode from GameConfig
     coordinator = LocalLLMCoordinator()
 
     prompt = construct_order_generation_prompt(
@@ -279,63 +336,58 @@ async def get_valid_orders(
         # model_error_stats[model_id]["prompt_errors"] += 1
         return _fallback_orders_utility(possible_orders)
 
-    raw_response_text = "" # Initialize
-    llm_call_result = None
+    raw_response = ""
+    llm_proposed_moves = None
 
     try:
-        request_identifier = f"{power_name}-{phase}-order_gen"
-        # TODO: Replace placeholders for game_id, agent_name, and phase_str with actual values.
-        # This might involve adding game_id as a parameter to get_valid_orders.
-        # current_game_id_placeholder = "unknown_game_id_utils" # Placeholder
-        
-        llm_call_result = await coordinator.call_llm_with_json_parsing(
+        # Using the coordinator's request method which internally uses llm_call_internal
+        # Parameters for llm_call_internal are game_id, agent_name, phase_str
+        # Here, power_name can be used as agent_name for the call.
+        # phase is already available as a parameter.
+        raw_response = await coordinator.request(
             model_id=model_id,
-            prompt=prompt,
-            system_prompt=agent_system_prompt,
-            request_identifier=request_identifier,
-            expected_json_fields=["orders"], # Expecting a list of orders
-            # --- Parameters for new llm_call_internal & file logging ---
-            game_id=game_id, # Replaced placeholder with game_id parameter
-            agent_name=power_name, # Use power_name as agent_name
-            phase_str=phase if phase else "unknown_phase_utils", # Use provided phase or placeholder
-            response_type="order_generation",
-            log_to_file_path=log_file_path
+            prompt_text=prompt,
+            system_prompt_text=agent_system_prompt,
+            game_id=game_id,
+            agent_name=power_name, # Using power_name as agent_name
+            phase_str=phase,       # Using phase as phase_str
+            request_identifier=f"{power_name}-{phase}-order_gen"
         )
 
-        if llm_call_result.success and llm_call_result.parsed_json:
-            # The _extract_moves_from_llm_response logic might be redundant
-            # if call_llm_with_json_parsing already gives us the parsed "orders" field.
-            # We'll try to get "orders" directly from parsed_json first.
-            extracted_moves = llm_call_result.parsed_json.get("orders")
-            if extracted_moves is None: # Fallback to old extraction if "orders" not top-level
-                 logger.warning(f"[{model_id}] 'orders' field not found directly in parsed JSON for {power_name}. Trying raw response parsing.")
-                 extracted_moves = _extract_moves_from_llm_response(llm_call_result.raw_response, power_name, model_id)
-            raw_response_text = llm_call_result.raw_response # For logging or further debugging
-        elif llm_call_result.success: # Success but no JSON or "orders" field
-            logger.warning(f"[{model_id}] LLM call succeeded for {power_name} but no valid JSON 'orders' found. Raw: {llm_call_result.raw_response[:100]}...")
-            extracted_moves = _extract_moves_from_llm_response(llm_call_result.raw_response, power_name, model_id)
-            raw_response_text = llm_call_result.raw_response
-        else: # LLM call failed
-            logger.error(f"[{model_id}] LLM call failed for {power_name} in get_valid_orders: {llm_call_result.error_message}")
-            # model_error_stats.setdefault(model_id, {}).setdefault("llm_api_errors", 0)
-            # model_error_stats[model_id]["llm_api_errors"] += 1
-            raw_response_text = llm_call_result.raw_response if llm_call_result.raw_response else f"Error: {llm_call_result.error_message}"
-            extracted_moves = None # Ensure fallback if call failed
+        llm_proposed_moves = _extract_moves_from_llm_response(raw_response, power_name, model_id)
+        if llm_proposed_moves is None and dev_mode:
+            raise LLMInvalidOutputError(
+                f"Failed to extract any moves from LLM response for {power_name} ({model_id}).",
+                prompt=prompt,
+                raw_response=raw_response
+            )
 
     except Exception as e:
-        logger.error(f"[{model_id}] Unexpected error for {power_name} in get_valid_orders: {e}", exc_info=True)
-        # model_error_stats.setdefault(model_id, {}).setdefault("unknown_errors", 0)
-        # model_error_stats[model_id]["unknown_errors"] += 1
-        # Log the raw response if available, otherwise log the error
-        # log_llm_response is now called by coordinator.call_llm_with_json_parsing
-        return _fallback_orders_utility(possible_orders)
+        logger.error(f"[{model_id}] Error during LLM call for {power_name}: {e}", exc_info=True)
+        if dev_mode:
+            # If the error is already our custom one, re-raise it. Otherwise, wrap it.
+            if isinstance(e, LLMInvalidOutputError):
+                raise
+            raise LLMInvalidOutputError(
+                f"LLM call failed for {power_name} ({model_id}): {e}",
+                prompt=prompt,
+                raw_response=raw_response # raw_response might be empty if error was before/during call
+            ) from e
+        # Fallback if not dev_mode or if we want to ensure _validate_extracted_orders handles it
+        # No, if LLM call fails, llm_proposed_moves will be None, and _validate will use fallback.
 
-    if not extracted_moves:
-        logger.warning(f"[{model_id}] No moves extracted for {power_name}. Using fallback. Raw response snippet: {raw_response_text[:200]}")
-        # log_llm_response is handled by call_llm_with_json_parsing
-        return _fallback_orders_utility(possible_orders)
-
-    return _validate_extracted_orders(game, power_name, model_id, extracted_moves, possible_orders, _fallback_orders_utility)
+    # Validate and fill missing orders (pass dev_mode and raw_response for error reporting)
+    return _validate_extracted_orders(
+        game=game,
+        power_name=power_name, 
+        model_id=model_id,
+        moves=llm_proposed_moves if llm_proposed_moves is not None else [], # Pass empty list if None
+        possible_orders=possible_orders, 
+        fallback_utility_fn=_fallback_orders_utility,
+        dev_mode=dev_mode,
+        original_prompt=prompt,
+        raw_llm_response=raw_response
+    )
 
 
 def normalize_and_compare_orders(

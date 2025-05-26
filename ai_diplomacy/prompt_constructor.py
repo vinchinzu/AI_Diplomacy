@@ -150,5 +150,19 @@ def construct_order_generation_prompt(
         agent_private_diary=agent_private_diary_str,
     )
 
-    final_prompt = system_prompt + "\n\n" + context + "\n\n" + instructions
+    # Create a flat list of all valid orders for this power
+    all_valid_orders = []
+    for loc, orders_list in possible_orders.items():
+        all_valid_orders.extend(orders_list)
+    
+    # Format the valid orders list for injection into the instructions
+    if all_valid_orders:
+        valid_orders_formatted = "\n".join(f"- {order}" for order in sorted(all_valid_orders))
+    else:
+        valid_orders_formatted = "- No valid orders available"
+    
+    # Inject the valid orders list into the instructions
+    instructions_with_orders = instructions.format(valid_orders_list=valid_orders_formatted)
+
+    final_prompt = system_prompt + "\n\n" + context + "\n\n" + instructions_with_orders
     return final_prompt

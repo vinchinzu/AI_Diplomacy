@@ -3,6 +3,9 @@ import os
 import json
 from typing import Dict, TYPE_CHECKING
 
+# Import usage tracking functions
+from .llm_coordinator import get_usage_stats_by_country, get_total_usage_stats
+
 # Use try-except for diplomacy import for environments where it might not be immediately available
 # or to handle different import styles if necessary, though direct import is usually fine.
 try:
@@ -60,6 +63,9 @@ class GameResultsProcessor:
             # It might require a Game object that has been fully processed.
             if hasattr(game_instance, 'is_game_done') and game_instance.is_game_done: # Check if it's a real Game obj
                 game_state_json_str = to_saved_game_format(game_instance)
+                # Ensure it's a string - to_saved_game_format might return a dict
+                if isinstance(game_state_json_str, dict):
+                    game_state_json_str = json.dumps(game_state_json_str, indent=2, default=str)
                 with open(final_state_path_json, 'w', encoding='utf-8') as f:
                     f.write(game_state_json_str)
                 logger.info(f"Final game state (JSON) saved to: {final_state_path_json}")
@@ -177,42 +183,114 @@ class GameResultsProcessor:
 
     def log_final_results(self, game_instance: 'Game'):
         """
-        Logs the final supply center counts and game outcome.
+        Logs the final results of the game, including supply center counts and winner.
 
         Args:
-            game_instance: The final diplomacy.Game object.
+            game_instance: The completed Diplomacy game instance.
         """
         logger.info("--- FINAL GAME RESULTS ---")
         logger.info(f"Game ID: {self.config.game_id}")
         
-        if not hasattr(game_instance, 'is_game_done') or not game_instance.is_game_done:
+        # Check if game is properly completed
+        if hasattr(game_instance, 'is_game_done') and game_instance.is_game_done:
+            logger.info("Game completed successfully.")
+        elif hasattr(game_instance, 'status') and game_instance.status == 'COMPLETED':
+            logger.info("Game marked as completed.")
+        else:
             logger.warning("Game is not marked as done, or not a valid Game object. Final results might be incomplete.")
-            # Still try to log SCs if possible
-        
-        try:
-            if hasattr(game_instance, 'get_state') and 'centers' in game_instance.get_state():
-                sc_map = game_instance.get_state()['centers']
-                logger.info("Final Supply Center Counts:")
-                sorted_scs = sorted(sc_map.items(), key=lambda item: len(item[1]), reverse=True)
-                for power, scs in sorted_scs:
-                    logger.info(f"  {power: <10}: {len(scs): >2} SCs ({', '.join(sorted(scs))})")
-            else:
-                logger.warning("Could not retrieve final supply center map from game object.")
 
-            # Log winner(s) if any
-            if hasattr(game_instance, 'get_winners'):
+        # Log supply center counts
+        if hasattr(game_instance, 'powers') and game_instance.powers:
+            logger.info("Final Supply Center Counts:")
+            # Sort powers by supply center count (descending)
+            power_centers = []
+            for power_name, power in game_instance.powers.items():
+                if hasattr(power, 'centers'):
+                    center_count = len(power.centers)
+                    centers_list = sorted(power.centers) if power.centers else []
+                    power_centers.append((power_name, center_count, centers_list))
+            
+            # Sort by center count (descending)
+            power_centers.sort(key=lambda x: x[1], reverse=True)
+            
+            for power_name, center_count, centers_list in power_centers:
+                centers_str = ", ".join(centers_list) if centers_list else "None"
+                logger.info(f"  {power_name:<8}: {center_count:2d} SCs ({centers_str})")
+
+            # Determine winner(s)
+            if power_centers:
+                max_centers = power_centers[0][1]
+                winners = [power for power, count, _ in power_centers if count == max_centers]
+                if len(winners) == 1:
+                    logger.info(f"Winner: {winners[0]} with {max_centers} supply centers")
+                else:
+                    logger.info(f"Draw between: {', '.join(winners)} with {max_centers} supply centers each")
+        else:
+            logger.warning("No power information available for final results.")
+
+        # Try to get winner information from game object
+        if hasattr(game_instance, 'get_winners'):
+            try:
                 winners = game_instance.get_winners()
                 if winners:
-                    logger.info(f"Winner(s): {', '.join(winners)}")
-                else:
-                    logger.info("No winner (game ended by draw, resignation, or other condition).")
-            else:
-                logger.warning("Game object does not have 'get_winners' method to determine winner.")
+                    logger.info(f"Game winners: {', '.join(winners)}")
+            except Exception as e:
+                logger.warning(f"Could not determine winners: {e}")
+        else:
+            logger.warning("Game object does not have 'get_winners' method to determine winner.")
 
-        except Exception as e:
-            logger.error(f"Error logging final results: {e}", exc_info=True)
+        logger.info("-" * 26)
+
+        # Display API usage statistics
+        self.log_api_usage_stats()
+
+    def log_api_usage_stats(self):
+        """Log comprehensive API usage statistics by country."""
+        logger.info("--- API USAGE STATISTICS ---")
         
-        logger.info("--------------------------")
+        try:
+            # Get usage stats by country
+            country_stats = get_usage_stats_by_country(self.config.game_id)
+            total_stats = get_total_usage_stats(self.config.game_id)
+            
+            if not country_stats:
+                logger.info("No API usage data recorded for this game.")
+                return
+            
+            logger.info("Usage by Country:")
+            logger.info(f"{'Country':<8} {'API Calls':<10} {'Input Tokens':<13} {'Output Tokens':<14} {'Models'}")
+            logger.info("-" * 70)
+            
+            for country, stats in sorted(country_stats.items()):
+                models_str = ", ".join(stats['models'])
+                logger.info(f"{country:<8} {stats['api_calls']:<10} {stats['input_tokens']:<13} {stats['output_tokens']:<14} {models_str}")
+            
+            logger.info("-" * 70)
+            logger.info(f"{'TOTAL':<8} {total_stats['total_api_calls']:<10} {total_stats['total_input_tokens']:<13} {total_stats['total_output_tokens']:<14}")
+            
+            # Calculate costs (rough estimates)
+            total_input = total_stats['total_input_tokens']
+            total_output = total_stats['total_output_tokens']
+            
+            # Rough cost estimates (these are approximate and may vary)
+            # GPT-4o: $5/1M input, $15/1M output
+            # GPT-4o-mini: $0.15/1M input, $0.60/1M output  
+            # GPT-3.5-turbo: $0.50/1M input, $1.50/1M output
+            estimated_cost_gpt4o = (total_input * 5 + total_output * 15) / 1_000_000
+            estimated_cost_gpt4o_mini = (total_input * 0.15 + total_output * 0.60) / 1_000_000
+            estimated_cost_gpt35 = (total_input * 0.50 + total_output * 1.50) / 1_000_000
+            
+            logger.info("")
+            logger.info("Estimated Costs (if all tokens were from):")
+            logger.info(f"  GPT-4o:      ${estimated_cost_gpt4o:.4f}")
+            logger.info(f"  GPT-4o-mini: ${estimated_cost_gpt4o_mini:.4f}")
+            logger.info(f"  GPT-3.5:     ${estimated_cost_gpt35:.4f}")
+            logger.info("  (Ollama models: Free)")
+            
+        except Exception as e:
+            logger.error(f"Error displaying API usage statistics: {e}", exc_info=True)
+        
+        logger.info("-" * 30)
 
 
 if __name__ == '__main__':

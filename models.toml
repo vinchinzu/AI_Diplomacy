@@ -3,23 +3,23 @@
 # Optional: Default model to use if a power is not explicitly listed below,
 # or if a specified model is found to be invalid/unavailable during agent initialization.
 # If commented out or missing, AgentManager might use its own hardcoded fallback.
-default_model = "ollama/gemma3:4b" # Example: a generally available local model
+default_model = "gemma3:4b" # Example: a generally available local model
 
 # --- Power-Specific Model Assignments ---
 # List each power and the llm-compatible model ID you want it to use.
-# Ensure Ollama models are prefixed with "ollama/" (e.g., "ollama/llama3").
+# For Ollama models, use the model name directly (e.g., "llama3:latest", "gemma3:4b").
 # API-based models should use their standard identifiers (e.g., "gpt-4o", "claude-3-opus-20240229").
 # Make sure any necessary API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) are set in your environment
 # or .env file, and that the `llm` library has the required plugins installed.
 
 [powers]
 AUSTRIA = "gpt-4o"
-ENGLAND = "ollama/llama3" # Assumes llama3 is pulled in your Ollama
+ENGLAND = "llama3:latest" # Using available Ollama model
 FRANCE = "gpt-4o-mini"
-GERMANY = "ollama/gemma3:4b" # Assumes mistral is pulled
+GERMANY = "gemma3:4b" # Using available Ollama model
 ITALY = "gpt-3.5-turbo"
-RUSSIA = "ollama/gemma3:4b"    # Assumes phi3 is pulled
-TURKEY = "ollama/gemma3:4b" # Example of using a specific tag for gemma
+RUSSIA = "gemma3:4b"    # Using available Ollama model
+TURKEY = "gemma3:4b" # Using available Ollama model
 
 # Example of how you might comment out a power to let it use the default_model:
 # ENGLAND = "ollama/codellama:7b-instruct"

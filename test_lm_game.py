@@ -24,8 +24,8 @@ from ai_diplomacy.agent_manager import AgentManager
 # from ai_diplomacy.game_orchestrator import GamePhaseOrchestrator # Not used in this file
 # from ai_diplomacy.game_results import GameResultsProcessor # Not used in this file
 from ai_diplomacy.game_history import GameHistory
-from ai_diplomacy.utils import get_valid_orders, gather_possible_orders
-from ai_diplomacy.llm_coordinator import LLMCallResult # Added import
+from ai_diplomacy.utils import get_valid_orders, gather_possible_orders, LLMInvalidOutputError # Corrected import
+from ai_diplomacy.llm_coordinator import LLMCallResult # LLMCallResult still from coordinator
 
 
 # Suppress warnings
@@ -90,6 +90,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--use-mocks", action="store_true", default=False, 
         help="Use mocked LLM responses instead of live calls."
+    )
+    parser.add_argument(
+        "--dev_mode", action="store_true", default=True,
+        help="Enable development mode for stricter LLM output validation and error handling."
     )
     return parser.parse_args()
 
@@ -164,7 +168,6 @@ class GameTester:
     
     async def _get_mocked_llm_call_internal(self, power_name_for_mock: str, *args, **kwargs):
         """Helper to provide a mocked llm_call_internal behavior for a specific power."""
-        future = asyncio.Future()
         # Default mock orders, assuming S1901M phase for relevant powers
         # This can be made more sophisticated if tests need different responses for different powers
         mock_orders_db = {
@@ -177,45 +180,29 @@ class GameTester:
 
         mock_response_json_string = f'{{"orders": {selected_orders}}}'.replace("'", "\"") # Ensure valid JSON
         
-        mock_result = LLMCallResult(
-            success=True,
-            raw_response=mock_response_json_string,
-            parsed_json={"orders": selected_orders},
-            error_message=None,
-            model_id="mocked_model", 
-            prompt_text="mocked_prompt",
-            system_prompt_text="mocked_system_prompt"
-        )
-        future.set_result(mock_result)
-        return future
+        # llm_call_internal returns a string, and the extraction function looks for "PARSABLE OUTPUT:" pattern
+        mock_full_response = f"""Reasoning:
+- Mock reasoning for {power_name_for_mock}
+- These are test orders for validation
+
+PARSABLE OUTPUT:
+{mock_response_json_string}"""
+        
+        return mock_full_response
 
     async def test_power_order_generation(self, power_name: str) -> bool:
-        """Test order generation for a specific power, optionally using mocks."""
-        logger.info(f"Testing order generation for {power_name} (Mocks: {self.config.args.use_mocks})...")
-        
-        if power_name not in self.agent_manager.agents:
-            logger.error(f"❌ Agent for {power_name} not found")
+        """Tests order generation for a single power."""
+        agent = self.agent_manager.get_agent(power_name)
+        if not agent:
+            logger.error(f"Agent for {power_name} not found during order generation test.")
             return False
-        agent = self.agent_manager.agents[power_name]
-        
-        # Ensure game phase and units are set for consistent possible_orders
-        self.game.set_phase("S1901M") # Standard start phase
-        if not self.game.get_units(power_name):
-            # Basic default units for common powers if not set
-            default_units = {
-                "FRANCE": ["A PAR", "A MAR", "F BRE"], "GERMANY": ["A BER", "A MUN", "F KIE"],
-                "ENGLAND": ["F LON", "F EDI", "A LVP"], "ITALY": ["A ROM", "A VEN", "F NAP"],
-                "AUSTRIA": ["A VIE", "A BUD", "F TRI"], "RUSSIA": ["A MOS", "A WAR", "F STP/SC", "F SEV"],
-                "TURKEY": ["A CON", "A SMY", "F ANK"]
-            }
-            if power_name in default_units:
-                self.game.set_units(power_name, default_units[power_name])
 
-        board_state = self.game.get_state()
         current_phase = self.game.current_short_phase
+        logger.info(f"[{power_name}] Current phase for order generation: {current_phase}")
+        
+        board_state = self.game.get_state()
         possible_orders = gather_possible_orders(self.game, power_name)
         
-        logger.info(f"Current phase: {current_phase}")
         logger.info(f"Possible orders for {power_name}: {list(possible_orders.keys())}")
         
         log_file_path = os.path.join(self.config.game_id_specific_log_dir, "test_orders.csv")
@@ -228,22 +215,38 @@ class GameTester:
             game=self.game, model_id=agent.model_id, agent_system_prompt=agent.system_prompt,
             board_state=board_state, power_name=power_name, possible_orders=possible_orders,
             game_history=self.game_history, game_id=self.config.game_id,
+            config=self.config, # Pass the full config object
             agent_goals=agent.goals, agent_relationships=agent.relationships,
             agent_private_diary_str=agent.format_private_diary_for_prompt(),
             log_file_path=log_file_path, phase=current_phase
         )
 
         orders = None
-        if self.config.args.use_mocks:
-            # Pass power_name to the mock provider
-            async def mock_side_effect(*args, **kwargs):
-                return await self._get_mocked_llm_call_internal(power_name, *args, **kwargs)
+        try:
+            if self.config.args.use_mocks:
+                # Pass power_name to the mock provider
+                async def mock_side_effect(*args, **kwargs):
+                    return await self._get_mocked_llm_call_internal(power_name, *args, **kwargs)
 
-            with patch('ai_diplomacy.llm_coordinator.LocalLLMCoordinator.llm_call_internal', 
-                       side_effect=mock_side_effect):
+                with patch('ai_diplomacy.llm_coordinator.llm_call_internal', 
+                           side_effect=mock_side_effect):
+                    orders = await orders_callable
+            else:
                 orders = await orders_callable
-        else:
-            orders = await orders_callable
+        except LLMInvalidOutputError as e: # Specific catch for dev_mode errors
+            logger.error(f"DEV_MODE: LLMInvalidOutputError for {power_name} ({agent.model_id}): {e}")
+            if e.prompt:
+                logger.error(f"  LLM Prompt: {e.prompt}")
+            if e.raw_response:
+                logger.error(f"  LLM Raw Response: {e.raw_response}")
+            if e.proposed_moves:
+                logger.error(f"  LLM Proposed Moves: {e.proposed_moves}")
+            if e.invalid_moves:
+                logger.error(f"  Identified Invalid Moves: {e.invalid_moves}")
+            # In dev_mode, this should cause the test to fail or the program to exit.
+            # The test_single_round method will already mark this power as failed.
+            # If running lm_game.py in dev_mode, it would sys.exit here.
+            return False # Ensure this test case for the power is marked as failed
             
         end_time = time.time()
         duration = end_time - start_time
@@ -256,7 +259,7 @@ class GameTester:
             # This relies on _get_mocked_llm_call_internal providing consistent mock data
             mock_db = { "FRANCE": ["A PAR H", "A MAR H", "F BRE H"], "GERMANY": ["A BER H", "A MUN H", "F KIE H"], "ENGLAND": ["F LON H", "F EDI H", "A LVP H"]}
             expected_mocked_orders = mock_db.get(power_name, [f"A {power_name[:3].upper()} H"])
-            self.assertEqual(sorted(orders), sorted(expected_mocked_orders))
+            assert sorted(orders) == sorted(expected_mocked_orders), f"Mock orders mismatch for {power_name}: expected {expected_mocked_orders}, got {orders}"
             
         if orders and len(orders) > 0:
             logger.info(f"✅ Successfully generated {len(orders)} orders for {power_name}")
@@ -377,9 +380,9 @@ async def main():
     args.num_negotiation_rounds = 0 # Default if not parsed
     args.negotiation_style = "simultaneous" # Default if not parsed
     args.randomize_fixed_models = False # Default if not parsed
+    # args.dev_mode is already set by parse_arguments
 
-
-    config = GameConfig(args) # GameConfig now gets args including use_mocks
+    config = GameConfig(args) # GameConfig now gets args including use_mocks and dev_mode
     
     setup_logging(config)
     

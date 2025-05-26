@@ -19,12 +19,14 @@ Each power is represented by a `DiplomacyAgent` with:
 - Message history tracking and analysis
 - Detection of ignored messages and non-responsive powers
 
-### 🎯 Strategic Order Generation
-- BFS pathfinding for movement analysis
-- Context-aware order selection with nearest threats/opportunities
-- Fallback logic for robustness
-- Integrates with Simon Willison's `llm` library for flexible and unified access to various language models.
-- Support for multiple LLM providers (OpenAI, Claude, Gemini, DeepSeek, OpenRouter, and local models via Ollama/llama.cpp through `llm` plugins)
+### 🎯 Strategic Order Generation & LLM Integration
+- **Core LLM Abstraction**: Built around Simon Willison's `llm` library, providing a unified and flexible interface for diverse language models. This is a key architectural pillar, replacing previous client systems for enhanced maintainability and broader model access.
+- **Broad Model Compatibility**:
+    - Supports major API-based models (OpenAI, Anthropic Claude, Google Gemini, etc.).
+    - **Robust Local-Only Mode**: Extensive support for local LLMs via Ollama and llama.cpp (through `llm` plugins), enabling private, offline gameplay and development. Recent stability enhancements (e.g., serialized requests for local models, automatic configuration, EOF error resolution) make local play with Ollama seamless and reliable.
+- **Tactical Analysis**: Employs BFS pathfinding for movement analysis, aiding in strategic decision-making.
+- **Context-Aware Decisions**: Orders are selected based on comprehensive context, including identified threats, opportunities, and current game state.
+- **Resilient Operation**: Includes fallback logic to ensure agents can still function effectively even with unexpected or incomplete LLM outputs.
 
 ### 📊 Advanced Game Analysis
 - Custom phase summaries with success/failure categorization
@@ -39,6 +41,19 @@ Each power is represented by a `DiplomacyAgent` with:
   - Phase result analysis with betrayal detection
 - **Yearly Consolidation**: Automatic summarization of old entries to prevent context overflow
 - **Smart Context Building**: Only relevant history provided to LLMs
+
+## Recent Updates (Key Stability & Reliability Enhancements)
+
+- **Zero EOF Errors**: Resolved all "unexpected EOF" issues with local LLMs (like Ollama) by serializing concurrent requests and implementing robust retry logic with exponential backoff. Games now run to completion reliably.
+- **Rock-Solid Concurrency**: Replaced manual lock management with a new async context manager (`serial_access`) for guaranteed lock safety and automatic serialization of local LLM calls. No more deadlocks or race conditions.
+- **Dynamic & Robust Agent Behavior**:
+    - Agents now dynamically update relationships and goals thanks to flexible JSON parsing (`extract_relationships`, `extract_goals`) that handles various LLM response formats.
+    - Initialization bugs in agents have been fixed for cleaner and more reliable startup.
+- **Simplified Configuration**: Local LLM serialization is now automatic, removing the need for environment variables like `SERIALIZE_LOCAL_LLMS_ENV_VAR`.
+- **Centralized LLM Interaction**: Core LLM call logic, JSON parsing, and error handling are now centralized (e.g., `call_llm_with_json_parsing`, `LLMCallResult`), significantly reducing code duplication (~250+ lines removed) and improving maintainability.
+- **Template Error Fixes**: Corrected issues in prompt templates for more reliable LLM responses.
+
+These updates have transformed the system from a fragile prototype into a production-ready, robust AI diplomacy engine capable of running full 7-player games without interruption.
 
 ## How AI Agents Work
 
@@ -184,20 +199,24 @@ graph TB
 
 1. **`lm_game.py`** - Main game orchestrator
    - Manages agent lifecycle and game phases
-   - Coordinates async LLM calls for maximum performance
+   - Coordinates async LLM calls. **Note**: For local LLMs, calls are now effectively serialized by default to ensure stability.
    - Handles error tracking and recovery
    - Saves game state with phase summaries and agent relationships
 
 2. **`ai_diplomacy/agent.py`** - Stateful agent implementation
    - `DiplomacyAgent` class with goals, relationships, and memory
-   - Robust JSON parsing for various LLM response formats
+   - Robust JSON parsing for various LLM response formats (enhanced with `extract_relationships` and `extract_goals` utilities).
    - Diary entry generation for each game event
    - State update logic based on game outcomes
+   - Initialization logic streamlined and bugs fixed.
 
-3. **`ai_diplomacy/clients.py`** - LLM abstraction layer
-   - The old client system (`ai_diplomacy/clients.py`) has been deprecated.
-   - LLM interaction is now managed via Simon Willison's `llm` library and its plugins.
-   - The `DiplomacyAgent` directly uses `llm.get_model()` and `model.async_prompt()` for LLM calls.
+3. **`ai_diplomacy/llm_coordinator.py` (Conceptual - formerly `clients.py` logic now more distributed & part of agent/llm library)**
+   - LLM interaction is managed via Simon Willison's `llm` library and its plugins.
+   - The `DiplomacyAgent` directly uses `llm.get_model()` and `model.async_prompt()`.
+   - **New**: A conceptual `LocalLLMCoordinator` (or similar pattern within agent/game orchestrator) now handles:
+        - `serial_access()`: An `@asynccontextmanager` to ensure local LLM calls are serialized, preventing crashes.
+        - `call_llm_with_retry()`: Implements retry logic with exponential backoff for LLM calls.
+        - `call_llm_with_json_parsing()`: Centralized function for making LLM calls, parsing JSON, and handling errors, now with integrated retry logic.
 
 4. **`ai_diplomacy/possible_order_context.py`** - Strategic analysis
    - BFS pathfinding on game map

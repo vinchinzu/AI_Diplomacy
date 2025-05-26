@@ -22,72 +22,33 @@ ORDER SUBMISSION PROCESS
    }}
 
 CRITICAL RULES
-1. Only use orders from the provided possible_orders list
-2. Support orders must match actual moves (e.g., 'A PAR S F PIC - ENG' needs 'F PIC - ENG')
-3. Build orders (build phase only):
+1. ONLY use orders from the provided possible_orders list - these are the ONLY valid orders for YOUR units
+2. You can ONLY give orders to YOUR OWN units - never order other powers' units
+3. Every order must start with one of YOUR units (shown in the possible_orders section)
+4. Look at the "Unit Locations" section to see which units YOU control
+5. Choose EXACTLY ONE order per unit - do not list multiple options for the same unit
+6. A unit CANNOT support itself (e.g., "A MAR S A MAR - GAS" is INVALID)
+7. Each unit can only appear ONCE in your orders list
+8. Support orders must match actual moves (e.g., 'A PAR S F BRE - ENG' needs 'F BRE - ENG' to also be ordered)
+9. Build orders (build phase only):
    - Format: '[UnitType] [Location3LetterCode] B'
    - UnitType: 'A' (Army) or 'F' (Fleet)
    - Example: 'A PAR B', 'F LON B'
-4. Dual-coast provinces (STP, SPA, BUL):
-   - Specify coast when needed: 'F [PROVINCE]/[COAST_CODE]'
-   - Example: 'F STP/NC B', 'A MAR S F SPA/SC - WES'
-   - Coast codes: NC (North), SC (South), EC (East), WC (West)
-5. All orders resolve simultaneously
-6. Submit orders only, no messages
+10. Dual-coast provinces (STP, SPA, BUL):
+    - Specify coast when needed: 'F [PROVINCE]/[COAST_CODE]'
+    - Example: 'F STP/NC B', 'A MAR S F SPA/SC - WES'
+    - Coast codes: NC (North), SC (South), EC (East), WC (West)
+11. All orders resolve simultaneously
+12. Submit orders only, no messages
 
-EXAMPLES
-Reasoning:
-- Secure Burgundy against German threat
-- Mid-Atlantic move enables future convoys
+VALID ORDERS FOR YOUR UNITS
+Below are ALL the valid orders you can choose from. You MUST pick EXACTLY ONE order per unit from this list:
 
-PARSABLE OUTPUT:
-{{
-  "orders": [
-    "A PAR H",
-    "A MAR - BUR",
-    "F BRE - MAO"
-  ]
-}}
+{valid_orders_list}
 
-Example 2: As Germany, Spring 1901, aiming for a swift expansion into DEN and HOL, while also securing home centers.
-
-Reasoning:
-- Denmark (DEN) and Holland (HOL) are key neutral centers for early German expansion.
-- Need to secure Berlin (BER) and Munich (MUN) against potential French or Russian incursions.
-- Kiel (KIE) fleet is best positioned for DEN, while an army from Ruhr (RUH) can take HOL.
-
-PARSABLE OUTPUT:
-{{
-  "orders": [
-    "A BER H",
-    "A MUN H",
-    "F KIE - DEN",
-    "A RUH - HOL",
-    "A SIL - WAR", // Opportunistic move towards Warsaw if Russia is weak or focused elsewhere
-    "F HEL H"      // Hold Heligoland Bight for naval defense
-  ]
-}}
-
-// Example 3 removed as it might be confusing the LLM
-/*
-Example 3: As Italy, Autumn 1902, after securing Tunis and trying to break into Austria, while also defending against a potential French naval attack. My units are A VEN, A ROM, F NAP, F ION, A APU. Austria has F TRI, A VIE, A BUD. France has F WES, F MAR.
-
-Reasoning:
-- My primary goal is to take Trieste (TRI) from Austria. Army in Venice (VEN) will attack, supported by Army in Apulia (APU).
-- Fleet in Ionian Sea (ION) will support the attack on Trieste from the sea.
-- Army in Rome (ROM) will hold to protect the capital.
-- Fleet in Naples (NAP) will move to Tyrrhenian Sea (TYS) to defend against a potential French move from Western Mediterranean (WES) towards Naples or Rome.
-
-PARSABLE OUTPUT:
-{{
-  "orders": [
-    "A VEN - TRI",
-    "A APU S A VEN - TRI",
-    "F ION S A VEN - TRI",
-    "A ROM H",
-    "F NAP - TYS"
-  ]
-}}
-*/
+IMPORTANT: 
+- Choose one order per unit. If you have 3 units, submit exactly 3 orders.
+- Each unit (F BRE, A MAR, A PAR) should appear exactly once in your orders.
+- Do NOT duplicate units or create self-support orders.
 
 RESPOND WITH YOUR REASONING AND ORDERS (within PARSABLE OUTPUT) BELOW

@@ -93,6 +93,66 @@ async def record_usage(game_id: str, agent: str, phase: str, response: LLMRespon
     except Exception as e:
         logger.error(f"Unexpected error in record_usage: {e}", exc_info=True)
 
+def get_usage_stats_by_country(game_id: str) -> Dict[str, Dict[str, int]]:
+    """Get API usage statistics by country for a specific game."""
+    try:
+        with sqlite3.connect(DATABASE_PATH) as conn:
+            cursor = conn.execute("""
+                SELECT agent, 
+                       COUNT(*) as api_calls,
+                       SUM(input) as total_input_tokens,
+                       SUM(output) as total_output_tokens,
+                       model
+                FROM usage 
+                WHERE game_id = ? 
+                GROUP BY agent, model
+                ORDER BY agent
+            """, (game_id,))
+            
+            results = {}
+            for row in cursor.fetchall():
+                agent, api_calls, input_tokens, output_tokens, model = row
+                if agent not in results:
+                    results[agent] = {
+                        'api_calls': 0,
+                        'input_tokens': 0,
+                        'output_tokens': 0,
+                        'models': []
+                    }
+                results[agent]['api_calls'] += api_calls
+                results[agent]['input_tokens'] += input_tokens or 0
+                results[agent]['output_tokens'] += output_tokens or 0
+                if model not in results[agent]['models']:
+                    results[agent]['models'].append(model)
+            
+            return results
+    except sqlite3.Error as e:
+        logger.error(f"Error getting usage stats: {e}", exc_info=True)
+        return {}
+
+def get_total_usage_stats(game_id: str) -> Dict[str, int]:
+    """Get total API usage statistics for a specific game."""
+    try:
+        with sqlite3.connect(DATABASE_PATH) as conn:
+            cursor = conn.execute("""
+                SELECT COUNT(*) as total_api_calls,
+                       SUM(input) as total_input_tokens,
+                       SUM(output) as total_output_tokens
+                FROM usage 
+                WHERE game_id = ?
+            """, (game_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'total_api_calls': row[0],
+                    'total_input_tokens': row[1] or 0,
+                    'total_output_tokens': row[2] or 0
+                }
+            return {'total_api_calls': 0, 'total_input_tokens': 0, 'total_output_tokens': 0}
+    except sqlite3.Error as e:
+        logger.error(f"Error getting total usage stats: {e}", exc_info=True)
+        return {'total_api_calls': 0, 'total_input_tokens': 0, 'total_output_tokens': 0}
 
 async def llm_call_internal(
     game_id: str,
@@ -116,13 +176,12 @@ async def llm_call_internal(
     async with serial_if_local(model_id):
         response_obj = model_obj.prompt(prompt, **prompt_options)
         
-        # Fire-and-forget logging of token usage
-        # Use functools.partial to ensure the callback is recognized as async by llm library
-        record_usage_callback = functools.partial(record_usage, game_id, agent_name, phase_str)
-        response_obj.on_done(record_usage_callback)
-
         # Ensure we wait for the text to be fully generated.
         response_text = await response_obj.text()
+        
+        # Record usage after getting the response (fire-and-forget)
+        asyncio.create_task(record_usage(game_id, agent_name, phase_str, response_obj))
+        
         return response_text
 
 # --- End of New Global Components ---

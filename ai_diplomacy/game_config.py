@@ -45,6 +45,7 @@ class GameConfig:
         self.exclude_powers: Optional[List[str]] = getattr(args, 'exclude_powers', None)
         self.max_years: Optional[int] = getattr(args, 'max_years', None) # Added from lm_game.py logic
         self.log_to_file: bool = getattr(args, 'log_to_file', True) # Assuming default behavior
+        self.dev_mode: bool = getattr(args, 'dev_mode', False) # Added dev_mode
 
         # --- Load Model Configuration from TOML ---
         self.models_config_path: Optional[str] = getattr(args, 'models_config_file', "models.toml")
@@ -127,6 +128,7 @@ class GameConfig:
             logger.info(f"  Excluded Powers: {self.exclude_powers}")
         if self.max_years:
             logger.info(f"  Maximum Game Years: {self.max_years}")
+        logger.info(f"  Development Mode: {self.dev_mode}")
 
     def _load_models_config(self):
         """Loads model assignments from the TOML configuration file."""
@@ -183,7 +185,8 @@ if __name__ == '__main__':
         'max_years': 1,
         'log_to_file': True,
         'log_dir': None, # Test default log directory creation
-        'models_config_file': None # Test default models configuration file
+        'models_config_file': None, # Test default models configuration file
+        'dev_mode': True # For testing
     }
     test_args = argparse.Namespace(**args_dict)
 
