@@ -54,11 +54,11 @@ jobs:
     - name: Install project and development dependencies
       run: |
         # If "dev" is an optional-dependency (extra) in pyproject.toml:
-        # uv pip install --editable ".[dev]"
+        uv pip install --editable ".[dev]"
         #
         # If "dev" is a dependency group (e.g., in Hatch, PDM, or PEP 621 tools)
         # This seems to be what you intended from your original workflow.
-        uv pip install --editable . --group dev
+        # uv pip install --editable . --group dev
         #
         # If you have a requirements.txt for dev dependencies:
         # uv pip install --editable .
