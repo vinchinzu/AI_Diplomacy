@@ -1,29 +1,37 @@
-name: Python Test
+name: Python tests
 
-on:
+on: 
   push:
     branches: [ dev ]
   pull_request:
     branches: [ dev ]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v4         # v4 supports 3.13
       with:
         python-version: '3.13'
 
-    - name: Install dependencies
+    - name: Install uv
       run: |
+        pip install --upgrade pip           # optional but good hygiene
         pip install uv
-        uv pip install -p pyproject.toml
-        uv pip install pytest
 
-    - name: Test with pytest
+    - name: Install project & dev deps with uv
       run: |
-        pytest 
+        # install your package in editable mode
+        uv pip install --editable .
+        # install the "dev" extra declared in pyproject (includes pytest, ruff, etc.)
+        uv pip install --group dev
+        # if you have a requirements.txt instead:
+        # uv pip install -r requirements.txt
+
+    - name: Run unit‑tests
+      run: |
+        pytest -q
