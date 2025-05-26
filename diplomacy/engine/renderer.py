@@ -21,7 +21,6 @@
 """
 import os
 from xml.dom import minidom
-from typing import Tuple
 from diplomacy import settings
 from diplomacy.utils.equilateral_triangle import EquilateralTriangle
 

@@ -6,7 +6,6 @@ from enum import Enum
 
 from diplomacy import Game  # Removed Phase import
 # Removed: from diplomacy.utils.export import to_saved_game_format
-from .phase_summary import PhaseSummaryGenerator
 
 # Add a local Enum for phase types
 class PhaseType(Enum):

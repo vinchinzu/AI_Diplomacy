@@ -39,8 +39,17 @@ dependencies = [
     "tqdm>=4.67.1",
     "ujson>=5.10.0",
     "jinja2>=3.0.0",
+    "mcp[cli]>=1.9.1",
+    "pydantic>=2.11.5",
+    "pyyaml>=6.0.2",
 ]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.11",
+    "ty>=0.0.1a6",
+]

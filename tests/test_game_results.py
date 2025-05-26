@@ -3,7 +3,7 @@ import os
 from unittest.mock import MagicMock, mock_open, patch
 
 from ai_diplomacy.game_results import GameResultsProcessor
-from ai_diplomacy.game_history import GameHistory, Phase, Message # For creating mock GameHistory
+from ai_diplomacy.game_history import GameHistory # For creating mock GameHistory
 from ai_diplomacy.game_config import GameConfig # For mock GameConfig
 # from diplomacy import Game # For type hinting mock_game if needed, but MagicMock is often sufficient
 

@@ -2,7 +2,7 @@ import os
 import logging
 import re
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 import json_repair
 import json5
@@ -192,7 +192,7 @@ def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_f
         logger_param.error(f"{identifier_for_log} All JSON extraction attempts failed. Original text: {original_text[:500]}... Error: {e}")
         return {}
 
-def extract_relationships(data: dict) -> Optional[Dict[str, str]]:
+def extract_relationships(data) -> Optional[Dict[str, str]]:
     """
     Extract relationships from LLM response data, handling various key names.
     
@@ -210,7 +210,7 @@ def extract_relationships(data: dict) -> Optional[Dict[str, str]]:
             return data[key]
     return None
 
-def extract_goals(data: dict) -> Optional[list]:
+def extract_goals(data) -> Optional[list]:
     """
     Extract goals from LLM response data, handling various key names.
     

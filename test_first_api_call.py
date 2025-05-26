@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import time
-from typing import Dict, List
 from unittest.mock import patch 
 import pytest
 import pytest_asyncio
@@ -22,7 +21,6 @@ from ai_diplomacy.logging_setup import setup_logging
 from ai_diplomacy.agent_manager import AgentManager
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.utils import get_valid_orders, gather_possible_orders
-from ai_diplomacy.llm_coordinator import LLMCallResult
 
 # Load environment variables
 dotenv.load_dotenv()

@@ -12,7 +12,7 @@ from . import llm_utils # Import the new module
 from . import prompt_utils # Import for Jinja2 rendering
 # Removed: from .utils import log_llm_response
 from .prompt_constructor import build_context_prompt # Added import
-from .llm_coordinator import LocalLLMCoordinator, LLMCallResult # _local_lock is removed
+from .services.llm_coordinator import LLMCoordinator, LLMCallResult
 from .game_config import GameConfig # Added import for GameConfig
 # Removed: from .llm_interface import AgentLLMInterface
 # Removed: from ai_diplomacy.prompts import SYSTEM_PROMPT_TEMPLATE, POWER_SPECIFIC_PROMPTS, PLANNING_PROMPT_TEMPLATE, NEGOTIATION_DIARY_PROMPT_TEMPLATE, ORDER_SUBMISSION_PROMPT_TEMPLATE, ORDER_DIARY_PROMPT_TEMPLATE
@@ -24,7 +24,7 @@ ALL_POWERS = frozenset({"AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUS
 ALLOWED_RELATIONSHIPS = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
 
 # Global LLM Coordinator instance
-_global_llm_coordinator = LocalLLMCoordinator()
+_global_llm_coordinator = LLMCoordinator()
 
 # _local_llm_lock has been moved to llm_coordinator.py
 # _load_prompt_file function has been moved to llm_utils.py
@@ -641,46 +641,11 @@ class DiplomacyAgent:
                 logger.warning(f"[{power_name}] No summary available for previous phase {last_phase_name}. Skipping state update.")
                 return
  
-            # == Fix: Use board_state parameter ==
-            possible_orders = game.get_all_possible_orders()
-            
-            # Get formatted diary for context
-            formatted_diary = self.format_private_diary_for_prompt()
-
-            # The variable 'context' was assigned but not used. build_context_prompt is called for its side effects or future use.
-            # If it has no side effects relevant here and its return is truly unused, the call itself could be removed,
-            # but for now, just removing the assignment to an unused variable is safer.
-            # For this pass, we assume build_context_prompt might have logging or other side effects,
-            # so we keep the call but not the assignment if 'context' is not used.
-            # Upon review, build_context_prompt appears to be a pure function constructing text.
-            # If `context` is not used, the call to `build_context_prompt` is also dead code here.
-            # However, the instruction is "Remove such unused variables", not "remove calls that assign to unused variables".
-            # So, if `context` is not used, I will remove its assignment.
-            # Let me re-verify if `context` is used. It is not used.
-            # The instructions also say "Prioritize obvious cases. If unsure, it's safer to leave it."
-            # Removing the call to `build_context_prompt` might be too aggressive if its output was intended
-            # to be part of `prompt` later, but was missed.
-            # For now, I will remove the assignment `context =`, but leave the call if it was `_ = build_context_prompt(...)`
-            # or if the function call itself might have side effects (though unlikely for a prompt builder).
-            # The original code was `context = build_context_prompt(...)`.
-            # The variable `context` is not used in the rest of the function.
-            # I will remove the assignment and the call, as it's a prompt builder and its result is unused.
-            # build_context_prompt(  # Call removed as its result 'context' is unused
-            #     game=game,
-            #     board_state=board_state,
-            #     power_name=power_name,
-            #     possible_orders=possible_orders,
-            #     game_history=game_history,
-            #     agent_goals=self.goals,
-            #     agent_relationships=self.relationships,
-            #     agent_private_diary=formatted_diary,
-            # )
-
             # Add previous phase summary to the information provided to the LLM
             other_powers = [p for p in game.powers if p != power_name]
             
             # Create a readable board state string from the board_state dict
-            board_state_str = f"Board State:\n"
+            board_state_str = "Board State:\n"
             for p_name, power_data in board_state.get('powers', {}).items():
                 # Get units and centers from the board state
                 units = power_data.get('units', [])
@@ -740,11 +705,14 @@ class DiplomacyAgent:
                                 valid_new_relationships[p_upper] = r_title
                             else:
                                 invalid_count += 1
-                                if invalid_count <= 2: logger.warning(f"[{power_name}] Received invalid relationship label '{r_status}' for '{p}'. Ignoring.")
+                                if invalid_count <= 2:
+                                    logger.warning(f"[{power_name}] Received invalid relationship label '{r_status}' for '{p}'. Ignoring.")
                         elif p_upper != self.power_name: # Avoid logging self as invalid
                             invalid_count += 1
-                            if invalid_count <= 2: logger.warning(f"[{power_name}] Received relationship for invalid/own power '{p}'. Ignoring.")
-                    if invalid_count > 2: logger.warning(f"[{power_name}] {invalid_count} total invalid relationships were ignored.")
+                            if invalid_count <= 2:
+                                logger.warning(f"[{power_name}] Received relationship for invalid/own power '{p}'. Ignoring.")
+                    if invalid_count > 2:
+                        logger.warning(f"[{power_name}] {invalid_count} total invalid relationships were ignored.")
                     
                     if valid_new_relationships:
                         self.relationships.update(valid_new_relationships)

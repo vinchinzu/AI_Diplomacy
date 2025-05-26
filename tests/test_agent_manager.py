@@ -1,10 +1,7 @@
 import logging
-import random
-from typing import Optional, List, Dict
 
 # Assuming DiplomacyAgent is in agent.py and accessible in the test environment
 # If not, this might need adjustment based on the project structure and PYTHONPATH for tests
-from ai_diplomacy.agent import DiplomacyAgent 
 from ai_diplomacy.agent_manager import AgentManager, DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
 
 # Mock GameConfig for testing (copied from agent_manager.py)

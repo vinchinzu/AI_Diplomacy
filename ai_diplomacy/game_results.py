@@ -4,7 +4,7 @@ import json
 from typing import Dict, TYPE_CHECKING
 
 # Import usage tracking functions
-from .llm_coordinator import get_usage_stats_by_country, get_total_usage_stats
+from .services.usage_tracker import get_usage_stats_by_country, get_total_usage_stats
 
 # Use try-except for diplomacy import for environments where it might not be immediately available
 # or to handle different import styles if necessary, though direct import is usually fine.

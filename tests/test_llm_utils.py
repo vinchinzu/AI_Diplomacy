@@ -1,5 +1,3 @@
-import pytest # For fixtures like tmp_path
-import os
 import logging
 import json
 from ai_diplomacy import llm_utils # Import the module to be tested

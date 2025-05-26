@@ -2,7 +2,9 @@ import logging
 import random
 from typing import Optional, List, Dict, TYPE_CHECKING # Removed Set
 
-from .agent import DiplomacyAgent # Assuming DiplomacyAgent is in agent.py
+from .agents.factory import AgentFactory
+from .agents.base import BaseAgent
+from .services.config import AgentConfig
 if TYPE_CHECKING:
     from .game_config import GameConfig
 
@@ -24,7 +26,8 @@ class AgentManager:
             game_config: The game configuration object.
         """
         self.game_config = game_config
-        self.agents: Dict[str, DiplomacyAgent] = {}
+        self.agents: Dict[str, BaseAgent] = {}
+        self.agent_factory = AgentFactory()
         logger.info("AgentManager initialized.")
 
     def assign_models(self, all_game_powers: List[str]) -> Dict[str, str]:
@@ -145,58 +148,60 @@ class AgentManager:
         self.game_config.powers_and_models = final_llm_assignments
         return final_llm_assignments
 
-    def _initialize_agent_state_ext(self, agent: DiplomacyAgent):
+    def _initialize_agent_state_ext(self, agent: BaseAgent):
         """
         Initializes extended state for an agent (e.g., loading from files, specific heuristics).
-        Currently, the DiplomacyAgent constructor handles basic default initialization
-        of goals and relationships. This method is a placeholder for more complex setup.
+        This method is a placeholder for more complex setup that might be needed in the future.
         """
-        # In the original lm_game.py, initial goals and relationships were largely
-        # handled by the DiplomacyAgent's __init__ (e.g., relationships default to Neutral).
+        logger.debug(f"Performing extended state initialization for {agent.country} (currently minimal).")
         # This function can be expanded if there's a need to load specific initial states
         # from files or apply more complex power-specific heuristics here.
-        logger.debug(f"Performing extended state initialization for {agent.power_name} (currently minimal).")
-        # Example: Load power-specific initial goals from a configuration file if it existed
-        # initial_goals_config = load_goals_for_power(agent.power_name)
-        # if initial_goals_config:
-        #    agent.goals = initial_goals_config
-        # agent.add_journal_entry("Extended state initialization complete.")
         pass
 
 
     def initialize_agents(self, powers_and_models: Dict[str, str]):
         """
-        Creates and initializes DiplomacyAgent instances for each power.
+        Creates and initializes agent instances for each power using the new factory system.
 
         Args:
             powers_and_models: A dictionary mapping power names to their assigned model IDs.
         """
         logger.info("Initializing agents...")
         self.agents = {} # Clear any previous agents
+        
         for power_name, model_id_for_power in powers_and_models.items():
             logger.info(f"Creating agent for {power_name} with model {model_id_for_power}")
             try:
-                agent = DiplomacyAgent(
-                    power_name=power_name,
+                # Create agent configuration
+                agent_config = AgentConfig(
+                    country=power_name,
+                    type="llm",
                     model_id=model_id_for_power,
-                    game_config=self.game_config, # Add this line
-                    game_id=self.game_config.game_id  # Pass game_id to agent
-                    # Initial goals and relationships are handled by DiplomacyAgent's __init__
+                    context_provider="auto"  # Will auto-select based on model capabilities
                 )
+                
+                # Create agent using factory
+                agent_id = f"{power_name.lower()}_{self.game_config.game_id}"
+                agent = self.agent_factory.create_agent(
+                    agent_id=agent_id,
+                    country=power_name,
+                    config=agent_config,
+                    game_id=self.game_config.game_id
+                )
+                
                 self._initialize_agent_state_ext(agent) # Call extended initializer
                 self.agents[power_name] = agent
                 logger.info(f"Agent for {power_name} created and initialized.")
             except Exception as e:
                 logger.error(f"Failed to create or initialize agent for {power_name} with model {model_id_for_power}: {e}", exc_info=True)
-                # Decide if this is fatal or if the game can proceed without this agent
-                # For now, it will skip this agent.
+                # Continue with other agents
 
         # Store in game_config as well
         self.game_config.agents = self.agents
         logger.info(f"All {len(self.agents)} agents initialized.")
 
 
-    def get_agent(self, power_name: str) -> Optional[DiplomacyAgent]:
+    def get_agent(self, power_name: str) -> Optional[BaseAgent]:
         """
         Retrieves an initialized agent by its power name.
 
@@ -204,6 +209,6 @@ class AgentManager:
             power_name: The name of the power whose agent is to be retrieved.
 
         Returns:
-            The DiplomacyAgent instance, or None if not found.
+            The BaseAgent instance, or None if not found.
         """
         return self.agents.get(power_name)

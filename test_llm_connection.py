@@ -68,7 +68,7 @@ async def main():
             print(f"Failed to get model: {MODEL_NAME}. llm.get_async_model() returned None or an error occurred before this point.")
 
     except Exception as e:
-        print(f"--- Test Failed: An error occurred ---")
+        print("--- Test Failed: An error occurred ---")
         print(f"Error type: {type(e)}")
         print(f"Error message: {e}")
         import traceback
@@ -161,7 +161,7 @@ def test_synchronous_model():
             print(f"Failed to get synchronous model: {MODEL_NAME}. llm.get_model() returned None.")
 
     except TypeError as te:
-        print(f"--- Synchronous Test Failed: TypeError ---")
+        print("--- Synchronous Test Failed: TypeError ---")
         print(f"Error message: {te}")
         if "unexpected keyword argument 'options'" in str(te):
             print("This confirms the 'options' argument is not supported for llm.get_model().")
@@ -169,7 +169,7 @@ def test_synchronous_model():
         traceback.print_exc()
         print("------------------------------------")
     except Exception as e:
-        print(f"--- Synchronous Test Failed: An error occurred ---")
+        print("--- Synchronous Test Failed: An error occurred ---")
         print(f"Error type: {type(e)}")
         print(f"Error message: {e}")
         import traceback

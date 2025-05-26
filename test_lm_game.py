@@ -11,7 +11,7 @@ import os
 import sys
 import time
 import traceback
-from typing import Dict, List, Optional
+from typing import List
 from unittest.mock import patch # Added import
 
 import dotenv
@@ -25,7 +25,6 @@ from ai_diplomacy.agent_manager import AgentManager
 # from ai_diplomacy.game_results import GameResultsProcessor # Not used in this file
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.utils import get_valid_orders, gather_possible_orders, LLMInvalidOutputError # Corrected import
-from ai_diplomacy.llm_coordinator import LLMCallResult # LLMCallResult still from coordinator
 
 
 # Suppress warnings
@@ -417,7 +416,7 @@ async def main():
         duration = end_time - start_time
         
         logger.info(f"\n{'='*50}")
-        logger.info(f"🏁 TEST COMPLETE")
+        logger.info("🏁 TEST COMPLETE")
         logger.info(f"{'='*50}")
         logger.info(f"Test type: {args.test_type}")
         logger.info(f"Duration: {duration:.2f} seconds")

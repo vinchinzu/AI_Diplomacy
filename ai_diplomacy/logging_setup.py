@@ -107,7 +107,7 @@ def setup_logging(config: 'GameConfig') -> None: # verbose_llm_debug is part of 
         # File logs might still retain full detail if desired, or filter can be added there too.
         for handler in root_logger.handlers:
             if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout: # Target console handler
-                logging.info(f"Applying LLMVerboseFilter to console handler as verbose_llm_debug is False.")
+                logging.info("Applying LLMVerboseFilter to console handler as verbose_llm_debug is False.")
                 handler.addFilter(llm_filter)
 
 if __name__ == '__main__':

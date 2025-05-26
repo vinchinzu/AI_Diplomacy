@@ -1,6 +1,5 @@
 import json
-from collections import defaultdict
-from ai_diplomacy.game_history import GameHistory, Phase, Message
+from ai_diplomacy.game_history import GameHistory, Phase
 
 def test_game_history_to_dict_serialization():
     # Instantiate Objects

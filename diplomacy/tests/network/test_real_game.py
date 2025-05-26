@@ -19,7 +19,6 @@
 import logging
 import os
 import random
-from typing import Dict
 
 from tornado import gen
 from tornado.concurrent import Future

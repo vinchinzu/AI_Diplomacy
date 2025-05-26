@@ -18,7 +18,6 @@
 import logging
 import weakref
 from datetime import timedelta
-from typing import Dict
 from tornado import gen, ioloop
 from tornado.concurrent import Future
 from tornado.iostream import StreamClosedError

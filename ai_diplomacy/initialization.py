@@ -6,7 +6,7 @@ import asyncio
 import llm
 
 # Forward declaration for type hinting, actual imports in function if complex
-from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple, Coroutine
+from typing import TYPE_CHECKING, Dict, Any, Tuple
 if TYPE_CHECKING:
     from diplomacy import Game
     from diplomacy.models.game import GameHistory
@@ -16,7 +16,7 @@ from .agent import ALL_POWERS, ALLOWED_RELATIONSHIPS
 # run_llm_and_log is obsolete
 from .utils import log_llm_response 
 from .prompt_constructor import build_context_prompt
-from .llm_coordinator import _local_llm_lock # Import the lock
+from .services.llm_coordinator import _local_lock as _local_llm_lock # Import the lock
 
 logger = logging.getLogger(__name__)
 
@@ -109,16 +109,14 @@ async def initialize_agent_state_ext(
         
         except llm.UnknownModelError as e:
             logger.error(f"Agent {agent.power_name} has unknown model_id: {agent.model_id}. Error: {e}")
-            # Potentially skip this agent or raise an error to stop initialization
-            # For now, we'll log and continue, but the agent might fail later.
-            # Consider adding a 'failed_agents' list or similar handling.
-            # BUG: 'continue' is not valid in this context, should be 'return' or error propagation.
-            # This will be left as-is for the linting pass.
-            continue 
+            # Return early if model validation fails
+            success_status = f"Failure: UnknownModel ({agent.model_id})"
+            return
         except Exception as e:
             logger.error(f"Unexpected error validating model for agent {agent.power_name} ({agent.model_id}): {e}")
-            # BUG: 'continue' is not valid in this context.
-            continue 
+            # Return early if model validation fails
+            success_status = f"Failure: ModelValidationError ({type(e).__name__})"
+            return 
 
         initial_goals_applied = False
         initial_relationships_applied = False

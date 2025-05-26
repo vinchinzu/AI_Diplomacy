@@ -22,9 +22,8 @@ import os
 import ujson as json
 from diplomacy.engine.game import Game
 from diplomacy.engine.map import Map
-from diplomacy.utils import strings, parsing
+from diplomacy.utils import strings
 from diplomacy.utils.game_phase_data import GamePhaseData
-from diplomacy.utils.sorted_dict import SortedDict
 
 # Constants
 LOGGER = logging.getLogger(__name__)

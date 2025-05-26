@@ -13,7 +13,7 @@ import re
 import ast
 import json
 from .prompt_constructor import construct_order_generation_prompt
-from .llm_coordinator import LocalLLMCoordinator # Added import
+from .services.llm_coordinator import LLMCoordinator
 
 
 logger = logging.getLogger("utils")
@@ -316,7 +316,7 @@ async def get_valid_orders(
     If generation or validation fails, returns fallback orders unless in dev_mode.
     """
     dev_mode = config.dev_mode # Get dev_mode from GameConfig
-    coordinator = LocalLLMCoordinator()
+    coordinator = LLMCoordinator()
 
     prompt = construct_order_generation_prompt(
         system_prompt=agent_system_prompt,
@@ -488,7 +488,6 @@ def log_llm_response(
     """
     Log only the LLM response and minimal metadata to the CSV. Do NOT log the full prompt/context to avoid huge files.
     """
-    import csv
     import os
     # Only log minimal fields
     log_fields = ["model", "power", "phase", "response_type", "raw_response", "success"]
