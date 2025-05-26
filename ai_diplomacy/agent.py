@@ -9,6 +9,7 @@ import llm # Import the llm library
 from diplomacy import Game, Message # Message is used in type hints but not directly in refactored methods
 from .game_history import GameHistory
 from . import llm_utils # Import the new module
+from . import prompt_utils # Import for Jinja2 rendering
 from .utils import log_llm_response
 from .prompt_constructor import build_context_prompt # Added import
 from .llm_coordinator import LocalLLMCoordinator, _local_lock, LLMCallResult # Corrected: _local_llm_lock to _local_lock
@@ -383,12 +384,6 @@ class DiplomacyAgent:
         """
         logger.info(f"[{self.power_name}] Generating order diary entry for {game.current_short_phase}...")
         
-        # Load the template but we'll use it carefully with string interpolation
-        prompt_template = llm_utils.load_prompt_file('order_diary_prompt.txt')
-        if not prompt_template:
-            logger.error(f"[{self.power_name}] Could not load order_diary_prompt.txt. Skipping diary entry.")
-            return
-
         board_state_dict = game.get_state()
         board_state_str = f"Units: {board_state_dict.get('units', {})}, Centers: {board_state_dict.get('centers', {})}"
         
@@ -396,49 +391,35 @@ class DiplomacyAgent:
         
         goals_str = "\n".join([f"- {g}" for g in self.goals]) if self.goals else "None"
         relationships_str = "\n".join([f"- {p}: {s}" for p, s in self.relationships.items()]) if self.relationships else "None"
-
-        # Do aggressive preprocessing on the template file
-        # Fix any whitespace or formatting issues that could break .format()
-        for pattern in ['order_summary']:
-            prompt_template = re.sub(fr'\n\s*"{pattern}"', f'"{pattern}"', prompt_template)
         
-        # Escape all curly braces in JSON examples to prevent format() from interpreting them
-        # First, temporarily replace the actual template variables
-        temp_vars = ['power_name', 'current_phase', 'orders_list_str', 'board_state_str', 
-                    'agent_goals', 'agent_relationships']
-        for var in temp_vars:
-            prompt_template = prompt_template.replace(f'{{{var}}}', f'<<{var}>>')
-        
-        # Now escape all remaining braces (which should be JSON)
-        prompt_template = prompt_template.replace('{', '{{')
-        prompt_template = prompt_template.replace('}', '}}')
-        
-        # Restore the template variables
-        for var in temp_vars:
-            prompt_template = prompt_template.replace(f'<<{var}>>', f'{{{var}}}')
-        
-        # Create a dictionary of variables for template formatting
-        format_vars = {
-            "power_name": self.power_name,
-            "current_phase": game.current_short_phase,
-            "orders_list_str": orders_list_str,
-            "board_state_str": board_state_str,
-            "agent_goals": goals_str,
-            "agent_relationships": relationships_str
-        }
-        
-        # Try to use the template with proper formatting
         try:
-            prompt = prompt_template.format(**format_vars)
-            logger.info(f"[{self.power_name}] Successfully formatted order diary prompt template.")
-        except KeyError as e:
-            logger.error(f"[{self.power_name}] Error formatting order diary template: {e}. Skipping diary entry.")
-            return  # Exit early if prompt formatting fails
+            prompt = prompt_utils.render_prompt(
+                'order_diary_prompt.j2',  # Use the new .j2 extension
+                power_name=self.power_name,
+                current_phase=game.current_short_phase,
+                orders_list_str=orders_list_str,
+                board_state_str=board_state_str,
+                agent_goals=goals_str,
+                agent_relationships=relationships_str
+            )
+            logger.info(f"[{self.power_name}] Successfully rendered order diary prompt template using Jinja2.")
+        except FileNotFoundError as e:
+            logger.error(f"[{self.power_name}] Order diary prompt template file not found: {e}. Skipping diary entry.")
+            fallback_diary_on_file_not_found = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (Internal error: Prompt template file not found)"
+            self.add_diary_entry(fallback_diary_on_file_not_found, game.current_short_phase)
+            return
+        except Exception as e: # Catch other Jinja2 rendering errors
+            logger.error(f"[{self.power_name}] Error rendering order diary template with Jinja2: {e}. Skipping diary entry.")
+            # Add a fallback diary entry in case of prompt rendering error
+            fallback_diary_on_render_error = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (Internal error: Could not render prompt: {e})"
+            self.add_diary_entry(fallback_diary_on_render_error, game.current_short_phase)
+            logger.warning(f"[{self.power_name}] Added fallback diary due to prompt rendering error.")
+            return
         
-        logger.debug(f"[{self.power_name}] Order diary prompt:\n{prompt[:300]}...")
+        logger.debug(f"[{self.power_name}] Order diary prompt (first 300 chars):\n{prompt[:300]}...")
 
         # Use the new centralized LLM call wrapper
-        result = await _global_llm_coordinator.call_llm_with_json_parsing(
+        result: LLMCallResult = await _global_llm_coordinator.call_llm_with_json_parsing(
             model_id=self.model_id,
             prompt=prompt,
             system_prompt=self.system_prompt,
@@ -451,17 +432,23 @@ class DiplomacyAgent:
             response_type="order_diary"
         )
 
-        if result.success and result.parsed_json:
+        if result.success:
             diary_text = result.get_field("order_summary")
-            if isinstance(diary_text, str) and diary_text.strip():
+            if diary_text and isinstance(diary_text, str) and diary_text.strip():
                 self.add_diary_entry(diary_text, game.current_short_phase)
                 logger.info(f"[{self.power_name}] Order diary entry generated and added.")
-                return
-        
-        # Fallback if LLM failed or returned invalid data
-        fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (LLM failed to generate specific diary entry: {result.error_message})"
-        self.add_diary_entry(fallback_diary, game.current_short_phase)
-        logger.warning(f"[{self.power_name}] Failed to generate specific order diary entry. Added fallback. Error: {result.error_message}")
+            else:
+                # Success was true, but the field was missing or empty
+                missing_field_msg = "LLM response successful but 'order_summary' field missing or empty."
+                logger.warning(f"[{self.power_name}] {missing_field_msg}")
+                fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. ({missing_field_msg})"
+                self.add_diary_entry(fallback_diary, game.current_short_phase)
+        else:
+            # Fallback if LLM call failed or returned invalid data
+            error_message_for_log = result.error_message if result.error_message else "Unknown error during LLM call."
+            fallback_diary = f"Submitted orders for {game.current_short_phase}: {', '.join(orders)}. (LLM failed to generate specific diary entry: {error_message_for_log})"
+            self.add_diary_entry(fallback_diary, game.current_short_phase)
+            logger.warning(f"[{self.power_name}] Failed to generate specific order diary entry. Added fallback. Error: {error_message_for_log}")
 
     async def generate_phase_result_diary_entry(
         self, 

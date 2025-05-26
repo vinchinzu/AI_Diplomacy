@@ -1,5 +1,6 @@
 from typing import Dict, List, Tuple, Set, Optional # Added to resolve NameError: name 'List' is not defined
 import os
+import jinja2
 
 def load_prompt(filename: str) -> str:
     """Load a prompt from a file located in the 'prompts' subdirectory
@@ -25,4 +26,21 @@ def load_prompt(filename: str) -> str:
         )
 
     with open(filepath, "r", encoding="utf-8") as f:
-        return f.read() 
+        return f.read()
+
+def render_prompt(template_filename: str, **kwargs) -> str:
+    '''Loads a prompt template file and renders it using Jinja2.'''
+    template_string = load_prompt(template_filename) # Uses the existing load_prompt in this file
+    if template_string is None:
+        # load_prompt already logs an error and raises FileNotFoundError
+        raise FileNotFoundError(f"Template file {template_filename} not found by load_prompt.")
+    
+    try:
+        template = jinja2.Template(template_string)
+        return template.render(**kwargs)
+    except jinja2.exceptions.TemplateSyntaxError as e:
+        # Log or handle syntax errors in templates
+        # For now, re-raise to make it visible
+        raise Exception(f"Jinja2 template syntax error in {template_filename}: {e}") from e
+    except Exception as e:
+        raise Exception(f"Error rendering Jinja2 template {template_filename}: {e}") from e

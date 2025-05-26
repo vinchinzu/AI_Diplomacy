@@ -38,6 +38,7 @@ dependencies = [
     "tornado>=6.5.1",
     "tqdm>=4.67.1",
     "ujson>=5.10.0",
+    "jinja2>=3.0.0",
 ]
 
 [tool.pytest.ini_options]
