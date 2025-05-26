@@ -1,11 +1,11 @@
 import asyncio
-import os
+# Removed: import os
 import logging
-from typing import Optional, Dict, Any, Union, ContextManager, AsyncIterator
+from typing import Optional, Dict, Any, AsyncIterator # Removed Union, ContextManager
 from contextlib import asynccontextmanager
-import json
+# Removed: import json
 import sqlite3 # Added import
-import functools # Added import
+# Removed: import functools
 
 import llm # Assuming this is the llm library by Simon Willison
 from llm.models import Model as LLMModel # Renamed to avoid conflict, used for type hinting
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # --- New Global Components based on the provided pattern ---
 
 DATABASE_PATH = "ai_diplomacy_usage.db"
-_local_lock = asyncio.Lock() # Global lock for local LLM engines
+_local_lock = asyncio.Lock() # Removed comment: Global lock for local LLM engines
 
 class ModelPool:
     """Caches LLM model instances."""
@@ -73,7 +73,7 @@ def initialize_database():
         logger.error(f"Error initializing database {DATABASE_PATH}: {e}", exc_info=True)
         raise
 
-initialize_database() # Initialize DB on module load
+initialize_database() # Removed comment: Initialize DB on module load
 
 async def record_usage(game_id: str, agent: str, phase: str, response: LLMResponse):
     """Records LLM token usage in the database."""

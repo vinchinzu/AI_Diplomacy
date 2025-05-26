@@ -34,6 +34,7 @@ class MockGameConfig:
         self.num_negotiation_rounds = 1
         self.negotiation_style = "simultaneous"
         self.max_years = None
+        self.max_diary_tokens = 6500 # Added for new feature
 
 # Global for tests
 ALL_POWERS_IN_GAME = ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]

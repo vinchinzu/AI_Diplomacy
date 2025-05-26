@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Set, Optional # Added to resolve NameError: name 'List' is not defined
+# Removed comment: # Added to resolve NameError: name 'List' is not defined
 import os
 import jinja2
 
@@ -30,7 +30,7 @@ def load_prompt(filename: str) -> str:
 
 def render_prompt(template_filename: str, **kwargs) -> str:
     '''Loads a prompt template file and renders it using Jinja2.'''
-    template_string = load_prompt(template_filename) # Uses the existing load_prompt in this file
+    template_string = load_prompt(template_filename) # Removed comment: # Uses the existing load_prompt in this file
     if template_string is None:
         # load_prompt already logs an error and raises FileNotFoundError
         raise FileNotFoundError(f"Template file {template_filename} not found by load_prompt.")

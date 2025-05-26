@@ -6,7 +6,29 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .game_config import GameConfig
 
-def setup_logging(config: 'GameConfig') -> None:
+class LLMVerboseFilter(logging.Filter): # Removed comment: # Define the custom filter
+    def __init__(self, name="", verbose_llm_debug=False):
+        super().__init__(name)
+        self.verbose_llm_debug = verbose_llm_debug
+
+    def filter(self, record):
+        if not self.verbose_llm_debug and record.levelno == logging.INFO:
+            # Check logger name or message content for typical LLM verbose logs
+            msg_lower = record.getMessage().lower()
+            is_llm_log = "llm_coordinator" in record.name or \
+                         "prompt:" in msg_lower or \
+                         "response:" in msg_lower or \
+                         "raw_response" in msg_lower or \
+                         "full_prompt" in msg_lower
+            
+            if is_llm_log:
+                # Truncate the message
+                original_msg = record.getMessage() # Get the fully formatted message
+                record.msg = original_msg[:150] + "... (set verbose_llm_debug=True for full details)"
+                record.args = () # Clear args as msg is now pre-formatted
+        return True
+
+def setup_logging(config: 'GameConfig') -> None: # verbose_llm_debug is part of config
     """
     Sets up logging for the application.
 
@@ -26,11 +48,9 @@ def setup_logging(config: 'GameConfig') -> None:
         logging.error(f"Log level {config.log_level} not found. Defaulting to INFO.")
         numeric_log_level = logging.INFO
         
-    # Basic formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s') # Removed comment: # Basic formatter
 
-    # Get the root logger
-    root_logger = logging.getLogger()
+    root_logger = logging.getLogger() # Removed comment: # Get the root logger
     root_logger.setLevel(numeric_log_level)
     
     # Remove any existing handlers to avoid duplicate logs if this is called multiple times
@@ -39,14 +59,12 @@ def setup_logging(config: 'GameConfig') -> None:
         root_logger.removeHandler(handler)
         handler.close()
 
-    # Console Handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = logging.StreamHandler(sys.stdout) # Removed comment: # Console Handler
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     logging.info(f"Console logging configured at level {config.log_level}.")
 
-    # File Handler (if enabled)
-    if config.log_to_file:
+    if config.log_to_file: # Removed comment: # File Handler (if enabled)
         try:
             # Ensure the directory for the log file exists
             log_dir = os.path.dirname(config.general_log_path)
@@ -73,6 +91,24 @@ def setup_logging(config: 'GameConfig') -> None:
     # Test message
     # logging.debug("Debug logging test - should only appear if level is DEBUG")
     # logging.info("Info logging test - should appear if level is INFO or DEBUG")
+
+    # Apply the LLMVerboseFilter if verbose_llm_debug is False
+    if not config.verbose_llm_debug:
+        llm_filter = LLMVerboseFilter(verbose_llm_debug=False)
+        
+        # Apply to specific loggers known for verbosity or to root logger's handlers
+        # Applying to handlers of the root logger ensures it affects all logs passing through them.
+        # Alternatively, apply to specific loggers:
+        # logging.getLogger("ai_diplomacy.llm_coordinator").addFilter(llm_filter)
+        # logging.getLogger("ai_diplomacy.agent").addFilter(llm_filter) # If agent logs full prompts/responses at INFO
+        
+        # Add filter to console handler to affect what's printed on screen at INFO level
+        # This is often the primary concern for reducing verbosity.
+        # File logs might still retain full detail if desired, or filter can be added there too.
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout: # Target console handler
+                logging.info(f"Applying LLMVerboseFilter to console handler as verbose_llm_debug is False.")
+                handler.addFilter(llm_filter)
 
 if __name__ == '__main__':
     # Example Usage for testing logging_setup.py directly
@@ -102,55 +138,46 @@ if __name__ == '__main__':
 
     # Need to import GameConfig for the test, ensure path is correct for direct run
     # This might require adjusting PYTHONPATH if run directly from ai_diplomacy folder
-    try:
-        from game_config import GameConfig # If run from parent of ai_diplomacy
-    except ImportError:
-        from .game_config import GameConfig # If run as part of a package
+    
+    # Simplified import for direct script execution, assuming GameConfig is in the same directory
+    # or PYTHONPATH is set up. For actual use, the relative import `.game_config` is correct.
+    # We need a definition of GameConfig that includes verbose_llm_debug for the test.
+    # from .game_config import GameConfig # This is for package use
+
+    # Minimal mock for GameConfig to test logging_setup.py directly
+    class MinimalGameConfig:
+        def __init__(self, log_level="DEBUG", game_id="test_log_game", log_to_file=True, log_dir=None, verbose_llm_debug=False):
+            self.log_level = log_level
+            self.game_id = game_id
+            self.log_to_file = log_to_file
+            self.general_log_path = os.path.join(log_dir if log_dir else ".", f"{game_id}_general.log")
+            self.verbose_llm_debug = verbose_llm_debug # Add the new attribute
 
     print("--- Testing logging_setup.py ---")
 
-    # Test 1: Logging to file and console
-    print("\n--- Test 1: Logging to file and console (DEBUG level) ---")
-    mock_args_file = MockArgs(log_level="DEBUG", game_id="log_test_file_console")
-    config_file = GameConfig(mock_args_file)
-    setup_logging(config_file)
-    logging.debug("This is a DEBUG message (Test 1).")
-    logging.info("This is an INFO message (Test 1).")
-    logging.warning("This is a WARNING message (Test 1).")
-    print(f"General log for Test 1 should be at: {config_file.general_log_path}")
+    # Test 1: Logging to file and console, verbose_llm_debug = False
+    print("\n--- Test 1: Logging (DEBUG level), verbose_llm_debug = False ---")
+    config1 = MinimalGameConfig(log_level="DEBUG", game_id="log_test_verbose_false", verbose_llm_debug=False)
+    setup_logging(config1)
+    logging.getLogger("ai_diplomacy.llm_coordinator").info("LLM Coordinator Prompt: This is a very long prompt...")
+    logging.getLogger("ai_diplomacy.other_module").info("Other Info: Regular message.")
+    logging.getLogger("ai_diplomacy.llm_coordinator").debug("LLM Coordinator DEBUG: Full details here.")
 
-    # Test 2: Logging to console only
-    print("\n--- Test 2: Logging to console only (INFO level) ---")
-    mock_args_console = MockArgs(log_level="INFO", log_to_file=False, game_id="log_test_console_only")
-    # To avoid GameConfig trying to create dirs for a file that won't be used:
-    # We can either ensure GameConfig handles log_to_file=False correctly for path creation,
-    # or pass a dummy log_dir that it won't use.
-    # GameConfig's path creation is conditional on self.log_to_file, so it should be fine.
-    config_console = GameConfig(mock_args_console)
-    setup_logging(config_console)
-    logging.debug("This is a DEBUG message (Test 2) - SHOULD NOT APPEAR.")
-    logging.info("This is an INFO message (Test 2).")
-    logging.warning("This is a WARNING message (Test 2).")
 
-    # Test 3: Invalid log level
-    print("\n--- Test 3: Invalid log level ---")
-    mock_args_invalid = MockArgs(log_level="SUPERDEBUG", game_id="log_test_invalid_level")
-    config_invalid = GameConfig(mock_args_invalid)
-    setup_logging(config_invalid) # Should default to INFO and log a warning
-    logging.debug("This is a DEBUG message (Test 3) - SHOULD NOT APPEAR.")
-    logging.info("This is an INFO message (Test 3).")
+    # Test 2: Logging to file and console, verbose_llm_debug = True
+    print("\n--- Test 2: Logging (DEBUG level), verbose_llm_debug = True ---")
+    config2 = MinimalGameConfig(log_level="DEBUG", game_id="log_test_verbose_true", verbose_llm_debug=True)
+    setup_logging(config2)
+    logging.getLogger("ai_diplomacy.llm_coordinator").info("LLM Coordinator Prompt: This is a very long prompt...")
+    logging.getLogger("ai_diplomacy.other_module").info("Other Info: Regular message.")
+    logging.getLogger("ai_diplomacy.llm_coordinator").debug("LLM Coordinator DEBUG: Full details here.")
 
-    # Test 4: Specific log_dir provided
-    print("\n--- Test 4: Specific log_dir provided ---")
-    specific_log_directory = os.path.join(os.getcwd(), "temp_custom_logs", "game_XYZ")
-    mock_args_custom_dir = MockArgs(log_level="DEBUG", game_id="game_XYZ", log_dir=specific_log_directory)
-    config_custom_dir = GameConfig(mock_args_custom_dir)
-    setup_logging(config_custom_dir)
-    logging.debug(f"This is a DEBUG message (Test 4) in custom dir: {specific_log_directory}")
-    logging.info(f"General log for Test 4 should be at: {config_custom_dir.general_log_path}")
-    # Basic cleanup for test
-    # if os.path.exists(specific_log_directory):
-    #     import shutil
-    #     shutil.rmtree(os.path.dirname(specific_log_directory)) # remove temp_custom_logs
+    # Test 3: Logging at INFO level, verbose_llm_debug = False
+    print("\n--- Test 3: Logging (INFO level), verbose_llm_debug = False ---")
+    config3 = MinimalGameConfig(log_level="INFO", game_id="log_test_info_verbose_false", verbose_llm_debug=False)
+    setup_logging(config3)
+    logging.getLogger("ai_diplomacy.llm_coordinator").info("LLM Coordinator Prompt: This is a very long prompt...")
+    logging.getLogger("ai_diplomacy.llm_coordinator").debug("LLM Coordinator DEBUG: This should not appear.")
+
 
     print("\n--- logging_setup.py test complete ---")

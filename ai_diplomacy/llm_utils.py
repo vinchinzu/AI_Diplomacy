@@ -7,8 +7,7 @@ from typing import Optional, Dict, Any
 import json_repair
 import json5
 
-# Logger for this module
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) # Removed comment: # Logger for this module
 
 # Constants for relationship extraction
 REL_KEYS = ('updated_relationships', 'relationships', 'relationship_updates')

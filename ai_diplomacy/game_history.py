@@ -4,9 +4,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("utils")
-logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__) # Changed "utils" to __name__
+# Removed: logger.setLevel(logging.INFO)
+# Removed: logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 
@@ -221,10 +221,10 @@ class GameHistory:
                             'phase': phase.name
                         })
         
-        # Add debug logging
-        logger.info(f"Found {len(messages_to_power)} messages to {power_name} across {len(recent_phases)} phases")
+        # Removed comment: # Add debug logging
+        logger.debug(f"Found {len(messages_to_power)} messages to {power_name} across {len(recent_phases)} phases") # Changed to DEBUG
         if not messages_to_power:
-            logger.info(f"No messages found for {power_name} to respond to")
+            logger.debug(f"No messages found for {power_name} to respond to") # Changed to DEBUG
         
         # Take the most recent 'limit' messages
         return messages_to_power[-limit:] if messages_to_power else []

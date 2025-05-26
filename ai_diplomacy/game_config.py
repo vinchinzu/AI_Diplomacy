@@ -20,7 +20,7 @@ DEFAULT_GAME_ID_PREFIX = "diplomacy_game"
 DEFAULT_NUM_PLAYERS = 7
 DEFAULT_NUM_NEGOTIATION_ROUNDS = 3
 DEFAULT_NEGOTIATION_STYLE = "simultaneous" # or "round-robin"
-DEFAULT_GAME_SERVER_URL = "ws://localhost:8080" # Example, not used by lm_game.py directly
+# DEFAULT_GAME_SERVER_URL = "ws://localhost:8080" # Unused constant
 
 class GameConfig:
     """
@@ -28,10 +28,8 @@ class GameConfig:
     Also manages derived path configurations for logging and results.
     """
     def __init__(self, args: argparse.Namespace):
-        # Store raw arguments
         self.args = args
 
-        # Directly transfer arguments to attributes
         self.power_name: Optional[str] = getattr(args, 'power_name', None)
         self.model_id: Optional[str] = getattr(args, 'model_id', None)
         self.num_players: int = getattr(args, 'num_players', DEFAULT_NUM_PLAYERS)
@@ -46,6 +44,8 @@ class GameConfig:
         self.max_years: Optional[int] = getattr(args, 'max_years', None) # Added from lm_game.py logic
         self.log_to_file: bool = getattr(args, 'log_to_file', True) # Assuming default behavior
         self.dev_mode: bool = getattr(args, 'dev_mode', False) # Added dev_mode
+        self.verbose_llm_debug: bool = getattr(args, 'verbose_llm_debug', False) # New attribute
+        self.max_diary_tokens: int = getattr(args, 'max_diary_tokens', 6500) # New attribute
 
         # --- Load Model Configuration from TOML ---
         self.models_config_path: Optional[str] = getattr(args, 'models_config_file', "models.toml")
@@ -129,6 +129,8 @@ class GameConfig:
         if self.max_years:
             logger.info(f"  Maximum Game Years: {self.max_years}")
         logger.info(f"  Development Mode: {self.dev_mode}")
+        logger.info(f"  Verbose LLM Debug Logging: {self.verbose_llm_debug}")
+        logger.info(f"  Max Diary Tokens: {self.max_diary_tokens}")
 
     def _load_models_config(self):
         """Loads model assignments from the TOML configuration file."""
@@ -186,7 +188,9 @@ if __name__ == '__main__':
         'log_to_file': True,
         'log_dir': None, # Test default log directory creation
         'models_config_file': None, # Test default models configuration file
-        'dev_mode': True # For testing
+        'dev_mode': True, # For testing
+        'verbose_llm_debug': False, # For testing
+        'max_diary_tokens': 6500 # For testing
     }
     test_args = argparse.Namespace(**args_dict)
 

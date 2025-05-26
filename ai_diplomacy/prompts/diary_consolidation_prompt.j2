@@ -1,6 +1,6 @@
 DIARY CONSOLIDATION REQUEST
-Power: {power_name}
-Year to Consolidate: {year}
+Power: {{ power_name }}
+Year to Consolidate: {{ year }}
 
 GAME CONTEXT
 You are playing Diplomacy, a strategic board game set in pre-WWI Europe. Seven powers compete for control by conquering supply centers. Victory requires 18 supply centers. The powers are:
@@ -12,11 +12,11 @@ Key game mechanics:
 - All orders resolve simultaneously
 - Success often requires negotiated coordination with other powers
 
-DIARY ENTRIES FROM {year}
-{year_diary_entries}
+DIARY ENTRIES FROM {{ year }}
+{{ year_diary_entries }}
 
 TASK
-Create a concise summary (200-300 words) that captures the essential strategic developments from {year}. Focus on:
+Create a concise summary (200-300 words) that captures the essential strategic developments from {{ year }}. Focus on:
 
 1. Diplomatic Evolution
    - Alliances formed, maintained, or broken
@@ -45,7 +45,7 @@ Create a concise summary (200-300 words) that captures the essential strategic d
    - Mistakes to avoid
    - Successful tactics to repeat
 
-Maintain the first-person perspective of {power_name} and preserve critical strategic insights while condensing operational details. The summary should provide sufficient context for future strategic planning.
+Maintain the first-person perspective of {{ power_name }} and preserve critical strategic insights while condensing operational details. The summary should provide sufficient context for future strategic planning.
 
 RESPONSE FORMAT
 Return ONLY the consolidated summary text. Do not include JSON, formatting markers, or meta-commentary.

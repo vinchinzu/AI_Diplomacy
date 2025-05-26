@@ -2,7 +2,7 @@
 Module for constructing prompts for LLM interactions in the Diplomacy game.
 """
 import logging
-import json
+# Removed: import json
 from typing import Dict, List, Optional, Any # Added Any for game type placeholder
 
 # from .game_state import GameState # Removed unused import
@@ -72,8 +72,8 @@ def build_context_prompt(
         messages_this_round_text = "\n(No messages this round)\n"
 
     # Separate active and eliminated powers for clarity
-    active_powers = [p for p in game.powers.keys() if not game.powers[p].is_eliminated()]
-    eliminated_powers = [p for p in game.powers.keys() if game.powers[p].is_eliminated()]
+    # active_powers = [p for p in game.powers.keys() if not game.powers[p].is_eliminated()] # Unused variable
+    # eliminated_powers = [p for p in game.powers.keys() if game.powers[p].is_eliminated()] # Unused variable
     
     # Build units representation with power status
     units_lines = []

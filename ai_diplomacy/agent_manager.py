@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Optional, List, Dict, Set, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING # Removed Set
 
 from .agent import DiplomacyAgent # Assuming DiplomacyAgent is in agent.py
 if TYPE_CHECKING:
@@ -55,11 +55,11 @@ class AgentManager:
         logger.info(f"Using default model: '{default_model}' (from TOML or AgentManager fallback)")
 
         # Determine powers that still need assignment (not in TOML or to be LLM controlled)
-        powers_needing_assignment_for_llm_control = []
-        for p in all_game_powers:
-            if p not in exclude_powers:
-                if p not in powers_and_models: # Not specified in TOML
-                    powers_needing_assignment_for_llm_control.append(p)
+        # powers_needing_assignment_for_llm_control = [] # This variable is assigned but not used.
+        # for p in all_game_powers:
+        #     if p not in exclude_powers:
+        #         if p not in powers_and_models: # Not specified in TOML
+        #             powers_needing_assignment_for_llm_control.append(p)
                 # If p is in powers_and_models, it means TOML explicitly assigned it.
                 # We will respect that, unless num_players limits LLM control.
 
@@ -98,7 +98,8 @@ class AgentManager:
             random.shuffle(fixed_models_cli_list)
         
         additional_llm_assigned_count = 0
-        for i, power_to_assign_additional_model in enumerate(candidate_powers_for_filling_slots):
+        # Loop variable 'i' was not used. Replaced with '_'
+        for _, power_to_assign_additional_model in enumerate(candidate_powers_for_filling_slots):
             if additional_llm_assigned_count >= num_additional_llm_players_needed:
                 break
             
@@ -178,6 +179,7 @@ class AgentManager:
                 agent = DiplomacyAgent(
                     power_name=power_name,
                     model_id=model_id_for_power,
+                    game_config=self.game_config, # Add this line
                     game_id=self.game_config.game_id  # Pass game_id to agent
                     # Initial goals and relationships are handled by DiplomacyAgent's __init__
                 )

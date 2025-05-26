@@ -5,7 +5,7 @@ import os
 import sys # For sys.exit
 import time # For basic timing if needed outside of specific logs
 import traceback # For exception logging
-from typing import Dict, List, Optional, Set, Any, Coroutine, Callable # Added Any, Coroutine, Callable
+from typing import Dict, List, Optional, Any, Coroutine, Callable # Removed Set
 
 import dotenv
 from diplomacy import Game
@@ -29,7 +29,7 @@ from ai_diplomacy.game_history import GameHistory
 
 # get_valid_orders is kept from the original utils.py / lm_game.py for now.
 # gather_possible_orders might still be needed by get_valid_orders or other utils.
-from ai_diplomacy.utils import get_valid_orders, gather_possible_orders 
+from ai_diplomacy.utils import get_valid_orders # Removed gather_possible_orders
 
 # Removed old direct imports of assign_models_to_powers, conduct_negotiations, planning_phase,
 # initialize_agent_state_ext, narrative related imports as these functionalities
@@ -185,7 +185,7 @@ async def main():
         orchestrator = GamePhaseOrchestrator(
             game_config=config,
             agent_manager=agent_manager,
-            phase_summary_generator=None, # Orchestrator will create its own as needed
+            # Removed phase_summary_generator=None, as it's no longer an __init__ param
             get_valid_orders_func=get_valid_orders # Pass the existing function
         )
 

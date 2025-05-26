@@ -73,7 +73,7 @@ class GameResultsProcessor:
                 # Optionally, save an SVG of the final board if possible and desired
                 # This depends on the capabilities of the 'diplomacy' library version
                 if hasattr(game_instance, 'render_negotiation_messages_html'): # A guess for a render method
-                    final_state_path_svg = os.path.join(self.config.results_dir, f"{self.config.game_id}_final_board.svg")
+                    # final_state_path_svg = os.path.join(self.config.results_dir, f"{self.config.game_id}_final_board.svg") # Unused variable as SVG saving is commented
                     try:
                         # Example: game_instance.render().save_svg(final_state_path_svg)
                         # This is highly dependent on the library; adjust as needed.

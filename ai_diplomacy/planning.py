@@ -1,4 +1,4 @@
-from dotenv import load_dotenv
+# Removed: from dotenv import load_dotenv
 import logging
 import concurrent.futures
 from typing import Dict
