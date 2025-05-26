@@ -198,10 +198,18 @@ class BaseModelClient:
             # 1b) Check for inline JSON after "PARSABLE OUTPUT"
             pattern_alt = r"PARSABLE OUTPUT\s*\{(.*?)\}\s*$"
             matches = re.search(pattern_alt, raw_response, re.DOTALL)
+            
+        if not matches:
+            # 1c) Check for **PARSABLE OUTPUT:** pattern (with asterisks)
+            logger.debug(
+                f"[{self.model_name}] Regex parse #2 failed for {power_name}. Trying asterisk-wrapped pattern."
+            )
+            pattern_asterisk = r"\*\*PARSABLE OUTPUT:\*\*\s*(\{[\s\S]*?\})"
+            matches = re.search(pattern_asterisk, raw_response, re.DOTALL)
 
         if not matches:
             logger.debug(
-                f"[{self.model_name}] Regex parse #2 failed for {power_name}. Trying triple-backtick code fences."
+                f"[{self.model_name}] Regex parse #3 failed for {power_name}. Trying triple-backtick code fences."
             )
 
         # 2) If still no match, check for triple-backtick code fences containing JSON
@@ -212,17 +220,40 @@ class BaseModelClient:
                 logger.debug(
                     f"[{self.model_name}] Found triple-backtick JSON block for {power_name}."
                 )
+        
+        # 2b) Also try plain ``` code fences without json marker
+        if not matches:
+            code_fence_plain = r"```\n(.*?)\n```"
+            matches = re.search(code_fence_plain, raw_response, re.DOTALL)
+            if matches:
+                logger.debug(
+                    f"[{self.model_name}] Found plain triple-backtick block for {power_name}."
+                )
+        
+        # 2c) Try to find bare JSON object anywhere in the response
+        if not matches:
+            logger.debug(
+                f"[{self.model_name}] No explicit markers found for {power_name}. Looking for bare JSON."
+            )
+            # Look for a JSON object that contains "orders" key
+            bare_json_pattern = r'(\{[^{}]*"orders"\s*:\s*\[[^\]]*\][^{}]*\})'
+            matches = re.search(bare_json_pattern, raw_response, re.DOTALL)
+            if matches:
+                logger.debug(
+                    f"[{self.model_name}] Found bare JSON object with 'orders' key for {power_name}."
+                )
 
         # 3) Attempt to parse JSON if we found anything
         json_text = None
         if matches:
-            # Add braces back around the captured group
-            if matches.group(1).strip().startswith(r"{{"):
-                json_text = matches.group(1).strip()[1:-1]
-            elif matches.group(1).strip().startswith(r"{"):
-                json_text = matches.group(1).strip()
+            # Add braces back around the captured group if needed
+            captured = matches.group(1).strip()
+            if captured.startswith(r"{{"):
+                json_text = captured[1:-1]
+            elif captured.startswith(r"{"):
+                json_text = captured
             else:
-                json_text = "{%s}" % matches.group(1).strip
+                json_text = "{%s}" % captured
 
             json_text = json_text.strip()
 
@@ -238,8 +269,23 @@ class BaseModelClient:
             return data.get("orders", None)
         except json.JSONDecodeError as e:
             logger.warning(
-                f"[{self.model_name}] JSON decode failed for {power_name}: {e}. Trying bracket fallback."
+                f"[{self.model_name}] JSON decode failed for {power_name}: {e}. Trying to fix common issues."
             )
+            
+            # Try to fix common JSON issues
+            try:
+                # Remove trailing commas
+                fixed_json = re.sub(r',\s*([\}\]])', r'\1', json_text)
+                # Fix single quotes to double quotes
+                fixed_json = fixed_json.replace("'", '"')
+                # Try parsing again
+                data = json.loads(fixed_json)
+                logger.info(f"[{self.model_name}] Successfully parsed JSON after fixes for {power_name}")
+                return data.get("orders", None)
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"[{self.model_name}] JSON decode still failed after fixes for {power_name}. Trying bracket fallback."
+                )
 
         # 3b) Attempt bracket fallback: we look for the substring after "orders"
         #     E.g. "orders: ['A BUD H']" and parse it. This is risky but can help with minor JSON format errors.
