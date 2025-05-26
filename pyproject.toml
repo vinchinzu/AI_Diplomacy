@@ -47,6 +47,10 @@ dependencies = [
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
+markers = [
+    "integration: Marks tests as integration tests (deselect with -m 'not integration')",
+]
+addopts = "-m \"not integration\" --strict-markers"
 
 [dependency-groups]
 dev = [

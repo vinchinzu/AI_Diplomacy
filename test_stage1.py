@@ -4,8 +4,10 @@ Test script for Stage 1 of the refactor.
 Verifies that the clean agent boundary works correctly.
 """
 
-import asyncio
+import asyncio # Keep for test_llm_agent_interface and pytest-asyncio
 import logging
+import pytest # Add pytest
+from unittest.mock import patch
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.core.manager import GameEvent
 from ai_diplomacy.agents.factory import AgentFactory
@@ -92,6 +94,7 @@ def test_game_manager():
     logger.info("✓ GameManager components working correctly")
 
 
+@pytest.mark.asyncio
 async def test_llm_agent_interface():
     """Test that LLMAgent implements the BaseAgent interface correctly."""
     logger.info("Testing LLMAgent interface...")
@@ -125,26 +128,29 @@ async def test_llm_agent_interface():
     )
     
     # Test that the agent can handle the phase state
-    # Note: These will fail with actual LLM calls, but test the interface
-    try:
-        # This would make actual LLM calls, so we expect it to fail in testing
+    
+    # Define mock return values
+    mock_orders_return_value = ['A PAR H']
+    mock_negotiate_return_value = [{'recipient': 'GERMANY', 'message': 'Hello!'}]
+    
+    # Mock llm_call_internal
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', side_effect=[
+        mock_orders_return_value,  # For decide_orders
+        mock_negotiate_return_value,  # For negotiate
+        None  # For update_state
+    ]) as mock_llm_call:
         orders = await agent.decide_orders(phase)
         messages = await agent.negotiate(phase)
         await agent.update_state(phase, [])
         
-        # If we get here, the interface is working
-        logger.info(f"Agent generated {len(orders)} orders and {len(messages)} messages")
+        # Assert that the methods returned the mock values
+        assert orders == mock_orders_return_value
+        assert messages == mock_negotiate_return_value
         
-    except Exception as e:
-        # Expected to fail due to LLM calls, but interface should be correct
-        logger.info(f"LLM calls failed as expected: {type(e).__name__}")
+        # Assert that llm_call_internal was called 3 times
+        assert mock_llm_call.call_count == 3
         
-        # Test that the methods exist and have correct signatures
-        assert hasattr(agent, 'decide_orders')
-        assert hasattr(agent, 'negotiate')
-        assert hasattr(agent, 'update_state')
-    
-    logger.info("✓ LLMAgent interface working correctly")
+    logger.info("✓ LLMAgent interface working correctly with mocked LLM calls")
 
 
 def test_clean_boundaries():
@@ -180,26 +186,5 @@ def test_clean_boundaries():
     
     logger.info("✓ Clean boundaries maintained")
 
-
-async def main():
-    """Run all Stage 1 tests."""
-    logger.info("Starting Stage 1 tests...")
-    
-    try:
-        test_agent_factory()
-        test_config_integration()
-        test_game_manager()
-        await test_llm_agent_interface()
-        test_clean_boundaries()
-        
-        logger.info("🎉 All Stage 1 tests passed!")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Test failed: {e}", exc_info=True)
-        return False
-
-
-if __name__ == "__main__":
-    success = asyncio.run(main())
-    exit(0 if success else 1) 
+# Removed main() function and if __name__ == "__main__": block
+# Pytest will discover and run the test functions automatically.
