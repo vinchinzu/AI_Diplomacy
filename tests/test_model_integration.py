@@ -6,6 +6,7 @@ from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 
 MODEL_ID = "gemma3:latest" # Or your specific model
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     MODEL_ID not in llm.get_model_aliases(), 
     reason=f"Local model {MODEL_ID} not installed or not found by llm library"

@@ -4,8 +4,9 @@ Test script for Stage 0 of the refactor.
 Verifies that the new directory structure and basic components work.
 """
 
-import asyncio
+import asyncio # Keep for test_scripted_agent if it uses asyncio directly, or for pytest-asyncio
 import logging
+import pytest # Add pytest
 from ai_diplomacy.core.state import PhaseState
 
 from ai_diplomacy.agents.scripted_agent import ScriptedAgent
@@ -39,6 +40,7 @@ def test_core_state():
     logger.info("✓ PhaseState working correctly")
 
 
+@pytest.mark.asyncio
 async def test_scripted_agent():
     """Test scripted agent functionality."""
     logger.info("Testing ScriptedAgent...")
@@ -98,25 +100,5 @@ def test_llm_coordinator():
     
     logger.info("✓ LLM coordinator initialized correctly")
 
-
-async def main():
-    """Run all tests."""
-    logger.info("Starting Stage 0 tests...")
-    
-    try:
-        test_core_state()
-        await test_scripted_agent()
-        test_config()
-        test_llm_coordinator()
-        
-        logger.info("🎉 All Stage 0 tests passed!")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Test failed: {e}", exc_info=True)
-        return False
-
-
-if __name__ == "__main__":
-    success = asyncio.run(main())
-    exit(0 if success else 1) 
+# Removed main() function and if __name__ == "__main__": block
+# Pytest will discover and run the test functions automatically.

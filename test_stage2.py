@@ -4,8 +4,10 @@ Test script for Stage 2 of the refactor.
 Verifies that the pluggable context provider system works correctly.
 """
 
-import asyncio
+import asyncio # Keep for async tests and pytest-asyncio
 import logging
+import pytest # Add pytest
+from unittest.mock import patch
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
@@ -48,6 +50,7 @@ def test_context_provider_factory():
     logger.info("✓ ContextProviderFactory working correctly")
 
 
+@pytest.mark.asyncio
 async def test_inline_context_provider():
     """Test the inline context provider."""
     logger.info("Testing InlineContextProvider...")
@@ -94,6 +97,7 @@ async def test_inline_context_provider():
     logger.info("✓ InlineContextProvider working correctly")
 
 
+@pytest.mark.asyncio
 async def test_mcp_context_provider():
     """Test the MCP context provider (should show tools are not available)."""
     logger.info("Testing MCPContextProvider...")
@@ -161,6 +165,7 @@ def test_config_context_provider():
     logger.info("✓ Context provider configuration working correctly")
 
 
+@pytest.mark.asyncio
 async def test_agent_with_context_providers():
     """Test that agents work correctly with different context providers."""
     logger.info("Testing agents with context providers...")
@@ -194,26 +199,34 @@ async def test_agent_with_context_providers():
     )
     
     # Test that agents can call decide_orders with context providers
-    # Note: These will fail due to LLM calls, but should get past context provider setup
-    try:
+    mock_orders_return_value = ["A PAR H"]
+
+    # Test inline_agent
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_orders_return_value) as mock_llm_call_inline:
         orders = await inline_agent.decide_orders(phase_state)
-        logger.info(f"Inline agent generated {len(orders)} orders")
-    except Exception as e:
-        logger.info(f"Inline agent failed as expected (LLM call): {type(e).__name__}")
-    
-    try:
+        assert orders == mock_orders_return_value
+        assert mock_llm_call_inline.call_count == 1
+        logger.info(f"Inline agent generated {len(orders)} orders with mock")
+
+    # Test mcp_agent
+    # Even if it tries mcp_llm_call, it should eventually hit llm_call_internal or similar.
+    # If MCP was truly available and used a different path, this mock might not be hit as expected.
+    # However, given current fallbacks, this should work.
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_orders_return_value) as mock_llm_call_mcp:
         orders = await mcp_agent.decide_orders(phase_state)
-        logger.info(f"MCP agent generated {len(orders)} orders")
-    except Exception as e:
-        logger.info(f"MCP agent failed as expected (LLM call): {type(e).__name__}")
-    
-    try:
+        assert orders == mock_orders_return_value
+        # If mcp_agent truly fell back to inline provider path that uses llm_call_internal
+        assert mock_llm_call_mcp.call_count == 1 
+        logger.info(f"MCP agent generated {len(orders)} orders with mock (expected fallback to inline)")
+
+    # Test auto_agent
+    with patch('ai_diplomacy.services.llm_coordinator.llm_call_internal', return_value=mock_orders_return_value) as mock_llm_call_auto:
         orders = await auto_agent.decide_orders(phase_state)
-        logger.info(f"Auto agent generated {len(orders)} orders")
-    except Exception as e:
-        logger.info(f"Auto agent failed as expected (LLM call): {type(e).__name__}")
+        assert orders == mock_orders_return_value
+        assert mock_llm_call_auto.call_count == 1
+        logger.info(f"Auto agent generated {len(orders)} orders with mock (expected fallback to inline)")
     
-    logger.info("✓ Agents working correctly with context providers")
+    logger.info("✓ Agents working correctly with mocked context providers and LLM calls")
 
 
 def test_full_config_integration():
@@ -255,27 +268,5 @@ def test_full_config_integration():
     
     logger.info("✓ Full configuration integration working correctly")
 
-
-async def main():
-    """Run all Stage 2 tests."""
-    logger.info("Starting Stage 2 tests...")
-    
-    try:
-        test_context_provider_factory()
-        await test_inline_context_provider()
-        await test_mcp_context_provider()
-        test_config_context_provider()
-        await test_agent_with_context_providers()
-        test_full_config_integration()
-        
-        logger.info("🎉 All Stage 2 tests passed!")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Test failed: {e}", exc_info=True)
-        return False
-
-
-if __name__ == "__main__":
-    success = asyncio.run(main())
-    exit(0 if success else 1) 
+# Removed main() function and if __name__ == "__main__": block
+# Pytest will discover and run the test functions automatically.
