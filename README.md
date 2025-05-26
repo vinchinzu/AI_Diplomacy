@@ -22,7 +22,7 @@ Each power is represented by a `DiplomacyAgent` with:
 ### 🎯 Strategic Order Generation & LLM Integration
 - **Core LLM Abstraction**: Built around Simon Willison's `llm` library, providing a unified and flexible interface for diverse language models. This is a key architectural pillar, replacing previous client systems for enhanced maintainability and broader model access.
 - **Broad Model Compatibility**:
-    - Supports major API-based models (OpenAI, Anthropic Claude, Google Gemini, etc.).
+    - Supports major API-based models (Grok, OpenAI, Anthropic Claude, Google Gemini, etc.).
     - **Robust Local-Only Mode**: Extensive support for local LLMs via Ollama and llama.cpp (through `llm` plugins), enabling private, offline gameplay and development. Recent stability enhancements (e.g., serialized requests for local models, automatic configuration, EOF error resolution) make local play with Ollama seamless and reliable.
 - **Tactical Analysis**: Employs BFS pathfinding for movement analysis, aiding in strategic decision-making.
 - **Context-Aware Decisions**: Orders are selected based on comprehensive context, including identified threats, opportunities, and current game state.
