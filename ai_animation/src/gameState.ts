@@ -11,6 +11,7 @@ import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
+import { MomentsDataSchema, MomentsMetadataSchema } from "./types/moments";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -33,6 +34,7 @@ class GameState {
   boardState: CoordinateData
   gameId: number
   gameData: GameSchemaType
+  momentsData: MomentSchemaType
   phaseIndex: number
   boardName: string
   currentPower: PowerENUM
@@ -130,6 +132,8 @@ class GameState {
 
           // Display the initial phase
           displayInitialPhase()
+
+          this.loadMomentsFile()
           resolve()
         } else {
           logger.log("Error: No phases found in game data");
@@ -205,15 +209,17 @@ class GameState {
    */
   loadGameFile = (gameId: number) => {
 
-    // Clear any data that was already on the board, including messages, units, animations, etc.
-    //clearGameData();
+    if (gameId === null || gameId < 0) {
+      throw Error(`Attempted to load game with invalid ID ${gameId}`)
+    }
 
     // Path to the default game file
-    const gameFilePath = `./default_game${gameId}.json`;
+    const gameFilePath = `./games/${gameId}/game.json`;
 
     fetch(gameFilePath)
       .then(response => {
         if (!response.ok) {
+          alert(`Couldn't load gameFile, received reponse code ${response.status}`)
           throw new Error(`Failed to load default game file: ${response.status}`);
         }
 
@@ -226,12 +232,15 @@ class GameState {
         return response.text();
       })
       .then(data => {
+        // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
         // Check for HTML content as a fallback
         if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+          alert("Unable to load game file")
           throw new Error('Received HTML instead of JSON. Check the file path.');
         }
 
         console.log("Loaded game file, attempting to parse...");
+        this.gameId = gameId
         return this.loadGameData(data);
       })
       .then(() => {
@@ -249,6 +258,52 @@ class GameState {
         console.error(`Error loading game ${gameFilePath}: ${error.message}`);
       });
   }
+
+  /*
+  * Load the moments.json file for the given gameID. This includes all the "important" moments for a given game that should be highlighted
+  *
+  */
+  loadMomentsFile = () => {
+    // Path to the default game file
+    const momentsFilePath = `./games/${this.gameId}/moments.json`;
+
+    return new Promise((resolve, reject) => {
+      fetch(momentsFilePath)
+        .then(response => {
+          if (!response.ok) {
+            alert(`Couldn't load moments file, received reponse code ${response.status}`)
+            throw new Error(`Failed to load moments file: ${response.status}`);
+          }
+
+          // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
+          // Check content type to avoid HTML errors
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('text/html')) {
+            alert("Unable to load moments file")
+            throw new Error('Received HTML instead of JSON. Check the file path.');
+          }
+
+          return response.text();
+        })
+        .then(data => {
+          // Check for HTML content as a fallback
+          if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+            throw new Error('Received HTML instead of JSON. Check the file path.');
+          }
+
+          console.log("Loaded moments file, attempting to parse...");
+
+          return JSON.parse(data)
+        })
+        .then((data) => {
+          this.momentsData = MomentsDataSchema.parse(data)
+          resolve(data)
+        }).catch((error) => {
+          throw error
+        })
+    })
+  }
+
   initScene = () => {
     if (mapView === null) {
       throw Error("Cannot find mapView element, unable to continue.")

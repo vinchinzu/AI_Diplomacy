@@ -21,7 +21,8 @@ export function displayPhase(skipMessages = false) {
   if (index >= gameState.gameData.phases.length) {
     displayFinalPhase()
     logger.log("Displayed final phase, moving to next game.")
-    loadGamefile(gameState.gameId + 1)
+    gameState.loadNextGame()
+    return;
   }
   if (!gameState.gameData || !gameState.gameData.phases ||
     index < 0) {
@@ -171,7 +172,59 @@ export function advanceToNextPhase() {
 }
 
 function displayFinalPhase() {
-  // Stub for doing anything on the final phase of a game. 
+  if (!gameState.gameData || !gameState.gameData.phases || gameState.gameData.phases.length === 0) {
+    return;
+  }
+
+  // Get the final phase to determine the winner
+  const finalPhase = gameState.gameData.phases[gameState.gameData.phases.length - 1];
+  
+  if (!finalPhase.state?.centers) {
+    logger.log("No supply center data available to determine winner");
+    return;
+  }
+
+  // Find the power with the most supply centers
+  let winner = '';
+  let maxCenters = 0;
+  
+  for (const [power, centers] of Object.entries(finalPhase.state.centers)) {
+    const centerCount = Array.isArray(centers) ? centers.length : 0;
+    if (centerCount > maxCenters) {
+      maxCenters = centerCount;
+      winner = power;
+    }
+  }
+
+  // Display victory message
+  if (winner && maxCenters > 0) {
+    const victoryMessage = `🏆 GAME OVER - ${winner} WINS with ${maxCenters} supply centers! 🏆`;
+    
+    // Add victory message to news banner with dramatic styling
+    addToNewsBanner(victoryMessage);
+    
+    // Log the victory
+    logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
+    
+    // Display final standings in console
+    const standings = Object.entries(finalPhase.state.centers)
+      .map(([power, centers]) => ({
+        power,
+        centers: Array.isArray(centers) ? centers.length : 0
+      }))
+      .sort((a, b) => b.centers - a.centers);
+    
+    console.log("Final Standings:");
+    standings.forEach((entry, index) => {
+      const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "  ";
+      console.log(`${medal} ${entry.power}: ${entry.centers} centers`);
+    });
+
+    // Show victory in info panel
+    logger.updateInfoPanel(`🏆 ${winner} VICTORIOUS! 🏆\n\nFinal Score: ${maxCenters} supply centers\n\nCheck console for full standings.`);
+  } else {
+    logger.log("Could not determine game winner");
+  }
 }
 
 /**
@@ -189,15 +242,7 @@ function moveToNextPhase() {
   gameState.messagesPlaying = false;
 
   // Advance the phase index
-  if (gameState.gameData && gameState.phaseIndex >= gameState.gameData.phases.length - 1) {
-    logger.log("Reached end of game, Moving to next in 5 seconds");
-    setTimeout(() => {
-      gameState.loadGameFile(gameState.gameId + 1), 5000
-    })
-
-  } else {
-    gameState.phaseIndex++;
-  }
+  gameState.phaseIndex++;
   if (config.isDebugMode && gameState.gameData) {
     console.log(`Moving to phase ${gameState.gameData.phases[gameState.phaseIndex].name}`);
   }

@@ -1,8 +1,7 @@
 import * as THREE from "three";
 import "./style.css"
 import { initMap } from "./map/create";
-import { createAnimationsForNextPhase as createAnimationsForNextPhase } from "./units/animate";
-import { gameState, loadGameFile } from "./gameState";
+import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
@@ -15,10 +14,7 @@ import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatin
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
-//
-//  TODO: When loading an invalide file, show an error.
 
-//const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
 

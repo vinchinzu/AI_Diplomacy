@@ -1,23 +1,29 @@
 import { z } from "zod";
 
 export const OrderFromString = z.string().transform((orderStr) => {
+  // Helper function to clean province names by removing coast specifications
+  const cleanProvince = (province: string): string => {
+    if (!province) return province;
+    return province.split('/')[0];
+  };
+
   // Split the order into tokens by whitespace.
   const tokens = orderStr.trim().split(/\s+/);
   // The first token is the unit type (A or F)
   const unitType = tokens[0];
   // The second token is the origin province.
-  const origin = tokens[1];
+  const origin = cleanProvince(tokens[1]);
 
   // Check if this order is a support order.
   if (tokens.includes("S")) {
     const indexS = tokens.indexOf("S");
     // The tokens immediately after "S" define the supported unit.
     const supportedUnitType = tokens[indexS + 1];
-    const supportedOrigin = tokens[indexS + 2];
+    const supportedOrigin = cleanProvince(tokens[indexS + 2]);
     let supportedDestination = null;
     // If there is a hyphen following, then a destination is specified.
     if (tokens.length > indexS + 3 && tokens[indexS + 3] === "-") {
-      supportedDestination = tokens[indexS + 4];
+      supportedDestination = cleanProvince(tokens[indexS + 4]);
     }
     return {
       type: "support",
@@ -58,15 +64,15 @@ export const OrderFromString = z.string().transform((orderStr) => {
     return {
       type: "retreat",
       unit: { type: unitType, origin },
-      destination: tokens.at(-1),
+      destination: cleanProvince(tokens.at(-1) || ''),
       raw: orderStr
     }
   }
   else if (tokens.includes("C")) {
     return {
       type: "convoy",
-      unit: { type: unitType, origin: tokens.at(-3) },
-      destination: tokens.at(-1),
+      unit: { type: unitType, origin: cleanProvince(tokens.at(-3) || '') },
+      destination: cleanProvince(tokens.at(-1) || ''),
       raw: orderStr
     }
   }
@@ -74,7 +80,7 @@ export const OrderFromString = z.string().transform((orderStr) => {
   else if (tokens.includes("-")) {
     const dashIndex = tokens.indexOf("-");
     // The token immediately after "-" is the destination.
-    const destination = tokens[dashIndex + 1];
+    const destination = cleanProvince(tokens[dashIndex + 1]);
     return {
       type: "move",
       unit: { type: unitType, origin },

@@ -6,7 +6,7 @@ export const config = {
   playbackSpeed: 500,
 
   // Whether to enable debug mode (faster animations, more console logging)
-  isDebugMode: true,
+  isDebugMode: import.meta.env.VITE_DEBUG_MODE || false,
 
   // Duration of unit movement animation in ms
   animationDuration: 1500,

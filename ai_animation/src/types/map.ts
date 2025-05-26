@@ -9,6 +9,7 @@ export enum ProvTypeENUM {
 }
 
 export enum PowerENUM {
+  EUROPE = "EUROPE", // TODO: Used in the moments.json file to indicate all Powers
   AUSTRIA = "AUSTRIA",
   ENGLAND = "ENGLAND",
   FRANCE = "FRANCE",
