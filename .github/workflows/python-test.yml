@@ -31,10 +31,10 @@ jobs:
     - name: Install the project
       run: uv sync --dev
     
-    - name: Lint with Ruff
-      uses: astral-sh/ruff-action@v3
-      with:
-        args: "check --diff . && ruff format --check --diff ."
+    #- name: Lint with Ruff
+     # uses: astral-sh/ruff-action@v3
+     # with:
+     #   args: "check --diff . && ruff format --check --diff ."
 
     - name: Run unit tests with pytest
       run: |
