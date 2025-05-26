@@ -1,11 +1,15 @@
 import pytest
 import llm
 import asyncio
-from ai_diplomacy.llm_interface import AgentLLMInterface
-from ai_diplomacy.llm_coordinator import LocalLLMCoordinator
+# AgentLLMInterface was removed in refactor
+from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 
 MODEL_ID = "gemma3:latest" # Or your specific model
 
+@pytest.mark.skipif(
+    MODEL_ID not in llm.get_model_aliases(), 
+    reason=f"Local model {MODEL_ID} not installed or not found by llm library"
+)
 def test_get_model_and_prompt():
     """
     Tests if the specified LLM model can be loaded and can respond to a simple prompt.
@@ -38,29 +42,7 @@ def test_get_model_and_prompt():
     # For now, let's assume the main issue is with model loading or the basic prompt method.
     # If `model.prompt` works, `await model.prompt(...)` should also work in an async context. 
 
-class DummyCoordinator(LocalLLMCoordinator):
-    async def request(self, model_id, prompt_text, system_prompt_text, request_identifier="request"):
+class DummyCoordinator(LLMCoordinator):
+    async def request(self, model_id, prompt_text, system_prompt_text, game_id="test_game", agent_name="test_agent", phase_str="test_phase", request_identifier="request"):
         # Simulate a successful LLM response
-        return "This is a dummy LLM response."
-
-def test_agent_llm_interface_llm_call(monkeypatch):
-    """
-    Test that AgentLLMInterface can make an LLM call using a dummy coordinator, mimicking agent usage.
-    """
-    model_id = "dummy/model"
-    system_prompt = "You are a test agent."
-    power_name = "FRANCE"
-    dummy_coordinator = DummyCoordinator()
-    interface = AgentLLMInterface(model_id, system_prompt, dummy_coordinator, power_name)
-
-    async def run():
-        result = await interface._make_llm_call(
-            prompt_text="Say something clever.",
-            log_file_path="/tmp/llm_test_log.csv",
-            game_phase="S1901M",
-            response_type_for_logging="test",
-            expect_json=False
-        )
-        assert result == "This is a dummy LLM response."
-
-    asyncio.run(run()) 
+        return "This is a dummy LLM response." 

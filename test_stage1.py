@@ -7,11 +7,10 @@ Verifies that the clean agent boundary works correctly.
 import asyncio
 import logging
 from ai_diplomacy.core.state import PhaseState
-from ai_diplomacy.core.manager import GameManager, GameEvent
+from ai_diplomacy.core.manager import GameEvent
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
 from ai_diplomacy.services.config import DiplomacyConfig, AgentConfig, GameConfig
-from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

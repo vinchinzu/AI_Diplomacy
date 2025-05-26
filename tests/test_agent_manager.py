@@ -5,33 +5,40 @@ import logging
 from ai_diplomacy.agent_manager import AgentManager, DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
 
 # Mock GameConfig for testing (copied from agent_manager.py)
-class MockGameConfig:
+from ai_diplomacy.game_config import GameConfig
+
+class MockGameConfig(GameConfig):
     def __init__(self, num_players=2, power_name=None, model_id=None, fixed_models=None, randomize_fixed_models=False, exclude_powers=None, power_model_assignments=None, default_model_from_config=None):
-        self.num_players = num_players
-        self.power_name = power_name
-        self.model_id = model_id
-        self.fixed_models = fixed_models if fixed_models is not None else []
-        self.randomize_fixed_models = randomize_fixed_models
-        self.exclude_powers = exclude_powers if exclude_powers is not None else []
-        self.power_model_assignments = power_model_assignments if power_model_assignments is not None else [] # From TOML
-        self.default_model_from_config = default_model_from_config # From TOML
-
-
-        # Attributes needed for AgentManager and DiplomacyAgent instantiation
-        self.powers_and_models = None # To be filled by assign_models
-        self.agents = None # To be filled by initialize_agents
-        self.game_id = "test_game_manager" 
-        self.log_level = "DEBUG" # Example, pytest might override or manage this
+        # Create a minimal mock args object for the parent constructor
+        class MockArgs:
+            def __init__(self):
+                self.num_players = num_players
+                self.power_name = power_name
+                self.model_id = model_id
+                self.fixed_models = fixed_models if fixed_models is not None else []
+                self.randomize_fixed_models = randomize_fixed_models
+                self.exclude_powers = exclude_powers if exclude_powers is not None else []
+                self.game_id = "test_game_manager"
+                self.game_id_prefix = "test"
+                self.log_level = "DEBUG"
+                self.log_to_file = False
+                self.log_dir = None
+                self.perform_planning_phase = False
+                self.num_negotiation_rounds = 1
+                self.negotiation_style = "simultaneous"
+                self.max_years = None
+                self.max_diary_tokens = 6500
+                self.dev_mode = False
+                self.verbose_llm_debug = False
+                self.models_config_file = "models.toml"
+        
+        # Call parent constructor with mock args
+        super().__init__(MockArgs())
+        
+        # Override specific attributes for testing
+        self.power_model_assignments = power_model_assignments if power_model_assignments is not None else []
+        self.default_model_from_config = default_model_from_config
         self.current_datetime_str = "test_time"
-        self.game_id_prefix = "test"
-        self.log_to_file = False # To simplify test output
-
-        # Add other attributes GameConfig might expect, defaults from original mock
-        self.perform_planning_phase = False
-        self.num_negotiation_rounds = 1
-        self.negotiation_style = "simultaneous"
-        self.max_years = None
-        self.max_diary_tokens = 6500 # Added for new feature
 
 # Global for tests
 ALL_POWERS_IN_GAME = ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]
@@ -61,6 +68,9 @@ def test_basic_assignment_two_llm_players_no_primary():
         agent = manager1.get_agent(power_name)
         assert agent is not None
         assert agent.power_name == power_name
+        # Type check for LLMAgent to access model_id
+        from ai_diplomacy.agents.llm_agent import LLMAgent
+        assert isinstance(agent, LLMAgent)
         assert agent.model_id == assigned1[power_name]
         # logger.info(f"Agent {power_name} goals: {agent.goals}") # Informational
 
@@ -83,7 +93,10 @@ def test_primary_agent_specified_three_llm_players():
 
     manager2.initialize_agents(assigned2)
     assert "FRANCE" in manager2.agents
-    assert manager2.get_agent("FRANCE").model_id == "gpt-4o"
+    france_agent = manager2.get_agent("FRANCE")
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(france_agent, LLMAgent)
+    assert france_agent.model_id == "gpt-4o"
 
 
 def test_exclude_powers_randomize_fixed_models():
@@ -152,8 +165,12 @@ def test_num_players_one_primary_agent_set():
     assert assigned6.get("GERMANY") == "claude-3"
     manager6.initialize_agents(assigned6)
     assert "GERMANY" in manager6.agents
-    assert manager6.get_agent("GERMANY") is not None
-    assert manager6.get_agent("GERMANY").model_id == "claude-3"
+    agent = manager6.get_agent("GERMANY")
+    assert agent is not None
+    # Type check for LLMAgent to access model_id
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(agent, LLMAgent)
+    assert agent.model_id == "claude-3"
     assert manager6.get_agent("FRANCE") is None # Example of checking non-existence
 
 def test_primary_agent_excluded():
@@ -185,8 +202,13 @@ def test_toml_power_model_assignments_respected():
     assert assigned.get("AUSTRIA") == "toml_model_A"
     assert assigned.get("ENGLAND") == "toml_model_B"
     manager.initialize_agents(assigned)
-    assert manager.get_agent("AUSTRIA").model_id == "toml_model_A"
-    assert manager.get_agent("ENGLAND").model_id == "toml_model_B"
+    austria_agent = manager.get_agent("AUSTRIA")
+    england_agent = manager.get_agent("ENGLAND")
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(austria_agent, LLMAgent)
+    assert isinstance(england_agent, LLMAgent)
+    assert austria_agent.model_id == "toml_model_A"
+    assert england_agent.model_id == "toml_model_B"
 
 def test_toml_and_cli_primary_agent_conflict_cli_wins():
     logger.info("\n--- Test 9: TOML assignment conflicts with CLI primary agent, CLI wins ---")
@@ -198,7 +220,10 @@ def test_toml_and_cli_primary_agent_conflict_cli_wins():
     assert len(assigned) == 1
     assert assigned.get("FRANCE") == "cli_model_F" # CLI model should override TOML
     manager.initialize_agents(assigned)
-    assert manager.get_agent("FRANCE").model_id == "cli_model_F"
+    france_agent = manager.get_agent("FRANCE")
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(france_agent, LLMAgent)
+    assert france_agent.model_id == "cli_model_F"
 
 def test_num_players_limits_toml_assignments():
     logger.info("\n--- Test 10: num_players is less than TOML assignments ---")
@@ -219,7 +244,10 @@ def test_num_players_limits_toml_assignments():
     assert (assigned_power, assigned_model) in toml_assignments
     
     manager.initialize_agents(assigned)
-    assert manager.get_agent(assigned_power).model_id == assigned_model
+    agent = manager.get_agent(assigned_power)
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(agent, LLMAgent)
+    assert agent.model_id == assigned_model
 
 def test_default_model_from_config_used():
     logger.info("\n--- Test 11: Default model from TOML (GameConfig) is used ---")
@@ -234,7 +262,10 @@ def test_default_model_from_config_used():
     manager.initialize_agents(assigned)
     # Ensure the agent got the toml_default_model
     agent_power = list(manager.agents.keys())[0]
-    assert manager.get_agent(agent_power).model_id == "toml_default_model"
+    agent = manager.get_agent(agent_power)
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(agent, LLMAgent)
+    assert agent.model_id == "toml_default_model"
 
 def test_fallback_model_used_if_no_config_default():
     logger.info("\n--- Test 12: AgentManager fallback model is used if no default in TOML/GameConfig ---")
@@ -248,7 +279,10 @@ def test_fallback_model_used_if_no_config_default():
     assert assigned_model == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL # Check against the imported constant
     manager.initialize_agents(assigned)
     agent_power = list(manager.agents.keys())[0]
-    assert manager.get_agent(agent_power).model_id == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
+    agent = manager.get_agent(agent_power)
+    from ai_diplomacy.agents.llm_agent import LLMAgent
+    assert isinstance(agent, LLMAgent)
+    assert agent.model_id == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
 
 # More tests can be added for edge cases like:
 # - All powers excluded

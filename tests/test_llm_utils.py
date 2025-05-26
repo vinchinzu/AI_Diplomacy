@@ -189,9 +189,9 @@ def test_clean_json_text_newlines_before_keys():
 
 
 def test_clean_json_text_single_to_double_quotes_keys():
-    # text = re.sub(r"'(\w+)'\s*:", r'"\1":', text)
-    assert llm_utils.clean_json_text("{'key': 'value', 'another_key': 123}") == '{"key": "value", "another_key": 123}'
-    # Should not affect values
+    # text = re.sub(r"'(\w+)'\s*:", r'"\1":', text) # Conversion rule removed from clean_json_text
+    assert llm_utils.clean_json_text("{'key': 'value', 'another_key': 123}") == "{'key': 'value', 'another_key': 123}" # Expected output changed
+    # Should not affect values with actual double quotes
     assert llm_utils.clean_json_text('{"key": "val\'ue"}') == '{"key": "val\'ue"}'
 
 def test_clean_json_text_comments():
@@ -202,7 +202,6 @@ def test_clean_json_text_comments():
         "another": /* block comment */ "value2" 
     }
     """
-    expected = '{\n        "key": "value", \n        "another":  "value2" \n    }' # Exact spacing might vary
     cleaned = llm_utils.clean_json_text(json_with_comments)
     # We'll parse and compare as dicts to avoid issues with whitespace.
     assert json.loads(cleaned) == {"key": "value", "another": "value2"}

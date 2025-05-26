@@ -169,6 +169,48 @@ Make MCP an add‑on, not mandatory; support both inline and MCP context.
 
 ---
 
+## Legacy Cleanup: Remove old modules ✅ COMPLETED
+
+### Goal
+Clean up legacy files and imports to fully commit to the new layered structure.
+
+### What we accomplished
+
+#### 1. Updated Import Dependencies ✅
+- **agent_manager.py** - Updated to use new AgentFactory and BaseAgent
+- **game_results.py** - Updated to work with BaseAgent interface
+- **utils.py** - Updated to use new services.llm_coordinator
+- **initialization.py** - Simplified to deprecated stubs, created constants.py
+- **planning.py** - Deprecated and removed (planning now handled by agents)
+
+#### 2. Created New Modules ✅
+- **constants.py** - Centralized ALL_POWERS and ALLOWED_RELATIONSHIPS
+- **Updated __init__.py** - Backward compatibility exports for DiplomacyAgent
+
+#### 3. Removed Legacy Files ✅
+- **agent.py** - Deleted legacy agent implementation
+- **llm_coordinator.py** - Deleted legacy coordinator (kept services version)
+- **planning.py** - Deleted deprecated planning module
+
+#### 4. Updated Game Orchestrator ✅
+- **Planning phase** - Updated to gracefully handle deprecated planning
+- **Agent interface** - Compatible with new BaseAgent system
+
+#### 5. Comprehensive Testing ✅
+- **All stage tests pass** - Stages 0, 1, and 2 tests all passing
+- **Import compatibility** - All major imports work correctly
+- **Database functionality** - Usage tracking still functional
+- **Backward compatibility** - DiplomacyAgent alias works
+
+### Success Criteria
+- ✅ Legacy files safely removed without breaking functionality
+- ✅ All imports updated to use new services and agents
+- ✅ Comprehensive test suite still passes
+- ✅ Backward compatibility maintained through __init__.py exports
+- ✅ Clean codebase ready for Stage 3 (MCP integration)
+
+---
+
 ## Stage 3: Optional MCP integration (PLANNED)
 
 ### Goal

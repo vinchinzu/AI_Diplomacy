@@ -6,11 +6,10 @@ import logging
 from typing import List, Dict, Optional, Any
 
 from .base import BaseAgent, Order, Message, PhaseState
-from ..services.llm_coordinator import LLMCoordinator, LLMCallResult
+from ..services.llm_coordinator import LLMCoordinator
 from ..services.config import AgentConfig, resolve_context_provider
 from ..services.context_provider import ContextProviderFactory, ContextData
 from .. import llm_utils
-from .. import prompt_utils
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +49,8 @@ class LLMAgent(BaseAgent):
         """
         super().__init__(agent_id, country)
         self.config = config
+        self.power_name = country  # Added for direct access
+        self.model_id = config.model_id  # Added for direct access
         self.game_id = game_id
         self.llm_coordinator = llm_coordinator or LLMCoordinator()
         

@@ -72,7 +72,7 @@ def test_save_game_state_writes_history_json():
         results_processor = GameResultsProcessor(mock_game_config)
         
         # Mock to_saved_game_format specifically for the call within save_game_state
-        with patch("ai_diplomacy.game_results.to_saved_game_format", return_value='{"mock_game_state": "data"}') as mock_to_saved_format:
+        with patch("ai_diplomacy.game_results.to_saved_game_format", return_value='{"mock_game_state": "data"}'):
 
             # 3. Call save_game_state
             results_processor.save_game_state(mock_game_instance, mock_game_history)
@@ -88,7 +88,6 @@ def test_save_game_state_writes_history_json():
             # Check if open was called for the history file
             # It's also called for the final_state.json, so we look for the specific call
             found_history_file_call = False
-            final_state_filepath = os.path.join(expected_results_dir, f"{mock_game_config.game_id}_final_state.json")
 
             for call_args in mock_file_open.call_args_list:
                 if call_args[0][0] == expected_history_filepath:
@@ -103,7 +102,6 @@ def test_save_game_state_writes_history_json():
             # This assumes json.dump uses the write method of the file handle from open()
             
             # Get the file handle that was used for the history file
-            history_file_handle_write_calls = None
             for call in mock_file_open.call_args_list:
                 if call[0][0] == expected_history_filepath:
                     # The mock_open().write calls are on the instance returned by mock_file_open()
@@ -162,13 +160,21 @@ def test_save_game_state_writes_history_json():
         # Fill other necessary args for GameConfig constructor
         mock_cli_args.game_id_prefix = "test_prefix"
         mock_cli_args.log_dir = "dummy_base_log_dir"
-        mock_cli_args.power_name = None; mock_cli_args.model_id = None; mock_cli_args.num_players = 7
-        mock_cli_args.log_level = "INFO"; mock_cli_args.perform_planning_phase = False
-        mock_cli_args.num_negotiation_rounds = 1; mock_cli_args.negotiation_style = "simultaneous"
-        mock_cli_args.fixed_models = None; mock_cli_args.randomize_fixed_models = False
-        mock_cli_args.exclude_powers = None; mock_cli_args.max_years = None
-        mock_cli_args.dev_mode = False; mock_cli_args.verbose_llm_debug = False
-        mock_cli_args.max_diary_tokens = 6500; mock_cli_args.models_config_file = "models.toml"
+        mock_cli_args.power_name = None
+        mock_cli_args.model_id = None
+        mock_cli_args.num_players = 7
+        mock_cli_args.log_level = "INFO"
+        mock_cli_args.perform_planning_phase = False
+        mock_cli_args.num_negotiation_rounds = 1
+        mock_cli_args.negotiation_style = "simultaneous"
+        mock_cli_args.fixed_models = None
+        mock_cli_args.randomize_fixed_models = False
+        mock_cli_args.exclude_powers = None
+        mock_cli_args.max_years = None
+        mock_cli_args.dev_mode = False
+        mock_cli_args.verbose_llm_debug = False
+        mock_cli_args.max_diary_tokens = 6500
+        mock_cli_args.models_config_file = "models.toml"
 
         with patch('os.path.exists', return_value=False): # For models.toml
             mock_game_config_no_log = GameConfig(mock_cli_args)

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Define a type for the get_valid_orders function that will be passed
-GetValidOrdersFuncType = Callable[['Game', str, 'AgentLLMInterface', 'GameHistory', 'GameConfig', int], Coroutine[Any, Any, List[str]]]
+GetValidOrdersFuncType = Callable[['Game', str, str, Any, str, Dict[str, List[str]], 'GameHistory', str, 'GameConfig', Optional[List[str]], Optional[Dict[str, str]], Optional[str], str, str], Coroutine[Any, Any, List[str]]]
 
 
 class GamePhaseOrchestrator:
@@ -446,19 +446,9 @@ class GamePhaseOrchestrator:
 
 
     async def _perform_planning_phase(self, game: 'Game', game_history: 'GameHistory'):
-        logger.info("Performing planning phase...")
-        
-        # SERIALIZE planning instead of running concurrently
-        for power_name in self.active_powers:
-            agent = self.agent_manager.get_agent(power_name)
-            if agent:
-                logger.debug(f"Generating plan for {power_name}...") # INFO to DEBUG
-                try:
-                    plan = await agent.generate_plan(game, game_history, self.config.llm_log_path)
-                    game_history.add_plan(game.get_current_phase(), agent.power_name, plan)
-                    logger.debug(f"✅ {power_name}: Generated plan - {plan[:100]}...") # INFO to DEBUG
-                except Exception as e:
-                    logger.error(f"❌ Error generating plan for {power_name}: {e}", exc_info=e)
+        logger.warning("Planning phase is deprecated in the new agent system. Skipping planning phase.")
+        logger.info("The new agent system handles strategic planning internally during order generation.")
+        return
 
     async def _perform_negotiation_rounds(self, game: 'Game', game_history: 'GameHistory'):
         current_phase_name = game.get_current_phase()

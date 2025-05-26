@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+from datetime import datetime
 from typing import Dict, TYPE_CHECKING
 
 # Import usage tracking functions
@@ -21,7 +22,7 @@ except ImportError:
 if TYPE_CHECKING:
     from .game_config import GameConfig
     from .game_history import GameHistory # Assuming GameHistory can be pickled or has a to_dict method
-    from .agent import DiplomacyAgent
+    from .agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ class GameResultsProcessor:
             logger.error(f"Error saving game history: {e}", exc_info=True)
 
 
-    def save_agent_manifestos(self, agents: Dict[str, 'DiplomacyAgent']):
+    def save_agent_manifestos(self, agents: Dict[str, 'BaseAgent']):
         """
         Saves the final state (goals, relationships, journal/diary) of each agent.
 
@@ -146,36 +147,46 @@ class GameResultsProcessor:
             manifesto_path = os.path.join(self.config.manifestos_dir, f"{self.config.game_id}_{power_name}_manifesto.txt")
             try:
                 with open(manifesto_path, 'w', encoding='utf-8') as f:
-                    f.write(f"Manifesto for {power_name} (Model: {agent.model_id})\n")
+                    # Get agent info - works with both old and new agent types
+                    agent_info = agent.get_agent_info() if hasattr(agent, 'get_agent_info') else {}
+                    model_id = getattr(agent, 'model_id', agent_info.get('model_id', 'unknown'))
+                    
+                    f.write(f"Manifesto for {power_name} (Model: {model_id})\n")
                     f.write(f"Game ID: {self.config.game_id}\n")
                     f.write(f"Timestamp: {self.config.current_datetime_str}\n")
+                    f.write(f"Agent Type: {agent_info.get('type', type(agent).__name__)}\n")
+                    
+                    # Handle goals - may not exist in new agent types
                     f.write("\n--- Final Goals ---\n")
-                    if agent.goals:
+                    if hasattr(agent, 'goals') and agent.goals:
                         for goal in agent.goals:
                             f.write(f"- {goal}\n")
                     else:
-                        f.write("(No specific goals listed)\n")
+                        f.write("(No specific goals listed or not supported by this agent type)\n")
 
+                    # Handle relationships - may not exist in new agent types
                     f.write("\n--- Final Relationships ---\n")
-                    if agent.relationships:
+                    if hasattr(agent, 'relationships') and agent.relationships:
                         for p, status in agent.relationships.items():
                             f.write(f"- {p}: {status}\n")
                     else:
-                        f.write("(No specific relationships listed)\n")
+                        f.write("(No specific relationships listed or not supported by this agent type)\n")
 
+                    # Handle private journal - may not exist in new agent types
                     f.write("\n--- Private Journal (Last 20 entries) ---\n")
-                    if agent.private_journal:
+                    if hasattr(agent, 'private_journal') and agent.private_journal:
                         for entry in agent.private_journal[-20:]: # Show last few entries
                             f.write(f"{entry}\n")
                     else:
-                        f.write("(Journal is empty)\n")
+                        f.write("(Journal is empty or not supported by this agent type)\n")
                         
+                    # Handle private diary - may not exist in new agent types
                     f.write("\n--- Private Diary (Last 50 entries) ---\n")
-                    if agent.private_diary:
+                    if hasattr(agent, 'private_diary') and agent.private_diary:
                         for entry in agent.private_diary[-50:]: # Show last few entries
                             f.write(f"{entry}\n")
                     else:
-                        f.write("(Diary is empty)\n")
+                        f.write("(Diary is empty or not supported by this agent type)\n")
                 
                 logger.info(f"Manifesto for {power_name} saved to: {manifesto_path}")
             except Exception as e:
@@ -298,20 +309,38 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # --- Mocking dependencies ---
-    class MockGameConfigResults:
+    from .game_config import GameConfig
+    
+    class MockGameConfigResults(GameConfig):
         def __init__(self, game_id="results_test_game", log_to_file=True):
-            self.game_id = game_id
+            # Create minimal mock args for parent constructor
+            class MockArgs:
+                def __init__(self):
+                    self.game_id = game_id
+                    self.game_id_prefix = "test"
+                    self.log_level = "INFO"
+                    self.log_to_file = log_to_file
+                    self.log_dir = None
+                    self.power_name = None
+                    self.model_id = None
+                    self.num_players = 7
+                    self.perform_planning_phase = False
+                    self.num_negotiation_rounds = 1
+                    self.negotiation_style = "simultaneous"
+                    self.fixed_models = None
+                    self.randomize_fixed_models = False
+                    self.exclude_powers = None
+                    self.max_years = None
+                    self.dev_mode = False
+                    self.verbose_llm_debug = False
+                    self.max_diary_tokens = 6500
+                    self.models_config_file = "models.toml"
+            
+            # Call parent constructor
+            super().__init__(MockArgs())
+            
+            # Override for testing
             self.current_datetime_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.log_to_file = log_to_file
-            
-            # Create dummy directories similar to GameConfig
-            self.base_log_dir = os.path.join(os.getcwd(), "logs_results_test")
-            self.game_id_specific_log_dir = os.path.join(self.base_log_dir, self.game_id)
-            self.results_dir = os.path.join(self.game_id_specific_log_dir, "results")
-            self.manifestos_dir = os.path.join(self.results_dir, "manifestos")
-            
-            if self.log_to_file:
-                os.makedirs(self.manifestos_dir, exist_ok=True) # Also creates parent results_dir
 
     class MockDiplomacyAgent:
         def __init__(self, power_name, model_id="mock_model"):

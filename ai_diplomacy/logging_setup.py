@@ -1,6 +1,7 @@
 import logging
 import os
 import sys # To get stdout for console handler
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

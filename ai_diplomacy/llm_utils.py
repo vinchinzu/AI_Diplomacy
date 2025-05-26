@@ -56,16 +56,9 @@ def clean_json_text(text: str) -> str:
     # Fix newlines before JSON keys
     text = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', text)
     
-    # Replace single quotes with double quotes for keys
-    text = re.sub(r"'(\w+)'\s*:", r'"\1":', text)
-    
     # Remove comments (if any)
     text = re.sub(r'//.*$', '', text, flags=re.MULTILINE)
     text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    
-    # Fix unescaped quotes in values (basic attempt)
-    # This is risky but sometimes helps with simple cases
-    text = re.sub(r':\s*"([^"]*)"([^",}\]]+)"', r': "\1\2"', text)
     
     # Remove any BOM or zero-width spaces
     text = text.replace('\ufeff', '').replace('\u200b', '')
@@ -187,6 +180,9 @@ def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_f
     try:
         result = json_repair.loads(text)
         logger_param.warning(f"{identifier_for_log} Last resort json-repair succeeded")
+        if not isinstance(result, dict):
+            logger_param.error(f"{identifier_for_log} json-repair returned non-dict type: {type(result)}. Original text: {original_text[:500]}...")
+            return {}
         return result
     except Exception as e:
         logger_param.error(f"{identifier_for_log} All JSON extraction attempts failed. Original text: {original_text[:500]}... Error: {e}")

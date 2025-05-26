@@ -3,7 +3,7 @@ Abstract base agent interface.
 Defines the contract all agents must implement without coupling to specific LLM providers.
 """
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ..core.state import PhaseState
 
 
@@ -55,6 +55,7 @@ class BaseAgent(ABC):
         """
         self.agent_id = agent_id
         self.country = country.upper()
+        self.model_id: Optional[str] = None  # Will be set by concrete implementations
     
     @abstractmethod
     async def decide_orders(self, phase: PhaseState) -> List[Order]:

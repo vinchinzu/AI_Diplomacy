@@ -239,10 +239,38 @@ if __name__ == '__main__':
                 logger.error(f"[MockGameHistory] Phase {phase_name} not found to add summary for {power_name}")
 
 
-    class MockGameConfig:
+    from .game_config import GameConfig
+    
+    class MockGameConfig(GameConfig):
         def __init__(self, power_name="FRANCE"):
+            # Create minimal mock args for parent constructor
+            class MockArgs:
+                def __init__(self):
+                    self.game_id = "test_phase_summary"
+                    self.game_id_prefix = "test"
+                    self.log_level = "INFO"
+                    self.log_to_file = True
+                    self.log_dir = None
+                    self.power_name = power_name
+                    self.model_id = None
+                    self.num_players = 7
+                    self.perform_planning_phase = False
+                    self.num_negotiation_rounds = 1
+                    self.negotiation_style = "simultaneous"
+                    self.fixed_models = None
+                    self.randomize_fixed_models = False
+                    self.exclude_powers = None
+                    self.max_years = None
+                    self.dev_mode = False
+                    self.verbose_llm_debug = False
+                    self.max_diary_tokens = 6500
+                    self.models_config_file = "models.toml"
+            
+            # Call parent constructor
+            super().__init__(MockArgs())
+            
+            # Override for testing
             self.llm_log_path = "dummy_llm_log.csv"
-            self.power_name = power_name # Needed if PhaseSummaryGenerator uses it directly
             self.agents = {} # To store mock agents if needed for goal/relationship fetching
 
             # Mock an agent for testing goal/relationship fetching

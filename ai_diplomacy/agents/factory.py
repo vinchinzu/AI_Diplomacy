@@ -2,7 +2,7 @@
 Agent factory for creating different types of agents based on configuration.
 """
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 
 from .base import BaseAgent
 from .llm_agent import LLMAgent

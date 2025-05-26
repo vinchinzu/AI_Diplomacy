@@ -1,13 +1,12 @@
 from dotenv import load_dotenv
 import logging
 import os
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, TYPE_CHECKING
 from diplomacy import Game
 import csv
-# TYPE_CHECKING for BaseModelClient removed as it's obsolete.
-# from typing import TYPE_CHECKING
-# if TYPE_CHECKING:
-    # from .agent import DiplomacyAgent # Keep if DiplomacyAgent hint is still needed elsewhere
+
+if TYPE_CHECKING:
+    from .game_config import GameConfig
 # Removed: import llm 
 import re
 import ast
@@ -109,7 +108,8 @@ def _extract_moves_from_llm_response(raw_response: str, power_name: str, model_i
         logger.debug(f"[{model_id}] Regex for inline 'PARSABLE OUTPUT' failed. Trying triple-backtick code fences for {power_name}.")
         code_fence_pattern = r"```json\n(.*?)\n```"
         matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
-        if matches: logger.debug(f"[{model_id}] Found triple-backtick JSON block for {power_name}.")
+        if matches:
+            logger.debug(f"[{model_id}] Found triple-backtick JSON block for {power_name}.")
 
     json_text = None
     if matches:
