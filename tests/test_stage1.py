@@ -127,7 +127,3 @@ def test_clean_boundaries():
     assert hasattr(agent, "llm_coordinator")
 
     logger.info("✓ Clean boundaries maintained")
-
-
-# Removed main() function and if __name__ == "__main__": block
-# Pytest will discover and run the test functions automatically.

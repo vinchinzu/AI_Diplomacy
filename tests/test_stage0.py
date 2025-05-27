@@ -106,7 +106,3 @@ def test_llm_coordinator():
     assert coordinator is not None
 
     logger.info("✓ LLM coordinator initialized correctly")
-
-
-# Removed main() function and if __name__ == "__main__": block
-# Pytest will discover and run the test functions automatically.

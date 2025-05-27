@@ -8,25 +8,26 @@ import asyncio
 import logging
 import os
 import time
-from typing import List, Optional  # Added Any for mock args
+from typing import List, Optional
 from unittest.mock import patch
-import pytest  # Added pytest
-import json  # Added json import
+import pytest
+import json
 
 import dotenv
 from diplomacy import Game
 from diplomacy.utils.export import to_saved_game_format
 
 # New refactored components
-from ai_diplomacy.game_config import GameConfig
 from ai_diplomacy.logging_setup import setup_logging
 from ai_diplomacy.agent_manager import AgentManager
 from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.general_utils import (
-    assign_models_to_powers,
     get_valid_orders,
     gather_possible_orders,
 )
+# Use the shared factory for GameConfig
+from ._shared_fixtures import create_game_config
+from ai_diplomacy.game_config import GameConfig
 
 
 # Suppress warnings
@@ -43,13 +44,6 @@ logger = logging.getLogger(__name__)
 LIVE_MODEL_ID = "gemma3:latest"  # Or use an environment variable
 
 
-class MockArgs:
-    """Helper class to simulate argparse.Namespace for GameConfig."""
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-
 def _prepare_config_for_test(
     execution_mode: str,
     test_powers_str: str,
@@ -57,63 +51,59 @@ def _prepare_config_for_test(
     num_players: int = 1,
     num_sequential: int = 2,
     max_concurrent: int = 2,
+    log_to_file_override: bool = True,
+    log_dir_override: str = "./pytest_logs"
 ) -> GameConfig:
-    """Helper function to create GameConfig for tests."""
+    """Helper function to create GameConfig for tests using the shared factory."""
 
     use_mocks = execution_mode == "mock"
 
-    # Determine model_ids based on execution_mode
+    actual_model_ids_str: str
     if use_mocks:
-        # For mock mode, use placeholder model IDs that match what mock logic might expect
-        # or simply ensure they are syntactically valid if not used by mock logic.
         actual_model_ids_str = (
             model_ids_str if model_ids_str else "mock_model_1,mock_model_2"
         )
     else:
-        # For live mode, use the actual live model ID.
-        # If specific models were passed for live, use them, otherwise default to LIVE_MODEL_ID.
         actual_model_ids_str = model_ids_str if model_ids_str else LIVE_MODEL_ID
-        # Ensure all powers in live mode use a valid live model if multiple powers are tested
         num_test_powers = len(test_powers_str.split(","))
-        if (
-            "," not in actual_model_ids_str and num_test_powers > 1
-        ):  # Only one model ID provided for multiple powers
+        if "," not in actual_model_ids_str and num_test_powers > 1:
             actual_model_ids_str = ",".join([LIVE_MODEL_ID] * num_test_powers)
 
     parsed_model_ids = [m.strip() for m in actual_model_ids_str.split(",")]
-
     test_powers_list = [p.strip().upper() for p in test_powers_str.split(",")]
+    
     num_models = len(parsed_model_ids)
-    fixed_models = [
-        parsed_model_ids[i % num_models] for i in range(len(test_powers_list))
-    ]
+    fixed_models = [ parsed_model_ids[i % num_models] if num_models > 0 else "default_mock_model" for i in range(len(test_powers_list)) ]
 
-    args = MockArgs(
-        use_mocks=use_mocks,
-        dev_mode=True,  # Default from original script
-        game_id_prefix=f"pytest_{execution_mode}",
-        log_level="INFO",
-        log_to_file=True,
-        log_dir="./pytest_logs",
-        test_powers=test_powers_str,
-        model_ids=parsed_model_ids,  # Store as list
-        fixed_models=fixed_models,
-        num_players=num_players,
-        num_sequential=num_sequential,
-        max_concurrent=max_concurrent,
-        # Defaults for other GameConfig fields not covered by original args
-        power_name=None,  # From original args, default None
-        game_id=f"pytest_{execution_mode}_{int(time.time())}",
-        exclude_powers=None,
-        max_years=None,
-        perform_planning_phase=False,
-        num_negotiation_rounds=0,
-        negotiation_style="simultaneous",
-        randomize_fixed_models=False,
-    )
 
-    config = GameConfig(args)  # type: ignore
-    setup_logging(config)  # Setup logging for each test run based on its config
+    config_kwargs = {
+        "use_mocks": use_mocks,
+        "dev_mode": True,
+        "game_id_prefix": f"pytest_{execution_mode}",
+        "log_level": "INFO",
+        "log_to_file": log_to_file_override,
+        "log_dir": log_dir_override,
+        "test_powers": test_powers_str,
+        "model_ids": parsed_model_ids,
+        "fixed_models": fixed_models,
+        "num_players": num_players,
+        "power_name": None,
+        "game_id": f"pytest_{execution_mode}_{int(time.time())}",
+        "exclude_powers": None,
+        "max_years": 1,
+        "perform_planning_phase": False,
+        "num_negotiation_rounds": 0,
+        "negotiation_style": "simultaneous",
+        "randomize_fixed_models": False,
+        "models_config_file": None
+    }
+    
+    config_kwargs["num_sequential"] = num_sequential
+    config_kwargs["max_concurrent"] = max_concurrent
+
+
+    config = create_game_config(**config_kwargs)
+    setup_logging(config)
     return config
 
 

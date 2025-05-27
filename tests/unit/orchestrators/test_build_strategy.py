@@ -5,9 +5,6 @@ from types import SimpleNamespace
 
 from ai_diplomacy.orchestrators.build import BuildPhaseStrategy
 
-# Using the same FakeGame and DummyOrchestrator definitions as in test_movement_strategy
-# Ideally, these would be in a shared conftest.py or a common test utility file.
-# For now, duplicating for simplicity until a broader test structure is decided.
 
 class FakeGame:
     def __init__(self, phase, powers_names, build_conditions=None):

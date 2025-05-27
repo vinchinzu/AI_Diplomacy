@@ -19,6 +19,17 @@ from ai_diplomacy.utils.phase_parsing import get_phase_type_from_game, _extract_
         ("S1901MVT", PhaseType.MVT.value), # another variation of MVT
         ("AUTUMN 1901 BUILD", PhaseType.BLD.value), # another variation of BLD/Adjustments
         ("A1901B", PhaseType.BLD.value), # variation
+        # Cases from test_game_orchestrator.py
+        ("FALL 1901 RETREAT", PhaseType.RET.value),
+        ("WINTER 1901 ADJUSTMENT", PhaseType.BLD.value),
+        ("WINTER 1901 BUILD", PhaseType.BLD.value),
+        ("AUTUMN 1905 ADJUSTMENTS", PhaseType.BLD.value),
+        ("S1902M", PhaseType.MVT.value),
+        ("F1903 RET", PhaseType.RET.value),
+        ("WINTER 1904 BLD", PhaseType.BLD.value),
+        ("SPR 1901 M", PhaseType.MVT.value),
+        ("FAL 1901 R", PhaseType.RET.value),
+        ("WIN 1901 A", PhaseType.BLD.value),
     ],
 )
 def test_get_phase_type_from_game_valid(phase_string, expected_type):
@@ -33,6 +44,7 @@ def test_get_phase_type_from_game_valid(phase_string, expected_type):
         ("SUMMER 1904 PICNIC"),
         ("S190B"), # Invalid compact form
         ("SPRANG 1901 MOVEMENT"), # Misspelled season
+        ("XYZ1234 UNKNOWN_PHASE"), # Case from test_game_orchestrator.py
     ]
 )
 def test_get_phase_type_from_game_invalid(invalid_phase_string):

@@ -70,7 +70,6 @@ async def test_decide_orders_returns_valid_orders(
     llm_agent, mock_llm_coordinator, mock_phase_state
 ):
     # Fixture mock_phase_state already provides units by default
-    # mock_phase_state.get_power_units = Mock(return_value=["A LON", "F EDI"]) # No longer needed here
 
     mock_llm_coordinator.call_json = AsyncMock(
         return_value={"orders": ["A LON H", "F EDI M NTH"]}

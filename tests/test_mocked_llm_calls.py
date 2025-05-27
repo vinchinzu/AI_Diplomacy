@@ -49,7 +49,7 @@ def common_mocks():
     # However, diplomacy.Game() starts in S1901M by default.
 
     game_history = MagicMock(spec=GameHistory)
-    # Removed obsolete mock setups for methods not on GameHistory spec or not used by current SUT
+
     # game_history.get_event_log_for_power.return_value = "Fake history log"
     # game_history.get_full_event_log.return_value = "Fake full history log"
     game_history.get_messages_this_round.return_value = "Fake messages for this round"
@@ -61,20 +61,6 @@ def common_mocks():
         "config": config,
         "power_name": "FRANCE",  # Default power for these tests
     }
-
-
-# Commented out tests related to AgentLLMInterface as they were disabled
-# @patch('ai_diplomacy.llm_coordinator.LocalLLMCoordinator.llm_call_internal')
-# @pytest.mark.asyncio
-# async def test_mock_agent_negotiation_diary_success(mock_llm_call_internal, common_mocks):
-#     # This test is disabled because AgentLLMInterface was removed in refactor
-#     pass
-
-# @patch('ai_diplomacy.llm_coordinator.LocalLLMCoordinator.llm_call_internal')
-# @pytest.mark.asyncio
-# async def test_mock_agent_negotiation_diary_json_fail(mock_llm_call_internal, common_mocks):
-#     # This test is disabled because AgentLLMInterface was removed in refactor
-#     pass
 
 
 @pytest.mark.asyncio

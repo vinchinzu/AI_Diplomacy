@@ -249,47 +249,48 @@ async def test_agent_with_context_providers():
     with patch(
         "ai_diplomacy.services.llm_coordinator.llm_call_internal",
         return_value=mock_llm_orders_string_output,
-    ) as mock_llm_call_inline:
+    ) as mock_llm_call:
         orders = await inline_agent.decide_orders(phase_state)
         assert orders == expected_agent_orders
-        assert mock_llm_call_inline.call_count == 1
-        logger.info(f"Inline agent generated {len(orders)} orders with mock")
+        mock_llm_call.assert_called_once()
+        # Verify context from inline provider was used in the prompt
+        prompt_text = mock_llm_call.call_args[1]["prompt_text"]
+        assert "Context (Inline)" in prompt_text
 
     # Test mcp_agent
     with patch(
         "ai_diplomacy.services.llm_coordinator.llm_call_internal",
         return_value=mock_llm_orders_string_output,
-    ) as mock_llm_call_mcp:
+    ) as mock_llm_call:
         orders = await mcp_agent.decide_orders(phase_state)
         assert orders == expected_agent_orders
-        assert mock_llm_call_mcp.call_count == 1
-        logger.info(
-            f"MCP agent generated {len(orders)} orders with mock (expected fallback to inline)"
-        )
+        mock_llm_call.assert_called_once()
+        # Verify context from MCP provider (fallback to inline) was used
+        prompt_text = mock_llm_call.call_args[1]["prompt_text"]
+        assert "Context (MCP - Fallback to Inline)" in prompt_text
+        assert "MCP tools not available" in prompt_text
 
     # Test auto_agent
     with patch(
         "ai_diplomacy.services.llm_coordinator.llm_call_internal",
         return_value=mock_llm_orders_string_output,
-    ) as mock_llm_call_auto:
+    ) as mock_llm_call:
         orders = await auto_agent.decide_orders(phase_state)
         assert orders == expected_agent_orders
-        assert mock_llm_call_auto.call_count == 1
-        logger.info(
-            f"Auto agent generated {len(orders)} orders with mock (expected fallback to inline)"
-        )
+        mock_llm_call.assert_called_once()
+        # Verify context from auto provider (fallback to inline) was used
+        prompt_text = mock_llm_call.call_args[1]["prompt_text"]
+        assert "Context (Auto - Fallback to Inline)" in prompt_text
 
-    logger.info(
-        "✓ Agents working correctly with mocked context providers and LLM calls"
-    )
+    logger.info("✓ Agents working correctly with context providers")
 
 
 def test_full_config_integration():
-    """Test full configuration integration with context providers."""
-    logger.info("Testing full configuration integration...")
+    """Test creating agents from full configuration with context providers."""
+    logger.info("Testing full configuration integration with context providers...")
 
     # Create a full diplomacy configuration with mixed context providers
-    game_config = GameConfig(token_budget=5000, use_mcp=True)
+    game_config = GameConfig(token_budget=5000, use_mcp=False)
     agents_config = [
         AgentConfig(
             country="FRANCE",
@@ -306,9 +307,7 @@ def test_full_config_integration():
             model_id="claude-3-haiku",
             context_provider="auto",
         ),
-        AgentConfig(
-            country="RUSSIA", type="scripted", context_provider="inline"
-        ),  # Scripted doesn't use context providers
+        AgentConfig(country="RUSSIA", type="scripted"),
     ]
     config = DiplomacyConfig(game=game_config, agents=agents_config)
 
@@ -317,30 +316,21 @@ def test_full_config_integration():
     agents = factory.create_agents_from_config(config, "test-game")
 
     assert len(agents) == 4
-    assert "FRANCE" in agents
-    assert "GERMANY" in agents
-    assert "ENGLAND" in agents
-    assert "RUSSIA" in agents
-
-    # Check that LLM agents have correct context providers
     assert isinstance(agents["FRANCE"], LLMAgent)
     assert agents["FRANCE"].resolved_context_provider_type == "inline"
 
     assert isinstance(agents["GERMANY"], LLMAgent)
     assert (
         agents["GERMANY"].resolved_context_provider_type == "inline"
-    )  # Fallback since MCP not available
+    )  # Fallback
 
     assert isinstance(agents["ENGLAND"], LLMAgent)
     assert (
         agents["ENGLAND"].resolved_context_provider_type == "inline"
-    )  # Should fallback since MCP not available
+    )  # Fallback for non-tool model
 
     # Scripted agent doesn't have context providers
     assert agents["RUSSIA"].get_agent_info()["type"] == "ScriptedAgent"
+    assert not hasattr(agents["RUSSIA"], "resolved_context_provider_type")
 
-    logger.info("✓ Full configuration integration working correctly")
-
-
-# Removed main() function and if __name__ == "__main__": block
-# Pytest will discover and run the test functions automatically.
+    logger.info("✓ Full configuration integration with context providers working correctly")

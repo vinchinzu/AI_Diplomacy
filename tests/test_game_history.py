@@ -3,64 +3,40 @@ from ai_diplomacy.game_history import GameHistory, Phase
 
 
 def test_game_history_to_dict_serialization():
-    # Instantiate Objects
     game_history = GameHistory()
-
-    # Phase 1
     game_history.add_phase("S1901M")
     phase1 = game_history.get_phase_by_name("S1901M")
-    assert phase1 is not None  # Ensure phase was added
-
+    assert phase1 is not None
     phase1.add_plan("FRANCE", "Plan for France in S1901M")
     phase1.add_message("ENGLAND", "FRANCE", "Hello from England in S1901M!")
-    # For add_orders on Phase object, it takes power, orders, results
-    # The GameHistory.add_orders takes phase_name, power_name, orders (without results)
-    # The GameHistory.add_results takes phase_name, power_name, results
-    # For testing to_dict, we need to populate orders_by_power and results_by_power on the Phase object.
-    # The Phase.add_orders method is a bit confusing as it also takes results.
-    # Let's directly manipulate the dictionaries for clarity in testing to_dict structure.
     phase1.orders_by_power["ITALY"].extend(["F ROM - NAP"])
     phase1.results_by_power["ITALY"].extend([["SUCCESSFUL"]])
-
     phase1.phase_summaries["GERMANY"] = "Germany did well in S1901M."
     phase1.experience_updates["RUSSIA"] = "Learned about betrayal in S1901M."
-
-    # Phase 2
     game_history.add_phase("F1901M")
     phase2 = game_history.get_phase_by_name("F1901M")
     assert phase2 is not None
-
     phase2.add_plan("AUSTRIA", "Plan for Austria in F1901M")
     phase2.add_message("TURKEY", "GLOBAL", "Turkey's global message in F1901M.")
     phase2.orders_by_power["ENGLAND"].extend(["A LON H", "F EDI S A LON H"])
     phase2.results_by_power["ENGLAND"].extend([["SUCCESSFUL"], ["SUCCESSFUL"]])
     phase2.phase_summaries["FRANCE"] = "France struggled in F1901M."
     phase2.experience_updates["ITALY"] = "Italy gained valuable experience in F1901M."
-
-    # Call to_dict()
     history_dict = game_history.to_dict()
-
-    # Assert Dictionary Type
     assert isinstance(history_dict, dict)
-
-    # Assert Key Fields
     assert "phases" in history_dict
     assert isinstance(history_dict["phases"], list)
     assert len(history_dict["phases"]) == 2
-
-    # Check Phase 1
     phase_1_dict = history_dict["phases"][0]
     assert phase_1_dict["name"] == "S1901M"
     assert "plans" in phase_1_dict and isinstance(phase_1_dict["plans"], dict)
     assert phase_1_dict["plans"]["FRANCE"] == "Plan for France in S1901M"
-
     assert "messages" in phase_1_dict and isinstance(phase_1_dict["messages"], list)
     assert len(phase_1_dict["messages"]) == 1
     message_1_dict = phase_1_dict["messages"][0]
     assert message_1_dict["sender"] == "ENGLAND"
     assert message_1_dict["recipient"] == "FRANCE"
     assert message_1_dict["content"] == "Hello from England in S1901M!"
-
     assert "orders_by_power" in phase_1_dict and isinstance(
         phase_1_dict["orders_by_power"], dict
     )
@@ -69,7 +45,6 @@ def test_game_history_to_dict_serialization():
         phase_1_dict["results_by_power"], dict
     )
     assert phase_1_dict["results_by_power"]["ITALY"] == [["SUCCESSFUL"]]
-
     assert "phase_summaries" in phase_1_dict and isinstance(
         phase_1_dict["phase_summaries"], dict
     )
@@ -81,19 +56,14 @@ def test_game_history_to_dict_serialization():
         phase_1_dict["experience_updates"]["RUSSIA"]
         == "Learned about betrayal in S1901M."
     )
-
-    # Check Phase 2 (basic check for existence and name)
     phase_2_dict = history_dict["phases"][1]
     assert phase_2_dict["name"] == "F1901M"
     assert phase_2_dict["plans"]["AUSTRIA"] == "Plan for Austria in F1901M"
     assert phase_2_dict["messages"][0]["sender"] == "TURKEY"
-
-    # Assert JSON Serialization
     json_string = json.dumps(
         history_dict, indent=2
-    )  # Add indent for easier debugging if it fails
+    )
     assert isinstance(json_string, str)
-
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
 

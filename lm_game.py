@@ -3,6 +3,13 @@ import asyncio
 import logging
 import os
 import sys  # For sys.exit
+
+# Ensure the project root (directory of this script) is in sys.path
+# This helps in resolving local package imports like 'ai_diplomacy.something'
+_project_root_dir = os.path.dirname(os.path.abspath(__file__))
+if _project_root_dir not in sys.path:
+    sys.path.insert(0, _project_root_dir)
+
 import time  # For basic timing if needed outside of specific logs
 import traceback  # For exception logging
 from typing import Optional  # Removed Set
