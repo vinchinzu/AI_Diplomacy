@@ -168,6 +168,42 @@ graph TB
     class DIARY,ND,OD,PRD,CONS memory
 ```
 
+### Illustrative Agent API Usage
+
+The refactored `LLMAgent` (a type of `BaseAgent`) exposes a clean asynchronous API for interaction within the game loop. Here's a conceptual example of how an agent might be driven:
+
+```python
+# Conceptual example:
+# Assuming 'agent' is an initialized LLMAgent instance
+# and 'current_phase_state' is a PhaseState object representing the current game state.
+
+# 1. Negotiation Phase
+# Agent generates diplomatic messages
+messages_to_send = await agent.negotiate(current_phase_state)
+for msg in messages_to_send:
+    # Send messages to other powers or global chat
+    print(f"To {msg.recipient}: {msg.content}")
+
+# 2. Order Decision Phase
+# Agent decides on its orders for the current phase
+# The decide_orders method now returns a list of Order objects.
+# The game orchestrator would typically convert these to strings if needed by the game engine.
+orders_to_submit = await agent.decide_orders(current_phase_state)
+for order_obj in orders_to_submit:
+    print(f"Order: {order_obj.order_str}") # Access the string representation
+
+# (Game engine processes the phase based on submitted orders from all agents)
+
+# 3. State Update Phase
+# After the phase is processed, the agent updates its internal state
+# 'phase_state_after_processing' is the PhaseState after orders are resolved
+# 'events_this_phase' is a list of significant occurrences (e.g., attacks, captures)
+# await agent.update_state(phase_state_after_processing, events_this_phase)
+
+print("Agent has completed its turn actions and updated its state.")
+```
+This example highlights the core asynchronous methods `negotiate`, `decide_orders`, and `update_state` that form the primary interaction points with an `LLMAgent`.
+
 ### Key Components Explained
 
 1. **Information Sources**

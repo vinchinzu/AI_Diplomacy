@@ -30,6 +30,15 @@ jobs:
         
     - name: Install the project
       run: uv sync --dev
+
+    - name: Check for legacy interface markers
+      run: |
+        if grep -r "legacy interface" ai_diplomacy; then
+          echo "Error: Found 'legacy interface' markers. Please remove them."
+          exit 1
+        else
+          echo "No 'legacy interface' markers found. Check passed."
+        fi
     
     #- name: Lint with Ruff
      # uses: astral-sh/ruff-action@v3

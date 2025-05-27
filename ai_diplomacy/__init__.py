@@ -14,14 +14,14 @@ from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 from ai_diplomacy.services.config import AgentConfig, DiplomacyConfig
 
 __all__ = [
-    'DiplomacyAgent',  # Backward compatibility alias for LLMAgent
-    'LLMAgent',        # Direct access to new LLMAgent
-    'AgentFactory',
-    'BaseAgent', 
-    'PhaseState',
-    'LLMCoordinator',
-    'AgentConfig',
-    'DiplomacyConfig'
+    "DiplomacyAgent",  # Backward compatibility alias for LLMAgent
+    "LLMAgent",  # Direct access to new LLMAgent
+    "AgentFactory",
+    "BaseAgent",
+    "PhaseState",
+    "LLMCoordinator",
+    "AgentConfig",
+    "DiplomacyConfig",
 ]
 
 # Re-export LLMAgent under its own name as well

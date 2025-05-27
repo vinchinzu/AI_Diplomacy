@@ -1,15 +1,20 @@
 import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
+
 # AgentLLMInterface was removed in refactor
 from ai_diplomacy.game_config import GameConfig
 from diplomacy import Game
 from ai_diplomacy.game_history import GameHistory
-from ai_diplomacy.utils import get_valid_orders, gather_possible_orders # Step 1: Import get_valid_orders and gather_possible_orders
+from ai_diplomacy.utils import (
+    get_valid_orders,
+    gather_possible_orders,
+)  # Step 1: Import get_valid_orders and gather_possible_orders
+
 
 # Helper class for configuration, can be defined at module level
 class TestArgs:
-    __test__ = False # Prevent pytest from collecting this as a test class
+    __test__ = False  # Prevent pytest from collecting this as a test class
 
     def __init__(self):
         self.power_name = "FRANCE"
@@ -29,10 +34,11 @@ class TestArgs:
         self.max_years = None
         self.test_powers = "FRANCE"
 
+
 @pytest.fixture
 def common_mocks():
     args = TestArgs()
-    config = GameConfig(args) # type: ignore
+    config = GameConfig(args)  # type: ignore
 
     game = Game()
     # game.phase = "S1901M" # Set phase directly - this is usually handled by game processing
@@ -45,14 +51,15 @@ def common_mocks():
     # game_history.get_event_log_for_power.return_value = "Fake history log"
     # game_history.get_full_event_log.return_value = "Fake full history log"
     game_history.get_messages_this_round.return_value = "Fake messages for this round"
-    
+
     # agent_interface is None in the original setup for these tests
     return {
         "game": game,
         "game_history": game_history,
         "config": config,
-        "power_name": "FRANCE" # Default power for these tests
+        "power_name": "FRANCE",  # Default power for these tests
     }
+
 
 # Commented out tests related to AgentLLMInterface as they were disabled
 # @patch('ai_diplomacy.llm_coordinator.LocalLLMCoordinator.llm_call_internal')
@@ -69,7 +76,7 @@ def common_mocks():
 
 
 @pytest.mark.asyncio
-@patch('ai_diplomacy.services.llm_coordinator.llm_call_internal')
+@patch("ai_diplomacy.services.llm_coordinator.llm_call_internal")
 async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mocks):
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
@@ -80,7 +87,7 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
     game.set_units("FRANCE", ["A PAR", "A MAR", "F BRE"])
     # Ensure game phase is S1901M for get_all_possible_orders to be accurate
     # game.phase = "S1901M" # diplomacy.Game() starts in S1901M
-    
+
     # Use power-specific possible orders
     power_specific_possible_orders = gather_possible_orders(game, power_name)
 
@@ -97,24 +104,25 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
         game=game,
         model_id="test_model",
         agent_system_prompt="System prompt for FRANCE",
-        board_state=game.get_state(), # board_state is phase dependent
+        board_state=game.get_state(),  # board_state is phase dependent
         power_name=power_name,
-        possible_orders=power_specific_possible_orders, # Use power-specific
+        possible_orders=power_specific_possible_orders,  # Use power-specific
         game_history=game_history,
         game_id=config.game_id,
         config=config,
         agent_goals=["Goal 1"],
         agent_relationships={"GERMANY": "Neutral"},
-        log_file_path="./mock_test_logs/orders.csv", # Consider using tmp_path fixture for logs
-        phase=game.phase # Use game.phase
+        log_file_path="./mock_test_logs/orders.csv",  # Consider using tmp_path fixture for logs
+        phase=game.phase,  # Use game.phase
     )
 
     mock_llm_call_internal.assert_called_once()
     # Sort both lists for comparison as order is not guaranteed
     assert sorted(orders) == sorted(["A PAR H", "A MAR H", "F BRE H"])
 
+
 @pytest.mark.asyncio
-@patch('ai_diplomacy.services.llm_coordinator.llm_call_internal')
+@patch("ai_diplomacy.services.llm_coordinator.llm_call_internal")
 async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mocks):
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
@@ -126,10 +134,10 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
 
     # Use power-specific possible orders
     power_specific_possible_orders = gather_possible_orders(game, power_name)
-    
+
     # expected_fallback_orders should be calculated based on these power_specific_possible_orders
     expected_fallback_orders = []
-    for loc_str_key in power_specific_possible_orders: # loc_str_key is like "A PAR"
+    for loc_str_key in power_specific_possible_orders:  # loc_str_key is like "A PAR"
         orders_for_loc = power_specific_possible_orders[loc_str_key]
         # unit_type = loc_str_key.split()[0] # Not needed if using holds[0] or orders_for_loc[0]
         # unit_loc_name = loc_str_key.split()[1]
@@ -137,7 +145,7 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
 
         if hold_order_candidates:
             expected_fallback_orders.append(hold_order_candidates[0])
-        elif orders_for_loc: # If no hold, take the first available order
+        elif orders_for_loc:  # If no hold, take the first available order
             expected_fallback_orders.append(orders_for_loc[0])
     expected_fallback_orders.sort()
 
@@ -147,21 +155,28 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
     mock_llm_call_internal.return_value = fut
 
     orders = await get_valid_orders(
-        game=game, model_id="test_model", agent_system_prompt="System prompt",
-        board_state=game.get_state(), power_name=power_name,
-        possible_orders=power_specific_possible_orders, # Use power-specific
-        game_history=game_history, game_id=config.game_id,
+        game=game,
+        model_id="test_model",
+        agent_system_prompt="System prompt",
+        board_state=game.get_state(),
+        power_name=power_name,
+        possible_orders=power_specific_possible_orders,  # Use power-specific
+        game_history=game_history,
+        game_id=config.game_id,
         config=config,
-        phase=game.phase
+        phase=game.phase,
     )
 
     mock_llm_call_internal.assert_called_once()
     orders.sort()
     assert orders == expected_fallback_orders
 
+
 @pytest.mark.asyncio
-@patch('ai_diplomacy.services.llm_coordinator.llm_call_internal')
-async def test_mock_get_valid_orders_empty_response(mock_llm_call_internal, common_mocks):
+@patch("ai_diplomacy.services.llm_coordinator.llm_call_internal")
+async def test_mock_get_valid_orders_empty_response(
+    mock_llm_call_internal, common_mocks
+):
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -175,13 +190,13 @@ async def test_mock_get_valid_orders_empty_response(mock_llm_call_internal, comm
 
     # expected_fallback_orders should be calculated based on these power_specific_possible_orders
     expected_fallback_orders = []
-    for loc_str_key in power_specific_possible_orders: # loc_str_key is like "A PAR"
+    for loc_str_key in power_specific_possible_orders:  # loc_str_key is like "A PAR"
         orders_for_loc = power_specific_possible_orders[loc_str_key]
         hold_order_candidates = [o for o in orders_for_loc if o.endswith(" H")]
 
         if hold_order_candidates:
             expected_fallback_orders.append(hold_order_candidates[0])
-        elif orders_for_loc: # If no hold, take the first available order
+        elif orders_for_loc:  # If no hold, take the first available order
             expected_fallback_orders.append(orders_for_loc[0])
     expected_fallback_orders.sort()
 
@@ -191,16 +206,21 @@ async def test_mock_get_valid_orders_empty_response(mock_llm_call_internal, comm
     mock_llm_call_internal.return_value = fut
 
     orders = await get_valid_orders(
-        game=game, model_id="test_model", agent_system_prompt="System prompt",
-        board_state=game.get_state(), power_name=power_name,
-        possible_orders=power_specific_possible_orders, # Use power-specific
-        game_history=game_history, game_id=config.game_id,
+        game=game,
+        model_id="test_model",
+        agent_system_prompt="System prompt",
+        board_state=game.get_state(),
+        power_name=power_name,
+        possible_orders=power_specific_possible_orders,  # Use power-specific
+        game_history=game_history,
+        game_id=config.game_id,
         config=config,
-        phase=game.phase
+        phase=game.phase,
     )
 
     mock_llm_call_internal.assert_called_once()
     orders.sort()
     assert orders == expected_fallback_orders
+
 
 # Removed unittest.main()
