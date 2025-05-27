@@ -2,7 +2,7 @@ import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { updatePhaseDisplay } from "./domElements";
 import { initUnits } from "./units/create";
-import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership } from "./map/state";
+import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
 import { updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { createAnimationsForNextPhase } from "./units/animate";
@@ -17,11 +17,11 @@ function _setPhase(phaseIndex: number) {
   if (phaseIndex >= gameLength || phaseIndex < 0) {
     throw new Error(`Provided invalid phaseIndex, cannot setPhase to ${phaseIndex} - game has ${gameState.gameData.phases.length} phases`)
   }
-  if (Math.abs(phaseIndex - gameState.phaseIndex) > 1) {
-    // We're moving more than one Phase, to do so clear the board and reInit the units on the correct phase
+  if (phaseIndex - gameState.phaseIndex != 1) {
+    // We're moving more than one Phase forward, or any number of phases backward, to do so clear the board and reInit the units on the correct phase
     gameState.unitAnimations = [];
     initUnits(phaseIndex)
-    updateMapOwnership()
+    displayPhase()
   } else {
 
   }
@@ -85,7 +85,7 @@ export function displayPhase(skipMessages = false) {
 
   // Update UI elements with smooth transitions
   updateLeaderboard(currentPhase);
-  updateMapOwnership();
+  _updateMapOwnership();
   updateRelationshipPopup();
 
   // Add phase info to news banner if not already there

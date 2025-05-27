@@ -64,6 +64,7 @@ export function updateMapOwnership() {
       gameState.boardState.provinces[key].owner = undefined;
     }
   }
+  // Set map ownership from the current influence section of the current phase
 
   for (let powerKey of Object.keys(currentPhase.state.influence) as Array<keyof typeof PowerENUM>) {
     for (let provKey of currentPhase.state.influence[powerKey]) {
@@ -71,17 +72,19 @@ export function updateMapOwnership() {
       const province = gameState.boardState.provinces[provKey];
       province.owner = PowerENUM[powerKey as keyof typeof PowerENUM]
 
-      // Update the color of the provinces if needed, you can only own coast and land
-      if ([ProvTypeENUM.COAST, ProvTypeENUM.LAND].indexOf(province.type) >= 0) {
-        if (province.owner) {
-          let powerColor = getPowerHexColor(province.owner);
-          let powerColorHex = parseInt(powerColor.substring(1), 16);
-          (province.mesh?.material as MeshBasicMaterial).color.setHex(powerColorHex);
-        } else if (province.owner === undefined && province.mesh !== undefined) {
-          let powerColor = getPowerHexColor(undefined);
-          let powerColorHex = parseInt(powerColor.substring(1), 16);
-          (province.mesh.material as MeshBasicMaterial).color.setHex(powerColorHex)
-        }
+    }
+  }
+  for (let [provKey, province] of Object.entries(gameState.boardState.provinces)) {
+    // Update the color of the provinces if needed, you can only own coast and land
+    if ([ProvTypeENUM.COAST, ProvTypeENUM.LAND].indexOf(province.type) >= 0) {
+      if (province.owner) {
+        let powerColor = getPowerHexColor(province.owner);
+        let powerColorHex = parseInt(powerColor.substring(1), 16);
+        (province.mesh?.material as MeshBasicMaterial).color.setHex(powerColorHex);
+      } else if (province.owner === undefined && province.mesh !== undefined) {
+        let powerColor = getPowerHexColor(undefined);
+        let powerColorHex = parseInt(powerColor.substring(1), 16);
+        (province.mesh.material as MeshBasicMaterial).color.setHex(powerColorHex)
       }
     }
   }
