@@ -6,6 +6,7 @@ import { MeshBasicMaterial } from "three";
 import { updateRotatingDisplay } from "../components/rotatingDisplay";
 
 export function updateSupplyCenterOwnership(centers) {
+  // TODO: Type the above centers. What actually is meant to come in here?
   if (!centers) return;
   const ownershipMap = {};
   // centers is typically { "AUSTRIA":["VIE","BUD"], "FRANCE":["PAR","MAR"], ... }
@@ -44,7 +45,7 @@ export function updateSupplyCenterOwnership(centers) {
   });
 }
 
-export function updateLeaderboard(phase) {
+export function updateLeaderboard() {
   // Instead of directly updating the leaderboard HTML,
   // use the rotating display component if game data exists
   if (gameState.gameData) {
@@ -52,10 +53,15 @@ export function updateLeaderboard(phase) {
   }
 }
 
+
+/**  Updates the ownership of the provinces in the gameState.boardState.provinces array and
+ *  changes the color of the province on the map to correspond to the new owner's color. Or 
+ *  the default color if province.owner is undefined.
+ */
 export function updateMapOwnership() {
   let currentPhase = gameState.gameData?.phases[gameState.phaseIndex]
   if (currentPhase === undefined) {
-    throw "Currentphase is undefined for index " + gameState.phaseIndex;
+    throw "Current phase is undefined for index " + gameState.phaseIndex;
   }
 
   // Clear existing ownership to avoid stale data
