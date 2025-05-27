@@ -28,7 +28,7 @@
     background: linear-gradient(90deg, #5a3e2b 0%, #382519 100%);
     color: #f0e6d2;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     border-bottom: 3px solid #2e1c10;
   }
@@ -37,6 +37,18 @@
   #phase-display {
     font-weight: bold;
     margin-left: 10px;
+    padding: 4px 8px;
+    border: 2px solid #2e1c10;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: #ffd;
+    font-family: "Book Antiqua", Palatino, serif;
+    font-size: 1rem;
+  }
+  
+  #game-id-display {
+    font-weight: bold;
+    margin-left: auto;
     padding: 4px 8px;
     border: 2px solid #2e1c10;
     border-radius: 6px;

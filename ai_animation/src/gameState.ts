@@ -4,16 +4,16 @@ import { updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { type CoordinateData, CoordinateDataSchema, PowerENUM } from "./types/map"
 import type { GameSchemaType } from "./types/gameState";
 import { GameSchema } from "./types/gameState";
-import { prevBtn, nextBtn, playBtn, speedSelector, mapView } from "./domElements";
+import { prevBtn, nextBtn, playBtn, speedSelector, mapView, updateGameIdDisplay } from "./domElements";
 import { createChatWindows } from "./domElements/chatWindows";
 import { logger } from "./logger";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
-import { MomentsDataSchema, MomentsMetadataSchema } from "./types/moments";
+import { MomentsDataSchema, MomentsDataSchemaType } from "./types/moments";
 
-//FIXME: This whole file is a mess. Need to organize and format
+//FIXME: This whole file is a mess. Need to organkze and format
 
 enum AvailableMaps {
   STANDARD = "standard"
@@ -34,7 +34,7 @@ class GameState {
   boardState: CoordinateData
   gameId: number
   gameData: GameSchemaType
-  momentsData: MomentSchemaType
+  momentsData: MomentsDataSchemaType
   phaseIndex: number
   boardName: string
   currentPower: PowerENUM
@@ -133,6 +133,9 @@ class GameState {
           // Display the initial phase
           displayInitialPhase()
 
+          // Update game ID display
+          updateGameIdDisplay();
+
           this.loadMomentsFile()
           resolve()
         } else {
@@ -205,6 +208,18 @@ class GameState {
   }
 
   /*
+   * Loads the next game in the order, reseting the board and gameState
+   */
+  loadNextGame = () => {
+    //
+
+    this.gameId += 1
+
+    // Try to load the next game, if it fails, show end screen forever
+
+  }
+
+  /*
    * Given a gameId, load that game's state into the GameState Object
    */
   loadGameFile = (gameId: number) => {
@@ -251,6 +266,7 @@ class GameState {
         if (this.gameData) {
           updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
           updateRelationshipPopup();
+          updateGameIdDisplay();
         }
       })
       .catch(error => {
@@ -304,7 +320,7 @@ class GameState {
     })
   }
 
-  initScene = () => {
+  createThreeScene = () => {
     if (mapView === null) {
       throw Error("Cannot find mapView element, unable to continue.")
     }
@@ -332,6 +348,14 @@ class GameState {
     this.camControls.maxDistance = 2000;
     this.camControls.maxPolarAngle = Math.PI / 2; // Limit so you don't flip under the map
     this.camControls.target.set(0, 0, 100); // ADDED: Set control target to new map center
+
+
+    // Lighting (keep it simple)
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(300, 400, 300);
+    this.scene.add(dirLight);
   }
 }
 

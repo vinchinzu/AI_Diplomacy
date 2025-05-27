@@ -20,33 +20,43 @@ The turn animation system is built around several key components that work toget
 The turn advancement follows a carefully orchestrated sequence:
 
 #### 1. Playback Initiation
+
 When the user clicks Play, `togglePlayback()` is triggered, which:
+
 - Sets `gameState.isPlaying = true`
 - Hides the standings board
 - Starts the camera pan animation
 - Begins message display for the current phase
 
 #### 2. Message Animation Phase
+
 If the current phase has messages:
+
 - `updateChatWindows()` displays messages word-by-word
 - Each message appears with typing animation
 - `gameState.messagesPlaying` tracks this state
 
 #### 3. Unit Animation Phase
+
 Once messages complete (or if there are no messages):
+
 - `displayPhaseWithAnimation()` is called
 - `createAnimationsForNextPhase()` analyzes the previous phase's orders
 - Movement tweens are created for each unit based on order results
 - Animations are added to `gameState.unitAnimations` array
 
 #### 4. Animation Monitoring
+
 The main `animate()` loop continuously:
+
 - Updates all active unit animations
 - Filters out completed animations
 - Detects when `gameState.unitAnimations.length === 0`
 
 #### 5. Phase Transition
+
 When all animations complete:
+
 - `advanceToNextPhase()` is scheduled with a configurable delay
 - If the phase has a summary, text-to-speech is triggered
 - After speech completes, `moveToNextPhase()` increments the phase index
@@ -125,3 +135,6 @@ This architecture ensures smooth, coordinated animations while maintaining clear
 ## Game Data
 
 Game data is loaded from JSON files in the `public/games/` directory. The expected format includes phases with messages, orders, and state information for each turn of the Diplomacy game.
+
+--TODO: Create something to combine the game data into a simpler place, Diary is in csv and I need that to display the thoughts of the LLM during the betrayal scenes
+
