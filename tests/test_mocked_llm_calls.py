@@ -6,9 +6,13 @@ from unittest.mock import patch, MagicMock
 from ai_diplomacy.game_config import GameConfig
 from diplomacy import Game
 from ai_diplomacy.game_history import GameHistory
-from ai_diplomacy.utils import (
-    get_valid_orders,
+from ai_diplomacy.agents.base import BaseAgent
+from ai_diplomacy.agents.llm_agent import LLMAgent
+from ai_diplomacy.general_utils import (
+    get_state_value_from_search,
+    get_order_value_from_search,
     gather_possible_orders,
+    get_valid_orders,
 )  # Step 1: Import get_valid_orders and gather_possible_orders
 
 

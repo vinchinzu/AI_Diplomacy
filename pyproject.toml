@@ -44,16 +44,32 @@ dependencies = [
     "pyyaml>=6.0.2",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.11.11",
+    "ty>=0.0.1a6",
+    "pytest-cov>=2.10.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["ai_diplomacy*"]
+namespaces = false
+
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 markers = [
     "integration: Marks tests as integration tests (deselect with -m 'not integration')",
 ]
-addopts = "-m \"not integration\" --strict-markers"
+addopts = "-m \"not integration\" --strict-markers -q -ra --cov=ai_diplomacy --cov-report=term-missing:skip-covered --cov-report=html"
+testpaths = ["tests"]
 
-[dependency-groups]
-dev = [
-    "ruff>=0.11.11",
-    "ty>=0.0.1a6",
-]
+
+[tool.coverage.run]
+branch = true
+omit   = ["*/__init__.py", "*/migrations/*", "*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 10          # start at 80 %, ratchet upward later
+show_missing = true
+

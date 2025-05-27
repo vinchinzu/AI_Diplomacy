@@ -32,9 +32,9 @@ def test_get_model_and_prompt():
     try:
         response = model.prompt("Say 'test'")
         assert response is not None, "Model returned a None response."
-        assert (
-            response.text().strip().lower() == "test"
-        ), f"Model did not respond as expected. Response: '{response.text()}'"
+        assert response.text().strip().lower() == "test", (
+            f"Model did not respond as expected. Response: '{response.text()}'"
+        )
         print(
             f"Synchronous prompt successful with {MODEL_ID}. Response: {response.text()}"
         )

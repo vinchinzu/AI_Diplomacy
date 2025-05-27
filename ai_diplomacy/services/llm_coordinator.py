@@ -383,7 +383,7 @@ class LLMCoordinator:
     ) -> LLMCallResult:
         """
         Internal method for LLM calls with JSON parsing.
-        Used by call_json() and legacy code during transition.
+        Used by call_json().
         """
         from .. import llm_utils  # Import here to avoid circular imports
         from ..utils import (

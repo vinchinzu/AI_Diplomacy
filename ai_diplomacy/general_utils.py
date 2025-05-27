@@ -352,9 +352,7 @@ def _validate_extracted_orders(
         logger.warning(
             f"[{model_id}] No valid orders could be confirmed for {power_name} after validation and hold fill. Using fallback."
         )
-        if (
-            dev_mode
-        ):  # If dev_mode is on and we still have no validated orders (e.g., LLM returned empty, or all were invalid and caught above)
+        if dev_mode:  # If dev_mode is on and we still have no validated orders (e.g., LLM returned empty, or all were invalid and caught above)
             raise LLMInvalidOutputError(
                 f"LLM for {power_name} ({model_id}) resulted in no valid orders even after attempting hold fills (or holds were skipped due to prior errors in dev_mode).",
                 prompt=original_prompt,

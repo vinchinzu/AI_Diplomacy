@@ -201,25 +201,6 @@ class LLMAgent(BaseAgent):
             # Fallback: hold all units
             return [Order(f"{unit} H") for unit in my_units]
 
-    def _build_order_prompt(self, phase: PhaseState) -> str:
-        """Build prompt for order generation (legacy method)."""
-        # This is a simplified version - in real implementation this would be more sophisticated
-        prompt = f"""
-        You are playing as {self.country} in Diplomacy.
-        
-        Current Phase: {phase.phase_name}
-        Your Units: {phase.get_power_units(self.country)}
-        Your Centers: {phase.get_power_centers(self.country)}
-        
-        Your Goals: {self.goals}
-        Your Relationships: {self.relationships}
-        
-        Recent Diary: {self.format_private_diary_for_prompt()}
-        
-        Decide your orders for this phase. Return JSON with "orders" field containing a list of order strings.
-        """
-        return prompt
-
     def _build_order_prompt_with_context(
         self, phase: PhaseState, context_result: Dict[str, Any]
     ) -> str:
@@ -232,7 +213,7 @@ Your Relationships: {self.relationships}
 
 Recent Diary: {self.format_private_diary_for_prompt()}
 
-{context_result.get('context_text', '')}
+{context_result.get("context_text", "")}
 
 Decide your orders for this phase. Return JSON with "orders" field containing a list of order strings.
         """.strip()
@@ -336,31 +317,6 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
             )
             return []
 
-    def _build_negotiation_prompt(self, phase: PhaseState) -> str:
-        """Build prompt for message generation (legacy method)."""
-        active_powers = [
-            p
-            for p in phase.powers
-            if not phase.is_power_eliminated(p) and p != self.country
-        ]
-
-        prompt = f"""
-        You are playing as {self.country} in Diplomacy.
-        
-        Current Phase: {phase.phase_name}
-        Active Powers: {", ".join(active_powers)}
-        
-        Your Goals: {self.goals}
-        Your Relationships: {self.relationships}
-        
-        Recent Diary: {self.format_private_diary_for_prompt()}
-        
-        Generate diplomatic messages to send to other powers. 
-        Return JSON with "messages" field containing a list of message objects.
-        Each message should have "recipient", "content", and "message_type" fields.
-        """
-        return prompt
-
     def _build_negotiation_prompt_with_context(
         self, phase: PhaseState, context_result: Dict[str, Any]
     ) -> str:
@@ -380,7 +336,7 @@ Your Relationships: {self.relationships}
 
 Recent Diary: {self.format_private_diary_for_prompt()}
 
-{context_result.get('context_text', '')}
+{context_result.get("context_text", "")}
 
 Generate diplomatic messages to send to other powers. 
 Return JSON with "messages" field containing a list of message objects.

@@ -80,7 +80,6 @@ def test_save_game_state_writes_history_json():
         patch("builtins.open", new_callable=mock_open) as mock_file_open,
         patch("os.makedirs") as mock_makedirs,
     ):  # os.makedirs is called by GameConfig and GameResultsProcessor
-
         # Instantiate GameResultsProcessor
         results_processor = GameResultsProcessor(mock_game_config)
 
@@ -89,7 +88,6 @@ def test_save_game_state_writes_history_json():
             "ai_diplomacy.game_results.to_saved_game_format",
             return_value='{"mock_game_state": "data"}',
         ):
-
             # 3. Call save_game_state
             results_processor.save_game_state(mock_game_instance, mock_game_history)
 
@@ -113,9 +111,9 @@ def test_save_game_state_writes_history_json():
                     assert call_args[1]["encoding"] == "utf-8"
                     found_history_file_call = True
                     break
-            assert (
-                found_history_file_call
-            ), f"History file {expected_history_filepath} was not opened."
+            assert found_history_file_call, (
+                f"History file {expected_history_filepath} was not opened."
+            )
 
             # 6. Assert json.dump or write content for the history file
             # Find the write call associated with the history file
@@ -164,9 +162,9 @@ def test_save_game_state_writes_history_json():
                         history_dump_call_args = call
                         break
 
-                assert (
-                    history_dump_call_args is not None
-                ), "json.dump was not called with history data."
+                assert history_dump_call_args is not None, (
+                    "json.dump was not called with history data."
+                )
 
                 written_data_dict = history_dump_call_args[0][0]
 

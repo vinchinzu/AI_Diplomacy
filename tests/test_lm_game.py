@@ -15,15 +15,18 @@ import json  # Added json import
 
 import dotenv
 from diplomacy import Game
+from diplomacy.utils.export import to_saved_game_format
 
 # New refactored components
 from ai_diplomacy.game_config import GameConfig
 from ai_diplomacy.logging_setup import setup_logging
 from ai_diplomacy.agent_manager import AgentManager
 from ai_diplomacy.game_history import GameHistory
-from ai_diplomacy.utils import (
-    get_valid_orders,
+from ai_diplomacy.general_utils import (
+    get_state_value_from_search,
+    get_order_value_from_search,
     gather_possible_orders,
+    get_valid_orders,
     LLMInvalidOutputError,
 )
 
@@ -272,9 +275,9 @@ class GameTester:
             expected_mocked_orders = mock_db.get(
                 power_name, [f"A {power_name[:3].upper()} H"]
             )
-            assert sorted(orders) == sorted(
-                expected_mocked_orders
-            ), f"Mock orders mismatch for {power_name}: expected {expected_mocked_orders}, got {orders}"
+            assert sorted(orders) == sorted(expected_mocked_orders), (
+                f"Mock orders mismatch for {power_name}: expected {expected_mocked_orders}, got {orders}"
+            )
 
         if orders and len(orders) > 0:
             logger.info(
@@ -322,13 +325,13 @@ class GameTester:
 
         success_count = 0
         for i in range(num_calls):
-            logger.info(f"\n--- Sequential Call {i+1}/{num_calls} ---")
+            logger.info(f"\n--- Sequential Call {i + 1}/{num_calls} ---")
             success = await self.test_power_order_generation(power_name)
             if success:
                 success_count += 1
-                logger.info(f"✅ Call {i+1} for {power_name} succeeded")
+                logger.info(f"✅ Call {i + 1} for {power_name} succeeded")
             else:
-                logger.warning(f"⚠️  Call {i+1} for {power_name} failed")
+                logger.warning(f"⚠️  Call {i + 1} for {power_name} failed")
             if i < num_calls - 1:
                 await asyncio.sleep(0.1 if self.config.args.use_mocks else 1)
         success_rate = (success_count / num_calls) * 100
@@ -400,7 +403,9 @@ async def test_single_round_scenario(execution_mode, request: pytest.FixtureRequ
     config = _prepare_config_for_test(execution_mode, test_powers_str, model_ids_str)
 
     tester = GameTester(config)
-    await tester.setup_game()  # Sets up agents based on config.args.test_powers and config.args.fixed_models
+    await (
+        tester.setup_game()
+    )  # Sets up agents based on config.args.test_powers and config.args.fixed_models
 
     # test_single_round expects a list of powers that are defined in config.args.test_powers
     # and have corresponding models in config.args.fixed_models
@@ -438,9 +443,9 @@ async def test_order_generation_scenario(
     tester.agent_manager.initialize_agents({power_to_test: config.args.fixed_models[0]})
 
     success = await tester.test_power_order_generation(power_to_test)
-    assert (
-        success
-    ), f"Order generation scenario for {power_to_test} failed in {execution_mode} mode."
+    assert success, (
+        f"Order generation scenario for {power_to_test} failed in {execution_mode} mode."
+    )
 
 
 @pytest.mark.asyncio
@@ -468,9 +473,9 @@ async def test_sequential_calls_scenario(
     # So, ensuring config.args.test_powers and config.args.fixed_models are correctly set up by _prepare_config_for_test is key.
 
     success = await tester.test_sequential_calls(power_to_test, num_sequential_calls)
-    assert (
-        success
-    ), f"Sequential calls scenario for {power_to_test} failed in {execution_mode} mode."
+    assert success, (
+        f"Sequential calls scenario for {power_to_test} failed in {execution_mode} mode."
+    )
 
 
 @pytest.mark.asyncio

@@ -32,7 +32,7 @@ from ai_diplomacy.game_history import GameHistory
 
 # get_valid_orders is kept from the original utils.py / lm_game.py for now.
 # gather_possible_orders might still be needed by get_valid_orders or other utils.
-from ai_diplomacy.utils import get_valid_orders  # Removed gather_possible_orders
+from ai_diplomacy.general_utils import get_valid_orders  # Removed gather_possible_orders
 
 # Removed old direct imports of assign_models_to_powers, conduct_negotiations, planning_phase,
 # initialize_agent_state_ext, narrative related imports as these functionalities

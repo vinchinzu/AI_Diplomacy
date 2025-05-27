@@ -381,3 +381,4 @@ def get_total_usage_stats(game_id: str) -> Dict[str, int]:
     except sqlite3.Error as e:
         logger.error(f"Error getting total usage stats: {e}", exc_info=True)
         return {"total_api_calls": 0, "total_input_tokens": 0, "total_output_tokens": 0}
+

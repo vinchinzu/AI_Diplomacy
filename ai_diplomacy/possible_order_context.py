@@ -260,9 +260,9 @@ def get_nearest_enemy_units(
     """Finds up to N nearest enemy units, sorted by path length."""
     enemy_paths: List[Tuple[str, List[str]]] = []  # (enemy_unit_str, path_short_names)
 
-    all_enemy_unit_locations_full: List[Tuple[str, str]] = (
-        []
-    )  # (loc_full, unit_str_full)
+    all_enemy_unit_locations_full: List[
+        Tuple[str, str]
+    ] = []  # (loc_full, unit_str_full)
     # board_state.get("units", {}) has format: { "POWER_NAME": ["A PAR", "F BRE"], ... }
     for p_name, unit_list_for_power in board_state.get("units", {}).items():
         if p_name != power_name:  # If it's an enemy power
@@ -604,9 +604,9 @@ def get_enemy_unit_context_for_orders(
     max_enemy_units_to_report: int = 10,
 ) -> str:
     """Generates context about enemy units for the order generation prompt."""
-    all_enemy_unit_locations_full: List[Tuple[str, str]] = (
-        []
-    )  # (loc_full, unit_str_full)
+    all_enemy_unit_locations_full: List[
+        Tuple[str, str]
+    ] = []  # (loc_full, unit_str_full)
     # board_state.get("units", {}) has format: { "POWER_NAME": ["A PAR", "F BRE"], ... }
     for p_name, unit_list_for_power in board_state.get("units", {}).items():
         if p_name != power_name:  # If it's an enemy power
