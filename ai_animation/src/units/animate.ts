@@ -94,25 +94,26 @@ export function createAnimationsForNextPhase() {
     }
     for (const order of orders) {
       // Check if unit bounced
-      let lastPhaseResultMatches = Object.entries(previousPhase.results).filter(([key, _]) => {
-        return key.split(" ")[1] == order.unit.origin
-      }).map(val => {
-        // in the form "A BER" (unitType origin)
-        let orderSplit = val[0].split(" ")
-        return { origin: orderSplit[1], unitType: orderSplit[0], result: val[1][0] }
-      })
-      // This should always exist. If we don't have a match here, that means something went wrong with our order parsing
-      if (!lastPhaseResultMatches) {
-        throw new Error("No result present in current phase for previous phase order. Cannot continue")
+      // With new format: {A: {"BUD": [results]}, F: {"BUD": [results]}}
+      const unitType = order.unit.type;
+      const unitOrigin = order.unit.origin;
+
+      let result = undefined;
+      if (previousPhase.results && previousPhase.results[unitType] && previousPhase.results[unitType][unitOrigin]) {
+        const resultArray = previousPhase.results[unitType][unitOrigin];
+        result = resultArray.length > 0 ? resultArray[0] : null;
+
       }
-      if (lastPhaseResultMatches.length > 1) {
-        throw new Error("Multiple matching results from last phase. Should only ever be 1.")
+
+      if (result === undefined) {
+        throw new Error(`No result present in current phase for previous phase order: ${unitType} ${unitOrigin}. Cannot continue`);
       }
-      if (lastPhaseResultMatches[0].result === "bounce") {
+
+      if (result === "bounce") {
         order.type = "bounce"
       }
       // If the result is void, that means the move was not valid?
-      if (lastPhaseResultMatches[0].result === "void") continue;
+      if (result === "void") continue;
       let unitIndex = -1
 
       switch (order.type) {
@@ -163,10 +164,6 @@ export function createAnimationsForNextPhase() {
 
         case "support":
           break
-
-
-        default:
-          break;
       }
     }
   }

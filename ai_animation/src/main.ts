@@ -7,7 +7,7 @@ import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, 
 import { updateChatWindows } from "./domElements/chatWindows";
 import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
 import { initRelationshipPopup, hideRelationshipPopup, updateRelationshipPopup } from "./domElements/relationshipPopup";
-import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase } from "./phase";
+import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase, previousPhase } from "./phase";
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
@@ -23,15 +23,8 @@ let prevPos
 
 // --- INITIALIZE SCENE ---
 function initScene() {
-  gameState.initScene()
+  gameState.createThreeScene()
 
-  // Lighting (keep it simple)
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  gameState.scene.add(ambientLight);
-
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-  dirLight.position.set(300, 400, 300);
-  gameState.scene.add(dirLight);
 
   // Initialize standings board
   initStandingsBoard();
@@ -267,12 +260,10 @@ fileInput.addEventListener('change', e => {
 });
 
 prevBtn.addEventListener('click', () => {
-  if (gameState.phaseIndex > 0) {
-    resetToPhase(gameState.phaseIndex - 1)
-  }
+  previousPhase()
 });
 nextBtn.addEventListener('click', () => {
-  advanceToNextPhase()
+  nextPhase()
 });
 
 playBtn.addEventListener('click', togglePlayback);

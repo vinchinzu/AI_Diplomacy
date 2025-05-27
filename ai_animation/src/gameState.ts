@@ -13,7 +13,7 @@ import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
 import { MomentsDataSchema, MomentsDataSchemaType } from "./types/moments";
 
-//FIXME: This whole file is a mess. Need to organkze and format
+//FIXME: This whole file is a mess. Need to organize and format
 
 enum AvailableMaps {
   STANDARD = "standard"

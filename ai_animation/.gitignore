@@ -26,4 +26,4 @@ dist-ssr
 # AI things
 .claude/
 
-./public/games/
+public/games/

@@ -11,6 +11,42 @@ import { config } from "./config";
 
 
 
+function _setPhase(phaseIndex: number) {
+  const gameLength = gameState.gameData.phases.length
+  // Validate that the phaseIndex is within the bounds of the game length.
+  if (phaseIndex >= gameLength || phaseIndex < 0) {
+    throw new Error(`Provided invalid phaseIndex, cannot setPhase to ${phaseIndex} - game has ${gameState.gameData.phases.length} phases`)
+  }
+  if (Math.abs(phaseIndex - gameState.phaseIndex) > 1) {
+    // We're moving more than one Phase, to do so clear the board and reInit the units on the correct phase
+    gameState.unitAnimations = [];
+    initUnits(phaseIndex)
+    updateMapOwnership()
+  } else {
+
+  }
+
+
+
+  // Finally, update the gameState with the current phaseIndex
+  gameState.phaseIndex = phaseIndex
+  // If we're at the end of the game, don't attempt to animate. 
+  if (phaseIndex === gameLength - 1) {
+
+  } else {
+
+    displayPhase()
+  }
+}
+
+export function nextPhase() {
+  _setPhase(gameState.phaseIndex + 1)
+}
+
+export function previousPhase() {
+  _setPhase(gameState.phaseIndex - 1)
+}
+
 /**
  * Unified function to display a phase with proper transitions
  * Handles both initial display and animated transitions between phases
@@ -86,8 +122,8 @@ export function displayPhase(skipMessages = false) {
  * Used when first loading a game
  */
 export function displayInitialPhase() {
-  initUnits();
   gameState.phaseIndex = 0;
+  initUnits(0);
   displayPhase(true);
 }
 
@@ -99,17 +135,6 @@ export function displayPhaseWithAnimation() {
   displayPhase(false);
 }
 
-// Explicityly sets the phase to a given index,
-// Removes and recreates all units.
-export function resetToPhase(index: number) {
-  gameState.phaseIndex = index
-  gameState.unitAnimations = [];
-  gameState.unitMeshes.map(unitMesh => gameState.scene.remove(unitMesh))
-
-  updateMapOwnership()
-  initUnits()
-
-}
 
 /**
  * Advances to the next phase in the game sequence
@@ -178,7 +203,7 @@ function displayFinalPhase() {
 
   // Get the final phase to determine the winner
   const finalPhase = gameState.gameData.phases[gameState.gameData.phases.length - 1];
-  
+
   if (!finalPhase.state?.centers) {
     logger.log("No supply center data available to determine winner");
     return;
@@ -187,7 +212,7 @@ function displayFinalPhase() {
   // Find the power with the most supply centers
   let winner = '';
   let maxCenters = 0;
-  
+
   for (const [power, centers] of Object.entries(finalPhase.state.centers)) {
     const centerCount = Array.isArray(centers) ? centers.length : 0;
     if (centerCount > maxCenters) {
@@ -199,13 +224,13 @@ function displayFinalPhase() {
   // Display victory message
   if (winner && maxCenters > 0) {
     const victoryMessage = `🏆 GAME OVER - ${winner} WINS with ${maxCenters} supply centers! 🏆`;
-    
+
     // Add victory message to news banner with dramatic styling
     addToNewsBanner(victoryMessage);
-    
+
     // Log the victory
     logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
-    
+
     // Display final standings in console
     const standings = Object.entries(finalPhase.state.centers)
       .map(([power, centers]) => ({
@@ -213,7 +238,7 @@ function displayFinalPhase() {
         centers: Array.isArray(centers) ? centers.length : 0
       }))
       .sort((a, b) => b.centers - a.centers);
-    
+
     console.log("Final Standings:");
     standings.forEach((entry, index) => {
       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "  ";
