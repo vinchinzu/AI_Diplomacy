@@ -7,18 +7,14 @@ import logging
 from typing import List, Dict, Optional, Any
 
 from .base import BaseAgent, Order, Message, PhaseState
+from .agent_state import DiplomacyAgentState
+from .llm_prompt_strategy import LLMPromptStrategy
 from ..services.llm_coordinator import LLMCoordinator
 from ..services.config import AgentConfig, resolve_context_provider
 from ..services.context_provider import ContextProviderFactory, ContextData
 from .. import llm_utils
 
 logger = logging.getLogger(__name__)
-
-# Constants moved from agent.py
-ALL_POWERS = frozenset(
-    {"AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"}
-)
-ALLOWED_RELATIONSHIPS = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
 
 
 class LLMAgent(BaseAgent):
@@ -67,13 +63,9 @@ class LLMAgent(BaseAgent):
         # Update resolved type to reflect actual provider used (handles fallbacks)
         self.resolved_context_provider_type = self.context_provider.get_provider_type()
 
-        # Agent state
-        self.goals: List[str] = []
-        self.relationships: Dict[str, str] = {
-            p: "Neutral" for p in ALL_POWERS if p != self.country
-        }
-        self.private_journal: List[str] = []
-        self.private_diary: List[str] = []
+        # Agent state using DiplomacyAgentState and LLMPromptStrategy
+        self.agent_state = DiplomacyAgentState(country=country)
+        self.prompt_strategy = LLMPromptStrategy()
 
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
@@ -81,7 +73,7 @@ class LLMAgent(BaseAgent):
         logger.info(
             f"Initialized LLMAgent for {self.country} with model {self.config.model_id}, context provider: {self.resolved_context_provider_type}"
         )
-        self.add_journal_entry(
+        self.agent_state.add_journal_entry(
             f"Agent initialized with model {self.config.model_id}, context provider: {self.resolved_context_provider_type}"
         )
 
@@ -103,34 +95,6 @@ class LLMAgent(BaseAgent):
             logger.error(f"Could not load system prompt for {self.country}!")
 
         return system_prompt
-
-    def add_journal_entry(self, entry: str):
-        """Add an entry to the agent's private journal."""
-        if not isinstance(entry, str):
-            entry = str(entry)
-        self.private_journal.append(entry)
-        logger.debug(f"[{self.country} Journal]: {entry}")
-
-    def add_diary_entry(self, entry: str, phase: str):
-        """Add an entry to the agent's private diary."""
-        if not isinstance(entry, str):
-            entry = str(entry)
-        formatted_entry = f"[{phase}] {entry}"
-        self.private_diary.append(formatted_entry)
-        logger.info(f"[{self.country}] DIARY ENTRY ADDED for {phase}: {entry[:100]}...")
-
-    def format_private_diary_for_prompt(self, max_entries: int = 40) -> str:
-        """Format diary entries for inclusion in prompts."""
-        if not self.private_diary:
-            return "(No diary entries yet)"
-
-        # Take the most recent entries
-        recent_entries = (
-            self.private_diary[-max_entries:]
-            if len(self.private_diary) > max_entries
-            else self.private_diary
-        )
-        return "\n".join(recent_entries)
 
     async def decide_orders(self, phase: PhaseState) -> List[Order]:
         """
@@ -169,8 +133,15 @@ class LLMAgent(BaseAgent):
                 agent_config=self.config,
             )
 
-            # Build prompt using context
-            prompt = self._build_order_prompt_with_context(phase, context_result)
+            # Build prompt using prompt strategy
+            prompt = self.prompt_strategy.build_order_prompt(
+                country=self.country,
+                goals=self.agent_state.goals,
+                relationships=self.agent_state.relationships,
+                formatted_diary=self.agent_state.format_private_diary_for_prompt(),
+                context_text=context_result.get("context_text", ""),
+                tools_available=context_result.get("tools_available", False),
+            )
 
             # Call LLM
             result = await self.llm_coordinator.call_json(
@@ -200,32 +171,6 @@ class LLMAgent(BaseAgent):
             logger.error(f"[{self.country}] Error deciding orders: {e}", exc_info=True)
             # Fallback: hold all units
             return [Order(f"{unit} H") for unit in my_units]
-
-    def _build_order_prompt_with_context(
-        self, phase: PhaseState, context_result: Dict[str, Any]
-    ) -> str:
-        """Build prompt for order generation using context provider."""
-        base_instructions = f"""
-You are playing as {self.country} in Diplomacy.
-
-Your Goals: {self.goals}
-Your Relationships: {self.relationships}
-
-Recent Diary: {self.format_private_diary_for_prompt()}
-
-{context_result.get("context_text", "")}
-
-Decide your orders for this phase. Return JSON with "orders" field containing a list of order strings.
-        """.strip()
-
-        # If using MCP tools, add tool usage instructions
-        if context_result.get("tools_available"):
-            base_instructions += """
-
-IMPORTANT: You have access to tools to get detailed game information. Use them to gather the information you need before deciding on orders.
-            """
-
-        return base_instructions
 
     def _extract_orders_from_response(
         self, response: Dict[str, Any], my_units: List[str]
@@ -284,8 +229,19 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
                 agent_config=self.config,
             )
 
-            # Build prompt using context
-            prompt = self._build_negotiation_prompt_with_context(phase, context_result)
+            # Build prompt using prompt strategy
+            active_powers_list = [
+                p for p in phase.powers if not phase.is_power_eliminated(p) and p != self.country
+            ]
+            prompt = self.prompt_strategy.build_negotiation_prompt(
+                country=self.country,
+                active_powers=active_powers_list,
+                goals=self.agent_state.goals,
+                relationships=self.agent_state.relationships,
+                formatted_diary=self.agent_state.format_private_diary_for_prompt(),
+                context_text=context_result.get("context_text", ""),
+                tools_available=context_result.get("tools_available", False),
+            )
 
             # Call LLM
             result = await self.llm_coordinator.call_json(
@@ -316,41 +272,6 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
                 f"[{self.country}] Error generating messages: {e}", exc_info=True
             )
             return []
-
-    def _build_negotiation_prompt_with_context(
-        self, phase: PhaseState, context_result: Dict[str, Any]
-    ) -> str:
-        """Build prompt for message generation using context provider."""
-        active_powers = [
-            p
-            for p in phase.powers
-            if not phase.is_power_eliminated(p) and p != self.country
-        ]
-
-        base_instructions = f"""
-You are playing as {self.country} in Diplomacy.
-Active Powers: {", ".join(active_powers)}
-
-Your Goals: {self.goals}
-Your Relationships: {self.relationships}
-
-Recent Diary: {self.format_private_diary_for_prompt()}
-
-{context_result.get("context_text", "")}
-
-Generate diplomatic messages to send to other powers. 
-Return JSON with "messages" field containing a list of message objects.
-Each message should have "recipient", "content", and "message_type" fields.
-        """.strip()
-
-        # If using MCP tools, add tool usage instructions
-        if context_result.get("tools_available"):
-            base_instructions += """
-
-IMPORTANT: You have access to tools to get detailed game information. Use them to understand the current situation before writing messages.
-            """
-
-        return base_instructions
 
     def _extract_messages_from_response(
         self, response: Dict[str, Any], phase: PhaseState
@@ -398,7 +319,7 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
         await self._generate_phase_diary_entry(phase, events)
 
         # Update relationships based on events
-        self._update_relationships_from_events(events)
+        self.agent_state._update_relationships_from_events(self.country, events)
 
         # Optionally update goals based on game state analysis
         await self._analyze_and_update_goals(phase)
@@ -408,22 +329,16 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
     ):
         """Generate a diary entry reflecting on the phase results."""
         try:
-            prompt = f"""
-            You are {self.country}. The phase {phase.phase_name} just ended.
-            
-            Current situation:
-            - Your units: {phase.get_power_units(self.country)}
-            - Your centers: {phase.get_power_centers(self.country)}
-            - Game over: {phase.is_game_over}
-            
-            Events that occurred: {events}
-            
-            Your current goals: {self.goals}
-            Your relationships: {self.relationships}
-            
-            Write a brief diary entry reflecting on what happened this phase.
-            Return JSON with "diary_entry" field.
-            """
+            prompt = self.prompt_strategy.build_diary_generation_prompt(
+                country=self.country,
+                phase_name=phase.phase_name,
+                power_units=phase.get_power_units(self.country),
+                power_centers=phase.get_power_centers(self.country),
+                is_game_over=phase.is_game_over,
+                events=events,
+                goals=self.agent_state.goals,
+                relationships=self.agent_state.relationships,
+            )
 
             result = await self.llm_coordinator.call_json(
                 prompt=prompt,
@@ -438,69 +353,27 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
             diary_text = result.get(
                 "diary_entry", f"Phase {phase.phase_name} completed."
             )
-            self.add_diary_entry(diary_text, phase.phase_name)
+            self.agent_state.add_diary_entry(diary_text, phase.phase_name)
 
         except Exception as e:
             logger.error(
                 f"[{self.country}] Error generating diary entry: {e}", exc_info=True
             )
-            self.add_diary_entry(
+            self.agent_state.add_diary_entry(
                 f"Phase {phase.phase_name} completed (diary generation failed).",
                 phase.phase_name,
             )
 
-    def _update_relationships_from_events(self, events: List[Dict[str, Any]]):
-        """Update relationships based on game events."""
-        for event in events:
-            event_type = event.get("type")
-
-            if event_type == "attack":
-                attacker = event.get("attacker")
-                target = event.get("target")
-
-                if target == self.country and attacker in self.relationships:
-                    # We were attacked - worsen relationship
-                    current = self.relationships[attacker]
-                    if current == "Ally":
-                        self.relationships[attacker] = "Friendly"
-                    elif current == "Friendly":
-                        self.relationships[attacker] = "Neutral"
-                    elif current == "Neutral":
-                        self.relationships[attacker] = "Unfriendly"
-                    elif current == "Unfriendly":
-                        self.relationships[attacker] = "Enemy"
-
-                    logger.info(
-                        f"[{self.country}] {attacker} attacked us, relationship now: {self.relationships[attacker]}"
-                    )
-
-            elif event_type == "support":
-                supporter = event.get("supporter")
-                supported = event.get("supported")
-
-                if supported == self.country and supporter in self.relationships:
-                    # We were supported - improve relationship
-                    current = self.relationships[supporter]
-                    if current == "Enemy":
-                        self.relationships[supporter] = "Unfriendly"
-                    elif current == "Unfriendly":
-                        self.relationships[supporter] = "Neutral"
-                    elif current == "Neutral":
-                        self.relationships[supporter] = "Friendly"
-                    elif current == "Friendly":
-                        self.relationships[supporter] = "Ally"
-
-                    logger.info(
-                        f"[{self.country}] {supporter} supported us, relationship now: {self.relationships[supporter]}"
-                    )
-
     async def _analyze_and_update_goals(self, phase: PhaseState):
         """Analyze current situation and potentially update goals."""
+        # For now, this uses rule-based logic.
+        # If LLM-driven, would use:
+        # prompt = self.prompt_strategy.build_goal_analysis_prompt(...)
+        # result = await self.llm_coordinator.call_json(...)
+        # self.agent_state.goals = result.get("updated_goals", self.agent_state.goals)
+        # self.agent_state.add_journal_entry(result.get("reasoning", "Goals updated by LLM."))
         try:
-            # Simple goal analysis - more sophisticated logic could be added
             my_center_count = phase.get_center_count(self.country)
-
-            # Basic goal updates based on situation
             new_goals = []
 
             if my_center_count < 3:
@@ -510,20 +383,16 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
             else:
                 new_goals.append("Consolidate position and prepare for victory")
 
-            # Check if anyone is getting too strong
-            max_centers = max(
-                phase.get_center_count(p)
-                for p in phase.powers
-                if not phase.is_power_eliminated(p)
-            )
-            if max_centers > 10 and phase.get_center_count(self.country) != max_centers:
-                new_goals.append("Form coalition against the leader")
-
-            # Update goals if they've changed significantly
-            if new_goals != self.goals:
-                old_goals = self.goals.copy()
-                self.goals = new_goals
-                self.add_journal_entry(f"Goals updated from {old_goals} to {new_goals}")
+            active_powers = [p for p in phase.powers if not phase.is_power_eliminated(p)]
+            if active_powers: # Ensure there are active powers to check
+                max_centers = max(phase.get_center_count(p) for p in active_powers)
+                if max_centers > 10 and phase.get_center_count(self.country) != max_centers:
+                    new_goals.append("Form coalition against the leader")
+            
+            if new_goals != self.agent_state.goals:
+                old_goals = self.agent_state.goals.copy()
+                self.agent_state.goals = new_goals
+                self.agent_state.add_journal_entry(f"Goals updated from {old_goals} to {new_goals}")
 
         except Exception as e:
             logger.error(f"[{self.country}] Error analyzing goals: {e}", exc_info=True)
@@ -535,8 +404,8 @@ IMPORTANT: You have access to tools to get detailed game information. Use them t
             "country": self.country,
             "type": "LLMAgent",
             "model_id": self.config.model_id,
-            "goals": self.goals,
-            "relationships": self.relationships,
-            "diary_entries": len(self.private_diary),
-            "journal_entries": len(self.private_journal),
+            "goals": self.agent_state.goals,
+            "relationships": self.agent_state.relationships,
+            "diary_entries": len(self.agent_state.private_diary),
+            "journal_entries": len(self.agent_state.private_journal),
         }
