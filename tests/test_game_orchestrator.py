@@ -2,11 +2,12 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 # Remove other unittest imports if not used by pytest tests or MockGame.
 
-from ai_diplomacy.orchestrators.phase_orchestrator import GamePhaseOrchestrator, PhaseType
-from ai_diplomacy.game_config import GameConfig
+from diplomacy import Game
+from ai_diplomacy.agents.base import BaseAgent, Order
+from ai_diplomacy.orchestrators.phase_orchestrator import PhaseOrchestrator, PhaseType
 from ai_diplomacy.general_utils import gather_possible_orders
-# diplomacy.Game might be needed if MockGame directly inherits or uses it for spec, but here it's self-contained.
-# from diplomacy import Game
+from ai_diplomacy.services.config import GameConfig
+from ai_diplomacy.game_history import GameHistory
 
 
 # Mock Game class for testing get_phase_type_from_game
@@ -60,14 +61,14 @@ class MockGame:
 def test_get_phase_type_from_game_valid(phase_string, expected_type):
     """Tests get_phase_type_from_game with various valid phase strings."""
     mock_game = MockGame(current_phase=phase_string)
-    assert GamePhaseOrchestrator.get_phase_type_from_game(mock_game) == expected_type
+    assert PhaseOrchestrator.get_phase_type_from_game(mock_game) == expected_type
 
 
 def test_get_phase_type_from_game_invalid_format():
     """Tests get_phase_type_from_game with an unknown phase string, expecting RuntimeError."""
     mock_game = MockGame(current_phase="XYZ1234 UNKNOWN_PHASE")
     with pytest.raises(RuntimeError) as excinfo:
-        GamePhaseOrchestrator.get_phase_type_from_game(mock_game)
+        PhaseOrchestrator.get_phase_type_from_game(mock_game)
     assert "Unknown or unhandled phase format: 'XYZ1234 UNKNOWN_PHASE'" in str(
         excinfo.value
     )
@@ -76,7 +77,7 @@ def test_get_phase_type_from_game_invalid_format():
 def test_get_phase_type_from_game_empty_phase():
     """Tests get_phase_type_from_game with an empty phase string, expecting '-'."""
     mock_game = MockGame(current_phase="")
-    assert GamePhaseOrchestrator.get_phase_type_from_game(mock_game) == "-"
+    assert PhaseOrchestrator.get_phase_type_from_game(mock_game) == "-"
 
 
 # If you need to test GamePhaseOrchestrator instances, you might use a fixture like this:

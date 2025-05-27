@@ -3,7 +3,7 @@ import asyncio
 from typing import Optional, List, Dict, Callable, Coroutine, TYPE_CHECKING, Any, Protocol
 from diplomacy import Game
 # Relative imports will need to be adjusted based on the new location
-from ..utils import gather_possible_orders # Adjusted import
+from ..general_utils import gather_possible_orders # Adjusted import
 from ..agents.llm_agent import LLMAgent # Adjusted import
 from ..core.state import PhaseState # Adjusted import
 from ..agents.base import BaseAgent, Order, Message # Adjusted import
