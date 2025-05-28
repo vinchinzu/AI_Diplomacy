@@ -108,7 +108,6 @@ function createCameraPan(): Group {
  * Handles camera movement, animations, and game state transitions
  */
 function animate() {
-  requestAnimationFrame(animate);
 
   if (gameState.isPlaying) {
     // Update the camera angle
@@ -171,6 +170,7 @@ function animate() {
     gameState.isDisplayingMoment = true
     showTwoPowerConversation({ power1: PowerENUM.AUSTRIA, power2: PowerENUM.FRANCE })
   }
+  requestAnimationFrame(animate);
 }
 
 
