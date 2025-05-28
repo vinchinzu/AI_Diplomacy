@@ -1,43 +1,11 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock
-from types import SimpleNamespace # For FakeGame powers
+# SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
+# from types import SimpleNamespace 
 
 from ai_diplomacy.orchestrators.movement import MovementPhaseStrategy
-# Assuming PhaseOrchestrator, GameHistory, AgentManager, GameConfig might be needed for DummyOrchestrator
-# We'll mock or simplify them as much as possible.
-# For GameConfig, we only need a few attributes like powers_and_models if used by active_powers logic
-# For AgentManager, we need get_agent method.
-
-# Simplified FakeGame as per the plan
-class FakeGame:
-    def __init__(self, phase, powers_names):
-        self.phase = phase
-        self.year = int(phase[1:5]) if phase and len(phase) >= 5 and phase[1:5].isdigit() else 1901
-        self.powers = {
-            name: SimpleNamespace(
-                is_eliminated=lambda: False,
-                must_retreat=False, 
-                n_builds=1 # Default, not relevant for movement
-            )
-            for name in powers_names
-        }
-    def get_current_phase(self):
-        return self.phase
-    def get_state(self): # Required by _get_orders_for_power if not LLMAgent
-        return {"centers": {}}
-
-# Dummy Orchestrator to hold necessary attributes/methods for the strategy
-class DummyOrchestrator:
-    def __init__(self, active_powers_list, game_config_mock, agent_manager_mock, get_valid_orders_func_mock=None):
-        self.active_powers = active_powers_list
-        self.config = game_config_mock # Needs llm_log_path if get_valid_orders_func is used
-        self.agent_manager = agent_manager_mock # Needs get_agent
-        # _get_orders_for_power is called by the strategy, so we mock it here.
-        # Alternatively, the strategy itself could be more self-contained or take more direct dependencies.
-        self._get_orders_for_power = AsyncMock(return_value=["WAIVE"])
-        # get_valid_orders_func might be needed if _get_orders_for_power calls it for non-LLMAgents
-        self.get_valid_orders_func = get_valid_orders_func_mock 
+from tests._diplomacy_fakes import FakeGame, DummyOrchestrator
 
 @pytest.mark.asyncio
 async def test_movement_generates_orders(mocker):

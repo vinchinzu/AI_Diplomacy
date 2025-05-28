@@ -11,6 +11,7 @@ from .scripted_agent import ScriptedAgent
 from ..services.config import AgentConfig, DiplomacyConfig
 from ..services.llm_coordinator import LLMCoordinator
 from ..services.context_provider import ContextProviderFactory
+from ..llm_utils import load_prompt_file
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class AgentFactory:
             game_id=game_id,
             llm_coordinator=self.llm_coordinator,
             context_provider_factory=self.context_provider_factory,
+            prompt_loader=load_prompt_file,
         )
 
     def _create_scripted_agent(

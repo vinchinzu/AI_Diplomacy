@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch, call
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 from ai_diplomacy.agents.llm_agent import LLMAgent
 from ai_diplomacy.agents.base import Order, Message, PhaseState
@@ -13,19 +13,21 @@ from ai_diplomacy.services.context_provider import ContextProviderFactory, BaseC
 
 class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
 
-    @patch('ai_diplomacy.agents.llm_agent.llm_utils.load_prompt_file') # Corrected patch target
+    def _create_mock_prompt_loader(self) -> Callable[[str], Optional[str]]:
+        # Helper to create a new mock loader for each test if needed, or use a shared one
+        return MagicMock(spec=Callable[[str], Optional[str]])
+
     @patch('ai_diplomacy.agents.llm_agent.ContextProviderFactory')
     @patch('ai_diplomacy.agents.llm_agent.LLMCoordinator')
     @patch('ai_diplomacy.agents.llm_agent.LLMPromptStrategy')
     @patch('ai_diplomacy.agents.llm_agent.DiplomacyAgentState')
-    async def asyncSetUp(self, MockDiplomacyAgentState, MockLLMPromptStrategy, MockLLMCoordinator, MockContextProviderFactory, mock_load_prompt_file):
+    async def asyncSetUp(self, MockDiplomacyAgentState, MockLLMPromptStrategy, MockLLMCoordinator, MockContextProviderFactory):
         # Store mocks for later use in tests
         self.MockDiplomacyAgentState = MockDiplomacyAgentState
         self.MockLLMPromptStrategy = MockLLMPromptStrategy
         self.MockLLMCoordinator = MockLLMCoordinator
         self.MockContextProviderFactory = MockContextProviderFactory
-        self.mock_load_prompt_file = mock_load_prompt_file
-
+        
         self.mock_agent_state = MockDiplomacyAgentState.return_value
         self.mock_prompt_strategy = MockLLMPromptStrategy.return_value
         self.mock_llm_coordinator = MockLLMCoordinator.return_value
@@ -35,7 +37,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         self.mock_context_provider.get_provider_type.return_value = ContextProviderType.DEFAULT
         self.mock_context_provider_factory.get_provider.return_value = self.mock_context_provider
         
-        self.mock_load_prompt_file.return_value = "Default system prompt"
+        self.mock_prompt_loader = self._create_mock_prompt_loader()
+        self.mock_prompt_loader.return_value = "Default system prompt from loader"
 
         self.agent_config = AgentConfig(
             agent_id="test_agent",
@@ -51,12 +54,13 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
             country="FRANCE",
             config=self.agent_config,
             game_id="test_game",
-            llm_coordinator=self.mock_llm_coordinator, # Pass the instance
-            context_provider_factory=self.mock_context_provider_factory # Pass the instance
+            llm_coordinator=self.mock_llm_coordinator,
+            context_provider_factory=self.mock_context_provider_factory,
+            prompt_loader=self.mock_prompt_loader
         )
 
     async def test_initialization(self):
-        await self.asyncSetUp() # Call asyncSetUp manually for tests
+        await self.asyncSetUp()
 
         self.MockDiplomacyAgentState.assert_called_once_with(country="FRANCE")
         self.MockLLMPromptStrategy.assert_called_once()
@@ -75,42 +79,81 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         self.mock_agent_state.add_journal_entry.assert_called_once_with(
             f"Agent initialized with model {self.agent_config.model_id}, context provider: {ContextProviderType.DEFAULT}"
         )
-        self.mock_load_prompt_file.assert_called_with("system_prompt.txt") # Default fallback
+        # System prompt loading is deferred to _load_system_prompt, which is called in __init__
+        # self.mock_prompt_loader should be called by _load_system_prompt
+        self.mock_prompt_loader.assert_any_call("france_system_prompt.txt")
+        # Depending on the side_effect setup for mock_prompt_loader, it might also call for the default.
+        # If france_system_prompt.txt returns a prompt, system_prompt.txt won't be called.
+        # If self.mock_prompt_loader.return_value was set (as it is), the first call would succeed.
+        
+        # Let's refine asyncSetUp and this test for clarity on prompt loading calls
+        # In current asyncSetUp, self.mock_prompt_loader.return_value = "Default system prompt from loader"
+        # So, the first call self.mock_prompt_loader("france_system_prompt.txt") returns this.
+        # Thus, self.mock_prompt_loader("system_prompt.txt") should NOT be called.
+        found_default_call = False
+        for c in self.mock_prompt_loader.call_args_list:
+            if c == call('system_prompt.txt'):
+                found_default_call = True
+                break
+        self.assertFalse(found_default_call, "Default prompt should not have been loaded if power-specific succeeded")
+
+
+    @patch('ai_diplomacy.agents.llm_agent.llm_utils.load_prompt_file')
+    async def test_initialization_no_prompt_loader(self, mock_llm_utils_load_prompt_file):
+        # Test case where prompt_loader is None, uses llm_utils.load_prompt_file
+        mock_llm_utils_load_prompt_file.return_value = "Prompt from llm_utils"
+        agent = LLMAgent(
+            agent_id="test_agent_no_loader",
+            country="FRANCE",
+            config=self.agent_config,
+            game_id="test_game_no_loader",
+            llm_coordinator=self.mock_llm_coordinator,
+            context_provider_factory=self.mock_context_provider_factory,
+            prompt_loader=None # Explicitly None
+        )
+        self.assertIsNotNone(agent.system_prompt)
+        mock_llm_utils_load_prompt_file.assert_any_call("france_system_prompt.txt")
+
 
     async def test_load_system_prompt_power_specific(self):
-        await self.asyncSetUp()
-        self.mock_load_prompt_file.reset_mock()
+        await self.asyncSetUp() # Uses self.mock_prompt_loader
+        self.mock_prompt_loader.reset_mock()
         
         # Power-specific succeeds
-        self.mock_load_prompt_file.side_effect = ["Power-specific prompt", "Default prompt"]
+        self.mock_prompt_loader.side_effect = ["Power-specific prompt via loader", "Default prompt via loader"]
         prompt = self.agent._load_system_prompt()
-        self.assertEqual(prompt, "Power-specific prompt")
-        self.mock_load_prompt_file.assert_any_call("france_system_prompt.txt")
+        self.assertEqual(prompt, "Power-specific prompt via loader")
+        self.mock_prompt_loader.assert_any_call("france_system_prompt.txt")
         # It shouldn't call for default if power-specific is found
-        self.assertFalse(any(c == call('system_prompt.txt') for c in self.mock_load_prompt_file.call_args_list))
+        found_default_call = False
+        for c in self.mock_prompt_loader.call_args_list:
+            if c == call('system_prompt.txt'):
+                found_default_call = True
+                break
+        self.assertFalse(found_default_call)
 
 
     async def test_load_system_prompt_default(self):
-        await self.asyncSetUp()
-        self.mock_load_prompt_file.reset_mock()
+        await self.asyncSetUp() # Uses self.mock_prompt_loader
+        self.mock_prompt_loader.reset_mock()
 
         # Power-specific fails, default succeeds
-        self.mock_load_prompt_file.side_effect = [None, "Default prompt"]
+        self.mock_prompt_loader.side_effect = [None, "Default prompt via loader"]
         prompt = self.agent._load_system_prompt()
-        self.assertEqual(prompt, "Default prompt")
-        self.mock_load_prompt_file.assert_has_calls([
+        self.assertEqual(prompt, "Default prompt via loader")
+        self.mock_prompt_loader.assert_has_calls([
             call("france_system_prompt.txt"),
             call("system_prompt.txt")
         ])
 
     async def test_load_system_prompt_failure(self):
-        await self.asyncSetUp()
-        self.mock_load_prompt_file.reset_mock()
+        await self.asyncSetUp() # Uses self.mock_prompt_loader
+        self.mock_prompt_loader.reset_mock()
         
-        self.mock_load_prompt_file.side_effect = [None, None] # Both fail
+        self.mock_prompt_loader.side_effect = [None, None] # Both fail
         prompt = self.agent._load_system_prompt()
         self.assertIsNone(prompt)
-        self.mock_load_prompt_file.assert_has_calls([
+        self.mock_prompt_loader.assert_has_calls([
             call("france_system_prompt.txt"),
             call("system_prompt.txt")
         ])

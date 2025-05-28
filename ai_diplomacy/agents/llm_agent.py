@@ -4,7 +4,7 @@ Extracts all LLM-specific logic from the original DiplomacyAgent while implement
 """
 
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable
 
 from .base import BaseAgent, Order, Message, PhaseState
 from .agent_state import DiplomacyAgentState
@@ -34,6 +34,7 @@ class LLMAgent(BaseAgent):
         game_id: str = "unknown_game",
         llm_coordinator: Optional[LLMCoordinator] = None,
         context_provider_factory: Optional[ContextProviderFactory] = None,
+        prompt_loader: Optional[Callable[[str], Optional[str]]] = None,
     ):
         """
         Initialize the LLM agent.
@@ -45,6 +46,7 @@ class LLMAgent(BaseAgent):
             game_id: Game identifier for tracking
             llm_coordinator: LLM coordinator instance (will create if None)
             context_provider_factory: Context provider factory (will create if None)
+            prompt_loader: Optional function to load prompts by filename
         """
         super().__init__(agent_id, country)
         self.config = config
@@ -66,6 +68,7 @@ class LLMAgent(BaseAgent):
         # Agent state using DiplomacyAgentState and LLMPromptStrategy
         self.agent_state = DiplomacyAgentState(country=country)
         self.prompt_strategy = LLMPromptStrategy()
+        self.prompt_loader = prompt_loader
 
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
@@ -81,15 +84,26 @@ class LLMAgent(BaseAgent):
         """Load power-specific or default system prompt."""
         power_prompt_filename = f"{self.country.lower()}_system_prompt.txt"
         default_prompt_filename = "system_prompt.txt"
+        system_prompt: Optional[str] = None
 
-        system_prompt = llm_utils.load_prompt_file(power_prompt_filename)
-        if not system_prompt:
-            logger.warning(
-                f"Power-specific prompt '{power_prompt_filename}' not found. Loading default."
-            )
-            system_prompt = llm_utils.load_prompt_file(default_prompt_filename)
+        if self.prompt_loader:
+            system_prompt = self.prompt_loader(power_prompt_filename)
+            if not system_prompt:
+                logger.warning(
+                    f"Power-specific prompt '{power_prompt_filename}' not found via prompt_loader. Loading default."
+                )
+                system_prompt = self.prompt_loader(default_prompt_filename)
+            else:
+                logger.info(f"Loaded power-specific system prompt for {self.country} via prompt_loader.")
         else:
-            logger.info(f"Loaded power-specific system prompt for {self.country}.")
+            system_prompt = llm_utils.load_prompt_file(power_prompt_filename)
+            if not system_prompt:
+                logger.warning(
+                    f"Power-specific prompt '{power_prompt_filename}' not found. Loading default."
+                )
+                system_prompt = llm_utils.load_prompt_file(default_prompt_filename)
+            else:
+                logger.info(f"Loaded power-specific system prompt for {self.country}.")
 
         if not system_prompt:
             logger.error(f"Could not load system prompt for {self.country}!")

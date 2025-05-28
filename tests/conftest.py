@@ -66,14 +66,8 @@ def mock_phase_state():
 
 
 @pytest.fixture
-def mock_load_prompt_file(mocker):
-    # TODO(remove-when-fixed-upstream): If this mock is considered egregious because it patches a utility function,
-    # consider refactoring LLMAgent to allow injecting the system prompt content directly for easier testing.
-    return mocker.patch(
-        "ai_diplomacy.llm_utils.load_prompt_file",
-        return_value="Mocked system prompt",
-        autospec=True,  # Adhering to custom instructions
-    )
+def mock_load_prompt_file_func(): # Renamed to reflect it returns a function
+    return lambda filename: "Mocked system prompt from new func"
 
 
 class MockDiplomacyAgent:

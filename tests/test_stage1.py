@@ -119,7 +119,9 @@ def test_clean_boundaries():
 
     # Test that agents receive PhaseState, not Game objects
     config = AgentConfig(country="FRANCE", type="llm", model_id="gpt-4o-mini")
-    agent = LLMAgent("test", "FRANCE", config)
+    # We need to import load_prompt_file for this direct instantiation
+    from ai_diplomacy.llm_utils import load_prompt_file
+    agent = LLMAgent("test", "FRANCE", config, prompt_loader=load_prompt_file)
 
     # Verify agent doesn't have direct game access
     assert not hasattr(agent, "game")

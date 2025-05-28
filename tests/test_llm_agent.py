@@ -17,7 +17,11 @@ def llm_agent(
     mock_llm_coordinator,
     mock_context_provider_factory,
     mock_context_provider,
-    mock_load_prompt_file,
+    # mock_load_prompt_file fixture is removed from here, 
+    # as LLMAgent will now take a prompt_loader function.
+    # Tests requiring specific prompt loading behavior will inject it directly
+    # or use a new fixture that returns a mock function.
+    mock_load_prompt_file_func, # Use the new fixture that returns a function
 ):
     agent = LLMAgent(
         agent_id="test_agent",
@@ -26,11 +30,11 @@ def llm_agent(
         game_id="test_game",
         llm_coordinator=mock_llm_coordinator,
         context_provider_factory=mock_context_provider_factory,
+        prompt_loader=mock_load_prompt_file_func, # Pass the mock loader function
     )
     # Ensure the agent uses the mocked context provider instance from the fixture
     agent.context_provider = mock_context_provider
-    # Ensure system_prompt is loaded using the mocked load_prompt_file
-    agent.system_prompt = agent._load_system_prompt()
+    # System prompt is now loaded internally by LLMAgent using the prompt_loader
     return agent
 
 

@@ -1,38 +1,11 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock
-from types import SimpleNamespace
+# SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
+# from types import SimpleNamespace 
 
 from ai_diplomacy.orchestrators.retreat import RetreatPhaseStrategy
-
-# Using the same FakeGame and DummyOrchestrator definitions as in test_movement_strategy
-# Ideally, these would be in a shared conftest.py or a common test utility file.
-# For now, duplicating for simplicity until a broader test structure is decided.
-
-class FakeGame:
-    def __init__(self, phase, powers_names, retreat_conditions=None):
-        self.phase = phase
-        self.year = int(phase[1:5]) if phase and len(phase) >= 5 and phase[1:5].isdigit() else 1901
-        self.powers = {}
-        for name in powers_names:
-            must_retreat_val = retreat_conditions.get(name, False) if retreat_conditions else False
-            self.powers[name] = SimpleNamespace(
-                is_eliminated=lambda: False,
-                must_retreat=must_retreat_val,
-                n_builds=0 
-            )
-    def get_current_phase(self):
-        return self.phase
-    def get_state(self):
-        return {"centers": {}}
-
-class DummyOrchestrator:
-    def __init__(self, active_powers_list, game_config_mock, agent_manager_mock):
-        self.active_powers = active_powers_list
-        self.config = game_config_mock 
-        self.agent_manager = agent_manager_mock
-        self._get_orders_for_power = AsyncMock(return_value=["A BUD - STP"])
-        self.get_valid_orders_func = None 
+from tests._diplomacy_fakes import FakeGame, DummyOrchestrator
 
 @pytest.mark.asyncio
 async def test_retreat_generates_orders_for_retreating_power(mocker):
