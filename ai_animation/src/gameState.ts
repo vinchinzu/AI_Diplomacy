@@ -1,6 +1,5 @@
 import * as THREE from "three"
 import { updateRotatingDisplay } from "./components/rotatingDisplay";
-import { updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { type CoordinateData, CoordinateDataSchema, PowerENUM } from "./types/map"
 import type { GameSchemaType } from "./types/gameState";
 import { GameSchema } from "./types/gameState";
@@ -265,7 +264,6 @@ class GameState {
         // Update rotating display and relationship popup with game data
         if (this.gameData) {
           updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
-          updateRelationshipPopup();
           updateGameIdDisplay();
         }
       })

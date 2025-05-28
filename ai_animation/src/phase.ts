@@ -4,7 +4,6 @@ import { updatePhaseDisplay } from "./domElements";
 import { initUnits } from "./units/create";
 import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
-import { updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { createAnimationsForNextPhase } from "./units/animate";
 import { speakSummary } from "./speech";
 import { config } from "./config";
@@ -86,7 +85,6 @@ export function displayPhase(skipMessages = false) {
   // Update UI elements with smooth transitions
   updateLeaderboard(currentPhase);
   _updateMapOwnership();
-  updateRelationshipPopup();
 
   // Add phase info to news banner if not already there
   const phaseBannerText = `Phase: ${currentPhase.name}`;

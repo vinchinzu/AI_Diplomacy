@@ -74,8 +74,6 @@ if (null === leaderboard) throw new Error("Element with ID 'leaderboard' not fou
 export const standingsBtn = document.getElementById('standings-btn');
 if (null === standingsBtn) throw new Error("Element with ID 'standings-btn' not found");
 
-export const relationshipsBtn = document.getElementById('relationships-btn');
-if (null === relationshipsBtn) throw new Error("Element with ID 'relationships-btn' not found");
 
 
 // Add roundRect polyfill for browsers that don't support it

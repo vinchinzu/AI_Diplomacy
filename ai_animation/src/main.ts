@@ -6,7 +6,6 @@ import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
 import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
-import { initRelationshipPopup, hideRelationshipPopup, updateRelationshipPopup } from "./domElements/relationshipPopup";
 import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase, previousPhase } from "./phase";
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
@@ -28,9 +27,6 @@ function initScene() {
 
   // Initialize standings board
   initStandingsBoard();
-
-  // Initialize relationship popup
-  initRelationshipPopup();
 
   // Load coordinate data, then build the map
   gameState.loadBoardState().then(() => {
