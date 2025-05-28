@@ -17,8 +17,15 @@ const GameState = z.record(ProvinceENUMSchema, z.object({
   //unit: z.object({}).optional()
 }))
 
+const MessageSchema = z.object({
+  sender: PowerENUMSchema,
+  recipient: PowerENUMSchema,
+  time_sent: z.number(),
+  phase: z.string(),
+  message: z.string()
+})
 const PhaseSchema = z.object({
-  messages: z.array(z.any()),
+  messages: z.array(MessageSchema),
   name: z.string(),
   orders: z.record(PowerENUMSchema, z.array(OrderFromString).nullable()),
   results: z.record(z.string(), z.array(z.any())).transform((originalResults) => {

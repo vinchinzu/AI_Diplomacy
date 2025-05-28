@@ -10,6 +10,8 @@ import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase,
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
+import { showTwoPowerConversation } from "./components/twoPowerConversation";
+import { PowerENUM } from "./types/map";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -171,6 +173,11 @@ function animate() {
 
   gameState.camControls.update();
   gameState.renderer.render(gameState.scene, gameState.camera);
+
+  if (gameState.phaseIndex === 3 && gameState.isDisplayingMoment === false) {
+    gameState.isDisplayingMoment = true
+    showTwoPowerConversation({ power1: PowerENUM.AUSTRIA, power2: PowerENUM.FRANCE })
+  }
 }
 
 
@@ -259,6 +266,7 @@ prevBtn.addEventListener('click', () => {
   previousPhase()
 });
 nextBtn.addEventListener('click', () => {
+  // FIXME: Need to have this wait until all animations are complete, trying to click next when still animating results in not finding units where they should be.
   nextPhase()
 });
 

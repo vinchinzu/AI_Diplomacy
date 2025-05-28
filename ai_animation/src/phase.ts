@@ -10,6 +10,7 @@ import { config } from "./config";
 
 
 
+// FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
 function _setPhase(phaseIndex: number) {
   const gameLength = gameState.gameData.phases.length
   // Validate that the phaseIndex is within the bounds of the game length.

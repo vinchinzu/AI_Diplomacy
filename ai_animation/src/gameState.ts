@@ -27,6 +27,33 @@ function getRandomPower(): PowerENUM {
   return values[idx];
 }
 
+function loadFileFromServer(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    fetch(filePath)
+      .then(response => {
+        if (!response.ok) {
+          alert(`Couldn't load file, received reponse code ${response.status}`)
+          throw new Error(`Failed to load file: ${response.status}`);
+        }
+
+        // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
+        // Check content type to avoid HTML errors
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          alert(`Unable to load file ${filePath}, was presented HTML, contentType ${contentType}`)
+          throw new Error('Received HTML instead of JSON. Check the file path.');
+        }
+        return response.text();
+      })
+      .then(data => {
+        // Check for HTML content as a fallback
+        if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+          throw new Error('Received HTML instead of JSON. Check the file path.');
+        }
+        resolve(data)
+      })
+  })
+}
 
 
 class GameState {
@@ -43,6 +70,7 @@ class GameState {
   isPlaying: boolean
   isSpeaking: boolean
   isAnimating: boolean
+  isDisplayingMoment: boolean // Used when we're displaying a moment, should pause all other items
   nextPhaseScheduled: boolean // Flag to prevent multiple phase transitions being scheduled
 
   //Scene for three.js
@@ -73,6 +101,7 @@ class GameState {
     this.isSpeaking = false
     this.isPlaying = false
     this.isAnimating = false
+    this.isDisplayingMoment = false
     this.messagesPlaying = false
     this.nextPhaseScheduled = false
 
@@ -87,33 +116,32 @@ class GameState {
    * @param gameDataString JSON string containing game data
    * @returns Promise that resolves when game is initialized or rejects if data is invalid
    */
-  loadGameData = (gameDataString: string): Promise<void> => {
+  loadGameData = (gameData: string): Promise<void> => {
+
     return new Promise((resolve, reject) => {
       try {
-        // First parse the raw JSON
-        const rawData = JSON.parse(gameDataString);
-
+        gameData = GameSchema.parse(JSON.parse(gameData));
+        this.gameData = gameData
         // Log data structure for debugging
         console.log("Loading game data with structure:",
-          `${rawData.phases?.length || 0} phases, ` +
-          `orders format: ${rawData.phases?.[0]?.orders ? (Array.isArray(rawData.phases[0].orders) ? 'array' : 'object') : 'none'}`
+          `${gameData.phases?.length || 0} phases, ` +
+          `orders format: ${gameData.phases?.[0]?.orders ? (Array.isArray(gameData.phases[0].orders) ? 'array' : 'object') : 'none'}`
         );
 
         // Show a sample of the first phase for diagnostic purposes
-        if (rawData.phases && rawData.phases.length > 0) {
+        if (gameData.phases && gameData.phases.length > 0) {
           console.log("First phase sample:", {
-            name: rawData.phases[0].name,
-            ordersCount: rawData.phases[0].orders ?
-              (Array.isArray(rawData.phases[0].orders) ?
-                rawData.phases[0].orders.length :
-                Object.keys(rawData.phases[0].orders).length) : 0,
-            ordersType: rawData.phases[0].orders ? typeof rawData.phases[0].orders : 'none',
-            unitsCount: rawData.phases[0].units ? rawData.phases[0].units.length : 0
+            name: gameData.phases[0].name,
+            ordersCount: gameData.phases[0].orders ?
+              (Array.isArray(gameData.phases[0].orders) ?
+                gameData.phases[0].orders.length :
+                Object.keys(gameData.phases[0].orders).length) : 0,
+            ordersType: gameData.phases[0].orders ? typeof gameData.phases[0].orders : 'none',
+            unitsCount: gameData.phases[0].units ? gameData.phases[0].units.length : 0
           });
         }
 
         // Parse the game data using Zod schema
-        this.gameData = GameSchema.parse(rawData);
         logger.log(`Game data loaded: ${this.gameData.phases?.length || 0} phases found.`)
 
         // Reset phase index to beginning
@@ -135,7 +163,11 @@ class GameState {
           // Update game ID display
           updateGameIdDisplay();
 
-          this.loadMomentsFile()
+
+          const momentsFilePath = `./games/${this.gameId}/moments.json`;
+          loadFileFromServer(momentsFilePath).then((data) => {
+            this.momentsData = MomentsDataSchema.parse(JSON.parse(data))
+          })
           resolve()
         } else {
           logger.log("Error: No phases found in game data");
@@ -229,34 +261,11 @@ class GameState {
 
     // Path to the default game file
     const gameFilePath = `./games/${gameId}/game.json`;
+    loadFileFromServer(gameFilePath).then((data) => {
+      this.gameId = gameId
 
-    fetch(gameFilePath)
-      .then(response => {
-        if (!response.ok) {
-          alert(`Couldn't load gameFile, received reponse code ${response.status}`)
-          throw new Error(`Failed to load default game file: ${response.status}`);
-        }
-
-        // Check content type to avoid HTML errors
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('text/html')) {
-          throw new Error('Received HTML instead of JSON. Check the file path.');
-        }
-
-        return response.text();
-      })
-      .then(data => {
-        // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
-        // Check for HTML content as a fallback
-        if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-          alert("Unable to load game file")
-          throw new Error('Received HTML instead of JSON. Check the file path.');
-        }
-
-        console.log("Loaded game file, attempting to parse...");
-        this.gameId = gameId
-        return this.loadGameData(data);
-      })
+      return this.loadGameData(data);
+    })
       .then(() => {
         console.log("Default game file loaded and parsed successfully");
         // Explicitly hide standings board after loading game
@@ -273,50 +282,6 @@ class GameState {
       });
   }
 
-  /*
-  * Load the moments.json file for the given gameID. This includes all the "important" moments for a given game that should be highlighted
-  *
-  */
-  loadMomentsFile = () => {
-    // Path to the default game file
-    const momentsFilePath = `./games/${this.gameId}/moments.json`;
-
-    return new Promise((resolve, reject) => {
-      fetch(momentsFilePath)
-        .then(response => {
-          if (!response.ok) {
-            alert(`Couldn't load moments file, received reponse code ${response.status}`)
-            throw new Error(`Failed to load moments file: ${response.status}`);
-          }
-
-          // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
-          // Check content type to avoid HTML errors
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('text/html')) {
-            alert("Unable to load moments file")
-            throw new Error('Received HTML instead of JSON. Check the file path.');
-          }
-
-          return response.text();
-        })
-        .then(data => {
-          // Check for HTML content as a fallback
-          if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-            throw new Error('Received HTML instead of JSON. Check the file path.');
-          }
-
-          console.log("Loaded moments file, attempting to parse...");
-
-          return JSON.parse(data)
-        })
-        .then((data) => {
-          this.momentsData = MomentsDataSchema.parse(data)
-          resolve(data)
-        }).catch((error) => {
-          throw error
-        })
-    })
-  }
 
   createThreeScene = () => {
     if (mapView === null) {
