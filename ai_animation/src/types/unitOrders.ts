@@ -69,9 +69,10 @@ export const OrderFromString = z.string().transform((orderStr) => {
     }
   }
   else if (tokens.includes("C")) {
+    // F NTH C A YOR - NWY
     return {
       type: "convoy",
-      unit: { type: unitType, origin: cleanProvince(tokens.at(-3) || '') },
+      unit: { type: unitType, origin: cleanProvince(tokens.at(1) || '') },
       destination: cleanProvince(tokens.at(-1) || ''),
       raw: orderStr
     }

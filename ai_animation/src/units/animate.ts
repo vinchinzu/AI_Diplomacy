@@ -116,10 +116,10 @@ export function createAnimationsForNextPhase() {
       if (result === "void") continue;
       let unitIndex = -1
 
+      unitIndex = getUnit(order, power);
       switch (order.type) {
         case "move":
           if (!order.destination) throw new Error("Move order with no destination, cannot complete move.")
-          unitIndex = getUnit(order, power);
           if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           // Create a tween for smooth movement
           createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
@@ -127,7 +127,6 @@ export function createAnimationsForNextPhase() {
 
         case "disband":
           // TODO: Death animation
-          unitIndex = getUnit(order, power);
           if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           gameState.scene.remove(gameState.unitMeshes[unitIndex]);
           gameState.unitMeshes.splice(unitIndex, 1);
@@ -153,17 +152,21 @@ export function createAnimationsForNextPhase() {
           break;
 
         case "convoy":
-          createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
+          // The unit doesn't move, so no animation for now
           break;
 
         case "retreat":
-          unitIndex = getUnit(order, power);
           if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
           break;
 
         case "support":
           break
+
+        default:
+          // FIXME: There is an issue where some F are not getting disbanded when I believe they should
+          //    check ROM in game 0, turn 2-5.  
+          throw new Error(`Unhandled order.type ${order.type}.`)
       }
     }
   }
