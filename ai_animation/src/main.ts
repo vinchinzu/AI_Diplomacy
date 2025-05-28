@@ -19,9 +19,6 @@ import { PowerENUM } from "./types/map";
 const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
 
-let prevPos
-
-
 // --- INITIALIZE SCENE ---
 function initScene() {
   gameState.createThreeScene()
@@ -57,7 +54,6 @@ function initScene() {
       }
     })
   }).catch(err => {
-    console.error("Error loading coordinates:", err);
     // Use console.error instead of logger.log to avoid updating the info panel
     console.error(`Error loading coords: ${err.message}`);
   });
@@ -113,9 +109,6 @@ function createCameraPan(): Group {
  */
 function animate() {
   requestAnimationFrame(animate);
-
-  // Store previous position as a new Vector3 to avoid reference issues
-  prevPos = new THREE.Vector3().copy(gameState.camera.position);
 
   if (gameState.isPlaying) {
     // Update the camera angle
