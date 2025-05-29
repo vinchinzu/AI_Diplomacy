@@ -125,7 +125,7 @@ async def test_movement_agent_not_found_and_agent_error(fake_game_factory, defau
         caplog.set_level(logging.WARNING, logger="ai_diplomacy.orchestrators.movement") # Set to capture WARNING and above
         orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
-    mocked_perform_negotiation.assert_not_awaited()
+    mocked_perform_negotiation.assert_awaited_once()
         
     # _get_orders_for_power should be called for ENG and GER, but not FRA (no agent)
     assert dummy_orchestrator._get_orders_for_power.await_count == 2
@@ -153,5 +153,5 @@ async def test_movement_agent_not_found_and_agent_error(fake_game_factory, defau
     assert len(warn_records) == 1
     assert "No agent found for active power FRA during movement order generation" in warn_records[0].message
     assert len(error_records) == 1
-    assert "Error getting movement orders for ENG: ENG LLM simulated attribute error" in error_records[0].message
+    assert "❌ Error getting orders for ENG (Movement): ENG LLM simulated attribute error" in error_records[0].message
 

@@ -11,7 +11,6 @@ from ai_diplomacy.services import llm_coordinator
 
 # Fixture to reset the database path for testing and ensure cleanup
 @pytest.fixture(autouse=True)
-@pytest.mark.integration # Fixtures don't typically get markers, but this is tightly coupled
 def test_db_path(tmp_path, monkeypatch):
     db_file = tmp_path / "test_usage.db"
     monkeypatch.setattr(llm_coordinator, 'DATABASE_PATH', str(db_file))
@@ -22,7 +21,6 @@ def test_db_path(tmp_path, monkeypatch):
     return str(db_file)
 
 @pytest.fixture
-@pytest.mark.integration # Fixtures don't typically get markers
 def mock_llm_response():
     response = MagicMock(spec=llm_coordinator.LLMResponse) # Use the imported LLMResponse
     response.model = MagicMock()

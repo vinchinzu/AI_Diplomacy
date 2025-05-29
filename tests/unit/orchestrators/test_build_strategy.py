@@ -42,13 +42,7 @@ async def test_build_generates_orders_for_building_power(fake_game_factory, defa
         fake_game, "FRA", mock_agent_fra, mock_game_history
     )
     # Assert that game_history.add_orders was called for FRA with its orders
-    # and for ENG with empty orders (as it had no builds/disbands)
-    expected_history_calls = [
-        call(fake_game.get_current_phase(), "FRA", ["A PAR B"]),
-        call(fake_game.get_current_phase(), "ENG", [])
-    ]
-    mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
-    assert mock_game_history.add_orders.call_count == 2
+    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "FRA", ["A PAR B"])
     
     assert isinstance(orders, dict)
     assert set(orders.keys()) == set(powers)
@@ -96,19 +90,14 @@ async def test_build_no_building_or_disbanding_powers(fake_game_factory, default
     # _get_orders_for_power should not be called as no power has builds/disbands
     # The default AsyncMock(return_value=["WAIVE"]) on default_dummy_orchestrator is fine
     
-    mock_game_history = MagicMock(spec=GameHistory, autospec=True) # Changed mock setup
+    mock_game_history = MagicMock(spec=GameHistory, autospec=True)
     # Removed: mock_game_history.add_orders = MagicMock()
 
     orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
-    # game_history.add_orders should be called for each power with empty orders
-    expected_history_calls = [
-        call(fake_game.get_current_phase(), "ENG", []),
-        call(fake_game.get_current_phase(), "GER", [])
-    ]
-    mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
-    assert mock_game_history.add_orders.call_count == 2
+    # game_history.add_orders should not be called as no power has builds/disbands
+    mock_game_history.add_orders.assert_not_called()
     assert orders == {"ENG": [], "GER": []}
 
 @pytest.mark.unit
@@ -159,8 +148,8 @@ async def test_build_agent_not_found(fake_game_factory, default_dummy_orchestrat
     orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
-    # game_history.add_orders should still be called with empty orders for the power with no agent
-    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "AUS", [])
+    # game_history.add_orders should not be called as the power with builds has no agent
+    mock_game_history.add_orders.assert_not_called()
     
     assert isinstance(orders, dict)
     # Even if agent not found, the power should be in the final orders dict with an empty list

@@ -26,7 +26,10 @@ class RetreatPhaseStrategy:
 
         if not powers_needing_retreat:
             logger.info("No powers need to retreat this phase.")
-            return {}
+            # Ensure all active powers are in the output, even if with empty orders
+            for p_name in orchestrator.active_powers:
+                orders_by_power[p_name] = []
+            return orders_by_power
 
         for power_name in powers_needing_retreat:
             agent = orchestrator.agent_manager.get_agent(power_name)

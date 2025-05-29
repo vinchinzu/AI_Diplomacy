@@ -649,6 +649,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
 
     async def test_analyze_and_update_goals_change(self):
         await self.asyncSetUp()
+        self.mock_agent_state.add_journal_entry.reset_mock() # Reset after setup
+
         mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
         mock_phase_state.get_center_count.return_value = 2 # Should trigger "Survive"
         mock_phase_state.powers = ["FRANCE", "GERMANY"]

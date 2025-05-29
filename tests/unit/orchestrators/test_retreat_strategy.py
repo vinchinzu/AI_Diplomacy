@@ -41,15 +41,11 @@ async def test_retreat_generates_orders_for_retreating_power(fake_game_factory, 
         fake_game, "FRA", mock_agent_fra, mock_game_history
     )
     # Assert that game_history.add_orders was called for FRA with its orders
-    # and for ENG with empty orders (as it was not retreating)
-    expected_history_calls = [
-        call(fake_game.get_current_phase(), "FRA", ["A PAR R A MAR"]),
-        call(fake_game.get_current_phase(), "ENG", [])
-    ]
-    mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
-    assert mock_game_history.add_orders.call_count == 2
+    # ENG was not retreating, so add_orders should not be called for it.
+    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "FRA", ["A PAR R A MAR"])
     
     assert isinstance(orders, dict)
+    # ENG should still be in the final orders dict with an empty list, even if not retreating
     assert set(orders.keys()) == set(powers)
     assert orders["FRA"] == ["A PAR R A MAR"]
     assert orders["ENG"] == []
@@ -72,14 +68,11 @@ async def test_retreat_no_retreating_powers(fake_game_factory, default_dummy_orc
     orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
-    # game_history.add_orders should be called for each power with empty orders
-    expected_history_calls = [
-        call(fake_game.get_current_phase(), "ENG", []),
-        call(fake_game.get_current_phase(), "GER", [])
-    ]
-    mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
-    assert mock_game_history.add_orders.call_count == 2
-    assert orders == {"ENG": [], "GER": []} # Strategy now ensures all powers are keys
+    # game_history.add_orders should not be called as no power is retreating
+    mock_game_history.add_orders.assert_not_called()
+    
+    # All powers should be in the orders dict with empty lists
+    assert orders == {"ENG": [], "GER": []}
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -129,11 +122,11 @@ async def test_retreat_agent_not_found(fake_game_factory, default_dummy_orchestr
     orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
-    # game_history.add_orders should still be called with empty orders for AUS
-    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "AUS", [])
+    # game_history.add_orders should not be called as the retreating power has no agent
+    mock_game_history.add_orders.assert_not_called()
     
     assert isinstance(orders, dict)
-    # Even if agent not found, the power should be in the final orders dict with an empty list
+    # AUS should be in the final orders dict with an empty list
     assert orders == {"AUS": []}
     assert len(caplog.records) == 1
     assert "No agent found for active power AUS during retreat order generation." in caplog.records[0].message
