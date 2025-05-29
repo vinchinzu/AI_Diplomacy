@@ -31,7 +31,7 @@ export function createChatWindows() {
 
   // Create chat windows for each power except the current one
   otherPowers.forEach(power => {
-    createChatWindow(getPowerDisplayName(power));
+    createChatWindow(power);
   });
 }
 // Modified to use 3D face icons properly

@@ -12,7 +12,7 @@ import { gameState } from '../gameState';
 export function getPowerDisplayName(power: PowerENUM | string): string {
   // Convert string to PowerENUM if needed
   const powerEnum = typeof power === 'string' ? power.toUpperCase() as PowerENUM : power;
-  
+
   // Special handling for GLOBAL and EUROPE which aren't models
   if (powerEnum === PowerENUM.GLOBAL || powerEnum === PowerENUM.EUROPE) {
     return powerEnum;
@@ -22,6 +22,11 @@ export function getPowerDisplayName(power: PowerENUM | string): string {
   if (gameState.momentsData?.power_models && powerEnum in gameState.momentsData.power_models) {
     const modelName = gameState.momentsData.power_models[powerEnum];
     if (modelName) {
+      // Remove the extra long parts of some of the model names e.g. openroute-meta/llama-4-maverick -> llama-4-maverick
+      let slashIdx = modelName?.indexOf("/")
+      if (slashIdx >= 0) {
+        return modelName.slice(0, slashIdx)
+      }
       return modelName;
     }
   }
@@ -39,7 +44,7 @@ export function getPowerDisplayName(power: PowerENUM | string): string {
 export function getAllPowerDisplayNames(): string[] {
   const standardPowers = [
     PowerENUM.AUSTRIA,
-    PowerENUM.ENGLAND, 
+    PowerENUM.ENGLAND,
     PowerENUM.FRANCE,
     PowerENUM.GERMANY,
     PowerENUM.ITALY,
@@ -58,7 +63,7 @@ export function getAllPowerDisplayNames(): string[] {
  */
 export function getPowerDisplayNameMapping(): Record<PowerENUM, string> {
   const mapping: Record<PowerENUM, string> = {} as Record<PowerENUM, string>;
-  
+
   Object.values(PowerENUM).forEach(power => {
     mapping[power] = getPowerDisplayName(power);
   });

@@ -154,19 +154,19 @@ class GameState {
           playBtn.disabled = false;
           speedSelector.disabled = false;
 
-          // Initialize chat windows for all powers
-          createChatWindows();
-
-          // Display the initial phase
-          displayInitialPhase()
-
-          // Update game ID display
-          updateGameIdDisplay();
 
 
           const momentsFilePath = `./games/${this.gameId}/moments.json`;
           loadFileFromServer(momentsFilePath).then((data) => {
             this.momentsData = MomentsDataSchema.parse(JSON.parse(data))
+            // Initialize chat windows for all powers
+            createChatWindows();
+
+            // Display the initial phase
+            displayInitialPhase()
+
+            // Update game ID display
+            updateGameIdDisplay();
           })
           resolve()
         } else {

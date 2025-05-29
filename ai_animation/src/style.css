@@ -525,35 +525,6 @@
     background-color: rgba(210, 180, 140, 0.3);
   }
 
-  /* Power-specific color accents */
-  .power-austria {
-    border-left: 4px solid #f08080;
-  }
-
-  .power-turkey {
-    border-left: 4px solid #f08080;
-  }
-
-  .power-england {
-    border-left: 4px solid #6495ed;
-  }
-
-  .power-france {
-    border-left: 4px solid #6495ed;
-  }
-
-  .power-italy {
-    border-left: 4px solid #90ee90;
-  }
-
-  .power-russia {
-    border-left: 4px solid #90ee90;
-  }
-
-  .power-germany {
-    border-left: 4px solid #dda0dd;
-  }
-
   .power-header {
     text-transform: uppercase;
   }
