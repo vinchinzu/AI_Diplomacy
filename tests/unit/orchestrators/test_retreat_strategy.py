@@ -1,10 +1,12 @@
 import pytest
 import asyncio
+import logging # Added import
 from unittest.mock import MagicMock, AsyncMock, call
 # SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
 # from types import SimpleNamespace 
 
 from ai_diplomacy.orchestrators.retreat import RetreatPhaseStrategy
+from ai_diplomacy.game_history import GameHistory # Added import
 # FakeGame and DummyOrchestrator are now injected via fixtures from conftest
 # from tests._diplomacy_fakes import FakeGame, DummyOrchestrator 
 
@@ -29,8 +31,8 @@ async def test_retreat_generates_orders_for_retreating_power(fake_game_factory, 
     dummy_orchestrator.agent_manager.get_agent.side_effect = get_agent_side_effect
     dummy_orchestrator._get_orders_for_power = AsyncMock(return_value=["A PAR R A MAR"])
     
-    mock_game_history = MagicMock()
-    mock_game_history.add_orders = MagicMock()
+    mock_game_history = MagicMock(spec=GameHistory, autospec=True)
+    # Removed: mock_game_history.add_orders = MagicMock()
 
     orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
@@ -64,8 +66,8 @@ async def test_retreat_no_retreating_powers(fake_game_factory, default_dummy_orc
     dummy_orchestrator.active_powers = powers
     # _get_orders_for_power should not be called as no power is retreating
     
-    mock_game_history = MagicMock()
-    mock_game_history.add_orders = MagicMock()
+    mock_game_history = MagicMock(spec=GameHistory, autospec=True)
+    # Removed: mock_game_history.add_orders = MagicMock()
 
     orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
@@ -109,7 +111,7 @@ async def test_retreat_agent_fails_to_provide_orders(fake_game_factory, default_
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_retreat_agent_not_found(fake_game_factory, default_dummy_orchestrator):
+async def test_retreat_agent_not_found(fake_game_factory, default_dummy_orchestrator, caplog): # Added caplog
     strat = RetreatPhaseStrategy()
     powers = ["AUS"]
     retreat_conditions_map = {"AUS": True}
@@ -123,8 +125,8 @@ async def test_retreat_agent_not_found(fake_game_factory, default_dummy_orchestr
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
 
-    with pytest.logs(logger="ai_diplomacy.orchestrators.retreat", level="WARNING") as log_capture:
-        orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
+    caplog.set_level(logging.WARNING, logger="ai_diplomacy.orchestrators.retreat")
+    orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
     # game_history.add_orders should still be called with empty orders for AUS
@@ -133,12 +135,12 @@ async def test_retreat_agent_not_found(fake_game_factory, default_dummy_orchestr
     assert isinstance(orders, dict)
     # Even if agent not found, the power should be in the final orders dict with an empty list
     assert orders == {"AUS": []}
-    assert len(log_capture.records) == 1
-    assert "No agent found for active power AUS during retreat order generation." in log_capture.records[0].getMessage()
+    assert len(caplog.records) == 1
+    assert "No agent found for active power AUS during retreat order generation." in caplog.records[0].message
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_retreat_one_agent_fails_another_succeeds(fake_game_factory, default_dummy_orchestrator):
+async def test_retreat_one_agent_fails_another_succeeds(fake_game_factory, default_dummy_orchestrator, caplog): # Added caplog
     strat = RetreatPhaseStrategy()
     powers = ["FRA", "GER"]
     retreat_conditions_map = {"FRA": True, "GER": True}
@@ -169,8 +171,8 @@ async def test_retreat_one_agent_fails_another_succeeds(fake_game_factory, defau
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
 
-    with pytest.logs(logger="ai_diplomacy.orchestrators.retreat", level="ERROR") as log_capture:
-        orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
+    caplog.set_level(logging.ERROR, logger="ai_diplomacy.orchestrators.retreat")
+    orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     assert dummy_orchestrator._get_orders_for_power.await_count == 2
     dummy_orchestrator._get_orders_for_power.assert_any_await(fake_game, "FRA", mock_agent_fra, mock_game_history)
@@ -187,6 +189,6 @@ async def test_retreat_one_agent_fails_another_succeeds(fake_game_factory, defau
     assert orders["FRA"] == ["A PAR R MAR"]
     assert orders["GER"] == []
 
-    assert len(log_capture.records) == 1
-    assert "Error getting retreat orders for GER: GER LLM simulated connection error" in log_capture.records[0].getMessage()
+    assert len(caplog.records) == 1
+    assert "Error getting retreat orders for GER: GER LLM simulated connection error" in caplog.records[0].message
  

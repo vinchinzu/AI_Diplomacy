@@ -1,10 +1,12 @@
 import pytest
 import asyncio
+import logging # Added import
 from unittest.mock import MagicMock, AsyncMock, patch, call
 # SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
 # from types import SimpleNamespace 
 
 from ai_diplomacy.orchestrators.movement import MovementPhaseStrategy
+from ai_diplomacy.game_history import GameHistory # Added import
 # FakeGame and DummyOrchestrator are now injected via fixtures from conftest
 # from tests._diplomacy_fakes import FakeGame, DummyOrchestrator 
 
@@ -24,10 +26,10 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
     dummy_orchestrator.agent_manager.get_agent.return_value = mock_agent
     dummy_orchestrator._get_orders_for_power = AsyncMock(return_value=["WAIVE"])
 
-    mock_game_history = MagicMock()
-    mock_game_history.add_orders = MagicMock()
-    mock_game_history.add_phase = MagicMock()
-    mock_game_history.add_message = MagicMock()
+    mock_game_history = MagicMock(spec=GameHistory, autospec=True)
+    # Removed: mock_game_history.add_orders = MagicMock()
+    # Removed: mock_game_history.add_phase = MagicMock()
+    # Removed: mock_game_history.add_message = MagicMock()
 
     with patch(
         "ai_diplomacy.orchestrators.movement.perform_negotiation_rounds", 
@@ -83,7 +85,7 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_movement_agent_not_found_and_agent_error(fake_game_factory, default_dummy_orchestrator):
+async def test_movement_agent_not_found_and_agent_error(fake_game_factory, default_dummy_orchestrator, caplog): # Added caplog
     strat = MovementPhaseStrategy()
     powers = ["ENG", "FRA", "GER"] # ENG: agent fails, FRA: no agent, GER: success
     fake_game = fake_game_factory(phase="S1901M", powers_names=powers)
@@ -119,10 +121,8 @@ async def test_movement_agent_not_found_and_agent_error(fake_game_factory, defau
         "ai_diplomacy.orchestrators.movement.perform_negotiation_rounds", 
         new_callable=AsyncMock, 
         return_value=None
-    ) as mocked_perform_negotiation, \
-         pytest.logs(logger="ai_diplomacy.orchestrators.movement", level="WARNING") as warn_logs, \
-         pytest.logs(logger="ai_diplomacy.orchestrators.movement", level="ERROR") as error_logs:
-        
+    ) as mocked_perform_negotiation:
+        caplog.set_level(logging.WARNING, logger="ai_diplomacy.orchestrators.movement") # Set to capture WARNING and above
         orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     mocked_perform_negotiation.assert_not_awaited()
@@ -147,8 +147,11 @@ async def test_movement_agent_not_found_and_agent_error(fake_game_factory, defau
     assert orders["GER"] == ["A BER H"]
 
     # Check logs
-    assert len(warn_logs.records) == 1
-    assert "No agent found for active power FRA during movement order generation" in warn_logs.records[0].getMessage()
-    assert len(error_logs.records) == 1
-    assert "Error getting movement orders for ENG: ENG LLM simulated attribute error" in error_logs.records[0].getMessage()
+    warn_records = [r for r in caplog.records if r.levelname == "WARNING" and r.name == "ai_diplomacy.orchestrators.movement"]
+    error_records = [r for r in caplog.records if r.levelname == "ERROR" and r.name == "ai_diplomacy.orchestrators.movement"]
+    
+    assert len(warn_records) == 1
+    assert "No agent found for active power FRA during movement order generation" in warn_records[0].message
+    assert len(error_records) == 1
+    assert "Error getting movement orders for ENG: ENG LLM simulated attribute error" in error_records[0].message
 
