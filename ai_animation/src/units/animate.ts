@@ -94,31 +94,32 @@ export function createAnimationsForNextPhase() {
     }
     for (const order of orders) {
       // Check if unit bounced
-      let lastPhaseResultMatches = Object.entries(previousPhase.results).filter(([key, _]) => {
-        return key.split(" ")[1] == order.unit.origin
-      }).map(val => {
-        // in the form "A BER" (unitType origin)
-        let orderSplit = val[0].split(" ")
-        return { origin: orderSplit[1], unitType: orderSplit[0], result: val[1][0] }
-      })
-      // This should always exist. If we don't have a match here, that means something went wrong with our order parsing
-      if (!lastPhaseResultMatches) {
-        throw new Error("No result present in current phase for previous phase order. Cannot continue")
+      // With new format: {A: {"BUD": [results]}, F: {"BUD": [results]}}
+      const unitType = order.unit.type;
+      const unitOrigin = order.unit.origin;
+
+      let result = undefined;
+      if (previousPhase.results && previousPhase.results[unitType] && previousPhase.results[unitType][unitOrigin]) {
+        const resultArray = previousPhase.results[unitType][unitOrigin];
+        result = resultArray.length > 0 ? resultArray[0] : null;
+
       }
-      if (lastPhaseResultMatches.length > 1) {
-        throw new Error("Multiple matching results from last phase. Should only ever be 1.")
+
+      if (result === undefined) {
+        throw new Error(`No result present in current phase for previous phase order: ${unitType} ${unitOrigin}. Cannot continue`);
       }
-      if (lastPhaseResultMatches[0].result === "bounce") {
+
+      if (result === "bounce") {
         order.type = "bounce"
       }
       // If the result is void, that means the move was not valid?
-      if (lastPhaseResultMatches[0].result === "void") continue;
+      if (result === "void") continue;
       let unitIndex = -1
 
+      unitIndex = getUnit(order, power);
       switch (order.type) {
         case "move":
           if (!order.destination) throw new Error("Move order with no destination, cannot complete move.")
-          unitIndex = getUnit(order, power);
           if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           // Create a tween for smooth movement
           createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
@@ -126,7 +127,6 @@ export function createAnimationsForNextPhase() {
 
         case "disband":
           // TODO: Death animation
-          unitIndex = getUnit(order, power);
           if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           gameState.scene.remove(gameState.unitMeshes[unitIndex]);
           gameState.unitMeshes.splice(unitIndex, 1);
@@ -152,11 +152,10 @@ export function createAnimationsForNextPhase() {
           break;
 
         case "convoy":
-          createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
+          // The unit doesn't move, so no animation for now
           break;
 
         case "retreat":
-          unitIndex = getUnit(order, power);
           if (unitIndex < 0) throw new Error("Unable to find unit for order " + order.raw)
           createMoveAnimation(gameState.unitMeshes[unitIndex], order.destination as keyof typeof ProvinceENUM)
           break;
@@ -164,9 +163,10 @@ export function createAnimationsForNextPhase() {
         case "support":
           break
 
-
         default:
-          break;
+          // FIXME: There is an issue where some F are not getting disbanded when I believe they should
+          //    check ROM in game 0, turn 2-5.  
+          throw new Error(`Unhandled order.type ${order.type}.`)
       }
     }
   }

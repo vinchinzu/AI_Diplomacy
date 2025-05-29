@@ -1,5 +1,7 @@
 import { gameState } from "./gameState";
 import { config } from "./config";
+// TODO: We need to get these pieces of audio ahead of time, instead of paying for them each time we load the front end
+//  These pieces of audio are predetermined. 
 
 // --- ElevenLabs Text-to-Speech configuration ---
 let ELEVENLABS_API_KEY = '';
