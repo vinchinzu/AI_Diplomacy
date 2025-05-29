@@ -1,17 +1,22 @@
 import { gameState } from "./gameState";
 import { logger } from "./logger";
-import { updatePhaseDisplay } from "./domElements";
+import { debugMenu, updatePhaseDisplay } from "./domElements";
 import { initUnits } from "./units/create";
 import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
 import { createAnimationsForNextPhase } from "./units/animate";
 import { speakSummary } from "./speech";
 import { config } from "./config";
+import { updateNextMomentDisplay } from "./debug/nextMoment";
+import { debugMenuInstance } from "./debug/debugMenu";
 
 
 
 // FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
 function _setPhase(phaseIndex: number) {
+  if (config.isDebugMode) {
+    debugMenuInstance.updateTools()
+  }
   const gameLength = gameState.gameData.phases.length
   // Validate that the phaseIndex is within the bounds of the game length.
   if (phaseIndex >= gameLength || phaseIndex < 0) {

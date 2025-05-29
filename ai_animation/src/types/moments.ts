@@ -2,6 +2,21 @@ import { z } from 'zod';
 import { PowerENUMSchema } from './map';
 
 /**
+ * Schema for parsing Diplomacy phase names (e.g., "W1901R")
+ */
+export const PhaseNameSchema = z.string().regex(/^[SFW]\d{4}[MRA]$/, "Phase name must match format [Season][Year][Phase]");
+
+/**
+ * Schema for parsed phase components
+ */
+export const ParsedPhaseSchema = z.object({
+  season: z.enum(['S', 'F', 'W']),
+  year: z.number().int().min(1901),
+  phase: z.enum(['M', 'R', 'A']),
+  order: z.number().int()
+});
+
+/**
  * Schema for moment categories used in analysis
  */
 export const MomentCategorySchema = z.enum([
@@ -67,7 +82,80 @@ export const MomentsDataSchema = z.object({
   moments: z.array(MomentSchema)
 });
 
+/**
+ * Parses a phase name like "W1901R" into its components
+ */
+export function parsePhase(phaseName: string): z.infer<typeof ParsedPhaseSchema> | null {
+  const parseResult = PhaseNameSchema.safeParse(phaseName);
+  if (!parseResult.success) {
+    return null;
+  }
+
+  const match = phaseName.match(/^([SFW])(\d{4})([MRA])$/);
+  if (!match) return null;
+
+  const [, season, yearStr, phase] = match;
+  const year = parseInt(yearStr, 10);
+
+  const order = calculatePhaseOrder(season as 'S' | 'F' | 'W', year, phase as 'M' | 'R' | 'A');
+
+  return ParsedPhaseSchema.parse({
+    season: season as 'S' | 'F' | 'W',
+    year,
+    phase: phase as 'M' | 'R' | 'A',
+    order
+  });
+}
+
+/**
+ * Calculates chronological order number for a phase
+ */
+function calculatePhaseOrder(season: 'S' | 'F' | 'W', year: number, phase: 'M' | 'R' | 'A'): number {
+  const yearMultiplier = (year - 1901) * 9;
+  
+  let seasonOffset = 0;
+  switch (season) {
+    case 'S': seasonOffset = 0; break;
+    case 'F': seasonOffset = 3; break;
+    case 'W': seasonOffset = 6; break;
+  }
+  
+  let phaseOffset = 0;
+  switch (phase) {
+    case 'M': phaseOffset = 0; break;
+    case 'R': phaseOffset = 1; break;
+    case 'A': phaseOffset = 2; break;
+  }
+  
+  return yearMultiplier + seasonOffset + phaseOffset;
+}
+
+/**
+ * Generates the next phase name in chronological order
+ */
+export function getNextPhaseName(currentPhaseName: string): string | null {
+  const parsed = parsePhase(currentPhaseName);
+  if (!parsed) return null;
+
+  let { season, year, phase } = parsed;
+
+  switch (phase) {
+    case 'M': phase = 'R'; break;
+    case 'R': phase = 'A'; break;
+    case 'A':
+      switch (season) {
+        case 'S': season = 'F'; phase = 'M'; break;
+        case 'F': season = 'W'; phase = 'M'; break;
+        case 'W': season = 'S'; phase = 'M'; year++; break;
+      }
+      break;
+  }
+
+  return `${season}${year}${phase}`;
+}
+
 // Type exports
+export type ParsedPhase = z.infer<typeof ParsedPhaseSchema>;
 export type MomentCategory = z.infer<typeof MomentCategorySchema>;
 export type MomentsMetadata = z.infer<typeof MomentsMetadataSchema>;
 export type DiaryContext = z.infer<typeof DiaryContextSchema>;

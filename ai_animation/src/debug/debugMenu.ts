@@ -3,6 +3,9 @@
  * Handles the collapsible debug menu and organization of debug tools
  */
 
+import { updateNextMomentDisplay, initNextMomentTool } from "./nextMoment";
+import { initDebugProvinceHighlighting } from "./provinceHighlight";
+
 export class DebugMenu {
   private toggleBtn: HTMLButtonElement;
   private panel: HTMLElement;
@@ -19,6 +22,9 @@ export class DebugMenu {
     }
 
     this.initEventListeners();
+
+    // Start with the menu open
+    this.toggle()
   }
 
   private initEventListeners(): void {
@@ -39,14 +45,6 @@ export class DebugMenu {
       }
     });
 
-    // Close when clicking outside the menu
-    document.addEventListener('click', (e) => {
-      const target = e.target as Node;
-      const debugMenu = document.getElementById('debug-menu');
-      if (this.isExpanded && debugMenu && !debugMenu.contains(target)) {
-        this.collapse();
-      }
-    });
   }
 
   /**
@@ -56,6 +54,7 @@ export class DebugMenu {
     const debugMenu = document.getElementById('debug-menu');
     if (debugMenu) {
       debugMenu.style.display = 'block';
+      this.initTools()
     }
   }
 
@@ -136,7 +135,7 @@ export class DebugMenu {
     // If no specific position, insert before "Future Tools" section or at the end
     const futureToolsSection = Array.from(debugContent.querySelectorAll('.debug-section h4'))
       .find(h4 => h4.textContent === 'Future Tools')?.parentElement;
-    
+
     if (futureToolsSection) {
       debugContent.insertBefore(section, futureToolsSection);
     } else {
@@ -170,4 +169,15 @@ export class DebugMenu {
   public get expanded(): boolean {
     return this.isExpanded;
   }
+
+  private initTools(): void {
+    initNextMomentTool(this);
+    initDebugProvinceHighlighting()
+  }
+
+  public updateTools(): void {
+    updateNextMomentDisplay()
+  }
 }
+
+export let debugMenuInstance = new DebugMenu();

@@ -12,17 +12,12 @@ import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
 import { closeTwoPowerConversation, showTwoPowerConversation } from "./components/twoPowerConversation";
 import { PowerENUM } from "./types/map";
-import { debugMenu, provinceInput, highlightProvinceBtn } from "./domElements";
-import { highlightProvince, getAvailableProvinces } from "./debug/provinceHighlight";
-import { DebugMenu } from "./debug/debugMenu";
+import { debugMenuInstance } from "./debug/debugMenu";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
 
-const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
-
-let debugMenuInstance: DebugMenu | null = null;
 
 // --- INITIALIZE SCENE ---
 function initScene() {
@@ -49,13 +44,12 @@ function initScene() {
       gameState.cameraPanAnim = createCameraPan()
 
       // Load default game file if in debug mode
-      if (isDebugMode || isStreamingMode) {
+      if (config.isDebugMode || isStreamingMode) {
         gameState.loadGameFile(0);
       }
 
       // Initialize debug menu if in debug mode
-      if (isDebugMode) {
-        debugMenuInstance = new DebugMenu();
+      if (config.isDebugMode) {
         debugMenuInstance.show();
       }
       if (isStreamingMode) {
@@ -299,49 +293,6 @@ speedSelector.addEventListener('change', e => {
   }
 });
 
-// Initialize debug province highlighting functionality
-function initDebugProvinceHighlighting() {
-  if (!isDebugMode) return;
-
-  highlightProvinceBtn.addEventListener('click', () => {
-    const provinceName = provinceInput.value.trim();
-    if (provinceName) {
-      highlightProvince(provinceName);
-    } else {
-      console.warn('Please enter a province name');
-    }
-  });
-
-  // Allow highlighting on Enter key press
-  provinceInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      const provinceName = provinceInput.value.trim();
-      if (provinceName) {
-        highlightProvince(provinceName);
-      }
-    }
-  });
-
-  // Add input validation and autocomplete suggestions
-  provinceInput.addEventListener('input', () => {
-    const input = provinceInput.value.toUpperCase().trim();
-    const availableProvinces = getAvailableProvinces();
-
-    // Basic validation - turn input red if it doesn't match any province
-    if (input && !availableProvinces.some(p => p.startsWith(input))) {
-      provinceInput.style.borderColor = '#ff4444';
-      provinceInput.style.backgroundColor = '#ffe6e6';
-    } else {
-      provinceInput.style.borderColor = '#4f3b16';
-      provinceInput.style.backgroundColor = '#faf0d8';
-    }
-  });
-}
-
-// Initialize debug functionality after the scene is loaded
-if (isDebugMode) {
-  initDebugProvinceHighlighting();
-}
 
 // --- BOOTSTRAP ON PAGE LOAD ---
 window.addEventListener('load', initScene);
