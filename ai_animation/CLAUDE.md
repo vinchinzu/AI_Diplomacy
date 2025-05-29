@@ -31,6 +31,14 @@
    - When animations complete, show phase summary (if available)
    - Advance to next phase and repeat
 
+## Power Name Display System
+The application now includes a dynamic power name display system:
+
+1. **Model Names**: If a `moments.json` file exists with a `power_models` key, the UI will display AI model names instead of generic power names (e.g., "o3" instead of "FRANCE")
+2. **Fallback**: If no model names are available, the system falls back to standard power names (AUSTRIA, ENGLAND, etc.)
+3. **Utility Function**: `getPowerDisplayName(power)` resolves the appropriate display name for any power
+4. **Game-Aware**: The system automatically adapts based on the currently loaded game's data
+
 ## Agent State Display
 The game now includes agent state data that can be visualized:
 
@@ -69,6 +77,44 @@ The game now includes agent state data that can be visualized:
 - The game data's "orders" field can be either an array or an object in the JSON
 - The schema automatically converts object-format orders to array format for use in the code
 - When debugging order issues, check the format in the original JSON
+
+## Debug Tools
+The application includes a debug menu system (enabled when `config.isDebugMode` is true):
+
+### Debug Menu Structure
+- Located in `src/debug/` directory
+- `DebugMenu` class (`debugMenu.ts`) manages the collapsible menu system
+- Individual debug tools are implemented as separate modules and registered with the menu
+- Menu does not close when clicking outside (for better UX during debugging)
+
+### Available Debug Tools
+
+#### Province Highlighting (`provinceHighlight.ts`)
+- Allows highlighting specific provinces on the map by name
+- Input validation with visual feedback for invalid province names
+- Supports Enter key and button click to trigger highlighting
+
+#### Next Moment Display (`nextMoment.ts`)
+- Shows the next chronological moment that will occur in the game
+- Displays current phase, next phase, and next moment information
+- Uses phase name parsing to determine chronological order
+- Finds the next moment across all phases, not just the immediate next phase
+- Shows moment category, phase name, and interest score
+- Color-coded by importance (red for high scores ≥9, blue for others)
+
+### Phase Name Format
+Phase names follow the format: `[Season][Year][Phase]`
+- Seasons: Spring (S) → Fall (F) → Winter (W)
+- Phases within each season: Move (M) → Retreat (R) → Adjustment (A)
+- Example: `W1901R` = Winter 1901 Retreat phase
+- Phase parsing logic is implemented in `types/moments.ts` with Zod schemas
+
+### Adding New Debug Tools
+1. Create a new file in `src/debug/` directory
+2. Implement an init function that takes the DebugMenu instance
+3. Use `debugMenu.addDebugTool(title, htmlContent, beforeSection?)` to add to menu
+4. Register the tool in the DebugMenu's `initTools()` method
+5. Add any update functions to `updateTools()` method if needed
 
 ## Code Style Preferences
 - Use descriptive function and variable names

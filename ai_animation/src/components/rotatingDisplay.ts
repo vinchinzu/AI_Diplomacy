@@ -2,6 +2,7 @@ import { gameState } from "../gameState";
 import { PowerENUM } from "../types/map";
 import { GameSchemaType } from "../types/gameState";
 import { Chart } from "chart.js";
+import { getPowerDisplayName } from "../utils/powerNames";
 
 // Enum for the different display types
 export enum DisplayType {
@@ -12,14 +13,16 @@ export enum DisplayType {
 
 // Configuration
 const ROTATION_INTERVAL_MS = 15000; // 15 seconds between rotations
-const POWER_COLORS = {
-  AUSTRIA: "#ff1a1a", // Bright red
-  ENGLAND: "#1a1aff", // Bright blue
-  FRANCE: "#00bfff", // Sky blue
-  GERMANY: "#808080", // Gray
-  ITALY: "#00cc00", // Bright green
-  RUSSIA: "#e0e0e0", // Light gray/white
-  TURKEY: "#ffcc00"  // Gold/yellow
+const POWER_COLORS: Record<PowerENUM, string> = {
+  [PowerENUM.AUSTRIA]: "#ff1a1a", // Bright red
+  [PowerENUM.ENGLAND]: "#1a1aff", // Bright blue
+  [PowerENUM.FRANCE]: "#00bfff", // Sky blue
+  [PowerENUM.GERMANY]: "#808080", // Gray
+  [PowerENUM.ITALY]: "#00cc00", // Bright green
+  [PowerENUM.RUSSIA]: "#e0e0e0", // Light gray/white
+  [PowerENUM.TURKEY]: "#ffcc00",  // Gold/yellow
+  [PowerENUM.GLOBAL]: "#ffffff", // White for global
+  [PowerENUM.EUROPE]: "#ffffff"  // White for europe
 };
 
 // Relationship value mapping
@@ -226,7 +229,7 @@ function renderCurrentStandingsView(
     const units = unitCounts[power] || 0;
 
     html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
-          <span class="power-${power.toLowerCase()}">${power}</span>
+          <span class="power-${power.toLowerCase()}">${getPowerDisplayName(power as PowerENUM)}</span>
           <span>${centers} SCs, ${units} units</span>
         </div>`;
   });

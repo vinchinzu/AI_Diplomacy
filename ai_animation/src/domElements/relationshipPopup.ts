@@ -3,6 +3,7 @@ import { gameState } from '../gameState';
 import { PowerENUM } from '../types/map';
 import { GameSchemaType } from '../types/gameState';
 import { renderRelationshipHistoryChartView, DisplayType } from '../components/rotatingDisplay';
+import { getPowerDisplayName } from '../utils/powerNames';
 
 // DOM element references
 let relationshipPopupContainer: HTMLElement | null = null;
@@ -150,7 +151,7 @@ function renderRelationshipChart(): void {
 
       const powerHeader = document.createElement('h3');
       powerHeader.className = `power-${power.toLowerCase()}`;
-      powerHeader.textContent = power;
+      powerHeader.textContent = getPowerDisplayName(power as PowerENUM);
       powerContainer.appendChild(powerHeader);
 
       const chartContainer = document.createElement('div');
@@ -199,7 +200,7 @@ function renderRelationshipChart(): void {
 
           const powerHeader = document.createElement('h3');
           powerHeader.className = `power-${power.toLowerCase()}`;
-          powerHeader.textContent = power;
+          powerHeader.textContent = getPowerDisplayName(power as PowerENUM);
           powerContainer.appendChild(powerHeader);
 
           const chartContainer = document.createElement('div');

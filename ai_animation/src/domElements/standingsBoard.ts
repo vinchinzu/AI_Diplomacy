@@ -2,6 +2,8 @@ import { StandingsData, StandingsEntry, SortBy, SortDirection, SortOptions } fro
 import { gameState } from '../gameState';
 import { logger } from '../logger';
 import { standingsBtn } from '../domElements';
+import { getPowerDisplayName } from '../utils/powerNames';
+import { PowerENUM } from '../types/map';
 
 // DOM element references
 let standingsBoardContainer: HTMLElement | null = null;
@@ -170,7 +172,7 @@ function renderStandingsTable(): void {
   // Power column headers
   standingsData.powers.forEach(power => {
     const th = document.createElement('th');
-    th.textContent = power;
+    th.textContent = getPowerDisplayName(power as PowerENUM);
     th.className = `power-header power-${power.toLowerCase()}`;
     th.addEventListener('click', () => sortTable(`power_${power}`));
     headerRow.appendChild(th);

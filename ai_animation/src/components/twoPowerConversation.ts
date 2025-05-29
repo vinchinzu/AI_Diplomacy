@@ -1,5 +1,7 @@
 import { gameState } from '../gameState';
 import { config } from '../config';
+import { getPowerDisplayName } from '../utils/powerNames';
+import { PowerENUM } from '../types/map';
 
 interface ConversationMessage {
   sender: string;
@@ -150,7 +152,7 @@ function createDialogueContainer(power1: string, power2: string, title?: string)
 
   // Add title
   const titleElement = document.createElement('h2');
-  titleElement.textContent = title || `Conversation: ${power1} & ${power2}`;
+  titleElement.textContent = title || `Conversation: ${getPowerDisplayName(power1 as PowerENUM)} & ${getPowerDisplayName(power2 as PowerENUM)}`;
   titleElement.style.cssText = `
         margin: 0 0 20px 0;
         text-align: center;
@@ -190,7 +192,7 @@ function createConversationArea(): HTMLElement {
  */
 function createCloseButton(): HTMLElement {
   const button = document.createElement('button');
-  button.textContent = '×';
+  button.textContent = 'ï¿½';
   button.className = 'close-button';
   button.style.cssText = `
         position: absolute;
@@ -303,7 +305,7 @@ function createMessageElement(message: ConversationMessage, power1: string, powe
 
   // Sender label
   const senderLabel = document.createElement('div');
-  senderLabel.textContent = message.sender;
+  senderLabel.textContent = getPowerDisplayName(message.sender as PowerENUM);
   senderLabel.className = `power-${message.sender.toLowerCase()}`;
   senderLabel.style.cssText = `
         font-size: 12px;
