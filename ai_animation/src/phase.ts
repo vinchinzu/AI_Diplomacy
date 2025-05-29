@@ -2,12 +2,49 @@ import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { updatePhaseDisplay } from "./domElements";
 import { initUnits } from "./units/create";
-import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership } from "./map/state";
+import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
 import { createAnimationsForNextPhase } from "./units/animate";
 import { speakSummary } from "./speech";
 import { config } from "./config";
 
+
+
+function _setPhase(phaseIndex: number) {
+  const gameLength = gameState.gameData.phases.length
+  // Validate that the phaseIndex is within the bounds of the game length.
+  if (phaseIndex >= gameLength || phaseIndex < 0) {
+    throw new Error(`Provided invalid phaseIndex, cannot setPhase to ${phaseIndex} - game has ${gameState.gameData.phases.length} phases`)
+  }
+  if (phaseIndex - gameState.phaseIndex != 1) {
+    // We're moving more than one Phase forward, or any number of phases backward, to do so clear the board and reInit the units on the correct phase
+    gameState.unitAnimations = [];
+    initUnits(phaseIndex)
+    displayPhase()
+  } else {
+
+  }
+
+
+
+  // Finally, update the gameState with the current phaseIndex
+  gameState.phaseIndex = phaseIndex
+  // If we're at the end of the game, don't attempt to animate. 
+  if (phaseIndex === gameLength - 1) {
+
+  } else {
+
+    displayPhase()
+  }
+}
+
+export function nextPhase() {
+  _setPhase(gameState.phaseIndex + 1)
+}
+
+export function previousPhase() {
+  _setPhase(gameState.phaseIndex - 1)
+}
 
 /**
  * Unified function to display a phase with proper transitions
@@ -16,8 +53,14 @@ import { config } from "./config";
  */
 export function displayPhase(skipMessages = false) {
   let index = gameState.phaseIndex
+  if (index >= gameState.gameData.phases.length) {
+    displayFinalPhase()
+    logger.log("Displayed final phase, moving to next game.")
+    gameState.loadNextGame()
+    return;
+  }
   if (!gameState.gameData || !gameState.gameData.phases ||
-    index < 0 || index >= gameState.gameData.phases.length) {
+    index < 0) {
     logger.log("Invalid phase index.");
     return;
   }
@@ -41,7 +84,7 @@ export function displayPhase(skipMessages = false) {
 
   // Update UI elements with smooth transitions
   updateLeaderboard(currentPhase);
-  updateMapOwnership();
+  _updateMapOwnership();
 
   // Add phase info to news banner if not already there
   const phaseBannerText = `Phase: ${currentPhase.name}`;
@@ -77,8 +120,8 @@ export function displayPhase(skipMessages = false) {
  * Used when first loading a game
  */
 export function displayInitialPhase() {
-  initUnits();
   gameState.phaseIndex = 0;
+  initUnits(0);
   displayPhase(true);
 }
 
@@ -90,17 +133,6 @@ export function displayPhaseWithAnimation() {
   displayPhase(false);
 }
 
-// Explicityly sets the phase to a given index,
-// Removes and recreates all units.
-export function resetToPhase(index: number) {
-  gameState.phaseIndex = index
-  gameState.unitAnimations = [];
-  gameState.unitMeshes.map(unitMesh => gameState.scene.remove(unitMesh))
-
-  updateMapOwnership()
-  initUnits()
-
-}
 
 /**
  * Advances to the next phase in the game sequence
@@ -162,6 +194,62 @@ export function advanceToNextPhase() {
   }
 }
 
+function displayFinalPhase() {
+  if (!gameState.gameData || !gameState.gameData.phases || gameState.gameData.phases.length === 0) {
+    return;
+  }
+
+  // Get the final phase to determine the winner
+  const finalPhase = gameState.gameData.phases[gameState.gameData.phases.length - 1];
+
+  if (!finalPhase.state?.centers) {
+    logger.log("No supply center data available to determine winner");
+    return;
+  }
+
+  // Find the power with the most supply centers
+  let winner = '';
+  let maxCenters = 0;
+
+  for (const [power, centers] of Object.entries(finalPhase.state.centers)) {
+    const centerCount = Array.isArray(centers) ? centers.length : 0;
+    if (centerCount > maxCenters) {
+      maxCenters = centerCount;
+      winner = power;
+    }
+  }
+
+  // Display victory message
+  if (winner && maxCenters > 0) {
+    const victoryMessage = `🏆 GAME OVER - ${winner} WINS with ${maxCenters} supply centers! 🏆`;
+
+    // Add victory message to news banner with dramatic styling
+    addToNewsBanner(victoryMessage);
+
+    // Log the victory
+    logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
+
+    // Display final standings in console
+    const standings = Object.entries(finalPhase.state.centers)
+      .map(([power, centers]) => ({
+        power,
+        centers: Array.isArray(centers) ? centers.length : 0
+      }))
+      .sort((a, b) => b.centers - a.centers);
+
+    console.log("Final Standings:");
+    standings.forEach((entry, index) => {
+      const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "  ";
+      console.log(`${medal} ${entry.power}: ${entry.centers} centers`);
+    });
+
+    // Show victory in info panel
+    logger.updateInfoPanel(`🏆 ${winner} VICTORIOUS! 🏆\n\nFinal Score: ${maxCenters} supply centers\n\nCheck console for full standings.`);
+  } else {
+    logger.log("Could not determine game winner");
+  }
+}
+
 /**
  * Internal helper to handle the actual phase advancement
  */
@@ -177,12 +265,7 @@ function moveToNextPhase() {
   gameState.messagesPlaying = false;
 
   // Advance the phase index
-  if (gameState.gameData && gameState.phaseIndex >= gameState.gameData.phases.length - 1) {
-    gameState.phaseIndex = 0;
-    logger.log("Reached end of game, looping back to start");
-  } else {
-    gameState.phaseIndex++;
-  }
+  gameState.phaseIndex++;
   if (config.isDebugMode && gameState.gameData) {
     console.log(`Moving to phase ${gameState.gameData.phases[gameState.phaseIndex].name}`);
   }

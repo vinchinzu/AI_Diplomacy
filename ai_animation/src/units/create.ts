@@ -144,11 +144,17 @@ export function createUnitMesh(unitData: UnitData): THREE.Group {
   return group;
 }
 
+function _removeUnitsFromBoard() {
 
-// Creates the units for the current gameState.phaseIndex.
-export function initUnits() {
-  createSupplyCenters()
-  for (const [power, unitArr] of Object.entries(gameState.gameData.phases[gameState.phaseIndex].state.units)) {
+  gameState.unitMeshes.map((mesh) => gameState.scene.remove(mesh))
+}
+
+/*
+  * Given a phaseIndex, Add the units for that phase to the board, in the province specified in the game.json file.
+  */
+function _addUnitsToBoard(phaseIndex: number) {
+  _removeUnitsFromBoard()
+  for (const [power, unitArr] of Object.entries(gameState.gameData.phases[phaseIndex].state.units)) {
     unitArr.forEach(unitStr => {
       const match = unitStr.match(/^([AF])\s+(.+)$/);
       if (match) {
@@ -162,4 +168,10 @@ export function initUnits() {
       }
     });
   }
+}
+// Creates the units for the current gameState.phaseIndex.
+export function initUnits(phaseIndex: number) {
+  if (phaseIndex === undefined) throw new Error("Cannot pass undefined phaseIndex");
+  createSupplyCenters()
+  _addUnitsToBoard(phaseIndex)
 }

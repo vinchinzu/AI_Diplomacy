@@ -1,23 +1,19 @@
 import * as THREE from "three";
 import "./style.css"
 import { initMap } from "./map/create";
-import { createAnimationsForNextPhase as createAnimationsForNextPhase } from "./units/animate";
 import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
 import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
-import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase } from "./phase";
+import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase, previousPhase } from "./phase";
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
-//
-//  TODO: When loading an invalide file, show an error.
 
-//const isDebugMode = process.env.NODE_ENV === 'development' || localStorage.getItem('debug') === 'true';
 const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
 
@@ -26,15 +22,8 @@ let prevPos
 
 // --- INITIALIZE SCENE ---
 function initScene() {
-  gameState.initScene()
+  gameState.createThreeScene()
 
-  // Lighting (keep it simple)
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  gameState.scene.add(ambientLight);
-
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-  dirLight.position.set(300, 400, 300);
-  gameState.scene.add(dirLight);
 
   // Initialize standings board
   initStandingsBoard();
@@ -57,7 +46,7 @@ function initScene() {
 
       // Load default game file if in debug mode
       if (isDebugMode || isStreamingMode) {
-        loadDefaultGameFile();
+        gameState.loadGameFile(0);
       }
       if (isStreamingMode) {
         setTimeout(() => {
@@ -192,64 +181,20 @@ function onWindowResize() {
   gameState.renderer.setSize(mapView.clientWidth, mapView.clientHeight);
 }
 
-// Load a default game if we're running debug
-function loadDefaultGameFile() {
-  console.log("Loading default game file for debug mode...");
 
-  // Path to the default game file
-  const defaultGameFilePath = './default_game.json';
-
-  fetch(defaultGameFilePath)
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`Failed to load default game file: ${response.status}`);
-      }
-
-      // Check content type to avoid HTML errors
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error('Received HTML instead of JSON. Check the file path.');
-      }
-
-      return response.text();
-    })
-    .then(data => {
-      // Check for HTML content as a fallback
-      if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-        throw new Error('Received HTML instead of JSON. Check the file path.');
-      }
-
-      console.log("Loaded game file, attempting to parse...");
-      return gameState.loadGameData(data);
-    })
-    .then(() => {
-      console.log("Default game file loaded and parsed successfully");
-      // Explicitly hide standings board after loading game
-      hideStandingsBoard();
-      // Update rotating display with game data
-      if (gameState.gameData) {
-        updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
-      }
-    })
-    .catch(error => {
-      console.error("Error loading default game file:", error);
-      // Use console.error instead of logger.log to avoid updating the info panel
-      console.error(`Error loading default game: ${error.message}`);
-
-      // Fallback - tell user to drag & drop a file but don't update the info panel
-      console.log('Please load a game file using the "Load Game" button.');
-    });
-}
 
 
 // --- PLAYBACK CONTROLS ---
 function togglePlayback() {
-  if (!gameState.gameData || gameState.gameData.phases.length <= 1) return;
+  // If the game doesn't have any data, or there are no phases, return;
+  if (!gameState.gameData || gameState.gameData.phases.length <= 0) {
+    alert("This game file appears to be broken. Please reload the page and load a different game.")
+    throw Error("Bad gameState, exiting.")
+  };
 
-  // NEW: If we're speaking, don't allow toggling playback
+  // TODO: Likely not how we want to handle the speaking section of this. 
+  //   Should be able to pause the other elements while we're speaking
   if (gameState.isSpeaking) return;
-
-  // Pause the camera animation
 
   gameState.isPlaying = !gameState.isPlaying;
 
@@ -302,20 +247,19 @@ fileInput.addEventListener('change', e => {
     loadGameBtnFunction(file);
     // Explicitly hide standings board after loading game
     hideStandingsBoard();
-    // Update rotating display with game data
+    // Update rotating display and relationship popup with game data
     if (gameState.gameData) {
       updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+      updateRelationshipPopup();
     }
   }
 });
 
 prevBtn.addEventListener('click', () => {
-  if (gameState.phaseIndex > 0) {
-    resetToPhase(gameState.phaseIndex - 1)
-  }
+  previousPhase()
 });
 nextBtn.addEventListener('click', () => {
-  advanceToNextPhase()
+  nextPhase()
 });
 
 playBtn.addEventListener('click', togglePlayback);

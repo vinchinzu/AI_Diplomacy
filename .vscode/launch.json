@@ -4,14 +4,14 @@
     {
       "type": "firefox",
       "request": "launch",
-      "name": "Debug App",
-      "url": "http://localhost:3000",
-      "webRoot": "${workspaceFolder}/ai_animation",
+      "name": "Firefox Debug 9223",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/ai_animation/",
       "sourceMapPathOverrides": {
-        "webpack:///./src/*": "${webRoot}/*"
+        "http://localhost:5173/*": "${webRoot}/*"
       },
       "runtimeArgs": [
-        "--remote-debugging-port=9222"
+        "--remote-debugging-port=9223"
       ],
       "sourceMaps": true
     }

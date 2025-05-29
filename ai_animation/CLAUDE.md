@@ -9,6 +9,8 @@
 - `npm run dev` - Start the development server
 - `npm run build` - Build for production
 - `npm run lint` - Run TypeScript linting
+- `npm test` - Run unit tests with Vitest
+- `npm run test:ui` - Run tests with UI interface
 
 ## Project Structure
 - `src/` - Source code

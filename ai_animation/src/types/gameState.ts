@@ -5,10 +5,10 @@ import { ProvinceENUMSchema } from './map';
 
 // Define the possible relationship statuses
 const RelationshipStatusSchema = z.enum([
-  "Enemy", 
-  "Unfriendly", 
-  "Neutral", 
-  "Friendly", 
+  "Enemy",
+  "Unfriendly",
+  "Neutral",
+  "Friendly",
   "Ally"
 ]);
 
@@ -21,7 +21,27 @@ const PhaseSchema = z.object({
   messages: z.array(z.any()),
   name: z.string(),
   orders: z.record(PowerENUMSchema, z.array(OrderFromString).nullable()),
-  results: z.record(z.string(), z.array(z.any())),
+  results: z.record(z.string(), z.array(z.any())).transform((originalResults) => {
+    // Transform results from {"A BUD": [results]} to {A: {"BUD": [results]}, F: {"BUD": [results]}}
+    const transformed: { A: Record<string, any[]>, F: Record<string, any[]> } = { A: {}, F: {} };
+
+    for (const [key, value] of Object.entries(originalResults)) {
+      const tokens = key.split(' ');
+      if (tokens.length >= 2) {
+        const unitType = tokens[0]; // "A" or "F"
+        const province = tokens[1].split('/')[0]; // Remove coast specification if present
+
+        if (unitType === 'A' || unitType === 'F') {
+          if (!transformed[unitType as 'A' | 'F']) {
+            transformed[unitType as 'A' | 'F'] = {};
+          }
+          transformed[unitType as 'A' | 'F'][province] = value;
+        }
+      }
+    }
+
+    return transformed;
+  }),
   state: z.object({
     units: z.record(PowerENUMSchema, z.array(z.string())),
     centers: z.record(PowerENUMSchema, z.array(ProvinceENUMSchema)),
@@ -32,7 +52,7 @@ const PhaseSchema = z.object({
   summary: z.string().optional(),
   // Add agent_relationships based on the provided lmvsgame.json structure
   agent_relationships: z.record(
-    PowerENUMSchema, 
+    PowerENUMSchema,
     z.record(PowerENUMSchema, RelationshipStatusSchema)
   ).optional(),
 });

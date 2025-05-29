@@ -15,6 +15,21 @@ export function updatePhaseDisplay() {
     phaseDisplay.style.opacity = '1';
   }, 300);
 }
+
+export function updateGameIdDisplay() {
+  if (!gameIdDisplay) return;
+
+  // Add fade-out effect
+  gameIdDisplay.style.transition = 'opacity 0.3s ease-out';
+  gameIdDisplay.style.opacity = '0';
+
+  // Update text after fade-out
+  setTimeout(() => {
+    gameIdDisplay.textContent = `Game: ${gameState.gameId}`;
+    // Fade back in
+    gameIdDisplay.style.opacity = '1';
+  }, 300);
+}
 // --- LOADING & DISPLAYING GAME PHASES ---
 export function loadGameBtnFunction(file) {
   const reader = new FileReader();
@@ -27,15 +42,39 @@ export function loadGameBtnFunction(file) {
   reader.readAsText(file);
 }
 export const loadBtn = document.getElementById('load-btn');
+if (null === loadBtn) throw new Error("Element with ID 'load-btn' not found");
+
 export const fileInput = document.getElementById('file-input');
+if (null === fileInput) throw new Error("Element with ID 'file-input' not found");
+
 export const prevBtn = document.getElementById('prev-btn');
+if (null === prevBtn) throw new Error("Element with ID 'prev-btn' not found");
+
 export const nextBtn = document.getElementById('next-btn');
+if (null === nextBtn) throw new Error("Element with ID 'next-btn' not found");
+
 export const playBtn = document.getElementById('play-btn');
+if (null === playBtn) throw new Error("Element with ID 'play-btn' not found");
+
 export const speedSelector = document.getElementById('speed-selector');
+if (null === speedSelector) throw new Error("Element with ID 'speed-selector' not found");
+
 export const phaseDisplay = document.getElementById('phase-display');
+if (null === phaseDisplay) throw new Error("Element with ID 'phase-display' not found");
+
+export const gameIdDisplay = document.getElementById('game-id-display');
+if (null === gameIdDisplay) throw new Error("Element with ID 'game-id-display' not found");
+
 export const mapView = document.getElementById('map-view');
+if (null === mapView) throw new Error("Element with ID 'map-view' not found");
+
 export const leaderboard = document.getElementById('leaderboard');
+if (null === leaderboard) throw new Error("Element with ID 'leaderboard' not found");
+
 export const standingsBtn = document.getElementById('standings-btn');
+if (null === standingsBtn) throw new Error("Element with ID 'standings-btn' not found");
+
+
 
 // Add roundRect polyfill for browsers that don't support it
 if (!CanvasRenderingContext2D.prototype.roundRect) {
