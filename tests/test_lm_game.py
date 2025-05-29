@@ -218,9 +218,9 @@ class GameTester:
             game_history=self.game_history,
             game_id=self.config.game_id,
             config=self.config,
-            agent_goals=agent.goals,
-            agent_relationships=agent.relationships,
-            agent_private_diary_str=agent.format_private_diary_for_prompt(),
+            agent_goals=agent.agent_state.goals,
+            agent_relationships=agent.agent_state.relationships,
+            agent_private_diary_str=agent.agent_state.format_private_diary_for_prompt(),
             log_file_path=log_file_path,
             phase=current_phase,
         )

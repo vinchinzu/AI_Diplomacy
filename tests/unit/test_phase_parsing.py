@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from ai_diplomacy.utils.phase_parsing import get_phase_type_from_game, _extract_year_from_phase, PhaseType
+from ai_diplomacy.utils.phase_parsing import get_phase_type_from_game, _extract_year_from_phase, PhaseType, _is_valid_compact_form
 
 # Test cases for get_phase_type_from_game
 @pytest.mark.parametrize(
@@ -85,4 +85,22 @@ def test_get_phase_type_from_game_empty_phase():
     ],
 )
 def test_extract_year_from_phase(phase_string, expected_year):
-    assert _extract_year_from_phase(phase_string) == expected_year 
+    assert _extract_year_from_phase(phase_string) == expected_year
+
+# Test cases for _is_valid_compact_form to improve coverage
+@pytest.mark.parametrize(
+    "phase_str, suffix, expected_result",
+    [
+        ("S1901M", "X", False),      # Suffix X does not match M in S1901M (tests endswith)
+        ("M", "M", False),           # Prefix becomes empty if phase_str is just "M"
+        ("X1901M", "M", False),     # X is an invalid season initial for M, R, A phase types
+        ("S190M", "M", False),       # Prefix S190 is too short for year component
+        ("Z1901B", "B", False),     # Z is an invalid season initial for B type (must be A)
+        ("S1901B", "B", False),     # S is an invalid season initial for B type (must be A)
+        ("A190B", "B", False),       # Prefix A190 is too short for year component in A...B form
+        # True cases for _is_valid_compact_form are implicitly tested by test_get_phase_type_from_game_valid
+        # e.g. _is_valid_compact_form("S1901M", "M") must be true for S1901M to be parsed.
+    ]
+)
+def test_is_valid_compact_form_edge_cases(phase_str, suffix, expected_result):
+    assert _is_valid_compact_form(phase_str, suffix) == expected_result 

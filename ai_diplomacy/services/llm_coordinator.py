@@ -386,7 +386,7 @@ class LLMCoordinator:
         Used by call_json().
         """
         from .. import llm_utils  # Import here to avoid circular imports
-        from ..utils import (
+        from ..general_utils import (
             log_llm_response,
         )  # Assuming this is still used for file logging
 

@@ -85,9 +85,9 @@ async def test_decide_orders_returns_valid_orders(
     assert isinstance(orders, list)
     assert len(orders) == 2
     assert isinstance(orders[0], Order)
-    assert orders[0].order_str == "A LON H"
+    assert orders[0].order_text == "A LON H"
     assert isinstance(orders[1], Order)
-    assert orders[1].order_str == "F EDI M NTH"
+    assert orders[1].order_text == "F EDI M NTH"
 
 
 @pytest.mark.asyncio

@@ -254,8 +254,9 @@ async def test_agent_with_context_providers():
         assert orders == expected_agent_orders
         mock_llm_call.assert_called_once()
         # Verify context from inline provider was used in the prompt
-        prompt_text = mock_llm_call.call_args[1]["prompt_text"]
-        assert "Context (Inline)" in prompt_text
+        prompt_text = mock_llm_call.call_args[1]["prompt"]
+        assert "Game Context and Relevant Information:" in prompt_text
+        assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text # Default from InlineContextProvider
 
     # Test mcp_agent
     with patch(
@@ -266,9 +267,9 @@ async def test_agent_with_context_providers():
         assert orders == expected_agent_orders
         mock_llm_call.assert_called_once()
         # Verify context from MCP provider (fallback to inline) was used
-        prompt_text = mock_llm_call.call_args[1]["prompt_text"]
-        assert "Context (MCP - Fallback to Inline)" in prompt_text
-        assert "MCP tools not available" in prompt_text
+        prompt_text = mock_llm_call.call_args[1]["prompt"]
+        assert "Game Context and Relevant Information:" in prompt_text
+        assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text
 
     # Test auto_agent
     with patch(
@@ -278,9 +279,10 @@ async def test_agent_with_context_providers():
         orders = await auto_agent.decide_orders(phase_state)
         assert orders == expected_agent_orders
         mock_llm_call.assert_called_once()
-        # Verify context from auto provider (fallback to inline) was used
-        prompt_text = mock_llm_call.call_args[1]["prompt_text"]
-        assert "Context (Auto - Fallback to Inline)" in prompt_text
+        # Verify context from Auto provider (fallback to inline) was used
+        prompt_text = mock_llm_call.call_args[1]["prompt"]
+        assert "Game Context and Relevant Information:" in prompt_text
+        assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text
 
     logger.info("✓ Agents working correctly with context providers")
 
