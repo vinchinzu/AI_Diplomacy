@@ -39,10 +39,29 @@
     <div id="news-banner">
       <div id="news-banner-content">Diplomatic actions unfolding...</div>
     </div>
-    <!-- Debug province highlighter -->
-    <div id="debug-province-panel" style="display: none;">
-      <input type="text" id="province-input" placeholder="Enter province name (e.g., PAR, LON, BER)" />
-      <button id="highlight-province-btn">Highlight Province</button>
+    <!-- Debug Menu -->
+    <div id="debug-menu" style="display: none;">
+      <button id="debug-toggle-btn">🔧 Debug</button>
+      <div id="debug-panel" class="debug-panel-collapsed">
+        <div class="debug-header">
+          <h3>Debug Tools</h3>
+          <button id="debug-close-btn">×</button>
+        </div>
+        <div class="debug-content">
+          <div class="debug-section">
+            <h4>Province Highlighting</h4>
+            <div class="debug-tool">
+              <input type="text" id="province-input" placeholder="Enter province name (e.g., PAR, LON, BER)" />
+              <button id="highlight-province-btn">Highlight</button>
+            </div>
+          </div>
+          <!-- Future debug tools will go here -->
+          <div class="debug-section">
+            <h4>Future Tools</h4>
+            <p class="debug-placeholder">More debug tools will be added here...</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </body>

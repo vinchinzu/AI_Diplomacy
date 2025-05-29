@@ -74,8 +74,18 @@ if (null === leaderboard) throw new Error("Element with ID 'leaderboard' not fou
 export const standingsBtn = document.getElementById('standings-btn');
 if (null === standingsBtn) throw new Error("Element with ID 'standings-btn' not found");
 
-export const debugProvincePanel = document.getElementById('debug-province-panel');
-if (null === debugProvincePanel) throw new Error("Element with ID 'debug-province-panel' not found");
+// Debug menu elements
+export const debugMenu = document.getElementById('debug-menu');
+if (null === debugMenu) throw new Error("Element with ID 'debug-menu' not found");
+
+export const debugToggleBtn = document.getElementById('debug-toggle-btn') as HTMLButtonElement;
+if (null === debugToggleBtn) throw new Error("Element with ID 'debug-toggle-btn' not found");
+
+export const debugPanel = document.getElementById('debug-panel');
+if (null === debugPanel) throw new Error("Element with ID 'debug-panel' not found");
+
+export const debugCloseBtn = document.getElementById('debug-close-btn') as HTMLButtonElement;
+if (null === debugCloseBtn) throw new Error("Element with ID 'debug-close-btn' not found");
 
 export const provinceInput = document.getElementById('province-input') as HTMLInputElement;
 if (null === provinceInput) throw new Error("Element with ID 'province-input' not found");

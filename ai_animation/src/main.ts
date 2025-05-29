@@ -12,14 +12,17 @@ import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
 import { closeTwoPowerConversation, showTwoPowerConversation } from "./components/twoPowerConversation";
 import { PowerENUM } from "./types/map";
-import { debugProvincePanel, provinceInput, highlightProvinceBtn } from "./domElements";
+import { debugMenu, provinceInput, highlightProvinceBtn } from "./domElements";
 import { highlightProvince, getAvailableProvinces } from "./debug/provinceHighlight";
+import { DebugMenu } from "./debug/debugMenu";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
 
 const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
+
+let debugMenuInstance: DebugMenu | null = null;
 
 // --- INITIALIZE SCENE ---
 function initScene() {
@@ -50,9 +53,10 @@ function initScene() {
         gameState.loadGameFile(0);
       }
 
-      // Show debug province panel if in debug mode
+      // Initialize debug menu if in debug mode
       if (isDebugMode) {
-        debugProvincePanel.style.display = 'block';
+        debugMenuInstance = new DebugMenu();
+        debugMenuInstance.show();
       }
       if (isStreamingMode) {
         setTimeout(() => {
@@ -295,8 +299,10 @@ speedSelector.addEventListener('change', e => {
   }
 });
 
-// Debug province highlighting event handlers
-if (isDebugMode) {
+// Initialize debug province highlighting functionality
+function initDebugProvinceHighlighting() {
+  if (!isDebugMode) return;
+
   highlightProvinceBtn.addEventListener('click', () => {
     const provinceName = provinceInput.value.trim();
     if (provinceName) {
@@ -330,6 +336,11 @@ if (isDebugMode) {
       provinceInput.style.backgroundColor = '#faf0d8';
     }
   });
+}
+
+// Initialize debug functionality after the scene is loaded
+if (isDebugMode) {
+  initDebugProvinceHighlighting();
 }
 
 // --- BOOTSTRAP ON PAGE LOAD ---
