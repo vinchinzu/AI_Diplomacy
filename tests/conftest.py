@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, AsyncMock, MagicMock
 from ai_diplomacy.services.config import AgentConfig
 from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 from ai_diplomacy.services.context_provider import (
@@ -34,12 +34,12 @@ def agent_config():
 
 @pytest.fixture
 def mock_llm_coordinator():
-    return AsyncMock(spec=LLMCoordinator)
+    return AsyncMock(spec=LLMCoordinator, autospec=True)
 
 
 @pytest.fixture
 def mock_context_provider():
-    provider = AsyncMock(spec=ContextProvider)
+    provider = AsyncMock(spec=ContextProvider, autospec=True)
     provider.provide_context = AsyncMock(
         return_value={
             "context_text": "Mocked context",
@@ -53,14 +53,14 @@ def mock_context_provider():
 
 @pytest.fixture
 def mock_context_provider_factory(mock_context_provider):
-    factory = Mock(spec=ContextProviderFactory)
+    factory = Mock(spec=ContextProviderFactory, autospec=True)
     factory.get_provider.return_value = mock_context_provider
     return factory
 
 
 @pytest.fixture
 def mock_phase_state():
-    phase_state = AsyncMock(spec=PhaseState)
+    phase_state = AsyncMock(spec=PhaseState, autospec=True)
     phase_state.phase_name = "S1901M"
     phase_state.get_power_units = Mock(return_value=["A LON", "F EDI"])
     phase_state.get_power_centers = Mock(return_value=["LON", "EDI"])
@@ -326,7 +326,8 @@ def minimal_game_config_logging_setup_info_verbose_false(tmp_path):
 
 
 @pytest.fixture
-def fake_game_factory(FakeGame): # Inject the FakeGame class from _diplomacy_fakes
+def fake_game_factory(): # Removed FakeGame parameter
+    # FakeGame class is imported at the top of this file from ._diplomacy_fakes
     def _create_fake_game(phase="S1901M", powers_names=None, build_conditions=None, retreat_conditions=None):
         if powers_names is None:
             powers_names = ["FRANCE", "GERMANY"]
@@ -335,17 +336,18 @@ def fake_game_factory(FakeGame): # Inject the FakeGame class from _diplomacy_fak
 
 @pytest.fixture
 def mock_game_config_for_orchestrator():
-    return MagicMock(spec=GameConfig)
+    return MagicMock(spec=GameConfig, autospec=True)
 
 @pytest.fixture
 def mock_agent_manager_for_orchestrator():
-    # from ai_diplomacy.agent_manager import AgentManager # Optional: for spec if AgentManager is easily importable
-    manager = MagicMock() # spec=AgentManager if imported
+    from ai_diplomacy.agent_manager import AgentManager
+    manager = MagicMock(spec=AgentManager, autospec=True)
     manager.get_agent = MagicMock()
     return manager
 
 @pytest.fixture
-def default_dummy_orchestrator(DummyOrchestrator, mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator): # Inject DummyOrchestrator class
+def default_dummy_orchestrator(mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator): # Removed DummyOrchestrator parameter
+    # DummyOrchestrator class is imported at the top of this file from ._diplomacy_fakes
     default_powers = ["FRANCE", "GERMANY"]
     orchestrator = DummyOrchestrator(default_powers, mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator)
     orchestrator._get_orders_for_power = AsyncMock(return_value=["WAIVE"]) # Default behavior

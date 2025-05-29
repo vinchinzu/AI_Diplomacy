@@ -6,25 +6,28 @@ with support for multiple agent types, context providers, and usage tracking.
 """
 
 # Expose the new agent classes for backward compatibility
+# Attempt to resolve circular import by importing llm_utils first
+from . import llm_utils # Make llm_utils available in the package namespace
+
 from ai_diplomacy.agents.llm_agent import LLMAgent as DiplomacyAgent
+from ai_diplomacy.agents.llm_agent import LLMAgent # Keep this for direct access if needed by __all__
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.base import BaseAgent
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.services.llm_coordinator import LLMCoordinator
 from ai_diplomacy.services.config import AgentConfig, DiplomacyConfig
 
+
 __all__ = [
     "DiplomacyAgent",  # Backward compatibility alias for LLMAgent
-    "LLMAgent",  # Direct access to new LLMAgent
+    "LLMAgent",
     "AgentFactory",
     "BaseAgent",
     "PhaseState",
     "LLMCoordinator",
     "AgentConfig",
     "DiplomacyConfig",
+    "llm_utils", # Expose llm_utils if it's intended to be public
 ]
-
-# Re-export LLMAgent under its own name as well
-from ai_diplomacy.agents.llm_agent import LLMAgent
 
 __version__ = "2.0.0"  # Updated for the new architecture

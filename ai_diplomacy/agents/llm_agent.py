@@ -12,7 +12,7 @@ from .llm_prompt_strategy import LLMPromptStrategy
 from ..services.llm_coordinator import LLMCoordinator
 from ..services.config import AgentConfig, resolve_context_provider
 from ..services.context_provider import ContextProviderFactory, ContextData
-from .. import llm_utils
+from ai_diplomacy import llm_utils # Changed from relative to absolute package import
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ class LLMAgent(BaseAgent):
                 goals=self.agent_state.goals,
                 relationships=self.agent_state.relationships,
                 formatted_diary=self.agent_state.format_private_diary_for_prompt(),
-                context_text=context_result.get("context_text", ""),
+                context_text=context_result.get("context_text") or "", # Ensure empty string if None
                 tools_available=context_result.get("tools_available", False),
             )
 
@@ -257,7 +257,7 @@ class LLMAgent(BaseAgent):
                 goals=self.agent_state.goals,
                 relationships=self.agent_state.relationships,
                 formatted_diary=self.agent_state.format_private_diary_for_prompt(),
-                context_text=context_result.get("context_text", ""),
+                context_text=context_result.get("context_text") or "", # Ensure empty string if None
                 tools_available=context_result.get("tools_available", False),
             )
 

@@ -6,7 +6,7 @@ from ai_diplomacy.agent_manager import (
     DEFAULT_AGENT_MANAGER_FALLBACK_MODEL,
 )
 from ai_diplomacy.agents.llm_agent import LLMAgent
-from ._shared_fixtures import create_game_config
+from tests._shared_fixtures import create_game_config # Changed to absolute import
 
 ALL_POWERS_IN_GAME = [
     "AUSTRIA",

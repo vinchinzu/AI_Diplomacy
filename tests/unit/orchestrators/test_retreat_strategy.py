@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, call
 # SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
 # from types import SimpleNamespace 
 
@@ -41,8 +41,8 @@ async def test_retreat_generates_orders_for_retreating_power(fake_game_factory, 
     # Assert that game_history.add_orders was called for FRA with its orders
     # and for ENG with empty orders (as it was not retreating)
     expected_history_calls = [
-        pytest.call(fake_game.get_current_phase(), "FRA", ["A PAR R A MAR"]),
-        pytest.call(fake_game.get_current_phase(), "ENG", [])
+        call(fake_game.get_current_phase(), "FRA", ["A PAR R A MAR"]),
+        call(fake_game.get_current_phase(), "ENG", [])
     ]
     mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
     assert mock_game_history.add_orders.call_count == 2
@@ -72,8 +72,8 @@ async def test_retreat_no_retreating_powers(fake_game_factory, default_dummy_orc
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
     # game_history.add_orders should be called for each power with empty orders
     expected_history_calls = [
-        pytest.call(fake_game.get_current_phase(), "ENG", []),
-        pytest.call(fake_game.get_current_phase(), "GER", [])
+        call(fake_game.get_current_phase(), "ENG", []),
+        call(fake_game.get_current_phase(), "GER", [])
     ]
     mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
     assert mock_game_history.add_orders.call_count == 2
@@ -177,8 +177,8 @@ async def test_retreat_one_agent_fails_another_succeeds(fake_game_factory, defau
     dummy_orchestrator._get_orders_for_power.assert_any_await(fake_game, "GER", mock_agent_ger, mock_game_history)
     
     expected_history_calls = [
-        pytest.call(fake_game.get_current_phase(), "FRA", ["A PAR R MAR"]),
-        pytest.call(fake_game.get_current_phase(), "GER", [])
+        call(fake_game.get_current_phase(), "FRA", ["A PAR R MAR"]),
+        call(fake_game.get_current_phase(), "GER", [])
     ]
     mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
     assert mock_game_history.add_orders.call_count == 2

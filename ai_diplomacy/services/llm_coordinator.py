@@ -128,8 +128,17 @@ async def record_usage(game_id: str, agent: str, phase: str, response: LLMRespon
     except sqlite3.Error as e:
         logger.error(f"SQLite error in record_usage: {e}", exc_info=True)
     except AttributeError as e:
+        model_id_for_log = "N/A"
+        if hasattr(response, 'model') and response.model is not None:
+            if hasattr(response.model, 'model_id'):
+                model_id_for_log = response.model.model_id
+            else:
+                model_id_for_log = "Unknown (model_id attribute missing)"
+        elif hasattr(response, 'model') and response.model is None:
+            model_id_for_log = "N/A (response.model is None)"
+
         logger.error(
-            f"Error accessing response attributes in record_usage (model: {response.model.model_id if hasattr(response, 'model') else 'N/A'}): {e}",
+            f"Error accessing response attributes in record_usage (model: {model_id_for_log}): {e}",
             exc_info=True,
         )
     except Exception as e:

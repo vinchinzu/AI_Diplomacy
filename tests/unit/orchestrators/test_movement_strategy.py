@@ -66,8 +66,8 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
         assert mock_game_history.add_orders.call_count == len(powers)
         
         expected_calls = [
-            call(fake_game.get_current_phase(), "ENG", ["WAIVE"]),
-            call(fake_game.get_current_phase(), "FRA", ["WAIVE"])
+            call(fake_game.get_current_phase(), "ENG", ["WAIVE"]), # unittest.mock.call
+            call(fake_game.get_current_phase(), "FRA", ["WAIVE"])  # unittest.mock.call
         ]
         # Check that all expected calls are present in the actual calls.
         # This is more robust than assert_any_call in a loop if call order might vary or for exactness.
@@ -134,9 +134,9 @@ async def test_movement_agent_not_found_and_agent_error(fake_game_factory, defau
 
     # Check game_history.add_orders calls
     expected_history_calls = [
-        pytest.call(fake_game.get_current_phase(), "ENG", []), # ENG failed
-        pytest.call(fake_game.get_current_phase(), "FRA", []), # FRA no agent
-        pytest.call(fake_game.get_current_phase(), "GER", ["A BER H"]) # GER succeeded
+        call(fake_game.get_current_phase(), "ENG", []), # ENG failed
+        call(fake_game.get_current_phase(), "FRA", []), # FRA no agent
+        call(fake_game.get_current_phase(), "GER", ["A BER H"]) # GER succeeded
     ]
     mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
     assert mock_game_history.add_orders.call_count == 3
