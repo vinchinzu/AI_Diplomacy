@@ -10,7 +10,7 @@ import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
-import { MomentsDataSchema, MomentsDataSchemaType } from "./types/moments";
+import { MomentsDataSchema, MomentsDataSchemaType, Moment } from "./types/moments";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -282,6 +282,20 @@ class GameState {
       });
   }
 
+  checkPhaseHasMoment = (phaseName: string): Moment | null => {
+    let momentMatch = this.momentsData.moments.filter((moment) => {
+      return moment.phase === phaseName
+    })
+
+    // If there is more than one moment per turn, only return the largest one.
+    if (momentMatch.length > 1) {
+      momentMatch = momentMatch.sort((a, b) => {
+        return a.interest_score - b.interest_score
+      })
+    }
+
+    return momentMatch.length > 0 ? momentMatch[0] : null
+  }
 
   createThreeScene = () => {
     if (mapView === null) {

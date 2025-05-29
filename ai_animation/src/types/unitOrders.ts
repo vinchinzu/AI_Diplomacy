@@ -1,11 +1,11 @@
 import { z } from "zod";
 
+export function cleanProvince(province: string): string {
+  if (!province) return province;
+  return province.split('/')[0];
+};
 export const OrderFromString = z.string().transform((orderStr) => {
   // Helper function to clean province names by removing coast specifications
-  const cleanProvince = (province: string): string => {
-    if (!province) return province;
-    return province.split('/')[0];
-  };
 
   // Split the order into tokens by whitespace.
   const tokens = orderStr.trim().split(/\s+/);

@@ -10,7 +10,7 @@ import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase,
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
-import { showTwoPowerConversation } from "./components/twoPowerConversation";
+import { closeTwoPowerConversation, showTwoPowerConversation } from "./components/twoPowerConversation";
 import { PowerENUM } from "./types/map";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
@@ -109,6 +109,7 @@ function createCameraPan(): Group {
  */
 function animate() {
 
+  requestAnimationFrame(animate);
   if (gameState.isPlaying) {
     // Update the camera angle
     // FIXME: This has to call the update functino twice inorder to avoid a bug in Tween.js, see here  https://github.com/tweenjs/tween.js/issues/677
@@ -166,11 +167,24 @@ function animate() {
   gameState.camControls.update();
   gameState.renderer.render(gameState.scene, gameState.camera);
 
-  if (gameState.phaseIndex === 3 && gameState.isDisplayingMoment === false) {
-    gameState.isDisplayingMoment = true
-    showTwoPowerConversation({ power1: PowerENUM.AUSTRIA, power2: PowerENUM.FRANCE })
+
+  // TODO: This needs to only occur at the end of a phase, not at the beginning during the animation loop.
+  //      MOVE ME
+  //
+  const MOMENT_THRESHOLD = 9.0
+  if (!gameState.isDisplayingMoment && gameState.gameData && gameState.momentsData) {
+    let moment = gameState.checkPhaseHasMoment(gameState.gameData.phases[gameState.phaseIndex].name)
+    if (moment !== null && moment.interest_score >= MOMENT_THRESHOLD && moment.hasBeenDisplayed === undefined) {
+      gameState.isDisplayingMoment = true
+      moment.hasBeenDisplayed = true
+      showTwoPowerConversation({ power1: PowerENUM.AUSTRIA, power2: PowerENUM.FRANCE })
+      setTimeout(() => {
+        closeTwoPowerConversation()
+        gameState.isDisplayingMoment = false
+      }, 2000)
+    }
+
   }
-  requestAnimationFrame(animate);
 }
 
 
