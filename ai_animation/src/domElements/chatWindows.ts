@@ -4,6 +4,7 @@ import { config } from "../config";
 import { advanceToNextPhase } from "../phase";
 import { getPowerDisplayName, getAllPowerDisplayNames } from '../utils/powerNames';
 import { PowerENUM } from '../types/map';
+import { isInstantChatEnabled } from '../debug/instantChat';
 
 
 //TODO: Sometimes the LLMs use lists, and they don't work in the chats. The just appear as bullets within a single line.
@@ -165,8 +166,8 @@ export function updateChatWindows(phase: any, stepMessages = false) {
     console.log(`Found ${relevantMessages.length} messages for player ${gameState.currentPower} in phase ${phase.name}`);
   }
 
-  if (!stepMessages) {
-    // Normal mode: show all messages at once
+  if (!stepMessages || isInstantChatEnabled()) {
+    // Normal mode or instant chat mode: show all messages at once
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew) {
@@ -176,6 +177,65 @@ export function updateChatWindows(phase: any, stepMessages = false) {
       }
     });
     gameState.messagesPlaying = false;
+    
+    // If instant chat is enabled during stepwise mode, immediately proceed to next phase logic
+    if (stepMessages && isInstantChatEnabled()) {
+      // Trigger the same logic as the end of stepwise message display
+      if (gameState.isPlaying && !gameState.isSpeaking) {
+        if (gameState.gameData && gameState.gameData.phases) {
+          const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
+
+          if (config.isDebugMode) {
+            console.log(`Instant chat enabled - processing end of phase ${currentPhase.name}`);
+          }
+
+          // Show summary first if available
+          if (currentPhase.summary?.trim()) {
+            addToNewsBanner(`(${currentPhase.name}) ${currentPhase.summary}`);
+          }
+
+          // Get previous phase for animations
+          const prevIndex = gameState.phaseIndex > 0 ? gameState.phaseIndex - 1 : null;
+          const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
+
+          // Only schedule next phase if not already scheduled
+          if (!gameState.nextPhaseScheduled) {
+            gameState.nextPhaseScheduled = true;
+
+            // Show animations for current phase's orders
+            if (previousPhase) {
+              if (config.isDebugMode) {
+                console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
+              }
+
+              // After animations complete, advance to next phase with longer delay
+              gameState.playbackTimer = setTimeout(() => {
+                if (gameState.isPlaying) {
+                  if (config.isDebugMode) {
+                    console.log(`Animations complete, advancing from ${currentPhase.name}`);
+                  }
+                  advanceToNextPhase();
+                }
+              }, config.playbackSpeed + config.animationDuration); // Wait for both summary and animations
+            } else {
+              // For first phase, use shorter delay since there are no animations
+              if (config.isDebugMode) {
+                console.log(`First phase ${currentPhase.name} - no animations to wait for`);
+              }
+
+              gameState.playbackTimer = setTimeout(() => {
+                if (gameState.isPlaying) {
+                  if (config.isDebugMode) {
+                    console.log(`Advancing from first phase ${currentPhase.name}`);
+                  }
+                  advanceToNextPhase();
+                }
+              }, config.playbackSpeed); // Only wait for summary, no animation delay
+            }
+          }
+        }
+      }
+    }
   } else {
     // Stepwise mode: show one message at a time, animating word-by-word
     gameState.messagesPlaying = true;

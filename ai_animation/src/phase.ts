@@ -1,6 +1,6 @@
 import { gameState } from "./gameState";
 import { logger } from "./logger";
-import { debugMenu, updatePhaseDisplay } from "./domElements";
+import { updatePhaseDisplay } from "./domElements";
 import { initUnits } from "./units/create";
 import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
@@ -8,9 +8,12 @@ import { createAnimationsForNextPhase } from "./units/animate";
 import { speakSummary } from "./speech";
 import { config } from "./config";
 import { debugMenuInstance } from "./debug/debugMenu";
-
+import { showTwoPowerConversation, closeTwoPowerConversation } from "./components/twoPowerConversation";
+import { PowerENUM } from "./types/map";
 
 const MOMENT_THRESHOLD = 8.0
+// If we're in debug mode, show it quick, otherwise show it for 30 seconds
+const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode ? 5000 : 30000
 
 // FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
 function _setPhase(phaseIndex: number) {
@@ -67,11 +70,15 @@ export function nextPhase() {
       setTimeout(() => {
         closeTwoPowerConversation()
         gameState.isDisplayingMoment = false
-      }, 2000)
+        _setPhase(gameState.phaseIndex + 1)
+      }, MOMENT_DISPLAY_TIMEOUT_MS)
     }
 
+    else {
+
+      _setPhase(gameState.phaseIndex + 1)
+    }
   }
-  _setPhase(gameState.phaseIndex + 1)
 }
 
 export function previousPhase() {

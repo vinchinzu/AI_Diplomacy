@@ -290,7 +290,7 @@ class GameState {
     // If there is more than one moment per turn, only return the largest one.
     if (momentMatch.length > 1) {
       momentMatch = momentMatch.sort((a, b) => {
-        return a.interest_score - b.interest_score
+        return b.interest_score - a.interest_score
       })
     }
 

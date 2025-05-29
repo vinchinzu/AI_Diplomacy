@@ -5,6 +5,7 @@
 
 import { updateNextMomentDisplay, initNextMomentTool } from "./nextMoment";
 import { initDebugProvinceHighlighting } from "./provinceHighlight";
+import { initInstantChatTool } from "./instantChat";
 
 export class DebugMenu {
   private toggleBtn: HTMLButtonElement;
@@ -171,6 +172,7 @@ export class DebugMenu {
   }
 
   private initTools(): void {
+    initInstantChatTool(this);
     initNextMomentTool(this);
     initDebugProvinceHighlighting()
   }
