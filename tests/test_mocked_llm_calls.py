@@ -1,6 +1,6 @@
 import asyncio
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # AgentLLMInterface was removed in refactor
 from ai_diplomacy.game_config import GameConfig
@@ -63,9 +63,9 @@ def common_mocks():
     }
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-@patch("ai_diplomacy.services.llm_coordinator.llm_call_internal")
-async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mocks):
+async def test_mock_get_valid_orders_success(common_mocks): # Removed mock_llm_call_internal
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -84,9 +84,11 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
     # Patch creates a MagicMock. If its return_value is set to a future, it works.
     # Or, if return_value is a direct value, it should be fine if the mock is treated as awaitable.
     # For clarity with async functions, AsyncMock is often preferred, but MagicMock can work.
-    fut = asyncio.Future()
-    fut.set_result(mock_response_json_string)
-    mock_llm_call_internal.return_value = fut
+    # fut = asyncio.Future() # No longer needed
+    # fut.set_result(mock_response_json_string)
+    # mock_llm_call_internal.return_value = fut # No longer needed
+
+    mock_custom_llm_caller = AsyncMock(return_value=mock_response_json_string)
 
     orders = await get_valid_orders(
         game=game,
@@ -102,16 +104,17 @@ async def test_mock_get_valid_orders_success(mock_llm_call_internal, common_mock
         agent_relationships={"GERMANY": "Neutral"},
         log_file_path="./mock_test_logs/orders.csv",  # Consider using tmp_path fixture for logs
         phase=game.phase,  # Use game.phase
+        llm_caller_override=mock_custom_llm_caller, # Pass the override
     )
 
-    mock_llm_call_internal.assert_called_once()
+    mock_custom_llm_caller.assert_called_once() # Simplified assertion
     # Sort both lists for comparison as order is not guaranteed
     assert sorted(orders) == sorted(["A PAR H", "A MAR H", "F BRE H"])
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-@patch("ai_diplomacy.services.llm_coordinator.llm_call_internal")
-async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mocks):
+async def test_mock_get_valid_orders_json_fail(common_mocks): # Removed mock_llm_call_internal
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -137,10 +140,12 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
             expected_fallback_orders.append(orders_for_loc[0])
     expected_fallback_orders.sort()
 
-    mock_response_malformed_json_string = '{"orders": ["A PAR H", "A MAR H", "F BRE H"'
-    fut = asyncio.Future()
-    fut.set_result(mock_response_malformed_json_string)
-    mock_llm_call_internal.return_value = fut
+    mock_response_malformed_json_string = '{"orders": ["A PAR H", "A MAR H", "F BRE H"' # Malformed
+    # fut = asyncio.Future() # No longer needed
+    # fut.set_result(mock_response_malformed_json_string)
+    # mock_llm_call_internal.return_value = fut # No longer needed
+
+    mock_custom_llm_caller = AsyncMock(return_value=mock_response_malformed_json_string)
 
     orders = await get_valid_orders(
         game=game,
@@ -153,18 +158,17 @@ async def test_mock_get_valid_orders_json_fail(mock_llm_call_internal, common_mo
         game_id=config.game_id,
         config=config,
         phase=game.phase,
+        llm_caller_override=mock_custom_llm_caller, # Pass the override
     )
 
-    mock_llm_call_internal.assert_called_once()
+    mock_custom_llm_caller.assert_called_once() # Simplified assertion
     orders.sort()
     assert orders == expected_fallback_orders
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-@patch("ai_diplomacy.services.llm_coordinator.llm_call_internal")
-async def test_mock_get_valid_orders_empty_response(
-    mock_llm_call_internal, common_mocks
-):
+async def test_mock_get_valid_orders_empty_response(common_mocks): # Removed mock_llm_call_internal
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -189,9 +193,11 @@ async def test_mock_get_valid_orders_empty_response(
     expected_fallback_orders.sort()
 
     mock_empty_response_string = ""
-    fut = asyncio.Future()
-    fut.set_result(mock_empty_response_string)
-    mock_llm_call_internal.return_value = fut
+    # fut = asyncio.Future() # No longer needed
+    # fut.set_result(mock_empty_response_string)
+    # mock_llm_call_internal.return_value = fut # No longer needed
+
+    mock_custom_llm_caller = AsyncMock(return_value=mock_empty_response_string)
 
     orders = await get_valid_orders(
         game=game,
@@ -204,9 +210,10 @@ async def test_mock_get_valid_orders_empty_response(
         game_id=config.game_id,
         config=config,
         phase=game.phase,
+        llm_caller_override=mock_custom_llm_caller, # Pass the override
     )
 
-    mock_llm_call_internal.assert_called_once()
+    mock_custom_llm_caller.assert_called_once() # Simplified assertion
     orders.sort()
     assert orders == expected_fallback_orders
 

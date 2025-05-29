@@ -1,7 +1,8 @@
 import json
+import pytest # Added import
 from ai_diplomacy.game_history import GameHistory, Phase
 
-
+@pytest.mark.unit
 def test_game_history_to_dict_serialization():
     game_history = GameHistory()
     game_history.add_phase("S1901M")
@@ -67,7 +68,7 @@ def test_game_history_to_dict_serialization():
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
 
-
+@pytest.mark.unit
 def test_game_history_to_dict_empty():
     game_history = GameHistory()
     history_dict = game_history.to_dict()
@@ -82,7 +83,7 @@ def test_game_history_to_dict_empty():
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
 
-
+@pytest.mark.unit
 def test_phase_add_orders_internal_consistency():
     """
     This test is more about the Phase.add_orders method if it's used for populating,
@@ -125,7 +126,7 @@ def test_phase_add_orders_internal_consistency():
         ["BOUNCED", "F ENG - MAO"],
     ]
 
-
+@pytest.mark.unit
 # Test with empty orders/results lists for a power
 def test_game_history_to_dict_empty_orders_for_power():
     game_history = GameHistory()
@@ -149,7 +150,7 @@ def test_game_history_to_dict_empty_orders_for_power():
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
 
-
+@pytest.mark.unit
 # Test with a phase that has no messages, plans, etc.
 def test_game_history_to_dict_empty_phase_fields():
     game_history = GameHistory()

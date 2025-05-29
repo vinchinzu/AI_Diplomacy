@@ -13,6 +13,8 @@ from typing import (
     Any,
     AsyncIterator,
     List,
+    Callable,
+    Awaitable,
 )  # Removed Union, ContextManager
 from contextlib import asynccontextmanager
 
@@ -126,8 +128,17 @@ async def record_usage(game_id: str, agent: str, phase: str, response: LLMRespon
     except sqlite3.Error as e:
         logger.error(f"SQLite error in record_usage: {e}", exc_info=True)
     except AttributeError as e:
+        model_id_for_log = "N/A"
+        if hasattr(response, 'model') and response.model is not None:
+            if hasattr(response.model, 'model_id'):
+                model_id_for_log = response.model.model_id
+            else:
+                model_id_for_log = "Unknown (model_id attribute missing)"
+        elif hasattr(response, 'model') and response.model is None:
+            model_id_for_log = "N/A (response.model is None)"
+
         logger.error(
-            f"Error accessing response attributes in record_usage (model: {response.model.model_id if hasattr(response, 'model') else 'N/A'}): {e}",
+            f"Error accessing response attributes in record_usage (model: {model_id_for_log}): {e}",
             exc_info=True,
         )
     except Exception as e:
@@ -292,6 +303,7 @@ class LLMCoordinator:
         game_id: str = "default",
         phase: str = "unknown",
         system_prompt: Optional[str] = None,
+        llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> str:
         """
         Simple text completion call.
@@ -303,18 +315,29 @@ class LLMCoordinator:
             game_id: Game identifier for tracking
             phase: Game phase for tracking
             system_prompt: Optional system prompt
+            llm_caller_override: Optional override for the LLM call logic.
 
         Returns:
             The raw text response
         """
-        return await llm_call_internal(
-            game_id=game_id,
-            agent_name=agent_id,
-            phase_str=phase,
-            model_id=model_id,
-            prompt=prompt,
-            system_prompt=system_prompt,
-        )
+        if llm_caller_override:
+            return await llm_caller_override(
+                game_id=game_id,
+                agent_name=agent_id,
+                phase_str=phase,
+                model_id=model_id,
+                prompt=prompt,
+                system_prompt=system_prompt,
+            )
+        else:
+            return await llm_call_internal(
+                game_id=game_id,
+                agent_name=agent_id,
+                phase_str=phase,
+                model_id=model_id,
+                prompt=prompt,
+                system_prompt=system_prompt,
+            )
 
     async def call_json(
         self,
@@ -327,6 +350,7 @@ class LLMCoordinator:
         system_prompt: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         expected_fields: Optional[List[str]] = None,
+        llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> Dict[str, Any]:
         """
         JSON completion call with parsing and validation.
@@ -340,6 +364,7 @@ class LLMCoordinator:
             system_prompt: Optional system prompt
             tools: Optional tool definitions for MCP-capable models
             expected_fields: Optional list of required JSON fields
+            llm_caller_override: Optional override for the LLM call logic.
 
         Returns:
             Parsed JSON response
@@ -361,6 +386,7 @@ class LLMCoordinator:
             agent_name=agent_id,
             phase_str=phase,
             expected_json_fields=expected_fields,
+            llm_caller_override=llm_caller_override,
         )
 
         if not result.success:
@@ -380,6 +406,7 @@ class LLMCoordinator:
         expected_json_fields: Optional[list] = None,
         response_type: str = "llm_call",
         log_to_file_path: Optional[str] = None,
+        llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> LLMCallResult:
         """
         Internal method for LLM calls with JSON parsing.
@@ -398,14 +425,24 @@ class LLMCoordinator:
                 f"Game: {game_id}, Agent: {agent_name}, Phase: {phase_str}, Model: {model_id}"
             )
 
-            raw_response = await llm_call_internal(
-                game_id=game_id,
-                agent_name=agent_name,
-                phase_str=phase_str,
-                model_id=model_id,
-                prompt=prompt,
-                system_prompt=system_prompt,
-            )
+            if llm_caller_override:
+                raw_response = await llm_caller_override(
+                    game_id=game_id,
+                    agent_name=agent_name,
+                    phase_str=phase_str,
+                    model_id=model_id,
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                )
+            else:
+                raw_response = await llm_call_internal(
+                    game_id=game_id,
+                    agent_name=agent_name,
+                    phase_str=phase_str,
+                    model_id=model_id,
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                )
 
             result.raw_response = raw_response
 
@@ -477,6 +514,7 @@ class LLMCoordinator:
         agent_name: str,  # Was implicitly part of request_identifier before, now explicit
         phase_str: str,  # New explicit parameter
         request_identifier: str = "request",  # For coordinator's logging
+        llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> str:
         """
         Makes a request to the specified LLM using the new internal wrapper.
@@ -490,6 +528,7 @@ class LLMCoordinator:
             agent_name: Agent/Power name for DB logging and context.
             phase_str: Game phase for DB logging and context.
             request_identifier: An identifier for the coordinator's logging purposes.
+            llm_caller_override: Optional override for the LLM call logic.
 
         Returns:
             The text response from the LLM.
@@ -508,14 +547,24 @@ class LLMCoordinator:
         )
 
         try:
-            response_text = await llm_call_internal(
-                game_id=game_id,
-                agent_name=agent_name,
-                phase_str=phase_str,
-                model_id=model_id,
-                prompt=prompt_text,
-                system_prompt=system_prompt_text,
-            )
+            if llm_caller_override:
+                response_text = await llm_caller_override(
+                    game_id=game_id,
+                    agent_name=agent_name,
+                    phase_str=phase_str,
+                    model_id=model_id,
+                    prompt=prompt_text,
+                    system_prompt=system_prompt_text,
+                )
+            else:
+                response_text = await llm_call_internal(
+                    game_id=game_id,
+                    agent_name=agent_name,
+                    phase_str=phase_str,
+                    model_id=model_id,
+                    prompt=prompt_text,
+                    system_prompt=system_prompt_text,
+                )
 
             logger.info(
                 f"[{request_identifier}] LLM call for {model_id} (Game: {game_id}, Agent: {agent_name}) succeeded via llm_call_internal."

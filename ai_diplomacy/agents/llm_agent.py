@@ -4,7 +4,7 @@ Extracts all LLM-specific logic from the original DiplomacyAgent while implement
 """
 
 import logging
-from typing import List, Dict, Optional, Any, Callable
+from typing import List, Dict, Optional, Any, Callable, Awaitable
 
 from .base import BaseAgent, Order, Message, PhaseState
 from .agent_state import DiplomacyAgentState
@@ -12,7 +12,7 @@ from .llm_prompt_strategy import LLMPromptStrategy
 from ..services.llm_coordinator import LLMCoordinator
 from ..services.config import AgentConfig, resolve_context_provider
 from ..services.context_provider import ContextProviderFactory, ContextData
-from .. import llm_utils
+from ai_diplomacy import llm_utils # Changed from relative to absolute package import
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class LLMAgent(BaseAgent):
         llm_coordinator: Optional[LLMCoordinator] = None,
         context_provider_factory: Optional[ContextProviderFactory] = None,
         prompt_loader: Optional[Callable[[str], Optional[str]]] = None,
+        llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ):
         """
         Initialize the LLM agent.
@@ -47,6 +48,7 @@ class LLMAgent(BaseAgent):
             llm_coordinator: LLM coordinator instance (will create if None)
             context_provider_factory: Context provider factory (will create if None)
             prompt_loader: Optional function to load prompts by filename
+            llm_caller_override: Optional override for the LLM call logic.
         """
         super().__init__(agent_id, country)
         self.config = config
@@ -69,6 +71,7 @@ class LLMAgent(BaseAgent):
         self.agent_state = DiplomacyAgentState(country=country)
         self.prompt_strategy = LLMPromptStrategy()
         self.prompt_loader = prompt_loader
+        self.llm_caller_override = llm_caller_override # Store the override
 
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
@@ -153,7 +156,7 @@ class LLMAgent(BaseAgent):
                 goals=self.agent_state.goals,
                 relationships=self.agent_state.relationships,
                 formatted_diary=self.agent_state.format_private_diary_for_prompt(),
-                context_text=context_result.get("context_text", ""),
+                context_text=context_result.get("context_text") or "", # Ensure empty string if None
                 tools_available=context_result.get("tools_available", False),
             )
 
@@ -171,6 +174,7 @@ class LLMAgent(BaseAgent):
                     if context_result.get("tools_available")
                     else None
                 ),
+                llm_caller_override=self.llm_caller_override,
             )
 
             # Extract orders from response
@@ -253,7 +257,7 @@ class LLMAgent(BaseAgent):
                 goals=self.agent_state.goals,
                 relationships=self.agent_state.relationships,
                 formatted_diary=self.agent_state.format_private_diary_for_prompt(),
-                context_text=context_result.get("context_text", ""),
+                context_text=context_result.get("context_text") or "", # Ensure empty string if None
                 tools_available=context_result.get("tools_available", False),
             )
 
@@ -271,6 +275,7 @@ class LLMAgent(BaseAgent):
                     if context_result.get("tools_available")
                     else None
                 ),
+                llm_caller_override=self.llm_caller_override,
             )
 
             # Extract messages from response
@@ -362,6 +367,7 @@ class LLMAgent(BaseAgent):
                 phase=phase.phase_name,
                 system_prompt=self.system_prompt,
                 expected_fields=["diary_entry"],
+                llm_caller_override=self.llm_caller_override,
             )
 
             diary_text = result.get(

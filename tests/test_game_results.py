@@ -1,6 +1,8 @@
 import json
 import os
 from unittest.mock import MagicMock, mock_open, patch
+from pathlib import Path # Added import
+import pytest # Added import
 
 from ai_diplomacy.game_results import GameResultsProcessor
 from ai_diplomacy.game_history import GameHistory  # For creating mock GameHistory
@@ -8,8 +10,8 @@ from ai_diplomacy.game_config import GameConfig  # For mock GameConfig
 
 # from diplomacy import Game # For type hinting mock_game if needed, but MagicMock is often sufficient
 
-
-def test_save_game_state_writes_history_json():
+@pytest.mark.unit
+def test_save_game_state_writes_history_json(tmp_path): # Added tmp_path
     """
     Test that save_game_state calls game_history.to_dict() and writes its output to a JSON file.
     """
@@ -34,7 +36,7 @@ def test_save_game_state_writes_history_json():
     mock_cli_args.game_id_prefix = (
         "test_prefix"  # GameConfig uses this if game_id is None
     )
-    mock_cli_args.log_dir = "dummy_base_log_dir"  # GameConfig will create subdirs here
+    mock_cli_args.log_dir = str(tmp_path) # Changed to tmp_path
     # Add any other attributes GameConfig's __init__ might access from args
     mock_cli_args.power_name = None
     mock_cli_args.model_id = None
@@ -75,119 +77,56 @@ def test_save_game_state_writes_history_json():
     # For this test, we are focusing on the history part.
     # We can make to_saved_game_format return a simple string.
 
-    # 2. Patch builtins.open and os.makedirs
-    with (
-        patch("builtins.open", new_callable=mock_open) as mock_file_open,
-        patch("os.makedirs") as mock_makedirs,
-    ):  # os.makedirs is called by GameConfig and GameResultsProcessor
-        # Instantiate GameResultsProcessor
-        results_processor = GameResultsProcessor(mock_game_config)
+    # Instantiate GameResultsProcessor
+    results_processor = GameResultsProcessor(mock_game_config)
 
-        # Mock to_saved_game_format specifically for the call within save_game_state
-        with patch(
-            "ai_diplomacy.game_results.to_saved_game_format",
-            return_value='{"mock_game_state": "data"}',
-        ):
-            # 3. Call save_game_state
-            results_processor.save_game_state(mock_game_instance, mock_game_history)
+    # Define expected file paths using tmp_path
+    results_dir_path = Path(mock_game_config.results_dir) # GameConfig sets this up
+    expected_history_filepath = results_dir_path / f"{mock_game_config.game_id}_game_history.json"
+    expected_final_state_filepath = results_dir_path / f"{mock_game_config.game_id}_final_state.json"
+    
+    # Mock to_saved_game_format specifically for the call within save_game_state
+    # This patch can remain as its output is what's being written.
+    with patch(
+        "ai_diplomacy.game_results.to_saved_game_format",
+        return_value='{"mock_game_state": "data"}',
+    ):
+        # Call save_game_state - this will now write to tmp_path
+        results_processor.save_game_state(mock_game_instance, mock_game_history)
 
-            # 4. Assert os.makedirs was called (by GameConfig and potentially by save_game_state)
-            # GameConfig creates results_dir if log_to_file is True
-            mock_makedirs.assert_any_call(expected_results_dir, exist_ok=True)
+        # Assert that the files were created in tmp_path
+        assert expected_history_filepath.is_file()
+        assert expected_final_state_filepath.is_file()
 
-            # 5. Assert open was called for the history JSON file
-            # Expected path: os.path.join(mock_game_config.results_dir, f"{mock_game_config.game_id}_game_history.json")
-            expected_history_filepath = os.path.join(
-                expected_results_dir, f"{mock_game_config.game_id}_game_history.json"
-            )
+        # Assert the content of the history file
+        with open(expected_history_filepath, "r", encoding="utf-8") as f:
+            written_data_dict = json.load(f)
+        
+        expected_history_dict = mock_game_history.to_dict()
+        assert written_data_dict == expected_history_dict
+        assert "phases" in written_data_dict
+        assert len(written_data_dict["phases"]) == 1
+        assert written_data_dict["phases"][0]["name"] == "S1901M"
+        assert (
+            written_data_dict["phases"][0]["plans"]["FRANCE"]
+            == "Test Plan S1901M"
+        )
+        assert (
+            written_data_dict["phases"][0]["messages"][0]["content"]
+            == "Test Message S1901M"
+        )
+        assert written_data_dict["phases"][0]["orders_by_power"]["ITALY"] == [
+            "F ROM - NAP"
+        ]
 
-            # Check if open was called for the history file
-            # It's also called for the final_state.json, so we look for the specific call
-            found_history_file_call = False
-
-            for call_args in mock_file_open.call_args_list:
-                if call_args[0][0] == expected_history_filepath:
-                    assert call_args[0][1] == "w"  # Mode 'w'
-                    assert call_args[1]["encoding"] == "utf-8"
-                    found_history_file_call = True
-                    break
-            assert found_history_file_call, (
-                f"History file {expected_history_filepath} was not opened."
-            )
-
-            # 6. Assert json.dump or write content for the history file
-            # Find the write call associated with the history file
-            # This assumes json.dump uses the write method of the file handle from open()
-
-            # Get the file handle that was used for the history file
-            for call in mock_file_open.call_args_list:
-                if call[0][0] == expected_history_filepath:
-                    # The mock_open().write calls are on the instance returned by mock_file_open()
-                    # when it was called for the history file.
-                    # We need to find which mock_file_open() instance corresponds to the history file.
-                    # This is tricky if multiple files are opened.
-                    # A simpler way is to check the content passed to json.dump if we patch json.dump
-                    break  # Found the open call, now need its handle's write calls.
-
-            # Instead of inspecting mock_file_open's write calls directly (which can be complex
-            # if multiple files are opened), we can patch json.dump for more direct assertion.
-
-            # Re-run with json.dump patched
-            with patch("json.dump") as mock_json_dump:
-                # Re-call the function under test now that json.dump is patched
-                # Need to reset mock_file_open if it's stateful across calls
-                mock_file_open.reset_mock()
-
-                # We need a fresh GameResultsProcessor or ensure state is clean if it's stateful
-                # results_processor = GameResultsProcessor(mock_game_config) # Re-instantiate if needed
-
-                with patch(
-                    "ai_diplomacy.game_results.to_saved_game_format",
-                    return_value='{"mock_game_state": "data"}',
-                ):
-                    results_processor.save_game_state(
-                        mock_game_instance, mock_game_history
-                    )
-
-                # Find the call to json.dump that wrote the history data
-                history_dump_call_args = None
-                for call in mock_json_dump.call_args_list:
-                    # The first argument to json.dump is the data, the second is the file handle
-                    # We expect the data to be the dictionary from game_history.to_dict()
-                    dumped_data = call[0][0]
-                    if (
-                        "phases" in dumped_data
-                        and dumped_data["phases"][0]["name"] == "S1901M"
-                    ):
-                        history_dump_call_args = call
-                        break
-
-                assert history_dump_call_args is not None, (
-                    "json.dump was not called with history data."
-                )
-
-                written_data_dict = history_dump_call_args[0][0]
-
-                # Assert content based on mock_game_history.to_dict()
-                expected_history_dict = mock_game_history.to_dict()
-                assert written_data_dict == expected_history_dict
-                assert "phases" in written_data_dict
-                assert len(written_data_dict["phases"]) == 1
-                assert written_data_dict["phases"][0]["name"] == "S1901M"
-                assert (
-                    written_data_dict["phases"][0]["plans"]["FRANCE"]
-                    == "Test Plan S1901M"
-                )
-                assert (
-                    written_data_dict["phases"][0]["messages"][0]["content"]
-                    == "Test Message S1901M"
-                )
-                assert written_data_dict["phases"][0]["orders_by_power"]["ITALY"] == [
-                    "F ROM - NAP"
-                ]
+        # Assert the content of the final state file
+        with open(expected_final_state_filepath, "r", encoding="utf-8") as f:
+            final_state_data = json.load(f)
+        assert final_state_data == {"mock_game_state": "data"}
 
     # Test when log_to_file is False
     # @patch("os.makedirs") # No need to patch if it shouldn't be called
+    @pytest.mark.unit
     @patch("builtins.open", new_callable=mock_open)
     def test_save_game_state_log_to_file_false(mock_file_open_disabled):
         mock_cli_args = MagicMock()
@@ -231,12 +170,14 @@ def test_save_game_state_writes_history_json():
         # This specific test is for save_game_state's behavior.
 
     # Test for GameHistory having a to_dict method (positive check)
+    @pytest.mark.unit
     def test_game_history_has_to_dict_method():
         gh = GameHistory()
         assert hasattr(gh, "to_dict")
         assert callable(gh.to_dict)
 
     # Test for GameHistory to_dict with multiple phases and complex data
+    @pytest.mark.unit
     def test_game_history_to_dict_complex():
         gh = GameHistory()
         gh.add_phase("S1901M")

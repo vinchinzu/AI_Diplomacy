@@ -38,6 +38,7 @@ def llm_agent(
     return agent
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_negotiate_returns_messages_and_updates_diary(
     llm_agent, mock_llm_coordinator, mock_phase_state
@@ -69,6 +70,7 @@ async def test_negotiate_returns_messages_and_updates_diary(
     assert message.message_type == "private"
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_decide_orders_returns_valid_orders(
     llm_agent, mock_llm_coordinator, mock_phase_state
@@ -90,6 +92,7 @@ async def test_decide_orders_returns_valid_orders(
     assert orders[1].order_text == "F EDI M NTH"
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_decide_orders_no_units(
     llm_agent, mock_llm_coordinator, mock_phase_state

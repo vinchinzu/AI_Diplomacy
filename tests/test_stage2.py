@@ -6,7 +6,7 @@ Verifies that the pluggable context provider system works correctly.
 
 import logging
 import pytest  # Add pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock # Added AsyncMock
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+@pytest.mark.unit
 def test_context_provider_factory():
     """Test the context provider factory."""
     logger.info("Testing ContextProviderFactory...")
@@ -51,7 +51,7 @@ def test_context_provider_factory():
 
     logger.info("✓ ContextProviderFactory working correctly")
 
-
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_inline_context_provider():
     """Test the inline context provider."""
@@ -106,7 +106,7 @@ async def test_inline_context_provider():
 
     logger.info("✓ InlineContextProvider working correctly")
 
-
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_mcp_context_provider():
     """Test the MCP context provider (should show tools are not available)."""
@@ -147,7 +147,7 @@ async def test_mcp_context_provider():
 
     logger.info("✓ MCPContextProvider correctly shows tools not available")
 
-
+@pytest.mark.unit
 def test_config_context_provider():
     """Test that agent configs specify context providers correctly."""
     logger.info("Testing context provider configuration...")
@@ -187,7 +187,7 @@ def test_config_context_provider():
 
     logger.info("✓ Context provider configuration working correctly")
 
-
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_agent_with_context_providers():
     """Test that agents work correctly with different context providers."""
@@ -246,47 +246,41 @@ async def test_agent_with_context_providers():
     expected_agent_orders = [Order("A PAR H")]
 
     # Test inline_agent
-    with patch(
-        "ai_diplomacy.services.llm_coordinator.llm_call_internal",
-        return_value=mock_llm_orders_string_output,
-    ) as mock_llm_call:
-        orders = await inline_agent.decide_orders(phase_state)
-        assert orders == expected_agent_orders
-        mock_llm_call.assert_called_once()
-        # Verify context from inline provider was used in the prompt
-        prompt_text = mock_llm_call.call_args[1]["prompt"]
-        assert "Game Context and Relevant Information:" in prompt_text
-        assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text # Default from InlineContextProvider
+    mock_custom_llm_caller_inline = AsyncMock(return_value=mock_llm_orders_string_output)
+    inline_agent.llm_caller_override = mock_custom_llm_caller_inline
+    orders = await inline_agent.decide_orders(phase_state)
+    assert orders == expected_agent_orders
+    mock_custom_llm_caller_inline.assert_called_once()
+    actual_call_args_inline = mock_custom_llm_caller_inline.call_args
+    prompt_text_inline = actual_call_args_inline.kwargs["prompt"]
+    assert "Game Context and Relevant Information:" in prompt_text_inline
+    assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_inline # Default from InlineContextProvider
 
     # Test mcp_agent
-    with patch(
-        "ai_diplomacy.services.llm_coordinator.llm_call_internal",
-        return_value=mock_llm_orders_string_output,
-    ) as mock_llm_call:
-        orders = await mcp_agent.decide_orders(phase_state)
-        assert orders == expected_agent_orders
-        mock_llm_call.assert_called_once()
-        # Verify context from MCP provider (fallback to inline) was used
-        prompt_text = mock_llm_call.call_args[1]["prompt"]
-        assert "Game Context and Relevant Information:" in prompt_text
-        assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text
+    mock_custom_llm_caller_mcp = AsyncMock(return_value=mock_llm_orders_string_output)
+    mcp_agent.llm_caller_override = mock_custom_llm_caller_mcp
+    orders = await mcp_agent.decide_orders(phase_state)
+    assert orders == expected_agent_orders
+    mock_custom_llm_caller_mcp.assert_called_once()
+    actual_call_args_mcp = mock_custom_llm_caller_mcp.call_args
+    prompt_text_mcp = actual_call_args_mcp.kwargs["prompt"]
+    assert "Game Context and Relevant Information:" in prompt_text_mcp
+    assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_mcp
 
     # Test auto_agent
-    with patch(
-        "ai_diplomacy.services.llm_coordinator.llm_call_internal",
-        return_value=mock_llm_orders_string_output,
-    ) as mock_llm_call:
-        orders = await auto_agent.decide_orders(phase_state)
-        assert orders == expected_agent_orders
-        mock_llm_call.assert_called_once()
-        # Verify context from Auto provider (fallback to inline) was used
-        prompt_text = mock_llm_call.call_args[1]["prompt"]
-        assert "Game Context and Relevant Information:" in prompt_text
-        assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text
+    mock_custom_llm_caller_auto = AsyncMock(return_value=mock_llm_orders_string_output)
+    auto_agent.llm_caller_override = mock_custom_llm_caller_auto
+    orders = await auto_agent.decide_orders(phase_state)
+    assert orders == expected_agent_orders
+    mock_custom_llm_caller_auto.assert_called_once()
+    actual_call_args_auto = mock_custom_llm_caller_auto.call_args
+    prompt_text_auto = actual_call_args_auto.kwargs["prompt"]
+    assert "Game Context and Relevant Information:" in prompt_text_auto
+    assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_auto
 
     logger.info("✓ Agents working correctly with context providers")
 
-
+@pytest.mark.unit
 def test_full_config_integration():
     """Test creating agents from full configuration with context providers."""
     logger.info("Testing full configuration integration with context providers...")

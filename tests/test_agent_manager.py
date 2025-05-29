@@ -6,7 +6,7 @@ from ai_diplomacy.agent_manager import (
     DEFAULT_AGENT_MANAGER_FALLBACK_MODEL,
 )
 from ai_diplomacy.agents.llm_agent import LLMAgent
-from ._shared_fixtures import create_game_config
+from tests._shared_fixtures import create_game_config # Changed to absolute import
 
 ALL_POWERS_IN_GAME = [
     "AUSTRIA",
@@ -169,6 +169,7 @@ PARAMETRIZED_TEST_CASES = [
     PARAMETRIZED_TEST_CASES,
     ids=[case[0] for case in PARAMETRIZED_TEST_CASES]
 )
+@pytest.mark.unit
 def test_assign_models_parametrized(
     game_config_factory, tmp_path,
     test_id, num_players, cli_power_name, cli_model_id, fixed_models, exclude_powers, randomize_fixed, toml_content, assertion_fn

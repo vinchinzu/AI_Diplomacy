@@ -2,7 +2,8 @@ import pytest
 import llm
 
 # AgentLLMInterface was removed in refactor
-from ai_diplomacy.services.llm_coordinator import LLMCoordinator
+# from ai_diplomacy.services.llm_coordinator import LLMCoordinator # No longer needed directly if FakeLLMCoordinator is used
+from tests._diplomacy_fakes import FakeLLMCoordinator # Added import
 
 MODEL_ID = "gemma3:latest"  # Or your specific model
 
@@ -53,17 +54,5 @@ def test_get_model_and_prompt():
     # For now, let's assume the main issue is with model loading or the basic prompt method.
     # If `model.prompt` works, `await model.prompt(...)` should also work in an async context.
 
-
-class DummyCoordinator(LLMCoordinator):
-    async def request(
-        self,
-        model_id,
-        prompt_text,
-        system_prompt_text,
-        game_id="test_game",
-        agent_name="test_agent",
-        phase_str="test_phase",
-        request_identifier="request",
-    ):
-        # Simulate a successful LLM response
-        return "This is a dummy LLM response."
+# Removed DummyCoordinator class definition
+# It has been moved to tests._diplomacy_fakes.py and renamed to FakeLLMCoordinator

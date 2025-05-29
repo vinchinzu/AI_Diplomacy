@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import logging
 import os
-from typing import Dict, List, Tuple, Set, Optional, TYPE_CHECKING
+from typing import Dict, List, Tuple, Set, Optional, TYPE_CHECKING, Callable, Awaitable
 from diplomacy import Game
 import csv
 from diplomacy.engine.map import Map as GameMap
@@ -383,6 +383,7 @@ async def get_valid_orders(
     log_file_path: Optional[str] = None,  # Already present
     phase: Optional[str] = None,  # Already present
     # dev_mode: bool = False # Added dev_mode, now part of config
+    llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None, # New parameter
 ) -> List[str]:
     """
     Generates orders using the specified LLM model, then validates and returns them.
@@ -429,6 +430,7 @@ async def get_valid_orders(
                 phase if phase is not None else "UNKNOWN_PHASE"
             ),  # Using phase as phase_str
             request_identifier=f"{power_name}-{phase if phase is not None else 'unknown'}-order_gen",
+            llm_caller_override=llm_caller_override # Pass the override
         )
 
         llm_proposed_moves = _extract_moves_from_llm_response(
