@@ -169,6 +169,7 @@ PARAMETRIZED_TEST_CASES = [
     PARAMETRIZED_TEST_CASES,
     ids=[case[0] for case in PARAMETRIZED_TEST_CASES]
 )
+@pytest.mark.unit
 def test_assign_models_parametrized(
     game_config_factory, tmp_path,
     test_id, num_players, cli_power_name, cli_model_id, fixed_models, exclude_powers, randomize_fixed, toml_content, assertion_fn

@@ -11,10 +11,15 @@ from datetime import datetime
 from typing import List, Any, Optional, Dict
 import logging
 import os
+import pytest # Import pytest
 
 # Import the shared factory
 from ._shared_fixtures import create_game_config
 from ai_diplomacy.game_config import GameConfig # Keep for type hinting if needed
+
+# Register assert rewrite for fakes
+pytest.register_assert_rewrite("tests._diplomacy_fakes")
+from tests._diplomacy_fakes import FakeGame, DummyOrchestrator, FakeDiplomacyAgent, FakeDiplomacyGame, FakeGameHistory # Added
 
 
 @pytest.fixture
@@ -69,66 +74,8 @@ def mock_phase_state():
 def mock_load_prompt_file_func(): # Renamed to reflect it returns a function
     return lambda filename: "Mocked system prompt from new func"
 
-
-class MockDiplomacyAgent:
-    def __init__(self, power_name, model_id="mock_model"):
-        self.power_name = power_name
-        self.model_id = model_id
-        self.goals = [f"Take over the world ({power_name})", "Make friends"]
-        self.relationships = {"OTHER_POWER": "Neutral"}
-        self.private_journal = [
-            f"Journal Entry 1 for {power_name}",
-            f"Journal Entry 2 for {power_name}",
-        ]
-        self.private_diary = [f"[S1901M] Diary entry for {power_name}"]
-
-    def get_agent_info(
-        self,
-    ):  # Added to match BaseAgent interface if needed by processor
-        return {
-            "agent_id": f"mock_agent_{self.power_name}",
-            "country": self.power_name,
-            "type": self.__class__.__name__,
-            "model_id": self.model_id,
-        }
-
-
-class MockGameHistoryResults:
-    def __init__(self):
-        self.phases = [  # Simplified phase objects for testing to_dict fallback
-            {"name": "SPRING 1901M", "orders_by_power": {"FRANCE": ["A PAR H"]}},
-            {
-                "name": "AUTUMN 1901M",
-                "orders_by_power": {"FRANCE": ["A PAR - BUR"]},
-            },
-        ]
-
-    def to_dict(self):  # Added to satisfy GameResultsProcessor's expectation
-        return {"phases": self.phases}
-
-
-class MockDiplomacyGame:  # Mock for diplomacy.Game
-    def __init__(self):
-        self.is_game_done = True  # Mark as done for saving state
-        self._current_phase = "WINTER 1905"  # Example
-        self._centers = {  # Example SC map
-            "FRANCE": ["PAR", "MAR", "BRE", "SPA", "POR", "BEL", "HOL"],
-            "ENGLAND": ["LON", "LVP", "EDI", "NWY", "SWE"],
-            "GERMANY": ["BER", "MUN", "KIE", "DEN", "RUH", "WAR", "MOS"],
-        }
-        self._winners = ["GERMANY"]  # Example winner
-
-    def get_current_phase(self):
-        return self._current_phase
-
-    def get_state(self):  # Corresponds to game.map.centers in some diplomacy versions
-        return {
-            "centers": self._centers
-        }  # Or however the real Game object structures this
-
-    def get_winners(self):
-        return self._winners
-
+# Removed MockDiplomacyAgent, MockGameHistoryResults, MockDiplomacyGame
+# These will be moved to _diplomacy_fakes.py and renamed.
 
 @pytest.fixture
 def mock_game_config_results(tmp_path) -> GameConfig:
@@ -139,22 +86,22 @@ def mock_game_config_results(tmp_path) -> GameConfig:
 
 @pytest.fixture
 def mock_diplomacy_agent_france():
-    return MockDiplomacyAgent("FRANCE")
+    return FakeDiplomacyAgent("FRANCE") # Updated to use new class name
 
 
 @pytest.fixture
 def mock_diplomacy_agent_germany():
-    return MockDiplomacyAgent("GERMANY", model_id="gpt-4-mini")
+    return FakeDiplomacyAgent("GERMANY", model_id="gpt-4-mini") # Updated
 
 
 @pytest.fixture
 def mock_game_history_results():
-    return MockGameHistoryResults()
+    return FakeGameHistory() # Updated
 
 
 @pytest.fixture
 def mock_diplomacy_game():
-    return MockDiplomacyGame()
+    return FakeDiplomacyGame() # Updated
 
 
 # Mock classes from ai_diplomacy.phase_summary for testing purposes
@@ -376,3 +323,30 @@ def minimal_game_config_logging_setup_info_verbose_false(tmp_path):
     log_dir = tmp_path / "minimal_log_info_vfalse"
     log_dir.mkdir()
     return MinimalGameConfig_LoggingSetup(log_level="INFO", log_to_file=True, log_dir=str(log_dir), verbose_llm_debug=False)
+
+
+@pytest.fixture
+def fake_game_factory(FakeGame): # Inject the FakeGame class from _diplomacy_fakes
+    def _create_fake_game(phase="S1901M", powers_names=None, build_conditions=None, retreat_conditions=None):
+        if powers_names is None:
+            powers_names = ["FRANCE", "GERMANY"]
+        return FakeGame(phase, powers_names, build_conditions, retreat_conditions)
+    return _create_fake_game
+
+@pytest.fixture
+def mock_game_config_for_orchestrator():
+    return MagicMock(spec=GameConfig)
+
+@pytest.fixture
+def mock_agent_manager_for_orchestrator():
+    # from ai_diplomacy.agent_manager import AgentManager # Optional: for spec if AgentManager is easily importable
+    manager = MagicMock() # spec=AgentManager if imported
+    manager.get_agent = MagicMock()
+    return manager
+
+@pytest.fixture
+def default_dummy_orchestrator(DummyOrchestrator, mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator): # Inject DummyOrchestrator class
+    default_powers = ["FRANCE", "GERMANY"]
+    orchestrator = DummyOrchestrator(default_powers, mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator)
+    orchestrator._get_orders_for_power = AsyncMock(return_value=["WAIVE"]) # Default behavior
+    return orchestrator

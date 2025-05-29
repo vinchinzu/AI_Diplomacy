@@ -36,6 +36,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         self.mock_context_provider = AsyncMock(spec=BaseContextProvider)
         self.mock_context_provider.get_provider_type.return_value = ContextProviderType.DEFAULT
         self.mock_context_provider_factory.get_provider.return_value = self.mock_context_provider
+
+        self.mock_llm_caller_override = AsyncMock(return_value='{"default_override_response": true}') # New mock
         
         self.mock_prompt_loader = self._create_mock_prompt_loader()
         self.mock_prompt_loader.return_value = "Default system prompt from loader"
@@ -56,7 +58,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
             game_id="test_game",
             llm_coordinator=self.mock_llm_coordinator,
             context_provider_factory=self.mock_context_provider_factory,
-            prompt_loader=self.mock_prompt_loader
+            prompt_loader=self.mock_prompt_loader,
+            llm_caller_override=self.mock_llm_caller_override # Pass the new mock
         )
 
     async def test_initialization(self):
@@ -102,6 +105,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
     async def test_initialization_no_prompt_loader(self, mock_llm_utils_load_prompt_file):
         # Test case where prompt_loader is None, uses llm_utils.load_prompt_file
         mock_llm_utils_load_prompt_file.return_value = "Prompt from llm_utils"
+        # Create a new llm_caller_override mock for this specific agent instance if needed, or use the shared one
+        # For this test, the override's behavior isn't the primary focus, so using None or a generic one is fine.
         agent = LLMAgent(
             agent_id="test_agent_no_loader",
             country="FRANCE",
@@ -109,7 +114,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
             game_id="test_game_no_loader",
             llm_coordinator=self.mock_llm_coordinator,
             context_provider_factory=self.mock_context_provider_factory,
-            prompt_loader=None # Explicitly None
+            prompt_loader=None, # Explicitly None
+            llm_caller_override=self.mock_llm_caller_override # Can pass the one from setUp
         )
         self.assertIsNotNone(agent.system_prompt)
         mock_llm_utils_load_prompt_file.assert_any_call("france_system_prompt.txt")
@@ -176,7 +182,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
 
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Test context", "tools_available": False})
         self.mock_prompt_strategy.build_order_prompt.return_value = "Test order prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={"orders": ["A PAR H", "F BRE M MAR"]})
+        # Configure the mock_llm_coordinator.call_json directly as it's already a mock
+        self.mock_llm_coordinator.call_json.return_value = {"orders": ["A PAR H", "F BRE M MAR"]}
         
         # Mock _extract_orders_from_response as it's tested separately
         with patch.object(self.agent, '_extract_orders_from_response', return_value=[Order("A PAR H"), Order("F BRE M MAR")]) as mock_extract:
@@ -191,7 +198,17 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
             context_text="Test context",
             tools_available=False
         )
-        self.mock_llm_coordinator.call_json.assert_called_once()
+        self.mock_llm_coordinator.call_json.assert_called_once_with(
+            prompt="Test order prompt",
+            model_id=self.agent_config.model_id,
+            agent_id=self.agent.agent_id,
+            game_id=self.agent.game_id,
+            phase=mock_phase_state.phase_name,
+            system_prompt=self.agent.system_prompt,
+            expected_fields=["orders"],
+            tools=None, # Based on tools_available=False
+            llm_caller_override=self.mock_llm_caller_override # Verify override is passed
+        )
         mock_extract.assert_called_once_with({"orders": ["A PAR H", "F BRE M MAR"]}, ["A PAR", "F BRE"])
         self.assertEqual(len(orders), 2)
         self.assertIsInstance(orders[0], Order)
@@ -204,7 +221,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
 
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Test context"})
         self.mock_prompt_strategy.build_order_prompt.return_value = "Test order prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(side_effect=Exception("LLM exploded"))
+        self.mock_llm_coordinator.call_json.side_effect = Exception("LLM exploded") # Configure existing mock
 
         orders = await self.agent.decide_orders(mock_phase_state)
         self.assertEqual(len(orders), 2)
@@ -219,7 +236,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
 
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Test context"})
         self.mock_prompt_strategy.build_order_prompt.return_value = "Test order prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={}) # Missing 'orders'
+        self.mock_llm_coordinator.call_json.return_value = {} # Missing 'orders'
 
         # _extract_orders_from_response will handle this and return HOLD
         orders = await self.agent.decide_orders(mock_phase_state)
@@ -231,17 +248,28 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_phase_state = MagicMock(spec=PhaseState)
         mock_phase_state.get_power_units.return_value = ["A PAR"]
         mock_phase_state.phase_name = "S1901M"
-        self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Ctx", "tools_available": True, "tools": [{"name": "tool1"}]})
+        mock_tools = [{"name": "tool1"}]
+        self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Ctx", "tools_available": True, "tools": mock_tools})
         self.mock_prompt_strategy.build_order_prompt.return_value = "Prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={"orders": ["A PAR H"]})
+        self.mock_llm_coordinator.call_json.return_value = {"orders": ["A PAR H"]}
         
         with patch.object(self.agent, '_extract_orders_from_response', return_value=[Order("A PAR H")]):
             await self.agent.decide_orders(mock_phase_state)
         
         self.mock_prompt_strategy.build_order_prompt.assert_called_once()
         self.assertTrue(self.mock_prompt_strategy.build_order_prompt.call_args[1]['tools_available'])
-        self.mock_llm_coordinator.call_json.assert_called_once()
-        self.assertIsNotNone(self.mock_llm_coordinator.call_json.call_args[1]['tools'])
+        
+        self.mock_llm_coordinator.call_json.assert_called_once_with(
+            prompt="Prompt",
+            model_id=self.agent_config.model_id,
+            agent_id=self.agent.agent_id,
+            game_id=self.agent.game_id,
+            phase=mock_phase_state.phase_name,
+            system_prompt=self.agent.system_prompt,
+            expected_fields=["orders"],
+            tools=mock_tools, # Verify tools are passed
+            llm_caller_override=self.mock_llm_caller_override # Verify override is passed
+        )
 
 
     async def test_decide_orders_context_empty_text(self):
@@ -251,7 +279,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_phase_state.phase_name = "S1901M"
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": None, "tools_available": False})
         self.mock_prompt_strategy.build_order_prompt.return_value = "Prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={"orders": ["A PAR H"]})
+        self.mock_llm_coordinator.call_json.return_value = {"orders": ["A PAR H"]}
 
         with patch.object(self.agent, '_extract_orders_from_response', return_value=[Order("A PAR H")]):
             await self.agent.decide_orders(mock_phase_state)
@@ -261,8 +289,19 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
             goals=self.mock_agent_state.goals,
             relationships=self.mock_agent_state.relationships,
             formatted_diary=self.mock_agent_state.format_private_diary_for_prompt.return_value,
-            context_text="", # Expect empty string if None
+            context_text="", 
             tools_available=False
+        )
+        self.mock_llm_coordinator.call_json.assert_called_once_with(
+            prompt="Prompt",
+            model_id=self.agent_config.model_id,
+            agent_id=self.agent.agent_id,
+            game_id=self.agent.game_id,
+            phase=mock_phase_state.phase_name,
+            system_prompt=self.agent.system_prompt,
+            expected_fields=["orders"],
+            tools=None,
+            llm_caller_override=self.mock_llm_caller_override
         )
 
     async def test_decide_orders_context_provider_exception(self):
@@ -346,14 +385,24 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Negotiation context"})
         self.mock_prompt_strategy.build_negotiation_prompt.return_value = "Test negotiation prompt"
         llm_response = {"messages": [{"recipient": "ENGLAND", "content": "Hello!", "message_type": "private"}]}
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value=llm_response)
+        self.mock_llm_coordinator.call_json.return_value = llm_response
 
         with patch.object(self.agent, '_extract_messages_from_response', return_value=[Message("ENGLAND", "Hello!", "private")]) as mock_extract:
             messages = await self.agent.negotiate(mock_phase_state)
 
         self.mock_context_provider.provide_context.assert_called_once()
         self.mock_prompt_strategy.build_negotiation_prompt.assert_called_once()
-        self.mock_llm_coordinator.call_json.assert_called_once()
+        self.mock_llm_coordinator.call_json.assert_called_once_with(
+            prompt="Test negotiation prompt",
+            model_id=self.agent_config.model_id,
+            agent_id=self.agent.agent_id,
+            game_id=self.agent.game_id,
+            phase=mock_phase_state.phase_name,
+            system_prompt=self.agent.system_prompt,
+            expected_fields=["messages"],
+            tools=None, # Assuming tools_available was False in context_result
+            llm_caller_override=self.mock_llm_caller_override
+        )
         mock_extract.assert_called_once_with(llm_response, mock_phase_state)
         self.assertEqual(len(messages), 1)
         self.assertIsInstance(messages[0], Message)
@@ -364,7 +413,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_phase_state.phase_name = "Spring1901"
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Context"})
         self.mock_prompt_strategy.build_negotiation_prompt.return_value = "Prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(side_effect=Exception("LLM error"))
+        self.mock_llm_coordinator.call_json.side_effect = Exception("LLM error")
         
         messages = await self.agent.negotiate(mock_phase_state)
         self.assertEqual(messages, [])
@@ -375,7 +424,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_phase_state.phase_name = "Spring1901"
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Context"})
         self.mock_prompt_strategy.build_negotiation_prompt.return_value = "Prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={}) # Missing 'messages'
+        self.mock_llm_coordinator.call_json.return_value = {} # Missing 'messages'
 
         messages = await self.agent.negotiate(mock_phase_state)
         self.assertEqual(messages, [])
@@ -386,18 +435,27 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_phase_state.powers = ["FRANCE", "ENGLAND"]
         mock_phase_state.is_power_eliminated.return_value = False
         mock_phase_state.phase_name = "S1901M"
-
-        self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Ctx", "tools_available": True, "tools": [{"name": "tool1"}]})
+        mock_tools = [{"name": "tool1"}]
+        self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": "Ctx", "tools_available": True, "tools": mock_tools})
         self.mock_prompt_strategy.build_negotiation_prompt.return_value = "Prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={"messages": []})
+        self.mock_llm_coordinator.call_json.return_value = {"messages": []}
 
         with patch.object(self.agent, '_extract_messages_from_response', return_value=[]):
             await self.agent.negotiate(mock_phase_state)
 
         self.mock_prompt_strategy.build_negotiation_prompt.assert_called_once()
         self.assertTrue(self.mock_prompt_strategy.build_negotiation_prompt.call_args[1]['tools_available'])
-        self.mock_llm_coordinator.call_json.assert_called_once()
-        self.assertIsNotNone(self.mock_llm_coordinator.call_json.call_args[1]['tools'])
+        self.mock_llm_coordinator.call_json.assert_called_once_with(
+            prompt="Prompt",
+            model_id=self.agent_config.model_id,
+            agent_id=self.agent.agent_id,
+            game_id=self.agent.game_id,
+            phase=mock_phase_state.phase_name,
+            system_prompt=self.agent.system_prompt,
+            expected_fields=["messages"],
+            tools=mock_tools,
+            llm_caller_override=self.mock_llm_caller_override
+        )
 
 
     async def test_negotiate_context_empty_text(self):
@@ -408,13 +466,24 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_phase_state.phase_name = "S1901M"
         self.mock_context_provider.provide_context = AsyncMock(return_value={"context_text": None, "tools_available": False})
         self.mock_prompt_strategy.build_negotiation_prompt.return_value = "Prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={"messages": []})
+        self.mock_llm_coordinator.call_json.return_value = {"messages": []}
 
         with patch.object(self.agent, '_extract_messages_from_response', return_value=[]):
             await self.agent.negotiate(mock_phase_state)
 
         self.mock_prompt_strategy.build_negotiation_prompt.assert_called_once()
         self.assertEqual(self.mock_prompt_strategy.build_negotiation_prompt.call_args[1]['context_text'], "")
+        self.mock_llm_coordinator.call_json.assert_called_once_with(
+            prompt="Prompt",
+            model_id=self.agent_config.model_id,
+            agent_id=self.agent.agent_id,
+            game_id=self.agent.game_id,
+            phase=mock_phase_state.phase_name,
+            system_prompt=self.agent.system_prompt,
+            expected_fields=["messages"],
+            tools=None,
+            llm_caller_override=self.mock_llm_caller_override
+        )
 
 
     async def test_negotiate_context_provider_exception(self):
@@ -515,7 +584,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_events = []
 
         self.mock_prompt_strategy.build_diary_generation_prompt.return_value = "Diary prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(return_value={"diary_entry": "It was a good phase."})
+        self.mock_llm_coordinator.call_json.return_value = {"diary_entry": "It was a good phase."}
 
         await self.agent._generate_phase_diary_entry(mock_phase_state, mock_events)
 
@@ -527,7 +596,8 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
             game_id=self.agent.game_id,
             phase=mock_phase_state.phase_name,
             system_prompt=self.agent.system_prompt,
-            expected_fields=["diary_entry"]
+            expected_fields=["diary_entry"],
+            llm_caller_override=self.mock_llm_caller_override # Verify override
         )
         self.mock_agent_state.add_diary_entry.assert_called_once_with("It was a good phase.", mock_phase_state.phase_name)
         # Verify exact values used from agent_state for the prompt
@@ -544,7 +614,7 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         mock_events = []
 
         self.mock_prompt_strategy.build_diary_generation_prompt.return_value = "Diary prompt"
-        self.mock_llm_coordinator.call_json = AsyncMock(side_effect=Exception("LLM diary error"))
+        self.mock_llm_coordinator.call_json.side_effect = Exception("LLM diary error")
 
         await self.agent._generate_phase_diary_entry(mock_phase_state, mock_events)
         

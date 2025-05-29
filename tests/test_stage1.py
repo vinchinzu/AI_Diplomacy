@@ -5,6 +5,7 @@ Verifies that the clean agent boundary works correctly.
 """
 
 import logging
+import pytest # Added import
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.core.manager import GameEvent
 from ai_diplomacy.agents.factory import AgentFactory
@@ -17,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+@pytest.mark.unit
 def test_agent_factory():
     """Test the agent factory creation."""
     logger.info("Testing AgentFactory...")
@@ -43,7 +44,7 @@ def test_agent_factory():
 
     logger.info("✓ AgentFactory working correctly")
 
-
+@pytest.mark.unit
 def test_config_integration():
     """Test creating agents from full configuration."""
     logger.info("Testing configuration integration...")
@@ -73,7 +74,7 @@ def test_config_integration():
 
     logger.info("✓ Configuration integration working correctly")
 
-
+@pytest.mark.unit
 def test_game_manager():
     """Test the core game manager."""
     logger.info("Testing GameManager...")
@@ -94,7 +95,7 @@ def test_game_manager():
 
     logger.info("✓ GameManager components working correctly")
 
-
+@pytest.mark.unit
 def test_clean_boundaries():
     """Test that the clean boundaries are maintained."""
     logger.info("Testing clean boundaries...")

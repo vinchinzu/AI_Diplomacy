@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from typing import List, Optional
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock # Added AsyncMock
 import pytest
 import json
 
@@ -24,9 +24,11 @@ from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.general_utils import (
     get_valid_orders,
     gather_possible_orders,
+    LLMInvalidOutputError, # Added for except block
 )
 # Use the shared factory for GameConfig
-from ._shared_fixtures import create_game_config
+# from ._shared_fixtures import create_game_config # This should be from tests._shared_fixtures
+from tests._shared_fixtures import create_game_config # Corrected import
 from ai_diplomacy.game_config import GameConfig
 
 
@@ -227,20 +229,35 @@ class GameTester:
         orders = None
         try:
             if self.config.args.use_mocks:
+                # Define the side effect function for the custom caller
+                async def mock_side_effect_for_override(*args_inner, **kwargs_inner):
+                    # power_name is from the outer scope of test_power_order_generation
+                    return await self._get_mocked_llm_call_internal(power_name, *args_inner, **kwargs_inner)
 
-                async def mock_side_effect(
-                    *args_inner, **kwargs_inner
-                ):  # Renamed args to avoid clash
-                    return await self._get_mocked_llm_call_internal(
-                        power_name, *args_inner, **kwargs_inner
-                    )
-
-                with patch(
-                    "ai_diplomacy.services.llm_coordinator.llm_call_internal",
-                    side_effect=mock_side_effect,
-                ):
-                    orders = await orders_callable
+                mock_custom_llm_caller = AsyncMock(side_effect=mock_side_effect_for_override)
+                
+                # Re-create orders_callable with the llm_caller_override
+                orders_callable_with_override = get_valid_orders(
+                    game=self.game,
+                    model_id=agent.model_id,
+                    agent_system_prompt=agent.system_prompt,
+                    board_state=board_state,
+                    power_name=power_name,
+                    possible_orders=possible_orders,
+                    game_history=self.game_history,
+                    game_id=self.config.game_id,
+                    config=self.config,
+                    agent_goals=agent.agent_state.goals,
+                    agent_relationships=agent.agent_state.relationships,
+                    agent_private_diary_str=agent.agent_state.format_private_diary_for_prompt(),
+                    log_file_path=log_file_path,
+                    phase=current_phase,
+                    llm_caller_override=mock_custom_llm_caller # Add this
+                )
+                orders = await orders_callable_with_override
             else:
+                # For non-mock scenarios, call the original orders_callable
+                # which does not have (and doesn't need) the override
                 orders = await orders_callable
         except LLMInvalidOutputError as e:
             logger.error(
@@ -371,7 +388,7 @@ class GameTester:
 
 # --- Pytest Test Functions ---
 
-
+@pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]
@@ -405,7 +422,7 @@ async def test_single_round_scenario(execution_mode, request: pytest.FixtureRequ
     success = await tester.test_single_round(test_powers_list)
     assert success, f"Single round scenario failed in {execution_mode} mode."
 
-
+@pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]
@@ -435,7 +452,7 @@ async def test_order_generation_scenario(
         f"Order generation scenario for {power_to_test} failed in {execution_mode} mode."
     )
 
-
+@pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]
@@ -465,7 +482,7 @@ async def test_sequential_calls_scenario(
         f"Sequential calls scenario for {power_to_test} failed in {execution_mode} mode."
     )
 
-
+@pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]

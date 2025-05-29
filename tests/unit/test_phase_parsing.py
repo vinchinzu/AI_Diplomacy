@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from ai_diplomacy.utils.phase_parsing import get_phase_type_from_game, _extract_year_from_phase, PhaseType, _is_valid_compact_form
 
 # Test cases for get_phase_type_from_game
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "phase_string, expected_type",
     [
@@ -37,6 +38,7 @@ def test_get_phase_type_from_game_valid(phase_string, expected_type):
     mock_game.get_current_phase.return_value = phase_string
     assert get_phase_type_from_game(mock_game) == expected_type
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "invalid_phase_string",
     [
@@ -53,6 +55,7 @@ def test_get_phase_type_from_game_invalid(invalid_phase_string):
     with pytest.raises(RuntimeError):
         get_phase_type_from_game(mock_game)
 
+@pytest.mark.unit
 def test_get_phase_type_from_game_empty_phase():
     mock_game = MagicMock()
     mock_game.get_current_phase.return_value = ""
@@ -61,6 +64,7 @@ def test_get_phase_type_from_game_empty_phase():
     assert get_phase_type_from_game(mock_game) == "-"
 
 # Test cases for _extract_year_from_phase
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "phase_string, expected_year",
     [
@@ -88,6 +92,7 @@ def test_extract_year_from_phase(phase_string, expected_year):
     assert _extract_year_from_phase(phase_string) == expected_year
 
 # Test cases for _is_valid_compact_form to improve coverage
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "phase_str, suffix, expected_result",
     [

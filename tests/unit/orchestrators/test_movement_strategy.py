@@ -5,36 +5,30 @@ from unittest.mock import MagicMock, AsyncMock, patch, call
 # from types import SimpleNamespace 
 
 from ai_diplomacy.orchestrators.movement import MovementPhaseStrategy
-from tests._diplomacy_fakes import FakeGame, DummyOrchestrator
+# FakeGame and DummyOrchestrator are now injected via fixtures from conftest
+# from tests._diplomacy_fakes import FakeGame, DummyOrchestrator 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_movement_generates_orders():
+async def test_movement_generates_orders(fake_game_factory, default_dummy_orchestrator):
     strat = MovementPhaseStrategy()
     powers = ["ENG", "FRA"]
-    fake_game = FakeGame("S1901M", powers)
+    fake_game = fake_game_factory(phase="S1901M", powers_names=powers)
     
-    # Mock dependencies for DummyOrchestrator
-    mock_game_config = MagicMock()
-    # mock_game_config.llm_log_path = "/tmp/dummy_log_path" # If using get_valid_orders_func
-    mock_game_config.num_negotiation_rounds = 1 # For perform_negotiation_rounds
+    dummy_orchestrator = default_dummy_orchestrator
+    dummy_orchestrator.active_powers = powers
+    dummy_orchestrator.config.num_negotiation_rounds = 1 # For perform_negotiation_rounds
 
-    mock_agent_manager = MagicMock()
-    # Simplistic agent mock for _get_orders_for_power to function if it checks agent type
-    mock_agent = MagicMock()
-    mock_agent_manager.get_agent.return_value = mock_agent
+    # Simplistic agent mock, can be customized if needed per power
+    mock_agent = MagicMock(name="GenericAgent")
+    dummy_orchestrator.agent_manager.get_agent.return_value = mock_agent
+    dummy_orchestrator._get_orders_for_power = AsyncMock(return_value=["WAIVE"])
 
-    dummy_orchestrator = DummyOrchestrator(powers, mock_game_config, mock_agent_manager)
-    # Override the default mock return value for this specific test case
-    dummy_orchestrator._get_orders_for_power.return_value = ["WAIVE"]
-
-    # Mock GameHistory (passed to strategy's get_orders)
     mock_game_history = MagicMock()
-    mock_game_history.add_orders = MagicMock() # Called by the strategy
-    mock_game_history.add_phase = MagicMock() # Called by perform_negotiation_rounds
-    mock_game_history.add_message = MagicMock() # Called by perform_negotiation_rounds
+    mock_game_history.add_orders = MagicMock()
+    mock_game_history.add_phase = MagicMock()
+    mock_game_history.add_message = MagicMock()
 
-    # Patch external calls made by MovementPhaseStrategy or its helpers
-    # perform_negotiation_rounds is now a separate function imported by movement.py
     with patch(
         "ai_diplomacy.orchestrators.movement.perform_negotiation_rounds", 
         new_callable=AsyncMock, 
@@ -87,54 +81,51 @@ async def test_movement_generates_orders():
         for power_name in powers:
             assert orders[power_name] == ["WAIVE"] # Based on DummyOrchestrator's _get_orders_for_power mock
 
+@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_movement_agent_not_found_and_agent_error():
+async def test_movement_agent_not_found_and_agent_error(fake_game_factory, default_dummy_orchestrator):
     strat = MovementPhaseStrategy()
     powers = ["ENG", "FRA", "GER"] # ENG: agent fails, FRA: no agent, GER: success
-    fake_game = FakeGame("S1901M", powers)
+    fake_game = fake_game_factory(phase="S1901M", powers_names=powers)
     
-    mock_game_config = MagicMock()
-    mock_game_config.num_negotiation_rounds = 0 # No negotiation for this test focus
+    dummy_orchestrator = default_dummy_orchestrator
+    dummy_orchestrator.active_powers = powers
+    dummy_orchestrator.config.num_negotiation_rounds = 0 # No negotiation
 
-    mock_agent_manager = MagicMock()
     mock_agent_eng = MagicMock(name="AgentENG")
     mock_agent_ger = MagicMock(name="AgentGER")
-    # FRA will have no agent (get_agent returns None)
 
     def get_agent_side_effect(power_name):
         if power_name == "ENG": return mock_agent_eng
         if power_name == "GER": return mock_agent_ger
-        if power_name == "FRA": return None # No agent for FRA
+        if power_name == "FRA": return None
         return MagicMock()
-    mock_agent_manager.get_agent.side_effect = get_agent_side_effect
-
-    dummy_orchestrator = DummyOrchestrator(powers, mock_game_config, mock_agent_manager)
+    dummy_orchestrator.agent_manager.get_agent.side_effect = get_agent_side_effect
 
     async def get_orders_side_effect_orchestrator(game_obj, power_name_call, agent_obj, history_obj):
         if power_name_call == "ENG":
             raise AttributeError("ENG LLM simulated attribute error")
         elif power_name_call == "GER":
             return ["A BER H"]
-        # FRA should not reach here as agent is None
-        return ["WAIVE"] # Default for any other unexpected calls
+        return ["WAIVE"] 
     dummy_orchestrator._get_orders_for_power = AsyncMock(side_effect=get_orders_side_effect_orchestrator)
     
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
-    mock_game_history.add_phase = MagicMock()
-    mock_game_history.add_message = MagicMock()
+    mock_game_history.add_phase = MagicMock() # Still needed by perform_negotiation_rounds even if not awaited
+    mock_game_history.add_message = MagicMock() # Still needed by perform_negotiation_rounds
 
     with patch(
         "ai_diplomacy.orchestrators.movement.perform_negotiation_rounds", 
         new_callable=AsyncMock, 
-        return_value=None # No negotiation for this test
+        return_value=None
     ) as mocked_perform_negotiation, \
          pytest.logs(logger="ai_diplomacy.orchestrators.movement", level="WARNING") as warn_logs, \
          pytest.logs(logger="ai_diplomacy.orchestrators.movement", level="ERROR") as error_logs:
         
         orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
-    mocked_perform_negotiation.assert_not_awaited() # num_negotiation_rounds is 0
+    mocked_perform_negotiation.assert_not_awaited()
         
     # _get_orders_for_power should be called for ENG and GER, but not FRA (no agent)
     assert dummy_orchestrator._get_orders_for_power.await_count == 2
