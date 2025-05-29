@@ -284,8 +284,50 @@ class BaseModelClient:
                 return data.get("orders", None)
             except json.JSONDecodeError:
                 logger.warning(
-                    f"[{self.model_name}] JSON decode still failed after fixes for {power_name}. Trying bracket fallback."
+                    f"[{self.model_name}] JSON decode still failed after fixes for {power_name}. Trying to remove inline comments."
                 )
+                
+                # Try to remove inline comments (// style)
+                try:
+                    # Remove // comments from each line
+                    lines = json_text.split('\n')
+                    cleaned_lines = []
+                    for line in lines:
+                        # Find // that's not inside quotes
+                        comment_pos = -1
+                        in_quotes = False
+                        escape_next = False
+                        for i, char in enumerate(line):
+                            if escape_next:
+                                escape_next = False
+                                continue
+                            if char == '\\':
+                                escape_next = True
+                                continue
+                            if char == '"' and not escape_next:
+                                in_quotes = not in_quotes
+                            if not in_quotes and line[i:i+2] == '//':
+                                comment_pos = i
+                                break
+                        
+                        if comment_pos >= 0:
+                            # Remove comment but keep any trailing comma
+                            cleaned_line = line[:comment_pos].rstrip()
+                        else:
+                            cleaned_line = line
+                        cleaned_lines.append(cleaned_line)
+                    
+                    comment_free_json = '\n'.join(cleaned_lines)
+                    # Also remove trailing commas after comment removal
+                    comment_free_json = re.sub(r',\s*([\}\]])', r'\1', comment_free_json)
+                    
+                    data = json.loads(comment_free_json)
+                    logger.info(f"[{self.model_name}] Successfully parsed JSON after removing inline comments for {power_name}")
+                    return data.get("orders", None)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"[{self.model_name}] JSON decode still failed after removing comments for {power_name}. Trying bracket fallback."
+                    )
 
         # 3b) Attempt bracket fallback: we look for the substring after "orders"
         #     E.g. "orders: ['A BUD H']" and parse it. This is risky but can help with minor JSON format errors.
