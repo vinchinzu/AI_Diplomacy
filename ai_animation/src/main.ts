@@ -172,24 +172,6 @@ function animate() {
   gameState.camControls.update();
   gameState.renderer.render(gameState.scene, gameState.camera);
 
-
-  // TODO: This needs to only occur at the end of a phase, not at the beginning during the animation loop.
-  //      MOVE ME
-  //
-  const MOMENT_THRESHOLD = 9.0
-  if (!gameState.isDisplayingMoment && gameState.gameData && gameState.momentsData) {
-    let moment = gameState.checkPhaseHasMoment(gameState.gameData.phases[gameState.phaseIndex].name)
-    if (moment !== null && moment.interest_score >= MOMENT_THRESHOLD && moment.hasBeenDisplayed === undefined) {
-      gameState.isDisplayingMoment = true
-      moment.hasBeenDisplayed = true
-      showTwoPowerConversation({ power1: PowerENUM.AUSTRIA, power2: PowerENUM.FRANCE })
-      setTimeout(() => {
-        closeTwoPowerConversation()
-        gameState.isDisplayingMoment = false
-      }, 2000)
-    }
-
-  }
 }
 
 

@@ -5,6 +5,8 @@ import { advanceToNextPhase } from "../phase";
 import { getPowerDisplayName, getAllPowerDisplayNames } from '../utils/powerNames';
 import { PowerENUM } from '../types/map';
 
+
+//TODO: Sometimes the LLMs use lists, and they don't work in the chats. The just appear as bullets within a single line.
 let faceIconCache = {}; // Cache for generated face icons
 
 // Add a message counter to track sound effect frequency
