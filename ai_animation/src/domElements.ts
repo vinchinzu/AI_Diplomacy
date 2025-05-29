@@ -74,6 +74,15 @@ if (null === leaderboard) throw new Error("Element with ID 'leaderboard' not fou
 export const standingsBtn = document.getElementById('standings-btn');
 if (null === standingsBtn) throw new Error("Element with ID 'standings-btn' not found");
 
+export const debugProvincePanel = document.getElementById('debug-province-panel');
+if (null === debugProvincePanel) throw new Error("Element with ID 'debug-province-panel' not found");
+
+export const provinceInput = document.getElementById('province-input') as HTMLInputElement;
+if (null === provinceInput) throw new Error("Element with ID 'province-input' not found");
+
+export const highlightProvinceBtn = document.getElementById('highlight-province-btn');
+if (null === highlightProvinceBtn) throw new Error("Element with ID 'highlight-province-btn' not found");
+
 
 
 // Add roundRect polyfill for browsers that don't support it

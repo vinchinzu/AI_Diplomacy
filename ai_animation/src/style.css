@@ -754,3 +754,50 @@
       min-width: 300px;
     }
   }
+
+  /* -----------------
+     Debug Province Panel
+     ----------------- */
+  #debug-province-panel {
+    position: absolute;
+    top: 80px;
+    right: 10px;
+    background: radial-gradient(ellipse at center, #f7ecd1 0%, #dbc08c 100%);
+    border: 3px solid #4f3b16;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    z-index: 100;
+    font-family: "Book Antiqua", Palatino, serif;
+  }
+
+  #province-input {
+    padding: 8px 12px;
+    border: 2px solid #4f3b16;
+    border-radius: 4px;
+    background-color: #faf0d8;
+    color: #2f260b;
+    font-family: "Book Antiqua", Palatino, serif;
+    width: 200px;
+    margin-right: 10px;
+  }
+
+  #province-input:focus {
+    outline: none;
+    border-color: #8d5a2b;
+    background-color: #fff;
+  }
+
+  #highlight-province-btn {
+    padding: 8px 12px;
+    background-color: #8d5a2b;
+    color: #f0e6d2;
+    border: 2px solid #2e1c10;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: "Book Antiqua", Palatino, serif;
+  }
+
+  #highlight-province-btn:hover {
+    background-color: #a4703a;
+  }

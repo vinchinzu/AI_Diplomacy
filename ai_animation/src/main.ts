@@ -12,6 +12,8 @@ import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
 import { closeTwoPowerConversation, showTwoPowerConversation } from "./components/twoPowerConversation";
 import { PowerENUM } from "./types/map";
+import { debugProvincePanel, provinceInput, highlightProvinceBtn } from "./domElements";
+import { highlightProvince, getAvailableProvinces } from "./debug/provinceHighlight";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -46,6 +48,11 @@ function initScene() {
       // Load default game file if in debug mode
       if (isDebugMode || isStreamingMode) {
         gameState.loadGameFile(0);
+      }
+
+      // Show debug province panel if in debug mode
+      if (isDebugMode) {
+        debugProvincePanel.style.display = 'block';
       }
       if (isStreamingMode) {
         setTimeout(() => {
@@ -287,6 +294,43 @@ speedSelector.addEventListener('change', e => {
     gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
   }
 });
+
+// Debug province highlighting event handlers
+if (isDebugMode) {
+  highlightProvinceBtn.addEventListener('click', () => {
+    const provinceName = provinceInput.value.trim();
+    if (provinceName) {
+      highlightProvince(provinceName);
+    } else {
+      console.warn('Please enter a province name');
+    }
+  });
+
+  // Allow highlighting on Enter key press
+  provinceInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      const provinceName = provinceInput.value.trim();
+      if (provinceName) {
+        highlightProvince(provinceName);
+      }
+    }
+  });
+
+  // Add input validation and autocomplete suggestions
+  provinceInput.addEventListener('input', () => {
+    const input = provinceInput.value.toUpperCase().trim();
+    const availableProvinces = getAvailableProvinces();
+
+    // Basic validation - turn input red if it doesn't match any province
+    if (input && !availableProvinces.some(p => p.startsWith(input))) {
+      provinceInput.style.borderColor = '#ff4444';
+      provinceInput.style.backgroundColor = '#ffe6e6';
+    } else {
+      provinceInput.style.borderColor = '#4f3b16';
+      provinceInput.style.backgroundColor = '#faf0d8';
+    }
+  });
+}
 
 // --- BOOTSTRAP ON PAGE LOAD ---
 window.addEventListener('load', initScene);
