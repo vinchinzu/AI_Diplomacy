@@ -67,6 +67,11 @@ async function testElevenLabsKey() {
  * @returns Promise that resolves when audio completes or rejects on error
  */
 export async function speakSummary(summaryText: string): Promise<void> {
+  if (!config.speechEnabled) {
+    console.log("Speech disabled via config, skipping TTS");
+    return;
+  }
+
   if (!summaryText || summaryText.trim() === '') {
     console.warn("No summary text provided to speakSummary function");
     return;
@@ -98,12 +103,11 @@ export async function speakSummary(summaryText: string): Promise<void> {
 
   try {
     // Truncate text to first 100 characters for ElevenLabs
-    // FIXME: Is this meant to be truncated? Presumably not
-    //const textForSpeaking = textToSpeak.substring(0, 100);
+    let textForSpeaking;
     if (config.isDebugMode) {
-      const textForSpeaking = textToSpeak.substring(0, 100);
+      textForSpeaking = textToSpeak.substring(0, 100);
     } else {
-      const textForSpeaking = textToSpeak
+      textForSpeaking = textToSpeak
     }
     // Hit ElevenLabs TTS endpoint with the truncated text
     const headers = {

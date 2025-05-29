@@ -2,6 +2,7 @@ import { gameState } from '../gameState';
 import { config } from '../config';
 import { getPowerDisplayName } from '../utils/powerNames';
 import { PowerENUM } from '../types/map';
+import { Moment } from '../types/moments';
 
 interface ConversationMessage {
   sender: string;
@@ -16,6 +17,7 @@ interface TwoPowerDialogueOptions {
   power2: string;
   messages?: ConversationMessage[];
   title?: string;
+  moment?: Moment;
   onClose?: () => void;
 }
 
@@ -26,7 +28,7 @@ let dialogueOverlay: HTMLElement | null = null;
  * @param options Configuration for the dialogue display
  */
 export function showTwoPowerConversation(options: TwoPowerDialogueOptions): void {
-  const { power1, power2, messages, title, onClose } = options;
+  const { power1, power2, messages, title, moment, onClose } = options;
 
   // Close any existing dialogue
   closeTwoPowerConversation();
@@ -43,11 +45,12 @@ export function showTwoPowerConversation(options: TwoPowerDialogueOptions): void
   dialogueOverlay = createDialogueOverlay();
 
   // Create dialogue container
-  const dialogueContainer = createDialogueContainer(power1, power2, title);
+  const dialogueContainer = createDialogueContainer(power1, power2, title, moment);
 
-  // Create conversation area
+  // Create conversation area and append to the conversation wrapper
+  const conversationWrapper = dialogueContainer.querySelector('div[style*="flex: 2"]') as HTMLElement;
   const conversationArea = createConversationArea();
-  dialogueContainer.appendChild(conversationArea);
+  conversationWrapper.appendChild(conversationArea);
 
   // Add close button
   const closeButton = createCloseButton();
@@ -134,7 +137,7 @@ function createDialogueOverlay(): HTMLElement {
 /**
  * Creates the main dialogue container
  */
-function createDialogueContainer(power1: string, power2: string, title?: string): HTMLElement {
+function createDialogueContainer(power1: string, power2: string, title?: string, moment?: Moment): HTMLElement {
   const container = document.createElement('div');
   container.className = 'dialogue-container';
   container.style.cssText = `
@@ -142,28 +145,176 @@ function createDialogueContainer(power1: string, power2: string, title?: string)
         border: 3px solid #4f3b16;
         border-radius: 8px;
         box-shadow: 0 0 15px rgba(0,0,0,0.5);
-        width: 80%;
-        height: 80%;
+        width: 90%;
+        height: 85%;
         position: relative;
         padding: 20px;
         display: flex;
         flex-direction: column;
     `;
 
-  // Add title
+  // Create header section with title and moment info
+  const headerSection = document.createElement('div');
+  headerSection.style.cssText = `
+        margin-bottom: 15px;
+        text-align: center;
+    `;
+
+  // Add main title
   const titleElement = document.createElement('h2');
   titleElement.textContent = title || `Conversation: ${getPowerDisplayName(power1 as PowerENUM)} & ${getPowerDisplayName(power2 as PowerENUM)}`;
   titleElement.style.cssText = `
-        margin: 0 0 20px 0;
-        text-align: center;
+        margin: 0 0 10px 0;
         color: #4f3b16;
         font-family: 'Times New Roman', serif;
         font-size: 24px;
         font-weight: bold;
     `;
-  container.appendChild(titleElement);
+  headerSection.appendChild(titleElement);
+
+  // Add moment type if available
+  if (moment) {
+    const momentTypeElement = document.createElement('div');
+    momentTypeElement.textContent = `${moment.category} (Interest: ${moment.interest_score}/10)`;
+    momentTypeElement.style.cssText = `
+        background: rgba(75, 59, 22, 0.8);
+        color: #f7ecd1;
+        padding: 5px 15px;
+        border-radius: 15px;
+        display: inline-block;
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 5px;
+    `;
+    headerSection.appendChild(momentTypeElement);
+
+    // Add moment description if available
+    if (moment.promise_agreement || moment.actual_action || moment.impact) {
+      const momentDescription = document.createElement('div');
+      let description = '';
+      if (moment.promise_agreement) description += `Promise: ${moment.promise_agreement}. `;
+      if (moment.actual_action) description += `Action: ${moment.actual_action}. `;
+      if (moment.impact) description += `Impact: ${moment.impact}`;
+      
+      momentDescription.textContent = description;
+      momentDescription.style.cssText = `
+        font-size: 12px;
+        color: #5a4b2b;
+        font-style: italic;
+        margin: 5px 20px 0 20px;
+        line-height: 1.4;
+      `;
+      headerSection.appendChild(momentDescription);
+    }
+  }
+
+  container.appendChild(headerSection);
+
+  // Create main content area with three columns: diary1, conversation, diary2
+  const mainContent = document.createElement('div');
+  mainContent.style.cssText = `
+        flex: 1;
+        display: flex;
+        gap: 15px;
+        height: 100%;
+    `;
+
+  // Left diary box for power1
+  const diary1Box = createDiaryBox(power1 as PowerENUM, moment?.diary_context?.[power1 as PowerENUM] || '');
+  mainContent.appendChild(diary1Box);
+
+  // Center conversation area
+  const conversationWrapper = document.createElement('div');
+  conversationWrapper.style.cssText = `
+        flex: 2;
+        display: flex;
+        flex-direction: column;
+    `;
+  mainContent.appendChild(conversationWrapper);
+
+  // Right diary box for power2
+  const diary2Box = createDiaryBox(power2 as PowerENUM, moment?.diary_context?.[power2 as PowerENUM] || '');
+  mainContent.appendChild(diary2Box);
+
+  container.appendChild(mainContent);
 
   return container;
+}
+
+/**
+ * Creates a diary box for displaying power-specific thoughts and context
+ */
+function createDiaryBox(power: PowerENUM, diaryContent: string): HTMLElement {
+  const diaryBox = document.createElement('div');
+  diaryBox.className = `diary-box diary-${power.toLowerCase()}`;
+  diaryBox.style.cssText = `
+        flex: 1;
+        background: rgba(255, 255, 255, 0.4);
+        border: 2px solid #8b7355;
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    `;
+
+  // Power name header
+  const powerHeader = document.createElement('h4');
+  powerHeader.textContent = `${getPowerDisplayName(power)} Thoughts`;
+  powerHeader.className = `power-${power.toLowerCase()}`;
+  powerHeader.style.cssText = `
+        margin: 0 0 10px 0;
+        font-size: 14px;
+        font-weight: bold;
+        text-align: center;
+        padding: 5px;
+        background: rgba(75, 59, 22, 0.1);
+        border-radius: 4px;
+        border-bottom: 1px solid #8b7355;
+    `;
+  diaryBox.appendChild(powerHeader);
+
+  // Diary content area
+  const contentArea = document.createElement('div');
+  contentArea.className = 'diary-content';
+  contentArea.style.cssText = `
+        flex: 1;
+        overflow-y: auto;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #4a3b1f;
+        font-style: italic;
+    `;
+
+  if (diaryContent.trim()) {
+    // Split diary content into paragraphs for better readability
+    const paragraphs = diaryContent.split('\n').filter(p => p.trim());
+    paragraphs.forEach((paragraph, index) => {
+      const p = document.createElement('p');
+      p.textContent = paragraph.trim();
+      p.style.cssText = `
+            margin: 0 0 8px 0;
+            padding: 4px;
+            background: ${index % 2 === 0 ? 'rgba(255,255,255,0.2)' : 'transparent'};
+            border-radius: 3px;
+        `;
+      contentArea.appendChild(p);
+    });
+  } else {
+    // No diary content available
+    const noDiaryMsg = document.createElement('div');
+    noDiaryMsg.textContent = 'No diary entries available for this moment.';
+    noDiaryMsg.style.cssText = `
+        color: #8b7355;
+        font-style: italic;
+        text-align: center;
+        padding: 20px;
+    `;
+    contentArea.appendChild(noDiaryMsg);
+  }
+
+  diaryBox.appendChild(contentArea);
+  return diaryBox;
 }
 
 /**

@@ -63,19 +63,24 @@ function _setPhase(phaseIndex: number) {
 export function nextPhase() {
   if (!gameState.isDisplayingMoment && gameState.gameData && gameState.momentsData) {
     let moment = gameState.checkPhaseHasMoment(gameState.gameData.phases[gameState.phaseIndex].name)
-    if (moment !== null && moment.interest_score >= MOMENT_THRESHOLD && moment.hasBeenDisplayed === undefined) {
+    if (moment !== null && moment.interest_score >= MOMENT_THRESHOLD && moment.powers_involved.length >= 2) {
       gameState.isDisplayingMoment = true
       moment.hasBeenDisplayed = true
-      showTwoPowerConversation({ power1: PowerENUM.AUSTRIA, power2: PowerENUM.FRANCE })
+
+      const power1 = moment.powers_involved[0];
+      const power2 = moment.powers_involved[1];
+
+      showTwoPowerConversation({
+        power1: power1,
+        power2: power2,
+        moment: moment
+      })
       setTimeout(() => {
         closeTwoPowerConversation()
         gameState.isDisplayingMoment = false
         _setPhase(gameState.phaseIndex + 1)
       }, MOMENT_DISPLAY_TIMEOUT_MS)
-    }
-
-    else {
-
+    } else {
       _setPhase(gameState.phaseIndex + 1)
     }
   }

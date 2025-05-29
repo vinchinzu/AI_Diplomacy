@@ -22,7 +22,9 @@ enum AvailableMaps {
  * Return a random power from the PowerENUM for the player to control
  */
 function getRandomPower(): PowerENUM {
-  const values = Object.values(PowerENUM);
+  const values = Object.values(PowerENUM).filter(power =>
+    power !== PowerENUM.GLOBAL && power !== PowerENUM.EUROPE
+  );
   const idx = Math.floor(Math.random() * values.length);
   return values[idx];
 }
