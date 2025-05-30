@@ -3,6 +3,7 @@ import { UnitData, UnitTypeENUM } from "../types/units";
 import { PowerENUM } from "../types/map";
 import { gameState } from "../gameState";
 import { getProvincePosition } from "../map/utils";
+import { cleanProvince } from "../types/unitOrders";
 
 // Get color for a power
 export function getPowerHexColor(power: PowerENUM | undefined): string {
@@ -161,7 +162,7 @@ function _addUnitsToBoard(phaseIndex: number) {
         let newUnit = createUnitMesh({
           power: PowerENUM[power.toUpperCase() as keyof typeof PowerENUM],
           type: UnitTypeENUM[match[1] as keyof typeof UnitTypeENUM],
-          province: match[2],
+          province: cleanProvince(match[2]),
         });
         gameState.scene.add(newUnit);
         gameState.unitMeshes.push(newUnit);

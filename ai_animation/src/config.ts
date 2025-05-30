@@ -12,5 +12,8 @@ export const config = {
   animationDuration: 1500,
 
   // How frequently to play sound effects (1 = every message, 3 = every third message)
-  soundEffectFrequency: 3
+  soundEffectFrequency: 3,
+
+  // Whether speech/TTS is enabled (can be toggled via debug menu)
+  speechEnabled: import.meta.env.VITE_DEBUG_MODE ? false : true
 }

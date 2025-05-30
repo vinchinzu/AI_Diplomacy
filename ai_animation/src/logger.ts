@@ -1,4 +1,6 @@
 import { gameState } from "./gameState";
+import { getPowerDisplayName } from './utils/powerNames';
+import { PowerENUM } from './types/map';
 
 class Logger {
   get infoPanel() {
@@ -34,18 +36,18 @@ class Logger {
       const scCounts = this.getSupplyCenterCounts();
 
       this.infoPanel.innerHTML = `
-        <div><strong>Power:</strong> <span class="power-${gameState.currentPower.toLowerCase()}">${gameState.currentPower}</span></div>
+        <div><strong>Power:</strong> <span class="power-${gameState.currentPower.toLowerCase()}">${getPowerDisplayName(gameState.currentPower)}</span></div>
         <div><strong>Current Phase:</strong> ${phaseName}</div>
         <hr/>
         <h4>Supply Center Counts</h4>
         <ul style="list-style:none;padding-left:0;margin:0;">
-          <li><span class="power-austria">Austria:</span> ${scCounts.AUSTRIA || 0}</li>
-          <li><span class="power-england">England:</span> ${scCounts.ENGLAND || 0}</li>
-          <li><span class="power-france">France:</span> ${scCounts.FRANCE || 0}</li>
-          <li><span class="power-germany">Germany:</span> ${scCounts.GERMANY || 0}</li>
-          <li><span class="power-italy">Italy:</span> ${scCounts.ITALY || 0}</li>
-          <li><span class="power-russia">Russia:</span> ${scCounts.RUSSIA || 0}</li>
-          <li><span class="power-turkey">Turkey:</span> ${scCounts.TURKEY || 0}</li>
+          <li><span class="power-austria">${getPowerDisplayName(PowerENUM.AUSTRIA)}:</span> ${scCounts.AUSTRIA || 0}</li>
+          <li><span class="power-england">${getPowerDisplayName(PowerENUM.ENGLAND)}:</span> ${scCounts.ENGLAND || 0}</li>
+          <li><span class="power-france">${getPowerDisplayName(PowerENUM.FRANCE)}:</span> ${scCounts.FRANCE || 0}</li>
+          <li><span class="power-germany">${getPowerDisplayName(PowerENUM.GERMANY)}:</span> ${scCounts.GERMANY || 0}</li>
+          <li><span class="power-italy">${getPowerDisplayName(PowerENUM.ITALY)}:</span> ${scCounts.ITALY || 0}</li>
+          <li><span class="power-russia">${getPowerDisplayName(PowerENUM.RUSSIA)}:</span> ${scCounts.RUSSIA || 0}</li>
+          <li><span class="power-turkey">${getPowerDisplayName(PowerENUM.TURKEY)}:</span> ${scCounts.TURKEY || 0}</li>
         </ul>
       `;
 

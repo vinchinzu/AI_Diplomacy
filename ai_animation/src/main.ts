@@ -10,15 +10,14 @@ import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase,
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
+import { closeTwoPowerConversation, showTwoPowerConversation } from "./components/twoPowerConversation";
+import { PowerENUM } from "./types/map";
+import { debugMenuInstance } from "./debug/debugMenu";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
 
-const isDebugMode = config.isDebugMode;
 const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
-
-let prevPos
-
 
 // --- INITIALIZE SCENE ---
 function initScene() {
@@ -45,8 +44,16 @@ function initScene() {
       gameState.cameraPanAnim = createCameraPan()
 
       // Load default game file if in debug mode
-      if (isDebugMode || isStreamingMode) {
+      if (config.isDebugMode || isStreamingMode) {
         gameState.loadGameFile(0);
+
+        // Initialize info panel
+        logger.updateInfoPanel();
+      }
+
+      // Initialize debug menu if in debug mode
+      if (config.isDebugMode) {
+        debugMenuInstance.show();
       }
       if (isStreamingMode) {
         setTimeout(() => {
@@ -55,7 +62,6 @@ function initScene() {
       }
     })
   }).catch(err => {
-    console.error("Error loading coordinates:", err);
     // Use console.error instead of logger.log to avoid updating the info panel
     console.error(`Error loading coords: ${err.message}`);
   });
@@ -66,8 +72,6 @@ function initScene() {
   // Kick off animation loop
   animate();
 
-  // Initialize info panel
-  logger.updateInfoPanel();
 }
 
 function createCameraPan(): Group {
@@ -110,11 +114,8 @@ function createCameraPan(): Group {
  * Handles camera movement, animations, and game state transitions
  */
 function animate() {
+
   requestAnimationFrame(animate);
-
-  // Store previous position as a new Vector3 to avoid reference issues
-  prevPos = new THREE.Vector3().copy(gameState.camera.position);
-
   if (gameState.isPlaying) {
     // Update the camera angle
     // FIXME: This has to call the update functino twice inorder to avoid a bug in Tween.js, see here  https://github.com/tweenjs/tween.js/issues/677
@@ -171,6 +172,7 @@ function animate() {
 
   gameState.camControls.update();
   gameState.renderer.render(gameState.scene, gameState.camera);
+
 }
 
 
@@ -259,6 +261,7 @@ prevBtn.addEventListener('click', () => {
   previousPhase()
 });
 nextBtn.addEventListener('click', () => {
+  // FIXME: Need to have this wait until all animations are complete, trying to click next when still animating results in not finding units where they should be.
   nextPhase()
 });
 
@@ -272,6 +275,7 @@ speedSelector.addEventListener('change', e => {
     gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
   }
 });
+
 
 // --- BOOTSTRAP ON PAGE LOAD ---
 window.addEventListener('load', initScene);

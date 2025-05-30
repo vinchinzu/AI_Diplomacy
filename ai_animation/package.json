@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "lint": "tsc --noEmit"
   },
   "devDependencies": {
     "@vitest/ui": "^3.1.4",

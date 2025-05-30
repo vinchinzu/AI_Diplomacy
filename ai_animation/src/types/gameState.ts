@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PowerENUMSchema } from './map';
+import { PowerENUM, PowerENUMSchema } from './map';
 import { OrderFromString } from './unitOrders';
 import { ProvinceENUMSchema } from './map';
 
@@ -17,8 +17,15 @@ const GameState = z.record(ProvinceENUMSchema, z.object({
   //unit: z.object({}).optional()
 }))
 
+const MessageSchema = z.object({
+  sender: PowerENUMSchema,
+  recipient: PowerENUMSchema,
+  time_sent: z.number(),
+  phase: z.string(),
+  message: z.string()
+})
 const PhaseSchema = z.object({
-  messages: z.array(z.any()),
+  messages: z.array(MessageSchema),
   name: z.string(),
   orders: z.record(PowerENUMSchema, z.array(OrderFromString).nullable()),
   results: z.record(z.string(), z.array(z.any())).transform((originalResults) => {
@@ -60,6 +67,7 @@ const PhaseSchema = z.object({
 export const GameSchema = z.object({
   map: z.string(),
   id: z.string(),
+  power: PowerENUMSchema.optional(),
   phases: z.array(PhaseSchema),
 });
 

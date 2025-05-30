@@ -2,7 +2,14 @@ import * as THREE from "three";
 import { gameState } from "../gameState";
 import { config } from "../config";
 import { advanceToNextPhase } from "../phase";
+import { getPowerDisplayName, getAllPowerDisplayNames } from '../utils/powerNames';
+import { PowerENUM } from '../types/map';
+import { isInstantChatEnabled } from '../debug/instantChat';
 
+
+//TODO: Sometimes the LLMs use lists, and they don't work in the chats. The just appear as bullets within a single line.
+//
+//TODO: We are getting a mixing of chats from different phases. In game 0, F1902M starts using chat before S1902M finishes
 let faceIconCache = {}; // Cache for generated face icons
 
 // Add a message counter to track sound effect frequency
@@ -19,13 +26,13 @@ export function createChatWindows() {
   chatWindows = {};
 
   // Create a chat window for each power (except the current power)
-  const powers = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY'];
+  const powers = [PowerENUM.AUSTRIA, PowerENUM.ENGLAND, PowerENUM.FRANCE, PowerENUM.GERMANY, PowerENUM.ITALY, PowerENUM.RUSSIA, PowerENUM.TURKEY];
 
   // Filter out the current power for chat windows
   const otherPowers = powers.filter(power => power !== gameState.currentPower);
 
   // Add a GLOBAL chat window first
-  createChatWindow('GLOBAL', true);
+  createChatWindow(PowerENUM.GLOBAL, true);
 
   // Create chat windows for each power except the current one
   otherPowers.forEach(power => {
@@ -56,10 +63,10 @@ function createChatWindow(power, isGlobal = false) {
   const titleElement = document.createElement('span');
   if (isGlobal) {
     titleElement.style.color = '#ffffff';
-    titleElement.textContent = 'GLOBAL';
+    titleElement.textContent = getPowerDisplayName(PowerENUM.GLOBAL);
   } else {
     titleElement.className = `power-${power.toLowerCase()}`;
-    titleElement.textContent = power;
+    titleElement.textContent = getPowerDisplayName(power as PowerENUM);
   }
   titleElement.style.fontWeight = 'bold'; // Make text more prominent
   titleElement.style.textShadow = '1px 1px 2px rgba(0,0,0,0.7)'; // Add text shadow for better readability
@@ -161,8 +168,8 @@ export function updateChatWindows(phase: any, stepMessages = false) {
     console.log(`Found ${relevantMessages.length} messages for player ${gameState.currentPower} in phase ${phase.name}`);
   }
 
-  if (!stepMessages) {
-    // Normal mode: show all messages at once
+  if (!stepMessages || isInstantChatEnabled()) {
+    // Normal mode or instant chat mode: show all messages at once
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
       if (isNew) {
@@ -172,6 +179,65 @@ export function updateChatWindows(phase: any, stepMessages = false) {
       }
     });
     gameState.messagesPlaying = false;
+
+    // If instant chat is enabled during stepwise mode, immediately proceed to next phase logic
+    if (stepMessages && isInstantChatEnabled()) {
+      // Trigger the same logic as the end of stepwise message display
+      if (gameState.isPlaying && !gameState.isSpeaking) {
+        if (gameState.gameData && gameState.gameData.phases) {
+          const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
+
+          if (config.isDebugMode) {
+            console.log(`Instant chat enabled - processing end of phase ${currentPhase.name}`);
+          }
+
+          // Show summary first if available
+          if (currentPhase.summary?.trim()) {
+            addToNewsBanner(`(${currentPhase.name}) ${currentPhase.summary}`);
+          }
+
+          // Get previous phase for animations
+          const prevIndex = gameState.phaseIndex > 0 ? gameState.phaseIndex - 1 : null;
+          const previousPhase = prevIndex !== null ? gameState.gameData.phases[prevIndex] : null;
+
+          // Only schedule next phase if not already scheduled
+          if (!gameState.nextPhaseScheduled) {
+            gameState.nextPhaseScheduled = true;
+
+            // Show animations for current phase's orders
+            if (previousPhase) {
+              if (config.isDebugMode) {
+                console.log(`Animating orders from ${previousPhase.name} to ${currentPhase.name}`);
+              }
+
+              // After animations complete, advance to next phase with longer delay
+              gameState.playbackTimer = setTimeout(() => {
+                if (gameState.isPlaying) {
+                  if (config.isDebugMode) {
+                    console.log(`Animations complete, advancing from ${currentPhase.name}`);
+                  }
+                  advanceToNextPhase();
+                }
+              }, config.playbackSpeed + config.animationDuration); // Wait for both summary and animations
+            } else {
+              // For first phase, use shorter delay since there are no animations
+              if (config.isDebugMode) {
+                console.log(`First phase ${currentPhase.name} - no animations to wait for`);
+              }
+
+              gameState.playbackTimer = setTimeout(() => {
+                if (gameState.isPlaying) {
+                  if (config.isDebugMode) {
+                    console.log(`Advancing from first phase ${currentPhase.name}`);
+                  }
+                  advanceToNextPhase();
+                }
+              }, config.playbackSpeed); // Only wait for summary, no animation delay
+            }
+          }
+        }
+      }
+    }
   } else {
     // Stepwise mode: show one message at a time, animating word-by-word
     gameState.messagesPlaying = true;
@@ -325,7 +391,7 @@ function addMessageToChat(msg, phaseName, animateWords = false, onComplete = nul
     const headerSpan = document.createElement('span');
     headerSpan.style.fontWeight = 'bold';
     headerSpan.className = `power-${senderColor}`;
-    headerSpan.textContent = `${msg.sender}: `;
+    headerSpan.textContent = `${getPowerDisplayName(msg.sender as PowerENUM)}: `;
     messageElement.appendChild(headerSpan);
 
     // Create a span for the message content that will be filled word by word
@@ -550,17 +616,18 @@ async function generateFaceIcon(power) {
   offCamera.position.set(0, 0, 50);
 
   // Power-specific colors with higher contrast/saturation
-  const colorMap = {
-    'GLOBAL': 0xf5f5f5, // Brighter white
-    'AUSTRIA': 0xff0000, // Brighter red
-    'ENGLAND': 0x0000ff, // Brighter blue
-    'FRANCE': 0x00bfff, // Brighter cyan
-    'GERMANY': 0x1a1a1a, // Darker gray for better contrast
-    'ITALY': 0x00cc00, // Brighter green
-    'RUSSIA': 0xe0e0e0, // Brighter gray
-    'TURKEY': 0xffcc00  // Brighter yellow
+  const colorMap: Record<PowerENUM, number> = {
+    [PowerENUM.GLOBAL]: 0xf5f5f5, // Brighter white
+    [PowerENUM.AUSTRIA]: 0xff0000, // Brighter red
+    [PowerENUM.ENGLAND]: 0x0000ff, // Brighter blue
+    [PowerENUM.FRANCE]: 0x00bfff, // Brighter cyan
+    [PowerENUM.GERMANY]: 0x1a1a1a, // Darker gray for better contrast
+    [PowerENUM.ITALY]: 0x00cc00, // Brighter green
+    [PowerENUM.RUSSIA]: 0xe0e0e0, // Brighter gray
+    [PowerENUM.TURKEY]: 0xffcc00, // Brighter yellow
+    [PowerENUM.EUROPE]: 0xf5f5f5, // Same as global
   };
-  const headColor = colorMap[power] || 0x808080;
+  const headColor = colorMap[power as PowerENUM] || 0x808080;
 
   // Larger head geometry
   const headGeom = new THREE.BoxGeometry(20, 20, 20); // Increased from 16x16x16
