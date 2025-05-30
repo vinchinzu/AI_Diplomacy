@@ -2,7 +2,7 @@ import { gameState } from "./gameState";
 import { logger } from "./logger";
 import { updatePhaseDisplay } from "./domElements";
 import { initUnits } from "./units/create";
-import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership } from "./map/state";
+import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership, updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
 import { createAnimationsForNextPhase } from "./units/animate";
 import { speakSummary } from "./speech";
@@ -16,7 +16,7 @@ const MOMENT_THRESHOLD = 8.0
 const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode ? 5000 : 30000
 
 // FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
-function _setPhase(phaseIndex: number) {
+export function _setPhase(phaseIndex: number) {
   if (config.isDebugMode) {
     debugMenuInstance.updateTools()
   }
@@ -29,7 +29,9 @@ function _setPhase(phaseIndex: number) {
     // We're moving more than one Phase forward, or any number of phases backward, to do so clear the board and reInit the units on the correct phase
     gameState.unitAnimations = [];
     initUnits(phaseIndex)
-    displayPhase()
+    gameState.phaseIndex = phaseIndex
+    updateMapOwnership()
+    updatePhaseDisplay()
   } else {
     // Clear any existing animations to prevent overlap
     if (gameState.playbackTimer) {
@@ -46,16 +48,16 @@ function _setPhase(phaseIndex: number) {
     if (config.isDebugMode && gameState.gameData) {
       console.log(`Moving to phase ${gameState.gameData.phases[gameState.phaseIndex].name}`);
     }
+
+    if (phaseIndex === gameLength - 1) {
+      displayFinalPhase()
+    } else {
+      displayPhase()
+    }
   }
 
   // Finally, update the gameState with the current phaseIndex
   gameState.phaseIndex = phaseIndex
-  // If we're at the end of the game, don't attempt to animate. 
-  if (phaseIndex === gameLength - 1) {
-    displayFinalPhase()
-  } else {
-    displayPhase()
-  }
 }
 
 

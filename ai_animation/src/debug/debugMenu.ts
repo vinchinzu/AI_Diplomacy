@@ -7,6 +7,7 @@ import { updateNextMomentDisplay, initNextMomentTool } from "./nextMoment";
 import { initDebugProvinceHighlighting } from "./provinceHighlight";
 import { initInstantChatTool } from "./instantChat";
 import { initSpeechToggleTool } from "./speechToggle";
+import { initShowRandomMomentTool, updateMomentStatus } from "./showRandomMoment";
 
 export class DebugMenu {
   private toggleBtn: HTMLButtonElement;
@@ -176,11 +177,13 @@ export class DebugMenu {
     initSpeechToggleTool(this);
     initInstantChatTool(this);
     initNextMomentTool(this);
+    initShowRandomMomentTool(this);
     initDebugProvinceHighlighting()
   }
 
   public updateTools(): void {
-    updateNextMomentDisplay()
+    updateNextMomentDisplay();
+    updateMomentStatus();
   }
 }
 
