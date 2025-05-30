@@ -715,8 +715,14 @@ PROVIDE YOUR NARRATIVE BELOW:"""
         """Generate the full analysis report matching the exact format of existing reports"""
         # Generate output path if not provided
         if not output_path:
+            # Create game_moments directory in project root
+            game_moments_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "game_moments"
+            game_moments_dir.mkdir(exist_ok=True)
+            
+            # Extract game name from results folder
+            results_name = os.path.basename(os.path.normpath(str(self.results_folder)))
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = self.results_folder / f"game_moments_report_{timestamp}.md"
+            output_path = game_moments_dir / f"{results_name}_report_{timestamp}.md"
         
         # Ensure the parent directory exists
         output_path = Path(output_path)
@@ -836,6 +842,87 @@ Game: {self.game_data_path}
         
         logger.info(f"Report generated: {output_path}")
         return str(output_path)
+    
+    def save_json_results(self, output_path: Optional[str] = None) -> str:
+        """Save all moments and lies as JSON for further analysis"""
+        # Generate output path if not provided
+        if not output_path:
+            # Create game_moments directory in project root
+            game_moments_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "game_moments"
+            game_moments_dir.mkdir(exist_ok=True)
+            
+            # Extract game name from results folder
+            results_name = os.path.basename(os.path.normpath(str(self.results_folder)))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = game_moments_dir / f"{results_name}_data_{timestamp}.json"
+        
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Prepare comprehensive data for JSON serialization
+        full_data = {
+            "metadata": {
+                "game_results_folder": str(self.results_folder),
+                "analysis_timestamp": datetime.now().isoformat(),
+                "model_used": self.model_name,
+                "game_data_path": str(self.game_data_path),
+                "power_to_model": self.power_to_model
+            },
+            "analysis_results": {
+                "moments": [self._moment_to_dict(moment) for moment in self.moments],
+                "lies": [asdict(lie) for lie in self.lies],
+                "invalid_moves_by_model": self.invalid_moves_by_model
+            },
+            "summary": {
+                "total_moments": len(self.moments),
+                "total_lies": len(self.lies),
+                "moments_by_category": {
+                    "BETRAYAL": len([m for m in self.moments if m.category == "BETRAYAL"]),
+                    "COLLABORATION": len([m for m in self.moments if m.category == "COLLABORATION"]),
+                    "PLAYING_BOTH_SIDES": len([m for m in self.moments if m.category == "PLAYING_BOTH_SIDES"]),
+                    "BRILLIANT_STRATEGY": len([m for m in self.moments if m.category == "BRILLIANT_STRATEGY"]),
+                    "STRATEGIC_BLUNDER": len([m for m in self.moments if m.category == "STRATEGIC_BLUNDER"])
+                },
+                "lies_by_power": {},
+                "intentional_lies": len([l for l in self.lies if l.intentional]),
+                "unintentional_lies": len([l for l in self.lies if not l.intentional]),
+                "score_distribution": {
+                    "9-10": len([m for m in self.moments if m.interest_score >= 9]),
+                    "7-8": len([m for m in self.moments if 7 <= m.interest_score < 9]),
+                    "4-6": len([m for m in self.moments if 4 <= m.interest_score < 7]),
+                    "1-3": len([m for m in self.moments if m.interest_score < 4])
+                }
+            },
+            "phases_analyzed": list(set(moment.phase for moment in self.moments))
+        }
+        
+        # Count lies by power
+        for lie in self.lies:
+            if lie.liar not in full_data["summary"]["lies_by_power"]:
+                full_data["summary"]["lies_by_power"][lie.liar] = 0
+            full_data["summary"]["lies_by_power"][lie.liar] += 1
+        
+        # Write to file with proper formatting
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(full_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"JSON results saved: {output_path}")
+        return str(output_path)
+    
+    def _moment_to_dict(self, moment: GameMoment) -> dict:
+        """Convert a GameMoment to a dictionary with all fields"""
+        return {
+            "phase": moment.phase,
+            "category": moment.category,
+            "powers_involved": moment.powers_involved,
+            "promise_agreement": moment.promise_agreement,
+            "actual_action": moment.actual_action,
+            "impact": moment.impact,
+            "interest_score": moment.interest_score,
+            "raw_messages": moment.raw_messages,
+            "raw_orders": moment.raw_orders,
+            "diary_context": moment.diary_context
+        }
 
 async def main():
     """Main entry point for the script"""
@@ -844,7 +931,8 @@ async def main():
     parser.add_argument('--model', default='openrouter-google/gemini-2.5-flash-preview',
                        help='Model to use for analysis')
     parser.add_argument('--max-phases', type=int, help='Maximum number of phases to analyze')
-    parser.add_argument('--output', help='Output file path for the report')
+    parser.add_argument('--output', help='Output file path for the markdown report')
+    parser.add_argument('--json', help='Output file path for the JSON data')
     
     args = parser.parse_args()
     
@@ -857,10 +945,43 @@ async def main():
     # Analyze game
     await analyzer.analyze_game(max_phases=args.max_phases)
     
-    # Generate report
-    report_path = await analyzer.generate_report(args.output)
+    # Generate coordinated outputs
+    # If neither output path is specified, generate both with matching timestamps
+    if not args.output and not args.json:
+        # Create game_moments directory in project root
+        game_moments_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "game_moments"
+        game_moments_dir.mkdir(exist_ok=True)
+        
+        # Extract game name from results folder
+        results_name = os.path.basename(os.path.normpath(args.results_folder))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Generate both paths with same timestamp
+        report_path = game_moments_dir / f"{results_name}_report_{timestamp}.md"
+        json_path = game_moments_dir / f"{results_name}_data_{timestamp}.json"
+        
+        # Generate both outputs
+        report_path = await analyzer.generate_report(report_path)
+        json_path = analyzer.save_json_results(json_path)
+    else:
+        # Generate outputs with specified paths
+        report_path = await analyzer.generate_report(args.output)
+        json_path = analyzer.save_json_results(args.json) if args.json else None
     
-    print(f"Analysis complete! Report saved to: {report_path}")
+    # Print summary
+    print(f"\nAnalysis Complete!")
+    print(f"Found {len(analyzer.moments)} key moments")
+    print(f"Detected {len(analyzer.lies)} lies")
+    print(f"\nReport saved to: {report_path}")
+    if json_path:
+        print(f"JSON data saved to: {json_path}")
+    
+    # Show score distribution
+    print("\nScore Distribution:")
+    print(f"  Scores 9-10: {len([m for m in analyzer.moments if m.interest_score >= 9])}")
+    print(f"  Scores 7-8: {len([m for m in analyzer.moments if 7 <= m.interest_score < 9])}")
+    print(f"  Scores 4-6: {len([m for m in analyzer.moments if 4 <= m.interest_score < 7])}")
+    print(f"  Scores 1-3: {len([m for m in analyzer.moments if m.interest_score < 4])}")
 
 if __name__ == "__main__":
     asyncio.run(main())
