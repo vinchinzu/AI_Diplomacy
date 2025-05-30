@@ -38,6 +38,7 @@ def mock_llm_response():
     return response
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_record_usage_success(mock_llm_response, test_db_path):
     await llm_coordinator.record_usage("game1", "agent1", "phase1", mock_llm_response)
@@ -50,6 +51,7 @@ async def test_record_usage_success(mock_llm_response, test_db_path):
         assert row == ("game1", "agent1", "phase1", "test_model", 100, 50)
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_record_usage_sqlite_error_on_insert(mock_llm_response, test_db_path, caplog):
     with patch("sqlite3.connect") as mock_connect:
@@ -62,6 +64,7 @@ async def test_record_usage_sqlite_error_on_insert(mock_llm_response, test_db_pa
         assert "SQLite error in record_usage: Simulated DB insert error" in caplog.text
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_record_usage_attribute_error_on_response(caplog): # mock_llm_response not needed here
     faulty_response = MagicMock()
@@ -80,6 +83,7 @@ async def test_record_usage_attribute_error_on_response(caplog): # mock_llm_resp
     assert "Error accessing response attributes in record_usage" in caplog.text
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_record_usage_generic_exception(mock_llm_response, test_db_path, caplog):
     async def mock_usage_exception():
@@ -104,6 +108,7 @@ def setup_basic_usage_data(db_path):
         conn.commit()
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_get_usage_stats_by_country_success(test_db_path):
     setup_basic_usage_data(test_db_path)
     stats = llm_coordinator.get_usage_stats_by_country("game1")
@@ -121,12 +126,14 @@ def test_get_usage_stats_by_country_success(test_db_path):
     assert "modelY" in stats["agentB"]["models"]
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_get_usage_stats_by_country_no_data_for_game(test_db_path):
     setup_basic_usage_data(test_db_path)
     stats = llm_coordinator.get_usage_stats_by_country("game_nonexistent")
     assert stats == {}
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_get_usage_stats_by_country_sqlite_error(test_db_path, caplog):
     with patch("sqlite3.connect") as mock_connect:
         mock_conn_instance = MagicMock()
@@ -138,6 +145,7 @@ def test_get_usage_stats_by_country_sqlite_error(test_db_path, caplog):
         assert "Error getting usage stats: Simulated DB query error" in caplog.text
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_get_total_usage_stats_success(test_db_path):
     setup_basic_usage_data(test_db_path)
     stats = llm_coordinator.get_total_usage_stats("game1")
@@ -147,12 +155,14 @@ def test_get_total_usage_stats_success(test_db_path):
     assert stats["total_output_tokens"] == 85
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_get_total_usage_stats_no_data_for_game(test_db_path):
     setup_basic_usage_data(test_db_path)
     stats = llm_coordinator.get_total_usage_stats("game_nonexistent")
     assert stats == {"total_api_calls": 0, "total_input_tokens": 0, "total_output_tokens": 0}
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_get_total_usage_stats_sqlite_error(test_db_path, caplog):
     with patch("sqlite3.connect") as mock_connect:
         mock_conn_instance = MagicMock()
@@ -164,6 +174,7 @@ def test_get_total_usage_stats_sqlite_error(test_db_path, caplog):
         assert "Error getting total usage stats: Simulated DB total query error" in caplog.text
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_initialize_database_success(tmp_path): # tmp_path here is fine, test_db_path fixture not strictly needed if we manage path locally
     db_file = tmp_path / "init_test.db"
     if db_file.exists():
@@ -184,6 +195,7 @@ def test_initialize_database_success(tmp_path): # tmp_path here is fine, test_db
         llm_coordinator.DATABASE_PATH = original_db_path # Restore
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_initialize_database_failure(tmp_path, caplog, monkeypatch):
     non_existent_path = tmp_path / "non_writeable_dir" / "fail.db"
     # monkeypatch is better than direct modification for restoring

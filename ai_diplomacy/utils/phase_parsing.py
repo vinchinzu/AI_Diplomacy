@@ -51,7 +51,7 @@ def get_phase_type_from_game(game: "Game") -> str:
         return "-"
 
     parts = phase_str_upper.split()
-    year_val = _extract_year_from_phase(phase_str_orig)
+    year_val = extract_year_from_phase(phase_str_orig)
 
     first_part_is_valid_season_or_compact_season_year = True # Default true for single-word/compact forms
     if len(parts) > 1 and year_val is not None:
@@ -59,7 +59,7 @@ def get_phase_type_from_game(game: "Game") -> str:
         if _is_valid_season_keyword(parts[0]):
             first_part_is_valid_season_or_compact_season_year = True
         # Check if the first part is a season initial + year e.g. "F1903" from "F1903 RET"
-        elif len(parts[0]) > 0 and parts[0][0] in VALID_SEASON_INITIALS and _extract_year_from_phase(parts[0]) == year_val:
+        elif len(parts[0]) > 0 and parts[0][0] in VALID_SEASON_INITIALS and extract_year_from_phase(parts[0]) == year_val:
             first_part_is_valid_season_or_compact_season_year = True
         else:
             first_part_is_valid_season_or_compact_season_year = False

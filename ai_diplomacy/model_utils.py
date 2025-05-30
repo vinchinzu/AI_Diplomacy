@@ -96,6 +96,8 @@ def assign_models_to_powers(game_config: "GameConfig", all_game_powers: List[str
 
     if game_config.randomize_fixed_models:
         random.shuffle(candidate_powers_for_filling_slots)
+    else:
+        candidate_powers_for_filling_slots.sort() # Ensure deterministic order
 
     fixed_models_cli_list = (
         list(game_config.fixed_models) if game_config.fixed_models else []

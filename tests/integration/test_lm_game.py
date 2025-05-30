@@ -389,6 +389,7 @@ class GameTester:
 # --- Pytest Test Functions ---
 
 @pytest.mark.integration
+@pytest.mark.slow 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]
@@ -423,6 +424,7 @@ async def test_single_round_scenario(execution_mode, request: pytest.FixtureRequ
     assert success, f"Single round scenario failed in {execution_mode} mode."
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]
@@ -453,6 +455,7 @@ async def test_order_generation_scenario(
     )
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]
@@ -483,6 +486,7 @@ async def test_sequential_calls_scenario(
     )
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "execution_mode", ["mock"]

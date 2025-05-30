@@ -1,5 +1,6 @@
 import unittest
 from ai_diplomacy.agents.agent_state import DiplomacyAgentState
+from ai_diplomacy import constants # Import constants
 
 class TestDiplomacyAgentState(unittest.TestCase):
 
@@ -8,7 +9,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
         self.test_country = "ENGLAND"
         self.state = DiplomacyAgentState(self.test_country)
         # Ensure ALL_POWERS for tests is consistent with the class
-        self.all_powers_set = DiplomacyAgentState.ALL_POWERS 
+        self.all_powers_set = constants.ALL_POWERS # Use imported constant
 
     def test_initialization(self):
         self.assertEqual(self.state.country, self.test_country)

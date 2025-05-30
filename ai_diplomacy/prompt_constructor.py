@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Any  # Added Any for game type placehol
 from .prompt_utils import load_prompt  # Changed from .utils to .prompt_utils
 from .possible_order_context import generate_rich_order_context
 from .game_history import GameHistory  # Assuming GameHistory is correctly importable
-from .. import constants # Import constants
+from . import constants # Import constants
 
 # placeholder for diplomacy.Game to avoid circular or direct dependency if not needed for typehinting only
 # from diplomacy import Game # Uncomment if 'Game' type hint is crucial and available

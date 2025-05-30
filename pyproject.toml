@@ -60,9 +60,7 @@ namespaces = false
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
-markers = [
-    "integration: Marks tests as integration tests (deselect with -m 'not integration')",
-]
+# markers array removed, moved to pytest.ini
 addopts = "-m \"not integration\" --strict-markers -q -ra --cov=ai_diplomacy --cov-report=term-missing:skip-covered --cov-report=html"
 testpaths = ["tests"]
 

@@ -3,12 +3,13 @@ import llm
 
 # AgentLLMInterface was removed in refactor
 # from ai_diplomacy.services.llm_coordinator import LLMCoordinator # No longer needed directly if FakeLLMCoordinator is used
-from tests._diplomacy_fakes import FakeLLMCoordinator # Added import
+from tests.fakes import FakeLLMCoordinator # Added import
 
 MODEL_ID = "gemma3:latest"  # Or your specific model
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.skipif(
     MODEL_ID not in llm.get_model_aliases(),
     reason=f"Local model {MODEL_ID} not installed or not found by llm library",

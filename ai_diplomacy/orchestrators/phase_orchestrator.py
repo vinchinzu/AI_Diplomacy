@@ -8,7 +8,7 @@ from ..agents.llm_agent import LLMAgent # Adjusted import
 from ..core.state import PhaseState # Adjusted import
 from ..agents.base import BaseAgent, Order, Message # Adjusted import
 from ..services.config import GameConfig # Adjusted import
-from ..utils.phase_parsing import get_phase_type_from_game, _extract_year_from_phase, PhaseType # Adjusted import
+from ..utils.phase_parsing import get_phase_type_from_game, extract_year_from_phase, PhaseType # Adjusted import
 
 # Import actual strategy classes
 from .movement import MovementPhaseStrategy
@@ -98,7 +98,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
                 current_phase_val = getattr(game, "phase", constants.DEFAULT_PHASE_NAME)
                 current_year = getattr(game, "year", None)
                 if current_year is None:
-                    current_year = _extract_year_from_phase(current_phase_val)
+                    current_year = extract_year_from_phase(current_phase_val)
 
                 if (
                     self.config.max_years
@@ -163,7 +163,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
 
                 current_year = getattr(game, "year", None)
                 if current_year is None:
-                    current_year = _extract_year_from_phase(current_phase_val)
+                    current_year = extract_year_from_phase(current_phase_val)
                 if (
                     self.config.max_years
                     and current_year is not None
@@ -263,7 +263,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
             elif agent:
                 logger.debug(f"Skipping state update for non-LLMAgent {power_name}")
         current_phase = game.get_current_phase()
-        current_year = _extract_year_from_phase(current_phase)
+        current_year = extract_year_from_phase(current_phase)
         if current_year is not None and current_year > 1902:
             year_to_consolidate = str(current_year - 2)
             logger.info(f"Checking for diary consolidation for year {year_to_consolidate}.")

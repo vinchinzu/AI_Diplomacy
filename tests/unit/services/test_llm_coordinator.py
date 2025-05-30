@@ -7,6 +7,7 @@ import logging
 # Assuming llm_coordinator.py is in ai_diplomacy.services
 from ai_diplomacy.services import llm_coordinator # llm_coordinator module itself for patching llm.get_async_model
 from ai_diplomacy.services.llm_coordinator import LLMCallResult, LLMCoordinator, ModelPool
+from ai_diplomacy import constants # Import constants at the top
 
 # DB-related fixtures and tests have been moved to tests/integration/services/test_llm_coordinator_db.py
 
@@ -128,6 +129,8 @@ async def test_llmcoordinator_call_text_default_game_phase(coordinator):
     model_id = "another_model"
     agent_id = "another_agent"
     
+    # constants is now imported at the top of the file
+
     await coordinator.call_text(
         prompt=prompt,
         model_id=model_id,
@@ -136,9 +139,9 @@ async def test_llmcoordinator_call_text_default_game_phase(coordinator):
     )
     
     mock_custom_llm_caller.assert_called_once_with(
-        game_id="default",
+            game_id=constants.DEFAULT_GAME_ID,
         agent_name=agent_id,
-        phase_str="unknown",
+            phase_str=constants.DEFAULT_PHASE_NAME,
         model_id=model_id,
         prompt=prompt,
         system_prompt=None
@@ -149,6 +152,8 @@ async def test_llmcoordinator_call_text_default_game_phase(coordinator):
 async def test_llmcoordinator_call_text_propagates_exception(coordinator):
     mock_custom_llm_caller = AsyncMock(side_effect=ValueError("LLM Internal Error"))
     
+    # constants is now imported at the top of the file
+
     with pytest.raises(ValueError, match="LLM Internal Error"):
         await coordinator.call_text(
             prompt="Error prompt",
@@ -158,9 +163,9 @@ async def test_llmcoordinator_call_text_propagates_exception(coordinator):
         )
     
     mock_custom_llm_caller.assert_called_once_with(
-        game_id="default",
+            game_id=constants.DEFAULT_GAME_ID,
         agent_name="error_agent",
-        phase_str="unknown",
+            phase_str=constants.DEFAULT_PHASE_NAME,
         model_id="error_model",
         prompt="Error prompt",
         system_prompt=None
@@ -187,13 +192,14 @@ async def test_llmcoordinator_call_json_success(mock_call_llm_with_json_parsing,
     )
     
     assert result == expected_dict
+    # constants is now imported at the top of the file
     mock_call_llm_with_json_parsing.assert_called_once_with(
         model_id="json_model",
         prompt="json prompt",
         system_prompt=None,
-        game_id="default",
+        game_id=constants.DEFAULT_GAME_ID,
         agent_name="json_agent",
-        phase_str="unknown",
+        phase_str=constants.DEFAULT_PHASE_NAME,
         expected_json_fields=["key", "orders"],
         llm_caller_override=None # Explicitly check it's passed as None
     )
