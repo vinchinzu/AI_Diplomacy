@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any  # Added Any for game type placehol
 from .prompt_utils import load_prompt  # Changed from .utils to .prompt_utils
 from .possible_order_context import generate_rich_order_context
 from .game_history import GameHistory  # Assuming GameHistory is correctly importable
+from .. import constants # Import constants
 
 # placeholder for diplomacy.Game to avoid circular or direct dependency if not needed for typehinting only
 # from diplomacy import Game # Uncomment if 'Game' type hint is crucial and available
@@ -47,7 +48,7 @@ def build_context_prompt(
     Returns:
         A string containing the formatted context.
     """
-    context_template = load_prompt("context_prompt.txt")
+    context_template = load_prompt(constants.PROMPT_TEMPLATE_CONTEXT)
 
     # === Agent State Debug Logging ===
     if agent_goals:
@@ -85,7 +86,7 @@ def build_context_prompt(
     units_lines = []
     for p, u in board_state["units"].items():
         if game.powers[p].is_eliminated():
-            units_lines.append(f"  {p}: {u} [ELIMINATED]")
+            units_lines.append(f"  {p}: {u} {constants.STATUS_ELIMINATED_PLAYER}")
         else:
             units_lines.append(f"  {p}: {u}")
     units_repr = "\n".join(units_lines)
@@ -94,7 +95,7 @@ def build_context_prompt(
     centers_lines = []
     for p, c in board_state["centers"].items():
         if game.powers[p].is_eliminated():
-            centers_lines.append(f"  {p}: {c} [ELIMINATED]")
+            centers_lines.append(f"  {p}: {c} {constants.STATUS_ELIMINATED_PLAYER}")
         else:
             centers_lines.append(f"  {p}: {c}")
     centers_repr = "\n".join(centers_lines)
@@ -153,9 +154,9 @@ def construct_order_generation_prompt(
     """
     # Load prompts
     _ = load_prompt(
-        "few_shot_example.txt"
+        constants.PROMPT_TEMPLATE_FEW_SHOT
     )  # Loaded but not used, as per original logic
-    instructions = load_prompt("order_instructions.txt")
+    instructions = load_prompt(constants.PROMPT_TEMPLATE_ORDER_INSTRUCTIONS)
 
     # Build the context prompt
     context = build_context_prompt(

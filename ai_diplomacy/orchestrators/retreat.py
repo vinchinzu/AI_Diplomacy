@@ -1,3 +1,9 @@
+"""
+Handles the strategy for the Retreat phase of a Diplomacy game.
+
+This module defines the RetreatPhaseStrategy class, which is responsible for
+collecting retreat orders from agents whose units must retreat.
+"""
 import logging
 import asyncio
 from typing import Dict, List, TYPE_CHECKING
@@ -9,11 +15,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["RetreatPhaseStrategy"]
+
 class RetreatPhaseStrategy:
     async def get_orders(
         self, game: "Game", orchestrator: "PhaseOrchestrator", game_history: "GameHistory"
     ) -> Dict[str, List[str]]:
-        """Handles the logic for a retreat phase."""
+        # Docstring already exists and is good.
         logger.info("Executing Retreat Phase actions via RetreatPhaseStrategy...")
         current_phase_name = game.get_current_phase()
         orders_by_power: Dict[str, List[str]] = {}

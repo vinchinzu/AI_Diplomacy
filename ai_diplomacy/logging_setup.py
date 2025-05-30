@@ -1,3 +1,10 @@
+"""
+Configures logging for the AI Diplomacy application.
+
+This module provides a function to set up root logger behavior,
+including log levels, formatting, console and file handlers, and
+a custom filter to manage verbosity of LLM-related logs.
+"""
 import logging
 import os
 import sys  # To get stdout for console handler
@@ -6,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .game_config import GameConfig
 
+__all__ = ["LLMVerboseFilter", "setup_logging"]
 
 class LLMVerboseFilter(logging.Filter):  # Removed comment: # Define the custom filter
     def __init__(self, name="", verbose_llm_debug=False):

@@ -1,3 +1,10 @@
+"""
+Utility functions for Large Language Model (LLM) interactions.
+
+This module provides helper functions for loading prompt files, cleaning and
+extracting JSON data from LLM text responses, and extracting specific
+structured information like relationships and goals from parsed JSON.
+"""
 import os
 import logging
 import re
@@ -8,6 +15,14 @@ import json_repair
 import json5
 
 logger = logging.getLogger(__name__)  # Removed comment: # Logger for this module
+
+__all__ = [
+    "load_prompt_file",
+    "clean_json_text",
+    "extract_json_from_text",
+    "extract_relationships",
+    "extract_goals",
+]
 
 # Constants for relationship extraction
 REL_KEYS = ("updated_relationships", "relationships", "relationship_updates")

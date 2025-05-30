@@ -1,15 +1,21 @@
+"""
+Manages the internal state of a Diplomacy agent.
+
+This module defines the DiplomacyAgentState class, which encapsulates
+an agent's goals, relationships with other powers, and private logs
+(journal and diary). It provides methods for updating and formatting this state.
+"""
 from typing import List, Dict, Any, FrozenSet
+from .. import constants # Import constants
+
+__all__ = ["DiplomacyAgentState"]
 
 class DiplomacyAgentState:
-    """
-    Manages the internal state of a Diplomacy agent, including relationships,
-    goals, and private logs.
-    """
+    # Class docstring already exists and is good.
 
-    ALL_POWERS: FrozenSet[str] = frozenset({
-        "AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"
-    })
-    ALLOWED_RELATIONSHIPS: List[str] = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
+    # ALL_POWERS and ALLOWED_RELATIONSHIPS are now sourced from constants.py
+    # However, they are used here for validation and default initialization logic.
+    # For validation, it's fine to reference them directly from constants.
 
     def __init__(self, country: str):
         """
@@ -18,13 +24,13 @@ class DiplomacyAgentState:
         Args:
             country (str): The country this state belongs to.
         """
-        if country not in self.ALL_POWERS:
-            raise ValueError(f"Invalid country '{country}'. Must be one of {self.ALL_POWERS}")
+        if country not in constants.ALL_POWERS: # Use constant for validation
+            raise ValueError(f"Invalid country '{country}'. Must be one of {constants.ALL_POWERS}")
 
         self.country: str = country
         self.goals: List[str] = []
         self.relationships: Dict[str, str] = {
-            power: "Neutral" for power in self.ALL_POWERS if power != self.country
+            power: "Neutral" for power in constants.ALL_POWERS if power != self.country # Use constant for iteration
         }
         self.private_journal: List[str] = []
         self.private_diary: List[str] = []
@@ -91,7 +97,7 @@ class DiplomacyAgentState:
             # This might indicate a logic error elsewhere if they are expected to always match.
             pass
 
-        relationship_levels = self.ALLOWED_RELATIONSHIPS
+        relationship_levels = constants.ALLOWED_RELATIONSHIPS # Use constant
         
         for event in events:
             event_type = event.get("type")

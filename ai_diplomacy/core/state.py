@@ -6,6 +6,7 @@ These provide a stable, frozen snapshot of game state without coupling to the fu
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, FrozenSet, Any
 
+__all__ = ["PhaseState"]
 
 @dataclass(frozen=True)
 class PhaseState:

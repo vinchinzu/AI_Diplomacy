@@ -1,5 +1,11 @@
-# ai_diplomacy/possible_order_context.py
+"""
+Provides functions to generate rich context about possible orders for AI agents.
 
+This module includes utilities for graph representation of the Diplomacy map,
+pathfinding (BFS), and functions to gather detailed information about units,
+supply centers, adjacencies, and potential threats or opportunities around
+a specific unit's location. This context is used to inform agent decision-making.
+"""
 from collections import deque
 from typing import Dict, List, Callable, Optional, Any, Set, Tuple
 from diplomacy.engine.map import Map as GameMap
@@ -17,6 +23,19 @@ BoardState = Dict[str, Any]  # board_state is consistently a dict from game.get_
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "BoardState",
+    "build_diplomacy_graph",
+    "bfs_shortest_path",
+    "get_unit_at_location",
+    "get_sc_controller",
+    "get_shortest_path_to_friendly_unit",
+    "get_nearest_enemy_units",
+    "get_nearest_uncontrolled_scs",
+    "get_adjacent_territory_details",
+    "generate_rich_order_context",
+    "get_enemy_unit_context_for_orders",
+]
 
 def build_diplomacy_graph(game_map: GameMap) -> Dict[str, Dict[str, List[str]]]:
     """

@@ -1,3 +1,11 @@
+"""
+General utility functions for the AI Diplomacy system.
+
+This module provides a collection of helper functions supporting various tasks
+such as order gathering, LLM response processing, order validation,
+and logging of LLM interactions. It also includes a custom exception
+for handling invalid LLM outputs.
+"""
 from dotenv import load_dotenv
 import logging
 import os
@@ -14,11 +22,21 @@ from .services.llm_coordinator import LLMCoordinator
 if TYPE_CHECKING:
     from .game_config import GameConfig
 
-logger = logging.getLogger("utils")
-logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("utils") # Consider using __name__
+# logger.setLevel(logging.INFO) # Logging level should be configured by application
+# logging.basicConfig(level=logging.INFO) # BasicConfig should be called once at application entry point
 
 load_dotenv()
+
+__all__ = [
+    "assign_models_to_powers", # Deprecated, but might be kept for a version
+    "gather_possible_orders",
+    "LLMInvalidOutputError",
+    "get_valid_orders",
+    "normalize_and_compare_orders",
+    "log_llm_response",
+    "normalize_order_for_game_map",
+]
 
 
 def assign_models_to_powers(fixed_models_str: Optional[str] = None) -> Dict[str, str]:

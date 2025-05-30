@@ -7,6 +7,7 @@ import random
 from typing import List, Dict, Any, Optional
 from .base import BaseAgent, Order, Message, PhaseState
 
+__all__ = ["ScriptedAgent"]
 
 class ScriptedAgent(BaseAgent):
     """

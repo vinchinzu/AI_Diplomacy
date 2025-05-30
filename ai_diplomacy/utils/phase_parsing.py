@@ -1,3 +1,10 @@
+"""
+Utilities for parsing Diplomacy game phase strings.
+
+This module provides an Enum for phase types (PhaseType) and functions
+to extract the phase type (e.g., Movement, Retreat, Build/Adjustment)
+and the year from standard Diplomacy game phase strings.
+"""
 import logging
 from typing import Optional, TYPE_CHECKING
 from enum import Enum
@@ -9,6 +16,14 @@ if TYPE_CHECKING:
 # It's good practice to have a module-level logger
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "PhaseType",
+    "get_phase_type_from_game",
+    "extract_year_from_phase",
+    "VALID_SEASON_KEYWORDS", # Might be useful externally
+    "VALID_SEASON_INITIALS", # Might be useful externally
+]
+
 VALID_SEASON_KEYWORDS = {
     "SPRING": "S", "SPR": "S",
     "SUMMER": "S", "SUM": "S", # Summer is often same as Spring for phases
@@ -19,9 +34,9 @@ VALID_SEASON_KEYWORDS = {
 VALID_SEASON_INITIALS = {"S", "F", "A", "W"}
 
 class PhaseType(Enum): # Moving PhaseType here as it's closely related to parsing
-    MVT = "M"
-    RET = "R"
-    BLD = "A"
+    MVT = "M" # Movement
+    RET = "R" # Retreat
+    BLD = "A" # Build / Adjustment
 
 def get_phase_type_from_game(game: "Game") -> str:
     """Extracts the phase type character from the current phase string (e.g., 'M', 'R', 'A')."""
@@ -119,7 +134,7 @@ def _is_valid_compact_form(phase_str: str, suffix: str) -> bool:
     year_part = prefix[1:5]
     return year_part.isdigit() and len(year_part) == 4
 
-def _extract_year_from_phase(phase_name: Optional[str]) -> Optional[int]:
+def extract_year_from_phase(phase_name: Optional[str]) -> Optional[int]: # Renamed to be public
     """Extracts the year as int from a phase string like 'S1901M' or 'SPRING 1901 MOVEMENT'."""
     if not phase_name:  # Handle None or empty string input first
         return None
@@ -131,7 +146,8 @@ def _extract_year_from_phase(phase_name: Optional[str]) -> Optional[int]:
 
     # Fallback for compact forms like S1901M if regex didn't catch it (e.g. no word boundaries)
     # and the phase_name is long enough and contains digits at expected place
-    if len(phase_name) >= 5 and phase_name[1:5].isdigit():
-        return int(phase_name[1:5])
+    if len(phase_name) >= 5 and phase_name[1:5].isdigit(): # Check if first char is a letter (season)
+        if phase_name[0].isalpha():
+            return int(phase_name[1:5])
 
     return None 

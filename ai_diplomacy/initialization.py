@@ -1,4 +1,12 @@
-# ai_diplomacy/initialization.py
+"""
+Handles the (now deprecated) initialization of agent states.
+
+This module contains functions that were previously used to initialize
+the internal state of agents, including their goals, relationships, and
+private diaries, often through concurrent LLM calls. These functions are
+being phased out in favor of initialization logic within the agent classes
+themselves or through the agent factory and configuration system.
+"""
 import logging
 from typing import TYPE_CHECKING, Dict, Any, Tuple
 
@@ -25,6 +33,8 @@ async def initialize_agent_state_ext(
     )
     return  # Early return - this function is deprecated
 
+# No public API is actively provided by this module due to deprecation.
+__all__ = []
 
 async def initialize_agent_state_concurrently(
     agent: "BaseAgent",

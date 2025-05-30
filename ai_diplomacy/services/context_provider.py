@@ -10,9 +10,17 @@ from dataclasses import dataclass
 
 from ..core.state import PhaseState
 from .config import AgentConfig
+from .. import constants # Import constants
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "ContextData",
+    "ContextProvider",
+    "InlineContextProvider",
+    "MCPContextProvider",
+    "ContextProviderFactory",
+]
 
 @dataclass
 class ContextData:
@@ -77,7 +85,7 @@ class InlineContextProvider(ContextProvider):
 
     def __init__(self):
         """Initialize the inline context provider."""
-        self.provider_type = "inline"
+        self.provider_type = constants.CONTEXT_PROVIDER_INLINE
         logger.info("InlineContextProvider initialized")
 
     async def provide_context(
@@ -114,23 +122,23 @@ class InlineContextProvider(ContextProvider):
 
             # Combine all context sections
             context_sections = [
-                "=== GAME STATE ===",
+                constants.CONTEXT_SECTION_HEADER_GAME_STATE,
                 phase_info,
                 "",
-                "=== YOUR POSSIBLE ORDERS ===",
+                constants.CONTEXT_SECTION_HEADER_POSSIBLE_ORDERS,
                 orders_info,
                 "",
-                "=== STRATEGIC ANALYSIS ===",
+                constants.CONTEXT_SECTION_HEADER_STRATEGIC_ANALYSIS,
                 strategic_info,
                 "",
-                "=== RECENT MESSAGES ===",
+                constants.CONTEXT_SECTION_HEADER_RECENT_MESSAGES,
                 messages_info,
             ]
 
             context_text = "\n".join(context_sections)
 
             return {
-                "provider_type": "inline",
+                "provider_type": constants.CONTEXT_PROVIDER_INLINE,
                 "context_text": context_text,
                 "tools_available": False,
             }
@@ -141,7 +149,7 @@ class InlineContextProvider(ContextProvider):
             )
             # Return minimal fallback context
             return {
-                "provider_type": "inline",
+                "provider_type": constants.CONTEXT_PROVIDER_INLINE,
                 "context_text": f"Context generation failed: {e}",
                 "tools_available": False,
             }
@@ -176,7 +184,7 @@ class InlineContextProvider(ContextProvider):
         lines.append("All Powers Status:")
         for power in sorted(phase_state.powers):
             if phase_state.is_power_eliminated(power):
-                status = "[ELIMINATED]"
+                status = constants.STATUS_ELIMINATED_PLAYER
             else:
                 center_count = phase_state.get_center_count(power)
                 unit_count = len(phase_state.get_power_units(power))
@@ -237,7 +245,7 @@ class MCPContextProvider(ContextProvider):
         Args:
             mcp_client: MCP client instance (will create if None)
         """
-        self.provider_type = "mcp"
+        self.provider_type = constants.CONTEXT_PROVIDER_MCP
         self.mcp_client = mcp_client
         logger.info(f"MCP client set for {self.__class__.__name__}")
 
@@ -261,7 +269,7 @@ class MCPContextProvider(ContextProvider):
                 f"MCP provider not available for {country}, falling back to basic context"
             )
             return {
-                "provider_type": "mcp",
+                "provider_type": constants.CONTEXT_PROVIDER_MCP,
                 "context_text": "MCP tools not available - using basic context",
                 "tools_available": False,
                 "tools": [],
@@ -283,7 +291,7 @@ Use these tools to gather the information you need to make decisions.
             """.strip()
 
             return {
-                "provider_type": "mcp",
+                "provider_type": constants.CONTEXT_PROVIDER_MCP,
                 "context_text": basic_context,
                 "tools_available": True,
                 "tools": tools,
@@ -294,7 +302,7 @@ Use these tools to gather the information you need to make decisions.
                 f"Error providing MCP context for {country}: {e}", exc_info=True
             )
             return {
-                "provider_type": "mcp",
+                "provider_type": constants.CONTEXT_PROVIDER_MCP,
                 "context_text": f"MCP context failed: {e}",
                 "tools_available": False,
                 "tools": [],
@@ -306,7 +314,7 @@ Use these tools to gather the information you need to make decisions.
         """Define MCP tools available to this agent."""
         tools = [
             {
-                "name": "diplomacy.board_state",
+                "name": constants.MCP_TOOL_BOARD_STATE,
                 "description": f"Get current board state for {country} including units, centers, and power status",
                 "parameters": {
                     "type": "object",
@@ -320,7 +328,7 @@ Use these tools to gather the information you need to make decisions.
                 },
             },
             {
-                "name": "diplomacy.possible_orders",
+                "name": constants.MCP_TOOL_POSSIBLE_ORDERS,
                 "description": f"Get all possible orders for {country}'s units this phase",
                 "parameters": {
                     "type": "object",
@@ -334,7 +342,7 @@ Use these tools to gather the information you need to make decisions.
                 },
             },
             {
-                "name": "diplomacy.recent_messages",
+                "name": constants.MCP_TOOL_RECENT_MESSAGES,
                 "description": "Get recent diplomatic messages involving this power",
                 "parameters": {
                     "type": "object",
@@ -383,8 +391,8 @@ class ContextProviderFactory:
 
     def _register_default_providers(self):
         """Register the default context providers."""
-        self._providers["inline"] = InlineContextProvider()
-        self._providers["mcp"] = MCPContextProvider()
+        self._providers[constants.CONTEXT_PROVIDER_INLINE] = InlineContextProvider()
+        self._providers[constants.CONTEXT_PROVIDER_MCP] = MCPContextProvider()
 
     def get_provider(self, provider_type: str) -> ContextProvider:
         """
@@ -399,12 +407,12 @@ class ContextProviderFactory:
         Raises:
             ValueError: If provider type is not supported
         """
-        if provider_type == "auto":
+        if provider_type == constants.CONTEXT_PROVIDER_AUTO:
             # Auto-selection logic - prefer MCP if available, fallback to inline
-            if self._providers["mcp"].is_available():
-                return self._providers["mcp"]
+            if self._providers[constants.CONTEXT_PROVIDER_MCP].is_available():
+                return self._providers[constants.CONTEXT_PROVIDER_MCP]
             else:
-                return self._providers["inline"]
+                return self._providers[constants.CONTEXT_PROVIDER_INLINE]
 
         if provider_type not in self._providers:
             raise ValueError(f"Unknown context provider type: {provider_type}")
@@ -415,7 +423,7 @@ class ContextProviderFactory:
             logger.warning(
                 f"Requested provider '{provider_type}' is not available, falling back to inline"
             )
-            return self._providers["inline"]
+            return self._providers[constants.CONTEXT_PROVIDER_INLINE]
 
         return provider
 

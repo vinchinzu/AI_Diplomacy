@@ -9,9 +9,20 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
 
+from .. import constants # Import constants
+
 logger = logging.getLogger(__name__)
 
-DATABASE_PATH = "ai_diplomacy_usage.db"
+__all__ = [
+    "UsageStats",
+    "GameSummary",
+    "UsageTracker",
+    "create_datasette_config",
+    "get_usage_stats_by_country", # Compatibility function
+    "get_total_usage_stats",    # Compatibility function
+]
+
+DATABASE_PATH = constants.LLM_USAGE_DATABASE_PATH # Updated to use constant
 
 
 @dataclass
@@ -42,7 +53,7 @@ class GameSummary:
 class UsageTracker:
     """Service for analyzing LLM usage patterns and costs."""
 
-    def __init__(self, db_path: str = DATABASE_PATH):
+    def __init__(self, db_path: str = constants.LLM_USAGE_DATABASE_PATH): # Use constant for default
         self.db_path = db_path
 
     def get_agent_stats(self, game_id: str, agent: str) -> Optional[UsageStats]:
@@ -246,19 +257,8 @@ class UsageTracker:
         These are approximations based on common pricing as of 2024.
         """
         # Rough pricing per 1K tokens (input/output) for common models
-        pricing = {
-            "gpt-4o": (0.005, 0.015),
-            "gpt-4o-mini": (0.00015, 0.0006),
-            "gpt-4-turbo": (0.01, 0.03),
-            "gpt-3.5-turbo": (0.001, 0.002),
-            "claude-3-5-sonnet": (0.003, 0.015),
-            "claude-3-opus": (0.015, 0.075),
-            "claude-3-sonnet": (0.003, 0.015),
-            "claude-3-haiku": (0.00025, 0.00125),
-        }
-
         # Default pricing for unknown models (use GPT-4o-mini as baseline)
-        input_price, output_price = pricing.get(model_id, (0.00015, 0.0006))
+        input_price, output_price = constants.MODEL_PRICING_ESTIMATES.get(model_id, constants.DEFAULT_MODEL_PRICE_ESTIMATE_PAIR)
 
         input_cost = (stats.total_input_tokens / 1000) * input_price
         output_cost = (stats.total_output_tokens / 1000) * output_price
@@ -310,7 +310,7 @@ def get_usage_stats_by_country(game_id: str) -> Dict[str, Dict[str, int]]:
     Compatibility function for legacy code.
     """
     try:
-        with sqlite3.connect(DATABASE_PATH) as conn:
+        with sqlite3.connect(constants.LLM_USAGE_DATABASE_PATH) as conn: # Use constant
             cursor = conn.execute(
                 """
                 SELECT agent, 
@@ -354,7 +354,7 @@ def get_total_usage_stats(game_id: str) -> Dict[str, int]:
     Compatibility function for legacy code.
     """
     try:
-        with sqlite3.connect(DATABASE_PATH) as conn:
+        with sqlite3.connect(constants.LLM_USAGE_DATABASE_PATH) as conn: # Use constant
             cursor = conn.execute(
                 """
                 SELECT COUNT(*) as total_api_calls,

@@ -1,3 +1,10 @@
+"""
+Generates and records summaries of game phases from a specific power's perspective.
+
+This module provides the PhaseSummaryGenerator class, which uses an LLM to create
+a diary-like entry reflecting on the events, orders, and negotiations of a completed
+game phase. This summary is then recorded in the game history.
+"""
 import logging
 from typing import Optional, Dict, List, TYPE_CHECKING, Any
 from .services.llm_coordinator import LLMCoordinator
@@ -10,6 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["PhaseSummaryGenerator"]
 
 class PhaseSummaryGenerator:
     """

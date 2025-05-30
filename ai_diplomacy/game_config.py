@@ -1,3 +1,10 @@
+"""
+Configuration class for AI Diplomacy games.
+
+This module defines the GameConfig class, which consolidates all game-related
+settings, command-line arguments, and derived path configurations for logging
+and results. It supports loading model assignments from a TOML file.
+"""
 import os
 import logging
 import argparse
@@ -23,12 +30,10 @@ DEFAULT_NUM_NEGOTIATION_ROUNDS = 3
 DEFAULT_NEGOTIATION_STYLE = "simultaneous"  # or "round-robin"
 # DEFAULT_GAME_SERVER_URL = "ws://localhost:8080" # Unused constant
 
+__all__ = ["GameConfig"]
 
 class GameConfig:
-    """
-    Holds game configuration derived from command-line arguments and defaults.
-    Also manages derived path configurations for logging and results.
-    """
+    # Class docstring already exists and is good.
 
     def __init__(self, args: argparse.Namespace):
         self.args = args

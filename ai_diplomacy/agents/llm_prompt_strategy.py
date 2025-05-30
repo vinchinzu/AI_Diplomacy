@@ -1,10 +1,16 @@
+"""
+Defines strategies for constructing various prompts for LLM-based agents.
+
+This module provides the LLMPromptStrategy class, which contains methods
+for building specific prompts required by LLM agents during different
+phases of a Diplomacy game (e.g., order generation, negotiation, diary entry).
+"""
 from typing import List, Dict, Any
 
+__all__ = ["LLMPromptStrategy"]
+
 class LLMPromptStrategy:
-    """
-    Defines strategies for constructing various prompts for an LLM agent
-    in the game of Diplomacy.
-    """
+    # Class docstring already exists and is good.
 
     def __init__(self) -> None:
         """

@@ -27,8 +27,20 @@ if TYPE_CHECKING:
     from ..game_history import GameHistory # Adjusted import
     from ..agents.base import BaseAgent, Message # Adjusted import
     from ..services.config import GameConfig # Adjusted import
+"""
+Orchestrates the main game loop and phase transitions in a Diplomacy game.
+
+This module defines the PhaseOrchestrator class, which is responsible for
+managing the overall game flow. It coordinates agent actions, negotiations,
+order submissions, and game state processing across different game phases
+(Movement, Retreat, Build). It utilizes specific strategy classes for each
+phase type.
+"""
+from .. import constants # Import constants
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["PhaseOrchestrator", "PhaseStrategy"] # Added PhaseStrategy Protocol
 
 GetValidOrdersFuncType = Callable[
     [
@@ -51,10 +63,8 @@ GetValidOrdersFuncType = Callable[
 ]
 
 class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
-    """
-    Orchestrates the main game loop, including phase transitions, agent actions,
-    negotiations, order submissions, and game processing.
-    """
+    # Class docstring already exists and is good.
+
     def __init__(
         self,
         game_config: "GameConfig",
@@ -85,7 +95,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
 
         try:
             while True:
-                current_phase_val = getattr(game, "phase", "Unknown")
+                current_phase_val = getattr(game, "phase", constants.DEFAULT_PHASE_NAME)
                 current_year = getattr(game, "year", None)
                 if current_year is None:
                     current_year = _extract_year_from_phase(current_phase_val)
@@ -101,8 +111,8 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
                         logger.info("Game marked as completed via draw.")
                     except Exception as e:
                         logger.warning(f"Could not call game.draw(): {e}. Setting status manually.")
-                        if hasattr(game, "set_status"): game.set_status("COMPLETED")
-                        if hasattr(game, "phase"): game.phase = "COMPLETED"
+                        if hasattr(game, "set_status"): game.set_status(constants.GAME_STATUS_COMPLETED)
+                        if hasattr(game, "phase"): game.phase = constants.GAME_STATUS_COMPLETED
                     break
 
                 if game.is_game_done:
@@ -137,7 +147,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
                 
                 if strategy:
                     all_orders_for_phase = await strategy.get_orders(game, self, game_history)
-                elif phase_type_val_str == "-":
+                elif phase_type_val_str == constants.PHASE_TYPE_PROCESS_ONLY:
                     current_phase_str = game.get_current_phase()
                     logger.info(f"Phase is '{current_phase_str}', processing to next phase.")
                     game.process()
@@ -160,16 +170,16 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
                     and current_year >= self.config.max_years
                 ):
                     current_phase_type_val = get_phase_type_from_game(game)
-                    if (current_phase_type_val == PhaseType.BLD.value and "WINTER" in current_phase_val.upper()) \
-                         or ("WINTER" in current_phase_val.upper() and game.is_game_done):
+                    if (current_phase_type_val == PhaseType.BLD.value and constants.PHASE_STRING_WINTER in current_phase_val.upper()) \
+                         or (constants.PHASE_STRING_WINTER in current_phase_val.upper() and game.is_game_done):
                         logger.info(f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_val}.")
                         try:
                             game.draw()
                             logger.info("Game marked as completed via draw.")
                         except Exception as e:
                             logger.warning(f"Could not call game.draw(): {e}. Setting status manually.")
-                            if hasattr(game, "set_status"): game.set_status("COMPLETED")
-                            if hasattr(game, "phase"): game.phase = "COMPLETED"
+                            if hasattr(game, "set_status"): game.set_status(constants.GAME_STATUS_COMPLETED)
+                            if hasattr(game, "phase"): game.phase = constants.GAME_STATUS_COMPLETED
                         break
             logger.info(f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}")
         except AttributeError as e:
@@ -184,7 +194,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
         if isinstance(agent, LLMAgent):
             logger.debug(f"Using LLMAgent.decide_orders() for {power_name}")
             try:
-                order_objects: List[Order] = await asyncio.wait_for(agent.decide_orders(current_phase_state), timeout=180.0)
+                order_objects: List[Order] = await asyncio.wait_for(agent.decide_orders(current_phase_state), timeout=constants.ORDER_DECISION_TIMEOUT_SECONDS)
                 logger.debug(f"✅ {power_name} (LLMAgent): Generated {len(order_objects)} orders via decide_orders")
                 return [str(o) for o in order_objects]
             except asyncio.TimeoutError:

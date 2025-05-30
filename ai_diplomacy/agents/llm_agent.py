@@ -13,9 +13,11 @@ from ..services.llm_coordinator import LLMCoordinator
 from ..services.config import AgentConfig, resolve_context_provider
 from ..services.context_provider import ContextProviderFactory, ContextData
 from ai_diplomacy import llm_utils # Changed from relative to absolute package import
+from .. import constants # Import constants
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["LLMAgent"]
 
 class LLMAgent(BaseAgent):
     """
@@ -31,7 +33,7 @@ class LLMAgent(BaseAgent):
         agent_id: str,
         country: str,
         config: AgentConfig,
-        game_id: str = "unknown_game",
+        game_id: str = constants.DEFAULT_GAME_ID,
         llm_coordinator: Optional[LLMCoordinator] = None,
         context_provider_factory: Optional[ContextProviderFactory] = None,
         prompt_loader: Optional[Callable[[str], Optional[str]]] = None,
@@ -86,7 +88,7 @@ class LLMAgent(BaseAgent):
     def _load_system_prompt(self) -> Optional[str]:
         """Load power-specific or default system prompt."""
         power_prompt_filename = f"{self.country.lower()}_system_prompt.txt"
-        default_prompt_filename = "system_prompt.txt"
+        default_prompt_filename = constants.DEFAULT_SYSTEM_PROMPT_FILENAME
         system_prompt: Optional[str] = None
 
         if self.prompt_loader:
@@ -168,7 +170,7 @@ class LLMAgent(BaseAgent):
                 game_id=self.game_id,
                 phase=phase.phase_name,
                 system_prompt=self.system_prompt,
-                expected_fields=["orders"],
+                expected_fields=[constants.LLM_RESPONSE_KEY_ORDERS],
                 tools=(
                     context_result.get("tools", [])
                     if context_result.get("tools_available")
@@ -196,11 +198,11 @@ class LLMAgent(BaseAgent):
         """Extract and validate orders from LLM response."""
         orders = []
 
-        if "orders" not in response:
-            logger.warning(f"[{self.country}] No 'orders' field in LLM response")
+        if constants.LLM_RESPONSE_KEY_ORDERS not in response:
+            logger.warning(f"[{self.country}] No '{constants.LLM_RESPONSE_KEY_ORDERS}' field in LLM response")
             return [Order(f"{unit} H") for unit in my_units]  # Default to hold
 
-        order_strings = response["orders"]
+        order_strings = response[constants.LLM_RESPONSE_KEY_ORDERS]
         if not isinstance(order_strings, list):
             logger.warning(f"[{self.country}] Orders field is not a list")
             return [Order(f"{unit} H") for unit in my_units]
@@ -269,7 +271,7 @@ class LLMAgent(BaseAgent):
                 game_id=self.game_id,
                 phase=phase.phase_name,
                 system_prompt=self.system_prompt,
-                expected_fields=["messages"],
+                expected_fields=[constants.LLM_RESPONSE_KEY_MESSAGES],
                 tools=(
                     context_result.get("tools", [])
                     if context_result.get("tools_available")
@@ -298,10 +300,10 @@ class LLMAgent(BaseAgent):
         """Extract and validate messages from LLM response."""
         messages = []
 
-        if "messages" not in response:
+        if constants.LLM_RESPONSE_KEY_MESSAGES not in response:
             return messages
 
-        message_dicts = response["messages"]
+        message_dicts = response[constants.LLM_RESPONSE_KEY_MESSAGES]
         if not isinstance(message_dicts, list):
             return messages
 
@@ -309,13 +311,13 @@ class LLMAgent(BaseAgent):
             if not isinstance(msg_dict, dict):
                 continue
 
-            recipient = msg_dict.get("recipient", "").upper()
-            content = msg_dict.get("content", "")
-            message_type = msg_dict.get("message_type", "private")
+            recipient = msg_dict.get(constants.LLM_MESSAGE_KEY_RECIPIENT, "").upper()
+            content = msg_dict.get(constants.LLM_MESSAGE_KEY_CONTENT, "")
+            message_type = msg_dict.get(constants.LLM_MESSAGE_KEY_TYPE, "private") # "private" remains hardcoded as it's an internal default
 
             if content and recipient:
                 # Validate recipient
-                if recipient in phase.powers or recipient == "GLOBAL":
+                if recipient in phase.powers or recipient == constants.MESSAGE_RECIPIENT_GLOBAL:
                     messages.append(Message(recipient, content, message_type))
                 else:
                     logger.warning(f"[{self.country}] Invalid recipient: {recipient}")
@@ -366,12 +368,12 @@ class LLMAgent(BaseAgent):
                 game_id=self.game_id,
                 phase=phase.phase_name,
                 system_prompt=self.system_prompt,
-                expected_fields=["diary_entry"],
+                expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
                 llm_caller_override=self.llm_caller_override,
             )
 
             diary_text = result.get(
-                "diary_entry", f"Phase {phase.phase_name} completed."
+                constants.LLM_RESPONSE_KEY_DIARY_ENTRY, f"Phase {phase.phase_name} completed."
             )
             self.agent_state.add_diary_entry(diary_text, phase.phase_name)
 

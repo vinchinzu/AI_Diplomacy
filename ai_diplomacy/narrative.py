@@ -34,6 +34,12 @@ DEFAULT_NARRATIVE_MODEL_ID = os.getenv("AI_DIPLOMACY_NARRATIVE_MODEL")
 # For now, we make it a module-level variable that can be updated.
 NARRATIVE_MODEL_ID_FROM_ARGS: str | None = None
 
+__all__ = [
+    "NARRATIVE_MODEL_ID_FROM_ARGS", # Allows external configuration
+    "get_narrative_model_id",     # Allows checking which model will be used
+    # The main effect is the patch, which happens on import.
+]
+
 # ---------------------------------------------------------------------------
 # Helper to call the model synchronously (though llm calls can be async)
 # ---------------------------------------------------------------------------

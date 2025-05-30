@@ -1,7 +1,14 @@
-# Removed comment: # Added to resolve NameError: name 'List' is not defined
+"""
+Utility functions for loading and rendering prompt templates.
+
+This module provides functions to load text-based prompt files and
+to render Jinja2 templates, which can be used for constructing
+dynamic prompts for LLMs.
+"""
 import os
 import jinja2
 
+__all__ = ["load_prompt", "render_prompt"]
 
 def load_prompt(filename: str) -> str:
     """Load a prompt from a file located in the 'prompts' subdirectory

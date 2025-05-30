@@ -7,18 +7,26 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 import yaml
 import logging
+from .. import constants # Import constants
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "GameConfig",
+    "AgentConfig",
+    "DiplomacyConfig",
+    "supports_tools",
+    "resolve_context_provider",
+]
 
 class GameConfig(BaseModel):
     """Game-level configuration."""
 
     random_seed: Optional[int] = None
     use_mcp: bool = False
-    token_budget: int = 6500
+    token_budget: int = constants.DEFAULT_TOKEN_BUDGET
     max_years: Optional[int] = None
-    log_level: str = "INFO"
+    log_level: str = constants.DEFAULT_LOG_LEVEL
 
     model_config = {"extra": "allow"}  # Allow additional fields for flexibility
 
@@ -30,7 +38,7 @@ class AgentConfig(BaseModel):
     type: str = Field(..., description="Agent type: 'llm', 'scripted', etc.")
     model_id: Optional[str] = Field(None, description="LLM model identifier")
     context_provider: str = Field(
-        "auto", description="Context provider: 'inline', 'mcp', 'auto'"
+        constants.CONTEXT_PROVIDER_AUTO, description="Context provider: 'inline', 'mcp', 'auto'"
     )
     personality_prompt: Optional[str] = Field(
         None, description="Path to personality prompt template"
@@ -55,7 +63,7 @@ class AgentConfig(BaseModel):
     @field_validator("context_provider")
     @classmethod
     def validate_context_provider(cls, v):
-        allowed_providers = {"inline", "mcp", "auto"}
+        allowed_providers = {constants.CONTEXT_PROVIDER_INLINE, constants.CONTEXT_PROVIDER_MCP, constants.CONTEXT_PROVIDER_AUTO}
         if v not in allowed_providers:
             raise ValueError(f"Context provider must be one of {allowed_providers}")
         return v
@@ -98,9 +106,9 @@ class DiplomacyConfig(BaseModel):
         game_config = GameConfig(
             random_seed=getattr(args, "random_seed", None),
             use_mcp=getattr(args, "use_mcp", False),
-            token_budget=getattr(args, "max_diary_tokens", 6500),
+            token_budget=getattr(args, "max_diary_tokens", constants.DEFAULT_TOKEN_BUDGET),
             max_years=getattr(args, "max_years", None),
-            log_level=getattr(args, "log_level", "INFO"),
+            log_level=getattr(args, "log_level", constants.DEFAULT_LOG_LEVEL),
         )
 
         agents = []
@@ -112,7 +120,7 @@ class DiplomacyConfig(BaseModel):
                     country=args.power_name,
                     type="llm",
                     model_id=getattr(args, "model_id", None),
-                    context_provider="auto",
+                    context_provider=constants.CONTEXT_PROVIDER_AUTO,
                 )
             )
         else:
@@ -134,7 +142,7 @@ class DiplomacyConfig(BaseModel):
                                 country=countries[i],
                                 type="llm",
                                 model_id=model_id,
-                                context_provider="auto",
+                                context_provider=constants.CONTEXT_PROVIDER_AUTO,
                             )
                         )
 
@@ -160,7 +168,7 @@ class DiplomacyConfig(BaseModel):
 
 # Model capability registry for context provider selection
 MODEL_CAPABILITIES = {
-    "supports_tools": {
+    constants.MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS: {
         "gpt-4o",
         "gpt-4o-mini",
         "gpt-4-turbo",
@@ -175,19 +183,19 @@ MODEL_CAPABILITIES = {
 
 def supports_tools(model_id: str) -> bool:
     """Check if a model supports tool calling."""
-    return model_id in MODEL_CAPABILITIES["supports_tools"]
+    return model_id in MODEL_CAPABILITIES[constants.MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS]
 
 
 def resolve_context_provider(agent_config: AgentConfig) -> str:
     """Resolve 'auto' context provider to concrete implementation."""
-    if agent_config.context_provider != "auto":
+    if agent_config.context_provider != constants.CONTEXT_PROVIDER_AUTO:
         return agent_config.context_provider
 
     # Check if model_id is not None before calling supports_tools
     if agent_config.model_id is not None and supports_tools(agent_config.model_id):
-        return "mcp"
+        return constants.CONTEXT_PROVIDER_MCP
     else:
-        return "inline"
+        return constants.CONTEXT_PROVIDER_INLINE
 
 
 # Removed SettingsConfigDict usage for compatibility

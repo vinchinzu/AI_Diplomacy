@@ -1,3 +1,8 @@
+"""
+Manages the history of a Diplomacy game, including messages, orders, plans,
+and phase summaries. This module provides classes to represent individual messages,
+game phases, and the overall game history.
+"""
 from dotenv import load_dotenv
 import logging
 from collections import defaultdict
@@ -9,6 +14,7 @@ logger = logging.getLogger(__name__)  # Changed "utils" to __name__
 # Removed: logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
+__all__ = ["Message", "Phase", "GameHistory"]
 
 @dataclass
 class Message:

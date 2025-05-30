@@ -1,3 +1,10 @@
+"""
+Handles the strategy for the Build phase of a Diplomacy game.
+
+This module defines the BuildPhaseStrategy class, which is responsible for
+determining build or disband orders for each power based on their supply
+center gains or losses.
+"""
 import logging
 import asyncio
 from typing import Dict, List, TYPE_CHECKING
@@ -9,11 +16,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["BuildPhaseStrategy"]
+
 class BuildPhaseStrategy:
     async def get_orders(
         self, game: "Game", orchestrator: "PhaseOrchestrator", game_history: "GameHistory"
     ) -> Dict[str, List[str]]:
-        """Handles the logic for a build phase."""
+        # Docstring already exists and is good.
         logger.info("Executing Build Phase actions via BuildPhaseStrategy...")
         current_phase_name = game.get_current_phase()
         orders_by_power: Dict[str, List[str]] = {}

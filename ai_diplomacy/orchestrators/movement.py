@@ -1,3 +1,9 @@
+"""
+Handles the strategy for the Movement phase of a Diplomacy game.
+
+This module defines the MovementPhaseStrategy class, which is responsible for
+managing diplomatic negotiations and collecting movement orders from each agent.
+"""
 import logging
 import asyncio
 from typing import Dict, List, TYPE_CHECKING
@@ -12,11 +18,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["MovementPhaseStrategy"]
+
 class MovementPhaseStrategy:
     async def get_orders(
         self, game: "Game", orchestrator: "PhaseOrchestrator", game_history: "GameHistory"
     ) -> Dict[str, List[str]]:
-        """Handles the logic for a movement phase."""
+        # Docstring already exists and is good.
         logger.info("Executing Movement Phase actions via MovementPhaseStrategy...")
         current_phase_name = game.get_current_phase()
 
