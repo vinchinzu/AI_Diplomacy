@@ -219,6 +219,7 @@ function createDialogueContainer(power1: string, power2: string, title?: string,
         display: flex;
         gap: 15px;
         height: 100%;
+overflow-y: auto;
     `;
 
   // Left diary box for power1
@@ -231,6 +232,9 @@ function createDialogueContainer(power1: string, power2: string, title?: string,
         flex: 2;
         display: flex;
         flex-direction: column;
+        min-height: 0;
+        max-height: 100%;
+        overflow: hidden;
     `;
   mainContent.appendChild(conversationWrapper);
 
@@ -330,7 +334,9 @@ function createConversationArea(): HTMLElement {
   area.style.cssText = `
         flex: 1;
         min-height: 0;
+        max-height: 100%;
         overflow-y: auto;
+        overflow-x: hidden;
         padding: 8px;
         border: 2px solid #8b7355;
         border-radius: 5px;
@@ -338,6 +344,7 @@ function createConversationArea(): HTMLElement {
         display: flex;
         flex-direction: column;
         gap: 8px;
+        box-sizing: border-box;
     `;
 
   return area;
