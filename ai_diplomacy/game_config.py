@@ -4,6 +4,14 @@ Configuration class for AI Diplomacy games.
 This module defines the GameConfig class, which consolidates all game-related
 settings, command-line arguments, and derived path configurations for logging
 and results. It supports loading model assignments from a TOML file.
+
+Key logging behaviors managed by this configuration:
+- `log_to_file`: Controls whether logs are written to files.
+    - In development mode (`dev_mode=True`), this defaults to `False`.
+    - This behavior can be overridden by setting the environment variable
+      `LOG_TO_FILE=1` (forces file logging to `True`) or by explicitly
+      passing the `--log_to_file` command-line argument.
+- Log paths are derived using `logging_setup.get_log_paths`.
 """
 import os
 import logging
@@ -62,10 +70,23 @@ class GameConfig:
         self.max_years: Optional[int] = getattr(
             args, "max_years", None
         )  # Added from lm_game.py logic
-        self.log_to_file: bool = getattr(
-            args, "log_to_file", True
-        )  # Assuming default behavior
+        
+        # Initialize dev_mode first as it's used in log_to_file logic
         self.dev_mode: bool = getattr(args, "dev_mode", False)  # Added dev_mode
+
+        # Determine log_to_file based on environment variable, args, and dev_mode
+        log_to_file_env = os.getenv("LOG_TO_FILE")
+        log_to_file_arg = getattr(args, "log_to_file", None) # Check if arg was explicitly passed
+
+        if log_to_file_env == "1":
+            self.log_to_file: bool = True
+        elif log_to_file_arg is not None:
+            self.log_to_file: bool = log_to_file_arg
+        elif self.dev_mode:
+            self.log_to_file: bool = False  # Default to False in dev_mode
+        else:
+            self.log_to_file: bool = True   # Default to True if not dev_mode and no arg
+
         self.verbose_llm_debug: bool = getattr(
             args, "verbose_llm_debug", False
         )  # New attribute
@@ -89,45 +110,42 @@ class GameConfig:
             self.game_id = f"{self.game_id_prefix}_{self.current_datetime_str}"
 
         # Configure paths
-        self.base_log_dir: str = os.path.join(
-            os.getcwd(), "logs"
-        )  # Default base log dir
-        # Allow overriding base_log_dir if provided in args (e.g. from network_lm_agent)
-        if getattr(args, "log_dir", None) is not None:
-            self.base_log_dir = args.log_dir
+        # Determine base_log_dir
+        # Default base log dir is os.path.join(os.getcwd(), "logs")
+        # It can be overridden by args.log_dir
+        # If args.log_dir is provided AND it already contains the game_id,
+        # then base_log_dir becomes the parent of args.log_dir.
+        # Otherwise, args.log_dir (if provided) or the default becomes base_log_dir.
 
-        # If log_dir in args was a full path for a specific game, adjust base_log_dir
-        # This logic assumes log_dir from args might be game-specific or a base.
-        # For lm_game.py, we usually construct the game_id_specific_log_dir from a base.
-        if getattr(args, "log_dir", None) and self.game_id in getattr(
-            args, "log_dir", ""
-        ):
-            self.game_id_specific_log_dir = getattr(args, "log_dir")
-            self.base_log_dir = os.path.dirname(self.game_id_specific_log_dir)
-        else:  # Construct game_id_specific_log_dir
-            self.game_id_specific_log_dir = os.path.join(
-                self.base_log_dir, self.game_id
-            )
+        default_base_log_dir = os.path.join(os.getcwd(), "logs")
+        provided_log_dir = getattr(args, "log_dir", None)
 
-        # Ensure the specific log directory for this game ID exists
+        if provided_log_dir:
+            if self.game_id in provided_log_dir and os.path.basename(provided_log_dir) == self.game_id:
+                # log_dir from args is already game-specific
+                self.base_log_dir = os.path.dirname(provided_log_dir)
+                # game_id_specific_log_dir will be set by get_log_paths using this base
+            else:
+                # log_dir from args is a new base
+                self.base_log_dir = provided_log_dir
+        else:
+            # No log_dir from args, use default
+            self.base_log_dir = default_base_log_dir
+
+        # Use the new helper function to get all paths
+        from .logging_setup import get_log_paths  # Local import to avoid circularity if moved
+
+        log_paths = get_log_paths(self.game_id, self.base_log_dir)
+        self.game_id_specific_log_dir: str = log_paths["game_id_specific_log_dir"]
+        self.llm_log_path: str = log_paths["llm_log_path"]
+        self.general_log_path: str = log_paths["general_log_path"]
+        self.results_dir: str = log_paths["results_dir"]
+        self.manifestos_dir: str = log_paths["manifestos_dir"]
+
+        # Ensure the directories exist if logging to file
         if self.log_to_file:
             os.makedirs(self.game_id_specific_log_dir, exist_ok=True)
-
-        self.llm_log_path: str = os.path.join(
-            self.game_id_specific_log_dir, f"{self.game_id}_llm_interactions.csv"
-        )
-        self.general_log_path: str = os.path.join(
-            self.game_id_specific_log_dir, f"{self.game_id}_general.log"
-        )
-
-        self.results_dir: str = os.path.join(self.game_id_specific_log_dir, "results")
-        if (
-            self.log_to_file
-        ):  # Only create if logging to file, implies saving results too
             os.makedirs(self.results_dir, exist_ok=True)
-
-        self.manifestos_dir: str = os.path.join(self.results_dir, "manifestos")
-        if self.log_to_file:
             os.makedirs(self.manifestos_dir, exist_ok=True)
 
         # Initialize game state placeholders (these will be populated later)

@@ -334,6 +334,20 @@ python lm_game.py --output results/my_game.json
     # OPENAI_API_KEY="sk-dummy" # Often needed even if server doesn't check it
     ```
 
+### Logging Configuration
+
+This project includes flexible logging options:
+
+-   **Log Path Generation**: The `ai_diplomacy.logging_setup.get_log_paths(game_id, base_log_dir)` function standardizes the creation of directories and file paths for game-specific logs, LLM interactions, general logs, results, and manifestos. This is used internally by `GameConfig`.
+-   **Development Mode File Logging (`dev_mode`)**:
+    -   When running with the `--dev_mode` flag (or `dev_mode=True` in `GameConfig`), log output to files is **disabled** by default to keep the development environment clean.
+    -   This can be overridden in several ways:
+        1.  Setting the environment variable `LOG_TO_FILE=1` will force file logging to be `True`, even in development mode.
+        2.  Explicitly passing `--log_to_file True` (or `False`) as a command-line argument will also take precedence over the `dev_mode` default.
+-   **JSON Log Formatting (`LOG_FORMAT`)**:
+    -   To enable structured JSON logging instead of the default plain text format, set the environment variable `LOG_FORMAT=JSON` (case-insensitive).
+    -   This will make both console and file logs (if enabled) output in JSON format, which can be easily parsed and ingested by log management systems. Each JSON log entry includes fields like `timestamp`, `level`, `name` (logger name), `message`, and source information (`pathname`, `lineno`, `function`). Exception details are also included if an exception is logged.
+
 ### Game Output and Analysis
 
 Games are saved to the `results/` directory with timestamps. Each game folder contains:

@@ -1,29 +1,66 @@
 """
 Configures logging for the AI Diplomacy application.
 
-This module provides a function to set up root logger behavior,
-including log levels, formatting, console and file handlers, and
-a custom filter to manage verbosity of LLM-related logs.
+This module provides functionalities to:
+- Set up root logger behavior, including log levels, formatting, console, and file handlers.
+- Offer a custom filter (`LLMVerboseFilter`) to manage verbosity of LLM-related logs.
+- Provide a helper function (`get_log_paths`) to construct standardized log paths.
+- Support JSON-formatted logs via the `JsonFormatter` class, configurable through
+  the `LOG_FORMAT=JSON` environment variable.
 """
 import logging
 import os
 import sys  # To get stdout for console handler
-from typing import TYPE_CHECKING
+import json # Added for JsonFormatter
+from datetime import datetime # Added for JsonFormatter timestamp
+from typing import TYPE_CHECKING, Dict
 
 if TYPE_CHECKING:
     from .game_config import GameConfig
 
-__all__ = ["LLMVerboseFilter", "setup_logging"]
+__all__ = ["LLMVerboseFilter", "JsonFormatter", "setup_logging", "get_log_paths"]
+
+
+def get_log_paths(game_id: str, base_log_dir: str) -> Dict[str, str]:
+    """
+    Constructs standardized log and result paths for a given game.
+
+    Args:
+        game_id: The unique identifier for the game.
+        base_log_dir: The base directory where game-specific logs should be stored.
+
+    Returns:
+        A dictionary containing the paths for game-specific logs, LLM interactions,
+        general logs, results, and manifestos.
+    """
+    game_id_specific_log_dir = os.path.join(base_log_dir, game_id)
+    llm_log_path = os.path.join(
+        game_id_specific_log_dir, f"{game_id}_llm_interactions.csv"
+    )
+    general_log_path = os.path.join(
+        game_id_specific_log_dir, f"{game_id}_general.log"
+    )
+    results_dir = os.path.join(game_id_specific_log_dir, "results")
+    manifestos_dir = os.path.join(results_dir, "manifestos")
+
+    return {
+        "game_id_specific_log_dir": game_id_specific_log_dir,
+        "llm_log_path": llm_log_path,
+        "general_log_path": general_log_path,
+        "results_dir": results_dir,
+        "manifestos_dir": manifestos_dir,
+    }
+
 
 class LLMVerboseFilter(logging.Filter):  # Removed comment: # Define the custom filter
     def __init__(self, name="", verbose_llm_debug=False):
         super().__init__(name)
         self.verbose_llm_debug = verbose_llm_debug
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool: # Added type hints
         if not self.verbose_llm_debug and record.levelno == logging.INFO:
             # Check logger name or message content for typical LLM verbose logs
-            msg_lower = record.getMessage().lower()
+            msg_lower = record.getMessage().lower() # getMessage ensures msg % args is done
             is_llm_log = (
                 "llm_coordinator" in record.name
                 or "prompt:" in msg_lower
@@ -41,6 +78,93 @@ class LLMVerboseFilter(logging.Filter):  # Removed comment: # Define the custom 
                 )
                 record.args = ()  # Clear args as msg is now pre-formatted
         return True
+
+
+class JsonFormatter(logging.Formatter):
+    """
+    Formats log records as JSON strings.
+
+    This formatter converts a LogRecord into a JSON string, including standard
+    logging fields like timestamp, level, logger name, and message, as well
+    as file/line information. It also includes exception information if present.
+    Extra fields passed to the logger can also be included if they are JSON serializable.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Can set default_time_format and default_msec_format here if desired
+        # For example, to always use ISO format with UTC:
+        # self.default_time_format = '%Y-%m-%dT%H:%M:%S'
+        # self.default_msec_format = '%s.%03dZ' # Note: %s is for seconds, not milliseconds from record.created
+        # To use datetime.fromtimestamp(record.created).isoformat() for timestamp:
+        # You would need to handle it directly in the format method instead of relying on record.asctime
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Ensure standard Formatter attributes are available, especially record.message and record.asctime
+        # record.message is created from record.msg % record.args
+        # record.asctime is created based on default_time_format
+        super().format(record) # This populates record.asctime and record.message
+
+        log_entry = {
+            "timestamp": getattr(record, 'asctime', datetime.fromtimestamp(record.created).isoformat()),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.message, # Contains the fully formatted message string
+            "source": { # Grouping source information
+                "pathname": record.pathname,
+                "lineno": record.lineno,
+                "function": record.funcName,
+            }
+            # "module": record.module, # Often redundant with pathname
+            # "process_id": record.process, # Optional: process ID
+            # "thread_name": record.threadName, # Optional: thread name
+        }
+
+        # Add exception info if present and formatted
+        if record.exc_info and record.exc_text:
+            log_entry["exception"] = {
+                "type": record.exc_info[0].__name__ if record.exc_info[0] else "Exception",
+                "message": str(record.exc_info[1]) if record.exc_info[1] else "",
+                "stacktrace": record.exc_text,
+            }
+        elif record.exc_info: # Fallback if exc_text is not pre-formatted (should be by super().format)
+             log_entry["exception_info"] = self.formatException(record.exc_info)
+
+
+        # Add any extra fields passed to the logger via logging.Logger.debug("...", extra=dict(...))
+        # Standard LogRecord attributes that might be of interest are already handled or commented out.
+        # User-defined extra fields:
+        standard_record_keys = {
+            'args', 'asctime', 'created', 'exc_info', 'exc_text', 'filename',
+            'funcName', 'levelname', 'levelno', 'lineno', 'message', 'module',
+            'msecs', 'msg', 'name', 'pathname', 'process', 'processName',
+            'relativeCreated', 'stack_info', 'thread', 'threadName',
+            '_log', '_name', '_exc_info_hidden', # Internal/already processed
+        }
+        extra_fields = {}
+        for key, value in record.__dict__.items():
+            if key not in standard_record_keys and key not in log_entry: # Avoid overwriting already set fields
+                if isinstance(value, (str, bool, int, float, list, dict, type(None))):
+                    extra_fields[key] = value
+                # else: # Potentially skip or convert non-basic types to string
+                #     extra_fields[key] = str(value)
+        if extra_fields:
+            log_entry["extra"] = extra_fields
+
+        try:
+            return json.dumps(log_entry, ensure_ascii=False)
+        except TypeError as e:
+            # Fallback for unserializable fields
+            fallback_timestamp = datetime.fromtimestamp(record.created).isoformat() if hasattr(record, 'created') else datetime.utcnow().isoformat()
+            error_log_entry = {
+                "timestamp": fallback_timestamp,
+                "level": "ERROR",
+                "name": "JsonFormatter.SerializationError",
+                "message": f"Error serializing log record: {e}. See original_record field.",
+                "original_record_name": getattr(record, 'name', 'Unknown'),
+                "original_record_msg_preview": getattr(record, 'msg', 'N/A')[:100]
+            }
+            return json.dumps(error_log_entry, ensure_ascii=False)
 
 
 def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of config
@@ -65,9 +189,17 @@ def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of
         logging.error(f"Log level {config.log_level} not found. Defaulting to INFO.")
         numeric_log_level = logging.INFO
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )  # Removed comment: # Basic formatter
+    # Determine which formatter to use
+    log_format_env = os.getenv("LOG_FORMAT", "").upper()
+    if log_format_env == "JSON":
+        formatter = JsonFormatter()
+        # Standard date format for JsonFormatter's asctime (if not overridden in JsonFormatter itself)
+        # formatter.default_time_format = '%Y-%m-%dT%H:%M:%S'
+        # formatter.default_msec_format = '%s.%03dZ' # Example for UTC
+    else:
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
 
     root_logger = logging.getLogger()  # Removed comment: # Get the root logger
     root_logger.setLevel(numeric_log_level)
