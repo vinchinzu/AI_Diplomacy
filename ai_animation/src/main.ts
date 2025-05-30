@@ -46,6 +46,9 @@ function initScene() {
       // Load default game file if in debug mode
       if (config.isDebugMode || isStreamingMode) {
         gameState.loadGameFile(0);
+
+        // Initialize info panel
+        logger.updateInfoPanel();
       }
 
       // Initialize debug menu if in debug mode
@@ -69,8 +72,6 @@ function initScene() {
   // Kick off animation loop
   animate();
 
-  // Initialize info panel
-  logger.updateInfoPanel();
 }
 
 function createCameraPan(): Group {

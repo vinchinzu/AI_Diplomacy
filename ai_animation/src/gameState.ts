@@ -97,7 +97,7 @@ class GameState {
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
     this.boardName = boardName
-    this.currentPower = getRandomPower()
+    this.currentPower = null;
     this.gameId = 1
     // State locks
     this.isSpeaking = false
@@ -156,6 +156,8 @@ class GameState {
           playBtn.disabled = false;
           speedSelector.disabled = false;
 
+          // Set the poewr if the game specifies it, else random.
+          this.currentPower = this.gameData.power !== undefined ? this.gameData.power : getRandomPower();
 
 
           const momentsFilePath = `./games/${this.gameId}/moments.json`;

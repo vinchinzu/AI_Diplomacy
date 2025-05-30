@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PowerENUMSchema } from './map';
+import { PowerENUM, PowerENUMSchema } from './map';
 import { OrderFromString } from './unitOrders';
 import { ProvinceENUMSchema } from './map';
 
@@ -67,6 +67,7 @@ const PhaseSchema = z.object({
 export const GameSchema = z.object({
   map: z.string(),
   id: z.string(),
+  power: PowerENUMSchema.optional(),
   phases: z.array(PhaseSchema),
 });
 
