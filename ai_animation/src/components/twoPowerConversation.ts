@@ -60,6 +60,8 @@ export function showTwoPowerConversation(options: TwoPowerDialogueOptions): void
   dialogueOverlay.appendChild(dialogueContainer);
   document.body.appendChild(dialogueOverlay);
 
+  gameState.isDisplayingMoment = true;
+
   // Set up event listeners
   setupEventListeners(onClose);
 
@@ -195,10 +197,10 @@ function createDialogueContainer(power1: string, power2: string, title?: string,
       if (moment.promise_agreement) description += `Promise: ${moment.promise_agreement}. `;
       if (moment.actual_action) description += `Action: ${moment.actual_action}. `;
       if (moment.impact) description += `Impact: ${moment.impact}`;
-      
+
       momentDescription.textContent = description;
       momentDescription.style.cssText = `
-        font-size: 12px;
+        font-size: 0.9rem;
         color: #5a4b2b;
         font-style: italic;
         margin: 5px 20px 0 20px;
@@ -249,10 +251,11 @@ function createDiaryBox(power: PowerENUM, diaryContent: string): HTMLElement {
   diaryBox.className = `diary-box diary-${power.toLowerCase()}`;
   diaryBox.style.cssText = `
         flex: 1;
+        min-height: 0;
         background: rgba(255, 255, 255, 0.4);
         border: 2px solid #8b7355;
         border-radius: 8px;
-        padding: 12px;
+        padding: 10px;
         display: flex;
         flex-direction: column;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
@@ -260,11 +263,11 @@ function createDiaryBox(power: PowerENUM, diaryContent: string): HTMLElement {
 
   // Power name header
   const powerHeader = document.createElement('h4');
-  powerHeader.textContent = `${getPowerDisplayName(power)} Thoughts`;
+  powerHeader.textContent = `${getPowerDisplayName(power)} Diary`;
   powerHeader.className = `power-${power.toLowerCase()}`;
   powerHeader.style.cssText = `
         margin: 0 0 10px 0;
-        font-size: 14px;
+        font-size: 0.875rem;
         font-weight: bold;
         text-align: center;
         padding: 5px;
@@ -279,9 +282,10 @@ function createDiaryBox(power: PowerENUM, diaryContent: string): HTMLElement {
   contentArea.className = 'diary-content';
   contentArea.style.cssText = `
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
-        font-size: 12px;
-        line-height: 1.5;
+        font-size: 1.75em;
+        line-height: 1.4;
         color: #4a3b1f;
         font-style: italic;
     `;
@@ -293,8 +297,8 @@ function createDiaryBox(power: PowerENUM, diaryContent: string): HTMLElement {
       const p = document.createElement('p');
       p.textContent = paragraph.trim();
       p.style.cssText = `
-            margin: 0 0 8px 0;
-            padding: 4px;
+            margin: 0 0 4px 0;
+            padding: 3px;
             background: ${index % 2 === 0 ? 'rgba(255,255,255,0.2)' : 'transparent'};
             border-radius: 3px;
         `;
@@ -325,14 +329,15 @@ function createConversationArea(): HTMLElement {
   area.className = 'conversation-area';
   area.style.cssText = `
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
-        padding: 10px;
+        padding: 8px;
         border: 2px solid #8b7355;
         border-radius: 5px;
         background: rgba(255, 255, 255, 0.3);
         display: flex;
         flex-direction: column;
-        gap: 15px;
+        gap: 8px;
     `;
 
   return area;
@@ -343,7 +348,7 @@ function createConversationArea(): HTMLElement {
  */
 function createCloseButton(): HTMLElement {
   const button = document.createElement('button');
-  button.textContent = '�';
+  button.textContent = 'X';
   button.className = 'close-button';
   button.style.cssText = `
         position: absolute;
@@ -451,7 +456,7 @@ function createMessageElement(message: ConversationMessage, power1: string, powe
         display: flex;
         flex-direction: column;
         align-items: ${isFromPower1 ? 'flex-start' : 'flex-end'};
-        margin: 5px 0;
+        margin: 3px 0;
     `;
 
   // Sender label
@@ -459,9 +464,9 @@ function createMessageElement(message: ConversationMessage, power1: string, powe
   senderLabel.textContent = getPowerDisplayName(message.sender as PowerENUM);
   senderLabel.className = `power-${message.sender.toLowerCase()}`;
   senderLabel.style.cssText = `
-        font-size: 12px;
+        font-size: 11px;
         font-weight: bold;
-        margin-bottom: 5px;
+        margin-bottom: 3px;
         color: #4f3b16;
     `;
 
@@ -471,11 +476,13 @@ function createMessageElement(message: ConversationMessage, power1: string, powe
   messageBubble.style.cssText = `
         background: ${isFromPower1 ? '#e6f3ff' : '#fff3e6'};
         border: 2px solid ${isFromPower1 ? '#4a90e2' : '#e67e22'};
-        border-radius: 15px;
-        padding: 10px 15px;
+        border-radius: 12px;
+        padding: 6px 10px;
         max-width: 70%;
         word-wrap: break-word;
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        font-size: 1.2rem;
+        line-height: 1.3;
     `;
 
   messageDiv.appendChild(senderLabel);

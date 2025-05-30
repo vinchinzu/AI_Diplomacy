@@ -8,6 +8,8 @@ import { isInstantChatEnabled } from '../debug/instantChat';
 
 
 //TODO: Sometimes the LLMs use lists, and they don't work in the chats. The just appear as bullets within a single line.
+//
+//TODO: We are getting a mixing of chats from different phases. In game 0, F1902M starts using chat before S1902M finishes
 let faceIconCache = {}; // Cache for generated face icons
 
 // Add a message counter to track sound effect frequency
@@ -177,7 +179,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
       }
     });
     gameState.messagesPlaying = false;
-    
+
     // If instant chat is enabled during stepwise mode, immediately proceed to next phase logic
     if (stepMessages && isInstantChatEnabled()) {
       // Trigger the same logic as the end of stepwise message display

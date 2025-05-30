@@ -64,7 +64,6 @@ export function nextPhase() {
   if (!gameState.isDisplayingMoment && gameState.gameData && gameState.momentsData) {
     let moment = gameState.checkPhaseHasMoment(gameState.gameData.phases[gameState.phaseIndex].name)
     if (moment !== null && moment.interest_score >= MOMENT_THRESHOLD && moment.powers_involved.length >= 2) {
-      gameState.isDisplayingMoment = true
       moment.hasBeenDisplayed = true
 
       const power1 = moment.powers_involved[0];
@@ -75,14 +74,20 @@ export function nextPhase() {
         power2: power2,
         moment: moment
       })
-      setTimeout(() => {
-        closeTwoPowerConversation()
-        gameState.isDisplayingMoment = false
+      if (gameState.isPlaying) {
+
+        setTimeout(() => {
+          closeTwoPowerConversation()
+          _setPhase(gameState.phaseIndex + 1)
+        }, MOMENT_DISPLAY_TIMEOUT_MS)
+      } else {
         _setPhase(gameState.phaseIndex + 1)
-      }, MOMENT_DISPLAY_TIMEOUT_MS)
+      }
     } else {
       _setPhase(gameState.phaseIndex + 1)
     }
+  } else {
+    console.log("not moving")
   }
 }
 
