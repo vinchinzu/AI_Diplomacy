@@ -48,23 +48,43 @@ def _apply_preset_to_args(args: argparse.Namespace) -> None:
         args.num_players = args.num_players if args.num_players is not None else 2
         args.num_negotiation_rounds = args.num_negotiation_rounds if args.num_negotiation_rounds is not None else 0
         args.max_years = args.max_years if args.max_years is not None else 1901
-        args.fixed_models = args.fixed_models if args.fixed_models is not None else "gemma3:4b,gpt-4o-mini"
+        # For 2p_quick, if players/types not set, default to two LLMs
+        args.players = args.players if args.players is not None else "AUSTRIA,ENGLAND" # Example powers
+        args.agent_types = args.agent_types if args.agent_types is not None else "llm,llm"
+        args.llm_models = args.llm_models if args.llm_models is not None else "gemma3:4b,gpt-4o-mini"
+        args.fixed_models = None # llm_models takes precedence for specific assignments
     elif args.preset == "3p_neg":
         args.num_players = args.num_players if args.num_players is not None else 3
         args.num_negotiation_rounds = args.num_negotiation_rounds if args.num_negotiation_rounds is not None else 1
         args.max_years = args.max_years if args.max_years is not None else 1901
-        args.fixed_models = args.fixed_models if args.fixed_models is not None else "gemma3:4b,gpt-4o-mini,gemma3:4b"
+        args.players = args.players if args.players is not None else "AUSTRIA,ENGLAND,FRANCE" # Example powers
+        args.agent_types = args.agent_types if args.agent_types is not None else "llm,llm,llm"
+        args.llm_models = args.llm_models if args.llm_models is not None else "gemma3:4b,gpt-4o-mini,gemma3:4b"
+        args.fixed_models = None # llm_models takes precedence
+    elif args.preset == "5p_standard":
+        args.players = args.players if args.players is not None else "ENGLAND,FRANCE,GERMANY,RUSSIA,TURKEY,ITALY,AUSTRIA"
+        args.agent_types = args.agent_types if args.agent_types is not None else "llm,llm,llm,llm,llm,neutral,neutral"
+        args.llm_models = args.llm_models if args.llm_models is not None else "gemma3:4b,gpt-4o-mini,gemma3:4b,gpt-4o-mini,gemma3:4b"
+        args.game_factory = args.game_factory if args.game_factory is not None else None # Standard game
+        args.num_negotiation_rounds = args.num_negotiation_rounds if args.num_negotiation_rounds is not None else 3
+        args.max_years = args.max_years if args.max_years is not None else 1905
+    elif args.preset == "6p_standard":
+        args.players = args.players if args.players is not None else "ENGLAND,FRANCE,GERMANY,RUSSIA,TURKEY,AUSTRIA,ITALY"
+        args.agent_types = args.agent_types if args.agent_types is not None else "llm,llm,llm,llm,llm,llm,neutral"
+        args.llm_models = args.llm_models if args.llm_models is not None else "gemma3:4b,gpt-4o-mini,gemma3:4b,gpt-4o-mini,gemma3:4b,gpt-4o-mini"
+        args.game_factory = args.game_factory if args.game_factory is not None else None # Standard game
+        args.num_negotiation_rounds = args.num_negotiation_rounds if args.num_negotiation_rounds is not None else 3
+        args.max_years = args.max_years if args.max_years is not None else 1905
     elif args.preset == "wwi_2p":
-        args.num_players = args.num_players if args.num_players is not None else 2
-        # game_factory specifies how to create the game, implies specific powers
+        args.num_players = args.num_players if args.num_players is not None else 2 # Number of blocs + neutral
         args.game_factory = args.game_factory if args.game_factory is not None else "scenarios:wwi_two_player"
-        # --players and --llm-models will be used by AgentManager directly if provided
-        # Default fixed_models for this preset if not specified by --llm-models or --fixed_models
-        if args.fixed_models is None and args.llm_models is None:
-            args.fixed_models = "gemma3:4b,gemma3:4b" # Default for wwi_2p
-        # Note: max_years, num_negotiation_rounds can be set by user or default for wwi_2p
-        args.max_years = args.max_years if args.max_years is not None else 1918 # Example: WWI ends around 1918
-        args.num_negotiation_rounds = args.num_negotiation_rounds if args.num_negotiation_rounds is not None else 0 # Often less negotiation in 2p
+        args.players = args.players if args.players is not None else "ENTENTE_BLOC,CENTRAL_BLOC,NEUTRAL_ITALY"
+        args.agent_types = args.agent_types if args.agent_types is not None else "bloc_llm,bloc_llm,neutral"
+        args.bloc_definitions = args.bloc_definitions if args.bloc_definitions is not None else "ENTENTE_BLOC:ENG;FRA;RUS,CENTRAL_BLOC:GER;AUS;TUR"
+        args.llm_models = args.llm_models if args.llm_models is not None else "gemma3:4b,gemma3:4b" # For the two blocs
+        args.fixed_models = None # llm_models takes precedence
+        args.max_years = args.max_years if args.max_years is not None else 1918
+        args.num_negotiation_rounds = args.num_negotiation_rounds if args.num_negotiation_rounds is not None else 0
 
 # -------------------------------------------------------------------------
 
@@ -74,8 +94,8 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--preset",
-        choices=["2p_quick", "3p_neg", "wwi_2p"],
-        help="Convenience aliases: 2p_quick, 3p_neg, or wwi_2p.",
+        choices=["2p_quick", "3p_neg", "5p_standard", "6p_standard", "wwi_2p"],
+        help="Convenience aliases: 2p_quick, 3p_neg, 5p_standard, 6p_standard, or wwi_2p.",
     )
     parser.add_argument(
         "--game_factory",
@@ -87,13 +107,25 @@ def parse_arguments() -> argparse.Namespace:
         "--players",
         type=str,
         default=None,
-        help="Comma-separated list defining player types (e.g., 'llm,human,llm'). Used with game_factory."
+        help="Comma-separated list of agent identifiers (e.g., 'FRANCE', 'ENTENTE_BLOC')."
     )
     parser.add_argument(
-        "--llm-models", # Renamed from fixed_models for clarity when used with --players
+        "--agent-types",
         type=str,
         default=None,
-        help="Comma-separated list of model IDs for LLM players, matching the order in --players. (e.g., 'gemma3:4b,gpt-4o-mini')."
+        help="Comma-separated list of agent types (e.g., 'llm,neutral,bloc_llm'), corresponding to --players."
+    )
+    parser.add_argument(
+        "--bloc-definitions",
+        type=str,
+        default=None,
+        help="Comma-separated list of bloc definitions (e.g., 'ENTENTE_BLOC:ENG;FRA;RUS,OTHER_BLOC:GER;AUS')."
+    )
+    parser.add_argument(
+        "--llm-models",
+        type=str,
+        default=None,
+        help="Comma-separated list of model IDs for 'llm' or 'bloc_llm' type agents, in order of appearance in --players. (e.g., 'gemma3:4b,gpt-4o-mini')."
     )
     # Arguments from original lm_game.py relevant to GameConfig
     parser.add_argument(
@@ -219,38 +251,53 @@ async def main():
     args = parse_arguments()
     _apply_preset_to_args(args) # Apply presets first
 
-    # Convert comma-separated strings from args to lists
+    # Convert comma-separated strings from args to lists and store them on args
+    # This makes them available to GameConfig
     if args.llm_models:
-        args.llm_models = [m.strip() for m in args.llm_models.split(",")]
-    if args.fixed_models and isinstance(args.fixed_models, str): # Could be set by preset
-        args.fixed_models = [m.strip() for m in args.fixed_models.split(",")]
+        args.llm_models_list = [m.strip() for m in args.llm_models.split(",")]
+    else:
+        args.llm_models_list = [] # Ensure it's a list
+
+    if args.fixed_models and isinstance(args.fixed_models, str):
+        args.fixed_models_list = [m.strip() for m in args.fixed_models.split(",")]
+    elif args.fixed_models: # Already a list from preset
+        args.fixed_models_list = args.fixed_models
+    else:
+        args.fixed_models_list = []
+
+
     if args.players:
-        args.players = [p.strip().lower() for p in args.players.split(",")]
+        # Keep case for player identifiers like "ENTENTE_BLOC"
+        args.players_list = [p.strip() for p in args.players.split(",")]
+    else:
+        args.players_list = [] # Ensure it's a list
+
+    if args.agent_types:
+        args.agent_types_list = [t.strip().lower() for t in args.agent_types.split(",")]
+    else:
+        args.agent_types_list = []
+
+    if args.bloc_definitions:
+        args.bloc_definitions_list = [d.strip() for d in args.bloc_definitions.split(",")]
+    else:
+        args.bloc_definitions_list = []
+
     if args.exclude_powers:
-        args.exclude_powers = [p.strip().upper() for p in args.exclude_powers.split(",")]
+        args.exclude_powers_list = [p.strip().upper() for p in args.exclude_powers.split(",")]
+    else:
+        args.exclude_powers_list = []
 
-    # Default num_players if not set by preset or arg
-    if args.num_players is None:
-        if args.game_factory and "wwi_two_player" in args.game_factory:
-            args.num_players = 2
-        elif args.players:
-            args.num_players = len(args.players)
-        else:
-            args.num_players = 7 # Default for standard game
-    
-    # Default num_negotiation_rounds if not set by preset or arg
-    if args.num_negotiation_rounds is None:
-        if args.preset in ["2p_quick", "wwi_2p"]:
-            args.num_negotiation_rounds = 0
-        else:
-            args.num_negotiation_rounds = 3
-
-
-    config = GameConfig(args)
+    # Pass the modified args to GameConfig
+    config = GameConfig(args) # GameConfig will pick up *_list attributes
     setup_logging(config)
 
     logger.info(f"Starting Diplomacy game: {config.game_id}")
-    logger.info(f"Full configuration: {vars(config.args)}")
+    # Log the lists from the config object where they are stored
+    logger.info(f"Players List: {config.players_list}")
+    logger.info(f"Agent Types List: {config.agent_types_list}")
+    logger.info(f"Bloc Definitions List: {config.bloc_definitions_list}")
+    logger.info(f"LLM Models List: {config.args.llm_models_list}") # from args
+    logger.info(f"Fixed Models List: {config.args.fixed_models_list}") # from args
     start_time = time.time()
 
     game: Optional[Game] = None
@@ -259,132 +306,121 @@ async def main():
 
     try:
         game_history = GameHistory()
+        agent_manager = AgentManager(config)
 
-        # AgentManager needs to handle the mapping of conceptual players (like "ENTENTE_BLOC")
-        # to the actual game powers they control (e.g., ENGLAND, FRANCE, RUSSIA).
-        # This is crucial for scenarios like wwi_two_player where the game factory
-        # sets up a game with bloc names but the underlying diplomacy.Game object
-        # still operates with standard powers. The AgentManager will need to ensure
-        # that an agent representing a bloc acts for all its assigned standard powers.
-        agent_manager = AgentManager(config) # AgentManager now uses config.args directly
+        # Construct agent_configurations
+        agent_configurations: Dict[str, Dict[str, Any]] = {}
+        actual_player_names_for_game: List[str] = [] # For game factory
 
-        # Determine player names for the game and agents
-        # These names will be the "powers" if a game factory like wwi_two_player is used.
-        actual_player_names_for_game: List[str] = []
-        if args.players:
-            # Use names from --players argument if provided. These become the "powers" in the game context.
-            # For wwi_2p, these would be like "ENTENTE_BLOC", "CENTRAL_BLOC"
-            # We need unique names if multiple llms are just "llm"
-            llm_count = 0
-            for i, p_type in enumerate(args.players):
-                if p_type == "llm":
-                    actual_player_names_for_game.append(f"LLM_PLAYER_{i+1}")
-                    llm_count +=1
-                else:
-                    actual_player_names_for_game.append(f"{p_type.upper()}_{i+1}") # e.g. HUMAN_1
-            
-            # If llm_models are not specified, but fixed_models are, and match llm_count, use fixed_models.
-            # Or, if llm_models are not specified, and fixed_models has enough models for llm_count, use them.
-            # The primary source for models with --players should be --llm-models.
-            if not args.llm_models and args.fixed_models and len(args.fixed_models) >= llm_count:
-                args.llm_models = args.fixed_models[:llm_count]
-                logger.info(f"Using fixed_models for llm_models with --players: {args.llm_models}")
-            elif not args.llm_models and llm_count > 0:
-                logger.error("LLM players specified via --players, but --llm-models not provided or insufficient from --fixed_models.")
+        if config.players_list and config.agent_types_list:
+            if len(config.players_list) != len(config.agent_types_list):
+                logger.error("--players and --agent-types must have the same number of elements.")
                 sys.exit(1)
 
+            actual_player_names_for_game = config.players_list # These are the entities for the game
 
-        # 3. Create Game Instance
-        if args.game_factory:
+            llm_model_idx = 0
+            # Use llm_models_list from args, or fixed_models_list as fallback
+            llm_models_available = config.args.llm_models_list or config.args.fixed_models_list or []
+
+            parsed_bloc_defs: Dict[str, List[str]] = {}
+            if config.bloc_definitions_list:
+                for bloc_def_str in config.bloc_definitions_list:
+                    parts = bloc_def_str.split(":", 1)
+                    if len(parts) == 2:
+                        bloc_name_def, powers_str = parts
+                        parsed_bloc_defs[bloc_name_def.strip()] = [p.strip().upper() for p in powers_str.split(";")]
+                    else:
+                        logger.warning(f"Invalid bloc definition format: {bloc_def_str}. Skipping.")
+
+            for i, player_identifier in enumerate(config.players_list):
+                agent_type = config.agent_types_list[i]
+                current_agent_setup: Dict[str, Any] = {"type": agent_type}
+
+                if agent_type == "llm":
+                    current_agent_setup["country"] = player_identifier
+                    if llm_model_idx < len(llm_models_available):
+                        current_agent_setup["model_id"] = llm_models_available[llm_model_idx]
+                        llm_model_idx += 1
+                    else:
+                        logger.warning(f"Not enough models for LLM agent: {player_identifier}. Using default or None.")
+                        current_agent_setup["model_id"] = None
+                elif agent_type == "neutral":
+                    current_agent_setup["country"] = player_identifier
+                    # model_id is not strictly needed, NeutralAgent sets its own
+                elif agent_type == "bloc_llm":
+                    current_agent_setup["bloc_name"] = player_identifier
+                    if player_identifier in parsed_bloc_defs:
+                        current_agent_setup["controlled_powers"] = parsed_bloc_defs[player_identifier]
+                    else:
+                        logger.error(f"No definition found for bloc: {player_identifier} in --bloc-definitions. Skipping.")
+                        continue
+                    if llm_model_idx < len(llm_models_available):
+                        current_agent_setup["model_id"] = llm_models_available[llm_model_idx]
+                        llm_model_idx += 1
+                    else:
+                        logger.warning(f"Not enough models for BlocLLM agent: {player_identifier}. Using default or None.")
+                        current_agent_setup["model_id"] = None
+                elif agent_type == "human":
+                    current_agent_setup["country"] = player_identifier
+                    logger.info(f"Human player defined: {player_identifier}. Manual control assumed. Skipping agent creation via AgentManager.")
+                    continue # AgentManager doesn't create human agents
+                else:
+                    logger.warning(f"Unknown agent type: {agent_type} for player {player_identifier}. Skipping.")
+                    continue
+                
+                agent_configurations[player_identifier] = current_agent_setup
+
+        elif not config.args.game_factory : # No players list, standard game. Default to 7 LLM players if nothing else.
+            logger.info("No --players list provided. Assuming standard 7-power game with LLMs or specified num_players.")
+            game_temp = Game() # Temp game to get standard powers
+            standard_powers = list(game_temp.powers.keys())
+
+            num_llms_to_create = config.num_players if config.num_players is not None else 7
+            actual_player_names_for_game = standard_powers # All standard powers are potential players
+
+            llm_models_available = config.args.llm_models_list or config.args.fixed_models_list or []
+            llm_model_idx = 0
+
+            for i, power_name in enumerate(standard_powers):
+                if config.exclude_powers_list and power_name in config.exclude_powers_list:
+                    agent_configurations[power_name] = {"type": "neutral", "country": power_name}
+                elif i < num_llms_to_create:
+                    model_to_use = None
+                    if llm_model_idx < len(llm_models_available):
+                        model_to_use = llm_models_available[llm_model_idx]
+                        llm_model_idx +=1
+                    elif len(llm_models_available) > 0 : # Cycle if models provided but fewer than players
+                        model_to_use = llm_models_available[llm_model_idx % len(llm_models_available)]
+                        llm_model_idx +=1
+                    else:
+                         logger.warning(f"Not enough models for standard LLM player {power_name}. Model set to None.")
+                    agent_configurations[power_name] = {"type": "llm", "country": power_name, "model_id": model_to_use}
+                else: # Remaining players are neutral
+                    agent_configurations[power_name] = {"type": "neutral", "country": power_name}
+            actual_player_names_for_game = [p for p in standard_powers if not (config.exclude_powers_list and p in config.exclude_powers_list)]
+
+
+        if not agent_configurations:
+            logger.error("No agent configurations created. Check arguments. Exiting.")
+            sys.exit(1)
+
+        # Create Game Instance
+        if config.args.game_factory:
             if not actual_player_names_for_game:
-                # Default player names if --players not specified but factory is.
-                # For wwi_2p, this means we need two default names.
-                if "wwi_two_player" in args.game_factory:
-                     actual_player_names_for_game = ["ENTENTE_BLOC", "CENTRAL_BLOC"]
-                else: # Generic factory, this might not be enough
-                    logger.error("Game factory specified, but --players not provided to define player names for the factory.")
-                    sys.exit(1)
-            game = get_game_from_factory(args.game_factory, actual_player_names_for_game)
-            logger.info(f"Game created using factory: {args.game_factory}")
-            logger.info(f"Game powers after factory: {list(game.powers.keys())}")
+                 # This case should ideally be handled by presets or arg validation for factories
+                logger.error("Game factory specified, but no player names determined (e.g. from --players).")
+                sys.exit(1)
+            game = get_game_from_factory(config.args.game_factory, actual_player_names_for_game)
+            logger.info(f"Game created using factory: {config.args.game_factory}. Players: {actual_player_names_for_game}")
         else:
             game = Game() # Standard game
             logger.info("Standard game created.")
-            # For standard game, actual_player_names_for_game are the standard powers unless excluded
-            standard_powers = list(game.powers.keys())
-            if args.exclude_powers:
-                actual_player_names_for_game = [p for p in standard_powers if p not in args.exclude_powers]
-            else:
-                actual_player_names_for_game = standard_powers
-            
-            if args.num_players is not None and args.num_players < len(actual_player_names_for_game):
-                 actual_player_names_for_game = actual_player_names_for_game[:args.num_players]
+            # Filter game.powers if some are excluded and became neutral.
+            # For standard game, actual_player_names_for_game was already set to non-excluded standard powers.
 
-
-        # 5. Assign models and Initialize Agents
-        # The "powers" for AgentManager are now actual_player_names_for_game
-        # These could be "FRANCE", "GERMANY" for standard, or "ENTENTE_BLOC", "CENTRAL_BLOC" for wwi_2p
-        
-        powers_and_models_map: Dict[str, str] = {}
-        if args.players and args.llm_models:
-            llm_model_idx = 0
-            for i, p_type in enumerate(args.players):
-                player_name_for_game = actual_player_names_for_game[i] # e.g. LLM_PLAYER_1
-                if p_type == "llm":
-                    if llm_model_idx < len(args.llm_models):
-                        powers_and_models_map[player_name_for_game] = args.llm_models[llm_model_idx]
-                        llm_model_idx += 1
-                    else:
-                        logger.error(f"Not enough models in --llm-models for all 'llm' players in --players.")
-                        sys.exit(1)
-                # elif p_type == "human": # Placeholder for human/other agent types
-                #    logger.info(f"Player {player_name_for_game} is human, no LLM model assigned.")
-        elif not args.game_factory: # Standard game assignment if not using --players
-            # This uses the original logic of assigning models from fixed_models or model_id
-            # to a subset of standard game powers.
-            # Ensure actual_player_names_for_game contains the powers to be LLM controlled.
-            llm_controlled_powers = agent_manager.get_llm_controlled_powers(
-                all_game_powers=actual_player_names_for_game, # These are the powers active in the game
-                num_llm_players=config.args.num_players or len(actual_player_names_for_game), # num_players from config
-                primary_power_name=config.args.power_name,
-                primary_model_id=config.args.model_id,
-                fixed_models_list=config.args.fixed_models if isinstance(config.args.fixed_models, list) else None,
-                randomize_assignment=config.args.randomize_fixed_models
-            )
-            powers_and_models_map = llm_controlled_powers # The function now returns the map directly
-        else: # Game factory used, but --players not, this is ambiguous.
-              # For wwi_2p, actual_player_names_for_game = ["ENTENTE_BLOC", "CENTRAL_BLOC"]
-              # We need to assign models to these.
-            if "wwi_two_player" in args.game_factory and len(actual_player_names_for_game) == 2:
-                models_to_assign = []
-                if args.llm_models and len(args.llm_models) >= 2:
-                    models_to_assign = args.llm_models[:2]
-                elif args.fixed_models and len(args.fixed_models) >= 2: # fixed_models can be string or list here
-                    models_list = args.fixed_models if isinstance(args.fixed_models, list) else [m.strip() for m in args.fixed_models.split(",")]
-                    models_to_assign = models_list[:2]
-                else: # Fallback to preset default if any, or error
-                    # The preset for wwi_2p already defaults fixed_models if llm_models isn't given.
-                     models_list_preset = [m.strip() for m in "gemma3:4b,gemma3:4b".split(",")] # default
-                     if args.fixed_models and isinstance(args.fixed_models, str): # from preset potentially
-                         models_list_preset = [m.strip() for m in args.fixed_models.split(",")]
-                     elif args.fixed_models and isinstance(args.fixed_models, list):
-                         models_list_preset = args.fixed_models
-
-                     if len(models_list_preset) >= 2:
-                         models_to_assign = models_list_preset[:2]
-                     else:
-                        logger.error("For wwi_2p preset, not enough models specified via --llm-models or --fixed_models.")
-                        sys.exit(1)
-                
-                powers_and_models_map[actual_player_names_for_game[0]] = models_to_assign[0]
-                powers_and_models_map[actual_player_names_for_game[1]] = models_to_assign[1]
-
-        if not powers_and_models_map:
-            logger.error("No LLM-controlled powers were assigned. Check --players, --llm-models, or game setup. Exiting.")
-            sys.exit(1)
-
-        logger.info(f"LLM Agents to be initialized for: {powers_and_models_map}")
-        agent_manager.initialize_agents(powers_and_models_map, game) # Pass game to initialize_agents
+        logger.info(f"Agents to be initialized: {agent_configurations}")
+        agent_manager.initialize_agents(agent_configurations)
 
         if not agent_manager.agents:
             logger.error("Failed to initialize any agents. Exiting.")
@@ -409,7 +445,7 @@ async def main():
             logger.info("Game loop finished or interrupted. Processing final results...")
             results_processor = GameResultsProcessor(config) # config now holds args
             results_processor.log_final_results(game)
-            if config.args.log_to_file: # Access log_to_file via config.args
+            if config.log_to_file: # Access log_to_file via config itself
                 results_processor.save_game_state(game, game_history)
                 if agent_manager.agents:
                     results_processor.save_agent_manifestos(agent_manager.agents) # Pass dict of agents

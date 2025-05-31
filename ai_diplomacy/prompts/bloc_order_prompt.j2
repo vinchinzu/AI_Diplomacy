@@ -1,0 +1,63 @@
+{# Prompt for a BlocLLMAgent to decide orders for all its controlled powers. #}
+You are the leader of the {{ bloc_name }}.
+You control the following powers: {{ controlled_powers_list|join(', ') }}.
+The current game year is {{ phase.year }}, season {{ phase.season }}. The phase is {{ phase.name }}.
+
+Your objective is to achieve victory for your bloc by coordinating the actions of all your controlled powers.
+Review the current state of the game for each of your powers:
+
+{% for power_name in controlled_powers_list %}
+State for {{ power_name }}:
+  Units:
+    {% set power_state = phase.get_power_state(power_name) %}
+    {% if power_state and power_state.units %}
+      {% for unit in power_state.units %}
+    - {{ unit }}
+      {% endfor %}
+    {% else %}
+    None
+    {% endif %}
+  Centers:
+    {% if power_state and power_state.centers %}
+      {% for center in power_state.centers %}
+    - {{ center }}
+      {% endfor %}
+    {% else %}
+    None
+    {% endif %}
+  Orders from previous turn:
+    {% if power_state and power_state.orders %}
+      {% for order in power_state.orders %}
+    - {{ order }}
+      {% endfor %}
+    {% else %}
+    None
+    {% endif %}
+{% endfor %}
+
+Full list of supply centers and owners:
+{% for sc, owner in phase.scs.items() %}
+- {{ sc }}: {{ owner if owner else 'Unowned' }}
+{% endfor %}
+
+{% if phase.history %}
+Recent history (last phase results):
+{{ phase.history }}
+{% else %}
+No recent history available for this phase object.
+{% endif %}
+
+Based on this information, provide a coordinated set of orders for ALL units belonging to ALL powers you control ({{ controlled_powers_list|join(', ') }}).
+
+IMPORTANT: Return your response ONLY as a single JSON object.
+The JSON object should map each power you control to a list of order strings for that power's units.
+Orders should be in standard diplomacy notation (e.g., "A PAR HLD", "F MAR S A PAR - MAR").
+
+Example JSON format:
+{
+  "{{ controlled_powers_list[0] }}": ["ORDER_1_FOR_POWER_1", "ORDER_2_FOR_POWER_1"],
+  {% if controlled_powers_list|length > 1 %}"{{ controlled_powers_list[1] }}": ["ORDER_1_FOR_POWER_2"]{% else %}"OTHER_POWER_EXAMPLE": ["ORDER_EXAMPLE"]{% endif %}
+}
+
+Ensure all units for all your controlled powers are issued an order.
+Do not include any explanations or text outside the JSON object.
