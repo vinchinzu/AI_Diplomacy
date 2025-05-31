@@ -10,7 +10,8 @@ import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
-import { MomentsDataSchema, MomentsDataSchemaType, Moment, NormalizedMomentsData } from "./types/moments";
+import { MomentsDataSchema, MomentsDataSchemaType, Moment } from "./types/moments";
+import { showEndScreenModal } from "./components/endScreenModal";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -34,23 +35,23 @@ function loadFileFromServer(filePath: string): Promise<string> {
     fetch(filePath)
       .then(response => {
         if (!response.ok) {
-          alert(`Couldn't load file, received reponse code ${response.status}`)
-          throw new Error(`Failed to load file: ${response.status}`);
+          console.error(`Couldn't load file, received reponse code ${response.status}`)
+          reject(`Failed to load file: ${response.status}`);
         }
 
         // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
         // Check content type to avoid HTML errors
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('text/html')) {
-          alert(`Unable to load file ${filePath}, was presented HTML, contentType ${contentType}`)
-          throw new Error('Received HTML instead of JSON. Check the file path.');
+          console.error(`Unable to load file ${filePath}, was presented HTML, contentType ${contentType}`)
+          reject('Received HTML instead of JSON. Check the file path.');
         }
         return response.text();
       })
       .then(data => {
         // Check for HTML content as a fallback
         if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-          throw new Error('Received HTML instead of JSON. Check the file path.');
+          reject('Received HTML instead of JSON. Check the file path.');
         }
         resolve(data)
       })
@@ -165,7 +166,7 @@ class GameState {
           loadFileFromServer(momentsFilePath)
             .then((data) => {
               const parsedData = JSON.parse(data);
-              
+
               // Check if this is the comprehensive format and normalize it
               if ('analysis_results' in parsedData && parsedData.analysis_results) {
                 // Transform comprehensive format to animation format
@@ -181,7 +182,7 @@ class GameState {
                 // Type assertion since we know this is the animation format after parsing
                 this.momentsData = validatedData as NormalizedMomentsData;
               }
-              
+
               logger.log(`Loaded ${this.momentsData.moments.length} moments from ${momentsFilePath}`);
             })
             .catch((error) => {
@@ -273,12 +274,102 @@ class GameState {
    * Loads the next game in the order, reseting the board and gameState
    */
   loadNextGame = () => {
-    //
+    // Increment game ID
+    this.gameId += 1;
 
-    this.gameId += 1
+    // Reset game state
+    this.phaseIndex = 0;
+    this.messagesPlaying = false;
+    this.isAnimating = false;
+    this.isDisplayingMoment = false;
+    this.nextPhaseScheduled = false;
+    this.isSpeaking = false;
 
-    // Try to load the next game, if it fails, show end screen forever
+    // Clear animations and timers
+    this.unitAnimations = [];
+    if (this.playbackTimer) {
+      clearTimeout(this.playbackTimer);
+      this.playbackTimer = 0;
+    }
 
+    console.log(`Loading next game: ${this.gameId}`);
+
+    // Try to load the next game, if it fails, show end screen
+    const gameFilePath = `./games/${this.gameId}/game.json`;
+    loadFileFromServer(gameFilePath)
+      .then((data) => {
+        return this.loadGameData(data);
+      })
+      .then(() => {
+        console.log(`Game ${this.gameId} loaded successfully`);
+        // Explicitly hide standings board after loading game
+        hideStandingsBoard();
+        // Update rotating display and relationship popup with game data
+        if (this.gameData) {
+          updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
+          updateGameIdDisplay();
+        }
+      })
+      .catch(error => {
+        console.error(`Failed to load game ${this.gameId}: ${error.message}`);
+        // If we can't load the next game, show an end screen or stop
+        this.showEndScreen();
+      });
+  }
+
+  /*
+   * Shows an end screen when no more games are available
+   */
+  private showEndScreen = () => {
+    const totalGamesPlayed = this.gameId - 1; // gameId is incremented past the last valid game
+    console.log(`No more games available - reached end of series after ${totalGamesPlayed} games`);
+
+    // Update play button to show we've stopped
+    if (playBtn) {
+      playBtn.textContent = "▶ Play";
+    }
+
+    // Log message for user
+    logger.log(`End of game series reached. Completed ${totalGamesPlayed} games.`);
+
+    // Show end screen modal with restart functionality
+    showEndScreenModal({
+      totalGamesPlayed,
+      onRestart: () => {
+        console.log('Restarting game series from beginning');
+        this.restartSeries();
+      }
+    });
+  }
+
+  /*
+   * Restarts the game series from the beginning
+   */
+  private restartSeries = () => {
+    // Reset to first game
+    this.gameId = 0;
+
+    // Reset game state
+    this.phaseIndex = 0;
+    this.messagesPlaying = false;
+    this.isAnimating = false;
+    this.isDisplayingMoment = false;
+    this.nextPhaseScheduled = false;
+    this.isSpeaking = false;
+
+    // Clear animations and timers
+    this.unitAnimations = [];
+    if (this.playbackTimer) {
+      clearTimeout(this.playbackTimer);
+      this.playbackTimer = 0;
+    }
+
+    console.log('Restarting series with game 1');
+
+    // Load the first game
+    const gameFilePath = `./games/${gameState.gameId}/game.json`;
+    this.loadGameFile(0)
+    this.isPlaying = true;
   }
 
   /*

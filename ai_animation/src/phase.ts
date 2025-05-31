@@ -9,6 +9,7 @@ import { speakSummary } from "./speech";
 import { config } from "./config";
 import { debugMenuInstance } from "./debug/debugMenu";
 import { showTwoPowerConversation, closeTwoPowerConversation } from "./components/twoPowerConversation";
+import { closeVictoryModal, showVictoryModal } from "./components/victoryModal";
 import { PowerENUM } from "./types/map";
 import { notifyPhaseChange } from "./webhooks/phaseNotifier";
 
@@ -115,8 +116,7 @@ export function displayPhase(skipMessages = false) {
   let index = gameState.phaseIndex
   if (index >= gameState.gameData.phases.length) {
     displayFinalPhase()
-    logger.log("Displayed final phase, moving to next game.")
-    gameState.loadNextGame()
+    logger.log("Displayed final phase.")
     return;
   }
   if (!gameState.gameData || !gameState.gameData.phases ||
@@ -281,24 +281,34 @@ function displayFinalPhase() {
 
   // Display victory message
   if (winner && maxCenters > 0) {
-    const victoryMessage = `🏆 GAME OVER - ${winner} WINS with ${maxCenters} supply centers! 🏆`;
-
-    // Add victory message to news banner with dramatic styling
-    addToNewsBanner(victoryMessage);
-
-    // Log the victory
-    logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
-
-    // Display final standings in console
-    const standings = Object.entries(finalPhase.state.centers)
+    // Create final standings
+    const finalStandings = Object.entries(finalPhase.state.centers)
       .map(([power, centers]) => ({
         power,
         centers: Array.isArray(centers) ? centers.length : 0
       }))
       .sort((a, b) => b.centers - a.centers);
 
+    // Show victory modal
+    showVictoryModal({
+      winner,
+      maxCenters,
+      finalStandings,
+      onClose: () => {
+        // Only proceed to next game if in playing mode
+        if (gameState.isPlaying) {
+          gameState.loadNextGame();
+        }
+      }
+    });
+    //setTimeout(closeVictoryModal, 10000)
+
+    // Log the victory
+    logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
+
+    // Display final standings in console
     console.log("Final Standings:");
-    standings.forEach((entry, index) => {
+    finalStandings.forEach((entry, index) => {
       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "  ";
       console.log(`${medal} ${entry.power}: ${entry.centers} centers`);
     });
