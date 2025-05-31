@@ -909,6 +909,77 @@ Game: {self.game_data_path}
         logger.info(f"JSON results saved: {output_path}")
         return str(output_path)
     
+    def save_moments_for_animation(self, output_path: Optional[str] = None) -> str:
+        """Save moments in the format expected by the animation project"""
+        # Generate output path if not provided
+        if not output_path:
+            # Default to moments.json in the same directory as the game data
+            output_path = self.results_folder / "moments.json"
+        
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Calculate category counts
+        category_counts = {
+            "betrayals": len([m for m in self.moments if m.category == "BETRAYAL"]),
+            "collaborations": len([m for m in self.moments if m.category == "COLLABORATION"]),
+            "playing_both_sides": len([m for m in self.moments if m.category == "PLAYING_BOTH_SIDES"]),
+            "brilliant_strategies": len([m for m in self.moments if m.category == "BRILLIANT_STRATEGY"]),
+            "strategic_blunders": len([m for m in self.moments if m.category == "STRATEGIC_BLUNDER"])
+        }
+        
+        # Calculate score distribution
+        score_dist = {
+            "scores_9_10": len([m for m in self.moments if m.interest_score >= 9]),
+            "scores_7_8": len([m for m in self.moments if 7 <= m.interest_score < 9]),
+            "scores_4_6": len([m for m in self.moments if 4 <= m.interest_score < 7]),
+            "scores_1_3": len([m for m in self.moments if m.interest_score < 4])
+        }
+        
+        # Prepare data in the expected format
+        animation_data = {
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "source_folder": str(self.results_folder),
+                "analysis_model": self.model_name,
+                "total_moments": len(self.moments),
+                "moment_categories": category_counts,
+                "score_distribution": score_dist
+            },
+            "power_models": self.power_to_model,
+            "moments": []
+        }
+        
+        # Format moments for animation
+        for moment in self.moments:
+            # Create diary context with only the powers involved
+            diary_context = {}
+            for power in ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]:
+                if power in moment.diary_context:
+                    diary_context[power] = moment.diary_context[power]
+                else:
+                    diary_context[power] = ""
+            
+            animation_moment = {
+                "phase": moment.phase,
+                "category": moment.category,
+                "powers_involved": moment.powers_involved,
+                "promise_agreement": moment.promise_agreement,
+                "actual_action": moment.actual_action,
+                "impact": moment.impact,
+                "interest_score": moment.interest_score,
+                "diary_context": diary_context
+            }
+            animation_data["moments"].append(animation_moment)
+        
+        # Write to file with proper formatting
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(animation_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Animation moments saved: {output_path}")
+        return str(output_path)
+    
     def _moment_to_dict(self, moment: GameMoment) -> dict:
         """Convert a GameMoment to a dictionary with all fields"""
         return {
@@ -933,6 +1004,7 @@ async def main():
     parser.add_argument('--max-phases', type=int, help='Maximum number of phases to analyze')
     parser.add_argument('--output', help='Output file path for the markdown report')
     parser.add_argument('--json', help='Output file path for the JSON data')
+    parser.add_argument('--animation-moments', help='Output file path for animation-compatible moments.json')
     
     args = parser.parse_args()
     
@@ -968,6 +1040,14 @@ async def main():
         report_path = await analyzer.generate_report(args.output)
         json_path = analyzer.save_json_results(args.json) if args.json else None
     
+    # Generate animation moments file if requested or by default
+    animation_path = None
+    if args.animation_moments:
+        animation_path = analyzer.save_moments_for_animation(args.animation_moments)
+    else:
+        # Always generate moments.json in the results folder for animation
+        animation_path = analyzer.save_moments_for_animation()
+    
     # Print summary
     print(f"\nAnalysis Complete!")
     print(f"Found {len(analyzer.moments)} key moments")
@@ -975,6 +1055,8 @@ async def main():
     print(f"\nReport saved to: {report_path}")
     if json_path:
         print(f"JSON data saved to: {json_path}")
+    if animation_path:
+        print(f"Animation moments saved to: {animation_path}")
     
     # Show score distribution
     print("\nScore Distribution:")
