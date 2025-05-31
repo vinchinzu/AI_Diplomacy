@@ -18,7 +18,7 @@ import logging
 import csv
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -48,6 +48,7 @@ class GameMoment:
     raw_messages: List[Dict]
     raw_orders: Dict
     diary_context: Dict[str, str]  # New field for diary entries
+    state_update_context: Dict[str, str] = None  # New field for state updates
 
 @dataclass
 class Lie:
@@ -75,6 +76,7 @@ class GameAnalyzer:
         self.power_to_model = None
         self.moments = []
         self.diary_entries = {}  # phase -> power -> diary content
+        self.state_updates = {}  # phase -> power -> state update content
         self.invalid_moves_by_model = {} # Initialize attribute
         self.lies = []  # Track detected lies
         self.lies_by_model = {}  # model -> {intentional: count, unintentional: count}
@@ -99,6 +101,10 @@ class GameAnalyzer:
         # Load diary entries from CSV
         self.diary_entries = self.parse_llm_responses_csv()
         logger.info(f"Loaded diary entries for {len(self.diary_entries)} phases")
+        
+        # Load state updates from CSV
+        self.state_updates = self.parse_state_updates_csv()
+        logger.info(f"Loaded state updates for {len(self.state_updates)} phases")
         
         # Load invalid moves data from CSV
         self.invalid_moves_by_model = self.parse_invalid_moves_from_csv()
@@ -185,6 +191,87 @@ class GameAnalyzer:
             logger.error(f"Error parsing CSV file: {e}")
             return {}
     
+    def parse_state_updates_csv(self) -> Dict[str, Dict[str, str]]:
+        """Parse the CSV file to extract state updates by phase and power"""
+        state_updates = {}
+        
+        try:
+            import pandas as pd
+            # Use pandas for more robust CSV parsing
+            df = pd.read_csv(self.csv_path)
+            
+            # Filter for state update entries
+            state_df = df[df['response_type'] == 'state_update']
+            
+            for _, row in state_df.iterrows():
+                phase = row['phase']
+                power = row['power']
+                raw_response = str(row['raw_response']).strip()
+                
+                if phase not in state_updates:
+                    state_updates[phase] = {}
+                
+                try:
+                    # Try to parse as JSON first
+                    response = json.loads(raw_response)
+                    state_content = f"Reasoning: {response.get('reasoning', 'N/A')}\n"
+                    state_content += f"Relationships: {response.get('relationships', {})}\n"
+                    goals = response.get('goals', [])
+                    if isinstance(goals, list):
+                        state_content += f"Goals: {'; '.join(goals)}"
+                    else:
+                        state_content += f"Goals: {goals}"
+                    state_updates[phase][power] = state_content
+                except (json.JSONDecodeError, TypeError):
+                    # If JSON parsing fails, use a simplified version or skip
+                    if raw_response and raw_response.lower() not in ['null', 'nan', 'none']:
+                        state_updates[phase][power] = f"Raw state update: {raw_response}"
+                    
+            logger.info(f"Successfully parsed {len(state_updates)} phases with state updates")
+            return state_updates
+            
+        except ImportError:
+            # Fallback to standard CSV if pandas not available
+            logger.info("Pandas not available, using standard CSV parsing for state updates")
+            import csv
+            
+            with open(self.csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        if row.get('response_type') == 'state_update':
+                            phase = row.get('phase', '')
+                            power = row.get('power', '')
+                            
+                            if phase and power:
+                                if phase not in state_updates:
+                                    state_updates[phase] = {}
+                                
+                                raw_response = row.get('raw_response', '').strip()
+                                
+                                try:
+                                    # Try to parse as JSON
+                                    response = json.loads(raw_response)
+                                    state_content = f"Reasoning: {response.get('reasoning', 'N/A')}\n"
+                                    state_content += f"Relationships: {response.get('relationships', {})}\n"
+                                    goals = response.get('goals', [])
+                                    if isinstance(goals, list):
+                                        state_content += f"Goals: {'; '.join(goals)}"
+                                    else:
+                                        state_content += f"Goals: {goals}"
+                                    state_updates[phase][power] = state_content
+                                except (json.JSONDecodeError, TypeError):
+                                    if raw_response and raw_response != "null":
+                                        state_updates[phase][power] = f"Raw state update: {raw_response}"
+                    except Exception as e:
+                        continue  # Skip problematic rows
+                        
+            return state_updates
+            
+        except Exception as e:
+            logger.error(f"Error parsing state updates from CSV file: {e}")
+            return {}
+    
     def parse_invalid_moves_from_csv(self) -> Dict[str, int]:
         """Parse the CSV file to count invalid moves by model"""
         invalid_moves_by_model = {}
@@ -248,13 +335,17 @@ class GameAnalyzer:
         # Get diary entries for this phase
         phase_diaries = self.diary_entries.get(phase_name, {})
         
+        # Get state updates for this phase
+        phase_state_updates = self.state_updates.get(phase_name, {})
+        
         return {
             "phase": phase_name,
             "messages": phase_data.get("messages", []),
             "orders": phase_data.get("orders", {}),
             "summary": phase_data.get("summary", ""),
             "statistical_summary": phase_data.get("statistical_summary", {}),
-            "diaries": phase_diaries
+            "diaries": phase_diaries,
+            "state_updates": phase_state_updates
         }
     
     def create_analysis_prompt(self, turn_data: Dict) -> str:
@@ -288,27 +379,43 @@ class GameAnalyzer:
             power_str = f"{power} ({power_model})" if power_model else power
             formatted_diaries.append(f"{power_str} DIARY:\n{diary}")
         
-        prompt = f"""You are analyzing diplomatic negotiations and subsequent military orders from a Diplomacy game. Your task is to identify key strategic moments in the following categories:
+        # Format state updates
+        formatted_state_updates = []
+        for power, state_update in turn_data.get("state_updates", {}).items():
+            power_model = self.power_to_model.get(power, '')
+            power_str = f"{power} ({power_model})" if power_model else power
+            formatted_state_updates.append(f"{power_str} STATE UPDATE:\n{state_update}")
+        
+        prompt = f"""You are analyzing diplomatic negotiations and subsequent military orders from a Diplomacy game. Your task is to identify ONLY the most significant strategic moments.
 
-1. BETRAYAL: When a power explicitly promises one action but takes a contradictory action
-2. COLLABORATION: When powers successfully coordinate as agreed
-3. PLAYING_BOTH_SIDES: When a power makes conflicting promises to different parties
-4. BRILLIANT_STRATEGY: Exceptionally well-executed strategic maneuvers that gain significant advantage
-5. STRATEGIC_BLUNDER: Major strategic mistakes that significantly weaken a power's position
+CRITICAL: 90% of game turns contain NO moments worth reporting. Only identify moments that meet these strict criteria:
 
-IMPORTANT SCORING GUIDELINES:
-- Scores 1-3: Minor or routine diplomatic events
-- Scores 4-6: Significant but expected diplomatic maneuvers
-- Scores 7-8: Notable strategic moments with clear impact
-- Scores 9-10: EXCEPTIONAL moments that are truly dramatic or game-changing
+CATEGORIES:
+1. BETRAYAL: Explicit promise broken that directly causes supply center loss
+2. COLLABORATION: Successful coordination that captures/defends supply centers
+3. PLAYING_BOTH_SIDES: Conflicting promises that manipulate the game's outcome
+4. BRILLIANT_STRATEGY: Moves that gain 2+ centers or save from elimination
+5. STRATEGIC_BLUNDER: Errors that lose 2+ centers or enable enemy victory
 
-Reserve high scores (8+) for:
-- Major betrayals that fundamentally shift alliances
-- Successful coordinated attacks on major powers
-- Clever deceptions that fool multiple powers
-- Brilliant strategic maneuvers that dramatically improve position
-- Catastrophic strategic errors with lasting consequences
-- Actions that dramatically alter the game's balance
+STRICT SCORING RUBRIC:
+- Scores 1-6: DO NOT REPORT THESE. Routine diplomacy, expected moves.
+- Score 7: Supply center changes hands due to this specific action
+- Score 8: Multiple centers affected or major power dynamic shift
+- Score 9: Completely alters the game trajectory (power eliminated, alliance system collapses)
+- Score 10: Once-per-game brilliance or catastrophe that determines the winner
+
+REQUIREMENTS FOR ANY REPORTED MOMENT:
+✓ Supply centers must change hands as a direct result
+✓ The action must be surprising given prior context
+✓ The impact must be immediately measurable
+✓ This must be a top-20 moment in the entire game
+
+Examples of what NOT to report:
+- Routine support orders that work as planned
+- Minor position improvements
+- Vague diplomatic promises
+- Failed attacks with no consequences
+- Defensive holds that maintain status quo
 
 For this turn ({turn_data.get('phase', '')}), analyze:
 
@@ -323,6 +430,9 @@ ORDERS:
 
 TURN SUMMARY:
 {turn_data.get('summary', 'No summary available')}
+
+STATE UPDATES (Powers' reactions after seeing results):
+{chr(10).join(formatted_state_updates) if formatted_state_updates else 'No state updates available'}
 
 Identify ALL instances that fit the five categories. For each instance provide:
 {{
@@ -391,7 +501,8 @@ PROVIDE YOUR RESPONSE BELOW:"""
                     interest_score=float(moment.get("interest_score", 5)),
                     raw_messages=turn_data["messages"],
                     raw_orders=turn_data["orders"],
-                    diary_context=turn_data["diaries"]
+                    diary_context=turn_data["diaries"],
+                    state_update_context=turn_data["state_updates"]
                 )
                 moments.append(game_moment)
                 logger.info(f"Detected {game_moment.category} in {game_moment.phase} "
@@ -663,7 +774,7 @@ PROVIDE YOUR RESPONSE BELOW:"""
                         break
         
         # Create the narrative prompt
-        narrative_prompt = f"""Generate a dramatic narrative of this Diplomacy game that covers the ENTIRE game from beginning to end.
+        narrative_prompt = f"""Generate a dramatic narrative of this Diplomacy game that covers the ENTIRE game from beginning to end. You should not spend too much time on any one phase. You should be telling stories across the whole game, focusing on the most important moments. Don't repeat yourself. Really think about the art of storytelling here and how to make this engaging, highlighting both the power and the model itself, which is more interesting throughout. Make sure you call back to relationships that used to exist and how things change throughout, and culminate in a satisfying ending.
 
 POWER MODELS:
 {chr(10).join([f"- {power}: {model}" for power, model in self.power_to_model.items()])}
@@ -700,6 +811,8 @@ Write a compelling narrative that:
 7. Names each power with their model in parentheses (e.g., "France (claude-opus-4-20250514)")
 8. Is written as a single flowing paragraph
 9. Captures the drama and tension of the entire game
+10. Is well formatted with great spacing that makes it easy to read and breaks phases of the game into paragraphs
+11. The whole thing should be relatively concise
 
 PROVIDE YOUR NARRATIVE BELOW:"""
         
@@ -715,14 +828,9 @@ PROVIDE YOUR NARRATIVE BELOW:"""
         """Generate the full analysis report matching the exact format of existing reports"""
         # Generate output path if not provided
         if not output_path:
-            # Create game_moments directory in project root
-            game_moments_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "game_moments"
-            game_moments_dir.mkdir(exist_ok=True)
-            
-            # Extract game name from results folder
-            results_name = os.path.basename(os.path.normpath(str(self.results_folder)))
+            # Save directly in the results folder
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = game_moments_dir / f"{results_name}_report_{timestamp}.md"
+            output_path = self.results_folder / f"game_moments_report_{timestamp}.md"
         
         # Ensure the parent directory exists
         output_path = Path(output_path)
@@ -835,6 +943,13 @@ Game: {self.game_data_path}
                 for power in moment.powers_involved:
                     if power in moment.diary_context:
                         report += f"_{self.format_power_with_model(power)} Diary:_ {moment.diary_context[power]}\n\n"
+                
+                # Add state update context
+                if moment.state_update_context:
+                    report += "**State Update Context (Post-Action Reflections):**\n\n"
+                    for power in moment.powers_involved:
+                        if power in moment.state_update_context:
+                            report += f"_{self.format_power_with_model(power)} State Update:_ {moment.state_update_context[power]}\n\n"
         
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -844,76 +959,10 @@ Game: {self.game_data_path}
         return str(output_path)
     
     def save_json_results(self, output_path: Optional[str] = None) -> str:
-        """Save all moments and lies as JSON for further analysis"""
+        """Save all moments and lies as JSON in a unified format that works for both analysis and animation"""
         # Generate output path if not provided
         if not output_path:
-            # Create game_moments directory in project root
-            game_moments_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "game_moments"
-            game_moments_dir.mkdir(exist_ok=True)
-            
-            # Extract game name from results folder
-            results_name = os.path.basename(os.path.normpath(str(self.results_folder)))
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = game_moments_dir / f"{results_name}_data_{timestamp}.json"
-        
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Prepare comprehensive data for JSON serialization
-        full_data = {
-            "metadata": {
-                "game_results_folder": str(self.results_folder),
-                "analysis_timestamp": datetime.now().isoformat(),
-                "model_used": self.model_name,
-                "game_data_path": str(self.game_data_path),
-                "power_to_model": self.power_to_model
-            },
-            "analysis_results": {
-                "moments": [self._moment_to_dict(moment) for moment in self.moments],
-                "lies": [asdict(lie) for lie in self.lies],
-                "invalid_moves_by_model": self.invalid_moves_by_model
-            },
-            "summary": {
-                "total_moments": len(self.moments),
-                "total_lies": len(self.lies),
-                "moments_by_category": {
-                    "BETRAYAL": len([m for m in self.moments if m.category == "BETRAYAL"]),
-                    "COLLABORATION": len([m for m in self.moments if m.category == "COLLABORATION"]),
-                    "PLAYING_BOTH_SIDES": len([m for m in self.moments if m.category == "PLAYING_BOTH_SIDES"]),
-                    "BRILLIANT_STRATEGY": len([m for m in self.moments if m.category == "BRILLIANT_STRATEGY"]),
-                    "STRATEGIC_BLUNDER": len([m for m in self.moments if m.category == "STRATEGIC_BLUNDER"])
-                },
-                "lies_by_power": {},
-                "intentional_lies": len([l for l in self.lies if l.intentional]),
-                "unintentional_lies": len([l for l in self.lies if not l.intentional]),
-                "score_distribution": {
-                    "9-10": len([m for m in self.moments if m.interest_score >= 9]),
-                    "7-8": len([m for m in self.moments if 7 <= m.interest_score < 9]),
-                    "4-6": len([m for m in self.moments if 4 <= m.interest_score < 7]),
-                    "1-3": len([m for m in self.moments if m.interest_score < 4])
-                }
-            },
-            "phases_analyzed": list(set(moment.phase for moment in self.moments))
-        }
-        
-        # Count lies by power
-        for lie in self.lies:
-            if lie.liar not in full_data["summary"]["lies_by_power"]:
-                full_data["summary"]["lies_by_power"][lie.liar] = 0
-            full_data["summary"]["lies_by_power"][lie.liar] += 1
-        
-        # Write to file with proper formatting
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(full_data, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"JSON results saved: {output_path}")
-        return str(output_path)
-    
-    def save_moments_for_animation(self, output_path: Optional[str] = None) -> str:
-        """Save moments in the format expected by the animation project"""
-        # Generate output path if not provided
-        if not output_path:
-            # Default to moments.json in the same directory as the game data
+            # Save directly in the results folder as moments.json for direct use
             output_path = self.results_folder / "moments.json"
         
         output_path = Path(output_path)
@@ -936,8 +985,9 @@ Game: {self.game_data_path}
             "scores_1_3": len([m for m in self.moments if m.interest_score < 4])
         }
         
-        # Prepare data in the expected format
-        animation_data = {
+        # Prepare unified data structure that includes all information
+        unified_data = {
+            # Animation-compatible metadata
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -945,43 +995,75 @@ Game: {self.game_data_path}
                 "analysis_model": self.model_name,
                 "total_moments": len(self.moments),
                 "moment_categories": category_counts,
-                "score_distribution": score_dist
+                "score_distribution": score_dist,
+                # Additional comprehensive metadata
+                "game_results_folder": str(self.results_folder),
+                "analysis_timestamp": datetime.now().isoformat(),
+                "model_used": self.model_name,
+                "game_data_path": str(self.game_data_path),
+                "power_to_model": self.power_to_model
             },
+            # Power models at root level for animation
             "power_models": self.power_to_model,
-            "moments": []
+            # Moments at root level for animation
+            "moments": [self._moment_to_dict(moment) for moment in self.moments],
+            # Analysis results in nested structure for comprehensive analysis
+            "analysis_results": {
+                "moments": [self._moment_to_dict(moment) for moment in self.moments],
+                "lies": [asdict(lie) for lie in self.lies],
+                "invalid_moves_by_model": self.invalid_moves_by_model
+            },
+            "summary": {
+                "total_moments": len(self.moments),
+                "total_lies": len(self.lies),
+                "moments_by_category": {
+                    "BETRAYAL": category_counts["betrayals"],
+                    "COLLABORATION": category_counts["collaborations"],
+                    "PLAYING_BOTH_SIDES": category_counts["playing_both_sides"],
+                    "BRILLIANT_STRATEGY": category_counts["brilliant_strategies"],
+                    "STRATEGIC_BLUNDER": category_counts["strategic_blunders"]
+                },
+                "lies_by_power": {},
+                "intentional_lies": len([l for l in self.lies if l.intentional]),
+                "unintentional_lies": len([l for l in self.lies if not l.intentional]),
+                "score_distribution": {
+                    "9-10": score_dist["scores_9_10"],
+                    "7-8": score_dist["scores_7_8"],
+                    "4-6": score_dist["scores_4_6"],
+                    "1-3": score_dist["scores_1_3"]
+                }
+            },
+            "phases_analyzed": list(set(moment.phase for moment in self.moments))
         }
         
-        # Format moments for animation
-        for moment in self.moments:
-            # Create diary context with only the powers involved
-            diary_context = {}
-            for power in ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]:
-                if power in moment.diary_context:
-                    diary_context[power] = moment.diary_context[power]
-                else:
-                    diary_context[power] = ""
-            
-            animation_moment = {
-                "phase": moment.phase,
-                "category": moment.category,
-                "powers_involved": moment.powers_involved,
-                "promise_agreement": moment.promise_agreement,
-                "actual_action": moment.actual_action,
-                "impact": moment.impact,
-                "interest_score": moment.interest_score,
-                "diary_context": diary_context
-            }
-            animation_data["moments"].append(animation_moment)
+        # Count lies by power
+        for lie in self.lies:
+            if lie.liar not in unified_data["summary"]["lies_by_power"]:
+                unified_data["summary"]["lies_by_power"][lie.liar] = 0
+            unified_data["summary"]["lies_by_power"][lie.liar] += 1
         
         # Write to file with proper formatting
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(animation_data, f, indent=2, ensure_ascii=False)
+            json.dump(unified_data, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Animation moments saved: {output_path}")
+        logger.info(f"Unified JSON results saved: {output_path}")
         return str(output_path)
+    
     
     def _moment_to_dict(self, moment: GameMoment) -> dict:
         """Convert a GameMoment to a dictionary with all fields"""
+        # Ensure all powers have entries in diary_context
+        all_powers = ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]
+        normalized_diary = {}
+        for power in all_powers:
+            normalized_diary[power] = moment.diary_context.get(power, "")
+        
+        # Ensure all powers have entries in state_update_context
+        normalized_state_update = {}
+        state_update_context = moment.state_update_context if hasattr(moment, 'state_update_context') else {}
+        for power in all_powers:
+            normalized_state_update[power] = state_update_context.get(power, "")
+        
         return {
             "phase": moment.phase,
             "category": moment.category,
@@ -992,7 +1074,8 @@ Game: {self.game_data_path}
             "interest_score": moment.interest_score,
             "raw_messages": moment.raw_messages,
             "raw_orders": moment.raw_orders,
-            "diary_context": moment.diary_context
+            "diary_context": normalized_diary,
+            "state_update_context": normalized_state_update
         }
 
 async def main():
@@ -1003,8 +1086,7 @@ async def main():
                        help='Model to use for analysis')
     parser.add_argument('--max-phases', type=int, help='Maximum number of phases to analyze')
     parser.add_argument('--output', help='Output file path for the markdown report')
-    parser.add_argument('--json', help='Output file path for the JSON data')
-    parser.add_argument('--animation-moments', help='Output file path for animation-compatible moments.json')
+    parser.add_argument('--json', help='Output file path for the JSON data (defaults to moments.json in results folder)')
     
     args = parser.parse_args()
     
@@ -1018,45 +1100,23 @@ async def main():
     await analyzer.analyze_game(max_phases=args.max_phases)
     
     # Generate coordinated outputs
-    # If neither output path is specified, generate both with matching timestamps
-    if not args.output and not args.json:
-        # Create game_moments directory in project root
-        game_moments_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "game_moments"
-        game_moments_dir.mkdir(exist_ok=True)
-        
-        # Extract game name from results folder
-        results_name = os.path.basename(os.path.normpath(args.results_folder))
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Generate both paths with same timestamp
-        report_path = game_moments_dir / f"{results_name}_report_{timestamp}.md"
-        json_path = game_moments_dir / f"{results_name}_data_{timestamp}.json"
-        
-        # Generate both outputs
-        report_path = await analyzer.generate_report(report_path)
-        json_path = analyzer.save_json_results(json_path)
-    else:
-        # Generate outputs with specified paths
-        report_path = await analyzer.generate_report(args.output)
-        json_path = analyzer.save_json_results(args.json) if args.json else None
+    # Always generate the report
+    report_path = await analyzer.generate_report(args.output)
     
-    # Generate animation moments file if requested or by default
-    animation_path = None
-    if args.animation_moments:
-        animation_path = analyzer.save_moments_for_animation(args.animation_moments)
+    # Generate JSON output - unified format that works for both analysis and animation
+    if args.json:
+        # Use the specified path
+        json_path = analyzer.save_json_results(args.json)
     else:
-        # Always generate moments.json in the results folder for animation
-        animation_path = analyzer.save_moments_for_animation()
+        # Default to moments.json in the results folder
+        json_path = analyzer.save_json_results()
     
     # Print summary
     print(f"\nAnalysis Complete!")
     print(f"Found {len(analyzer.moments)} key moments")
     print(f"Detected {len(analyzer.lies)} lies")
     print(f"\nReport saved to: {report_path}")
-    if json_path:
-        print(f"JSON data saved to: {json_path}")
-    if animation_path:
-        print(f"Animation moments saved to: {animation_path}")
+    print(f"JSON data saved to: {json_path}")
     
     # Show score distribution
     print("\nScore Distribution:")

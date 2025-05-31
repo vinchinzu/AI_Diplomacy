@@ -10,7 +10,7 @@ import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { displayInitialPhase } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
-import { MomentsDataSchema, MomentsDataSchemaType, Moment } from "./types/moments";
+import { MomentsDataSchema, MomentsDataSchemaType, Moment, NormalizedMomentsData } from "./types/moments";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -62,7 +62,7 @@ class GameState {
   boardState: CoordinateData
   gameId: number
   gameData: GameSchemaType
-  momentsData: MomentsDataSchemaType
+  momentsData: NormalizedMomentsData | null
   phaseIndex: number
   boardName: string
   currentPower: PowerENUM
@@ -99,6 +99,7 @@ class GameState {
     this.boardName = boardName
     this.currentPower = null;
     this.gameId = 1
+    this.momentsData = null; // Initialize as null, will be loaded later
     // State locks
     this.isSpeaking = false
     this.isPlaying = false
@@ -161,17 +162,43 @@ class GameState {
 
 
           const momentsFilePath = `./games/${this.gameId}/moments.json`;
-          loadFileFromServer(momentsFilePath).then((data) => {
-            this.momentsData = MomentsDataSchema.parse(JSON.parse(data))
-            // Initialize chat windows for all powers
-            createChatWindows();
+          loadFileFromServer(momentsFilePath)
+            .then((data) => {
+              const parsedData = JSON.parse(data);
+              
+              // Check if this is the comprehensive format and normalize it
+              if ('analysis_results' in parsedData && parsedData.analysis_results) {
+                // Transform comprehensive format to animation format
+                const normalizedData: NormalizedMomentsData = {
+                  metadata: parsedData.metadata,
+                  power_models: parsedData.metadata.power_to_model || {},
+                  moments: parsedData.analysis_results.moments || []
+                };
+                this.momentsData = normalizedData;
+              } else {
+                // It's already in animation format, validate and use
+                const validatedData = MomentsDataSchema.parse(parsedData);
+                // Type assertion since we know this is the animation format after parsing
+                this.momentsData = validatedData as NormalizedMomentsData;
+              }
+              
+              logger.log(`Loaded ${this.momentsData.moments.length} moments from ${momentsFilePath}`);
+            })
+            .catch((error) => {
+              logger.log(`Could not load moments data: ${error.message}`);
+              // Continue without moments data - it's optional
+              this.momentsData = null;
+            })
+            .finally(() => {
+              // Initialize chat windows for all powers
+              createChatWindows();
 
-            // Display the initial phase
-            displayInitialPhase()
+              // Display the initial phase
+              displayInitialPhase()
 
-            // Update game ID display
-            updateGameIdDisplay();
-          })
+              // Update game ID display
+              updateGameIdDisplay();
+            })
           resolve()
         } else {
           logger.log("Error: No phases found in game data");

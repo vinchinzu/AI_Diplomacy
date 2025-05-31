@@ -31,9 +31,20 @@ export const MomentCategorySchema = z.enum([
 
 
 /**
- * Schema for metadata about the moments analysis
+ * Schema for metadata about the moments analysis (comprehensive format)
  */
-export const MomentsMetadataSchema = z.object({
+export const ComprehensiveMetadataSchema = z.object({
+  game_results_folder: z.string(),
+  analysis_timestamp: z.string(),
+  model_used: z.string(),
+  game_data_path: z.string(),
+  power_to_model: z.record(PowerENUMSchema, z.string())
+});
+
+/**
+ * Schema for metadata about the moments analysis (animation format)
+ */
+export const AnimationMetadataSchema = z.object({
   timestamp: z.string(),
   generated_at: z.string(),
   source_folder: z.string(),
@@ -55,14 +66,41 @@ export const MomentsMetadataSchema = z.object({
 });
 
 /**
+ * Union schema for metadata that can handle both formats
+ */
+export const MomentsMetadataSchema = z.union([
+  AnimationMetadataSchema,
+  ComprehensiveMetadataSchema
+]);
+
+/**
  * Schema for diary context entries for each power
  */
 export const DiaryContextSchema = z.record(PowerENUMSchema, z.string());
 
 /**
- * Schema for an individual moment in the game
+ * Schema for state update context entries for each power
  */
-export const MomentSchema = z.object({
+export const StateUpdateContextSchema = z.record(PowerENUMSchema, z.string());
+
+/**
+ * Schema for a lie detected in the game
+ */
+export const LieSchema = z.object({
+  phase: z.string(),
+  liar: PowerENUMSchema,
+  recipient: PowerENUMSchema,
+  promise: z.string(),
+  diary_intent: z.string(),
+  actual_action: z.string(),
+  intentional: z.boolean(),
+  explanation: z.string()
+});
+
+/**
+ * Schema for an individual moment in the game (animation format)
+ */
+export const AnimationMomentSchema = z.object({
   phase: z.string(),
   category: MomentCategorySchema,
   powers_involved: z.array(PowerENUMSchema),
@@ -70,17 +108,84 @@ export const MomentSchema = z.object({
   actual_action: z.string(),
   impact: z.string(),
   interest_score: z.number().min(0).max(10),
-  diary_context: DiaryContextSchema
+  diary_context: DiaryContextSchema,
+  state_update_context: StateUpdateContextSchema
 });
 
 /**
- * Schema for the complete moments.json file
+ * Schema for an individual moment in the game (comprehensive format)
  */
-export const MomentsDataSchema = z.object({
-  metadata: MomentsMetadataSchema,
+export const ComprehensiveMomentSchema = z.object({
+  phase: z.string(),
+  category: MomentCategorySchema,
+  powers_involved: z.array(PowerENUMSchema),
+  promise_agreement: z.string(),
+  actual_action: z.string(),
+  impact: z.string(),
+  interest_score: z.number().min(0).max(10),
+  raw_messages: z.array(z.any()),
+  raw_orders: z.record(z.any()),
+  diary_context: z.record(z.string()),
+  state_update_context: z.record(z.string()).optional()
+});
+
+/**
+ * Union schema for moments that can handle both formats
+ */
+export const MomentSchema = z.union([
+  AnimationMomentSchema,
+  ComprehensiveMomentSchema
+]);
+
+/**
+ * Schema for the animation format moments.json file
+ */
+export const AnimationMomentsDataSchema = z.object({
+  metadata: AnimationMetadataSchema,
   power_models: z.record(PowerENUMSchema, z.string()),
   moments: z.array(MomentSchema)
 });
+
+/**
+ * Schema for the comprehensive format game_moments_data.json file
+ */
+export const ComprehensiveMomentsDataSchema = z.object({
+  metadata: ComprehensiveMetadataSchema,
+  analysis_results: z.object({
+    moments: z.array(ComprehensiveMomentSchema),
+    lies: z.array(LieSchema),
+    invalid_moves_by_model: z.record(z.string(), z.number())
+  }),
+  summary: z.object({
+    total_moments: z.number(),
+    total_lies: z.number(),
+    moments_by_category: z.object({
+      BETRAYAL: z.number(),
+      COLLABORATION: z.number(),
+      PLAYING_BOTH_SIDES: z.number(),
+      BRILLIANT_STRATEGY: z.number(),
+      STRATEGIC_BLUNDER: z.number()
+    }),
+    lies_by_power: z.record(z.number()),
+    intentional_lies: z.number(),
+    unintentional_lies: z.number(),
+    score_distribution: z.object({
+      "9-10": z.number(),
+      "7-8": z.number(),
+      "4-6": z.number(),
+      "1-3": z.number()
+    })
+  }),
+  phases_analyzed: z.array(z.string())
+});
+
+/**
+ * Schema for the complete moments.json file (supports both formats)
+ */
+export const MomentsDataSchema = z.union([
+  AnimationMomentsDataSchema,
+  ComprehensiveMomentsDataSchema
+]);
 
 /**
  * Parses a phase name like "W1901R" into its components
@@ -159,5 +264,13 @@ export type ParsedPhase = z.infer<typeof ParsedPhaseSchema>;
 export type MomentCategory = z.infer<typeof MomentCategorySchema>;
 export type MomentsMetadata = z.infer<typeof MomentsMetadataSchema>;
 export type DiaryContext = z.infer<typeof DiaryContextSchema>;
+export type StateUpdateContext = z.infer<typeof StateUpdateContextSchema>;
 export type Moment = z.infer<typeof MomentSchema>;
 export type MomentsDataSchemaType = z.infer<typeof MomentsDataSchema>;
+
+// Normalized format for internal use
+export interface NormalizedMomentsData {
+  metadata: z.infer<typeof AnimationMetadataSchema> | z.infer<typeof ComprehensiveMetadataSchema>;
+  power_models: Record<PowerENUM, string>;
+  moments: Moment[];
+}
