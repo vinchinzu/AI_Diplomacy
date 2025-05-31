@@ -29,13 +29,26 @@ This file tracks known issues, planned improvements, and ideas for future develo
     *   **Unified Prompting:** `BlocLLMAgent.decide_orders` would construct a single prompt for the LLM that includes the state and units of all its constituent game powers (e.g., England, France, Russia). The prompt would ask for a coordinated set of orders for all these units.
     *   **Complex Order Parsing:** The LLM response would need to be parsed to extract orders for each individual game power within the bloc. The JSON structure for orders would need to accommodate this (e.g., a top-level key for each power, or orders tagged by power).
     *   **AgentManager & Orchestrator Updates:**
-        *   `AgentManager` would need to be able to create and manage `BlocLLMAgent` instances, mapping a single bloc agent to multiple game powers.
-        *   `PhaseOrchestrator` and phase strategies would need to interact with these bloc agents, potentially by still iterating through game powers but knowing that the "agent" for several of them is the same instance. The `_get_orders_for_power` might need to be adapted or a new `_get_orders_for_bloc` introduced.
+        *   `AgentManager` would need to be able to create and manage `BlocLLMAgent` instances, mapping a single bloc agent to multiple game powers. (Implemented)
+        *   `PhaseOrchestrator` and phase strategies would need to interact with these bloc agents, potentially by still iterating through game powers but knowing that the "agent" for several of them is the same instance. The `_get_orders_for_power` might need to be adapted or a new `_get_orders_for_bloc` introduced. (Implemented - see Progress below)
+*   **Progress & Resolution:**
+    *   The `BlocLLMAgent` class has been implemented, capable of generating coordinated orders for multiple game powers it controls.
+    *   The `PhaseOrchestrator`'s phase strategies (`MovementPhaseStrategy`, `RetreatPhaseStrategy`, `BuildPhaseStrategy`) have been updated to correctly handle `BlocLLMAgent` instances.
+    *   **Mechanism:**
+        1.  Before iterating through powers that need orders, a `current_phase_state` is created from the game state.
+        2.  When a power is encountered that is managed by a `BlocLLMAgent`, the system checks if this specific bloc agent instance has already been processed for the current phase.
+        3.  If not processed, `await agent.decide_orders(current_phase_state)` is called *once* for the entire bloc. This triggers the LLM call and caches the orders for all members of the bloc within the `BlocLLMAgent` instance.
+        4.  A `current_phase_key_for_bloc` (a tuple representing the unique phase state) is constructed.
+        5.  `agent.get_all_bloc_orders_for_phase(current_phase_key_for_bloc)` is then called to retrieve the cached, coordinated orders for all powers controlled by this bloc agent.
+        6.  These orders are then assigned to the respective `orders_by_power` dictionary and recorded in `GameHistory`.
+        7.  The `BlocLLMAgent` instance is marked as processed for the current phase to prevent redundant calls.
+    *   This approach ensures that a single, coordinated decision-making process occurs for the bloc, and the resulting orders are efficiently distributed to the relevant game powers.
+*   **Status:** Resolved. The core requirements for coordinated bloc-level moves by LLM agents have been implemented.
 *   **Challenges:**
-    *   **Prompt Complexity:** Crafting a prompt that effectively allows an LLM to manage and coordinate 3-4 powers simultaneously is challenging. Token limits could be an issue.
-    *   **LLM Capability:** Requires an LLM capable of high-level strategic coordination across multiple entities in a complex game.
-    *   **Order Validation:** Validating orders for multiple powers from a single response.
-*   **Notes:** This is a significant architectural change and would likely improve the strategic coherence of AI players in bloc-based scenarios.
+    *   **Prompt Complexity:** Crafting a prompt that effectively allows an LLM to manage and coordinate 3-4 powers simultaneously is challenging. Token limits could be an issue. (This remains an ongoing challenge in prompt engineering but the mechanism to support it is in place).
+    *   **LLM Capability:** Requires an LLM capable of high-level strategic coordination across multiple entities in a complex game. (This remains an ongoing challenge in LLM development but the mechanism to support it is in place).
+    *   **Order Validation:** Validating orders for multiple powers from a single response. (Handled by the `BlocLLMAgent`'s parsing and the game engine's subsequent validation of individual power orders).
+*   **Notes:** This was a significant architectural change and has improved the strategic coherence of AI players in bloc-based scenarios.
 
 ## Build Phase
 

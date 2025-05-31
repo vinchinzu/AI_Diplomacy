@@ -2,15 +2,15 @@
 Manages the creation, initialization, and storage of DiplomacyAgents.
 """
 import logging
-from typing import List, Dict, TYPE_CHECKING, Optional # Added Optional for get_agent return
+from typing import List, Dict, TYPE_CHECKING, Optional, Any # Added Any
 
 from .agents.factory import AgentFactory
 from .agents.base import BaseAgent
-from .services.config import AgentConfig
-from .model_utils import assign_models_to_powers # Import the new function
+from .services.config import AgentConfig # AgentConfig from services
+# from .model_utils import assign_models_to_powers # This will be removed/commented
 
 if TYPE_CHECKING:
-    from .game_config import GameConfig
+    from .game_config import GameConfig # GameConfig from root
 
 logger = logging.getLogger(__name__)
 
@@ -29,41 +29,49 @@ class AgentManager:
             game_config: The game configuration object.
         """
         self.game_config = game_config
-        self.agents: Dict[str, BaseAgent] = {}
-        self.agent_factory = AgentFactory()
+        self.agents: Dict[str, BaseAgent] = {} # Keyed by agent identifier (power name or bloc name)
+        self.agent_factory = AgentFactory(
+            # Pass coordinator and factory if they are part of game_config or globally managed
+            # For now, assume AgentFactory default constructor is sufficient or it gets them from elsewhere.
+        )
         logger.info("AgentManager initialized.")
 
-    def assign_models(self, all_game_powers: List[str]) -> Dict[str, str]:
-        """
-        Assigns LLM model IDs to each participating power in the game.
-
-        This method considers:
-        - A specific power controlled by a specific model (from config.power_name & config.model_id).
-        - A list of fixed models to be assigned to other powers (from config.fixed_models).
-        - Randomization of fixed model assignments (config.randomize_fixed_models).
-        - Powers to be excluded (config.exclude_powers).
-        - The total number of LLM-controlled players (config.num_players).
-
-        Args:
-            all_game_powers: A list of all power names in the game (e.g., ["AUSTRIA", "ENGLAND", ...]).
-
-        Returns:
-            A dictionary mapping power names to their assigned model IDs.
-        """
-        logger.info("Assigning models to powers...") # Kept initial logging
-
-        # Call the new utility function
-        final_llm_assignments = assign_models_to_powers(
-            game_config=self.game_config,
-            all_game_powers=all_game_powers,
-        )
-
-        # Store in game_config as well
-        self.game_config.powers_and_models = final_llm_assignments
-        logger.info( # Added a log message here for clarity on what AgentManager is doing
-            f"AgentManager stored final model assignments from model_utils: {final_llm_assignments}"
-        )
-        return final_llm_assignments
+    # The assign_models method is removed/commented out as its core logic
+    # (determining which power gets which model) will be handled upstream
+    # before initialize_agents is called. The new `agent_configurations`
+    # argument to initialize_agents will carry this information.
+    #
+    # def assign_models(self, all_game_powers: List[str]) -> Dict[str, str]:
+    #     """
+    #     Assigns LLM model IDs to each participating power in the game.
+    #
+    #     This method considers:
+    #     - A specific power controlled by a specific model (from config.power_name & config.model_id).
+    #     - A list of fixed models to be assigned to other powers (from config.fixed_models).
+    #     - Randomization of fixed model assignments (config.randomize_fixed_models).
+    #     - Powers to be excluded (config.exclude_powers).
+    #     - The total number of LLM-controlled players (config.num_players).
+    #
+    #     Args:
+    #         all_game_powers: A list of all power names in the game (e.g., ["AUSTRIA", "ENGLAND", ...]).
+    #
+    #     Returns:
+    #         A dictionary mapping power names to their assigned model IDs.
+    #     """
+    #     logger.info("Assigning models to powers...") # Kept initial logging
+    #
+    #     # Call the new utility function
+    #     final_llm_assignments = assign_models_to_powers(
+    #         game_config=self.game_config,
+    #         all_game_powers=all_game_powers,
+    #     )
+    #
+    #     # Store in game_config as well
+    #     self.game_config.powers_and_models = final_llm_assignments
+    #     logger.info( # Added a log message here for clarity on what AgentManager is doing
+    #         f"AgentManager stored final model assignments from model_utils: {final_llm_assignments}"
+    #     )
+    #     return final_llm_assignments
 
     def _initialize_agent_state_ext(self, agent: BaseAgent):
         """
@@ -71,67 +79,123 @@ class AgentManager:
         This method is a placeholder for more complex setup that might be needed in the future.
         """
         logger.debug(
-            f"Performing extended state initialization for {agent.country} (currently minimal)."
+            f"Performing extended state initialization for {agent.agent_id} (currently minimal)."
         )
         # This function can be expanded if there's a need to load specific initial states
         # from files or apply more complex power-specific heuristics here.
         pass
 
-    def initialize_agents(self, powers_and_models: Dict[str, str]):
+    def initialize_agents(
+        self,
+        agent_configurations: Dict[str, Dict[str, Any]],
+        # game_instance: Optional["Game"] = None # If needed by agents during init
+    ):
         """
-        Creates and initializes agent instances for each power using the new factory system.
+        Creates and initializes agent instances based on provided configurations.
 
         Args:
-            powers_and_models: A dictionary mapping power names to their assigned model IDs.
+            agent_configurations: A dictionary where keys are agent identifiers
+                (e.g., "FRANCE" or "ENTENTE_BLOC") and values are dictionaries
+                containing agent setup details like type, model_id, country (for single),
+                bloc_name, controlled_powers (for blocs).
+            # game_instance: Optionally, the initialized diplomacy.Game object, if agents
+            # need access to it during their construction (currently they don't directly).
         """
-        logger.info("Initializing agents...")
+        logger.info(f"Initializing agents based on configurations: {list(agent_configurations.keys())}")
         self.agents = {}  # Clear any previous agents
 
-        for power_name, model_id_for_power in powers_and_models.items():
-            logger.info(
-                f"Creating agent for {power_name} with model {model_id_for_power}"
+        for agent_identifier, config_details in agent_configurations.items():
+            agent_type = config_details.get("type")
+            model_id = config_details.get("model_id") # Can be None for neutral
+
+            # Construct AgentConfig for the factory
+            # The factory's create_agent expects an AgentConfig object.
+            # We need to map our config_details to this.
+            # AgentConfig fields: country, type, model_id, etc.
+            # For bloc agents, 'country' in AgentConfig might be the bloc_name or a primary power.
+            # Let's use agent_identifier for 'country' field in AgentConfig for now.
+
+            # verbose_llm_debug should come from game_config
+            verbose_llm_debug = getattr(self.game_config.args, 'verbose_llm_debug', False)
+
+            # Create the specific AgentConfig instance for the agent/bloc
+            # The 'country' field in AgentConfig is a bit ambiguous for blocs.
+            # The factory's create_agent uses it for single agents.
+            # For bloc agents, bloc_name and controlled_powers are passed separately.
+            # Let's set AgentConfig.country to be the primary identifier from the loop.
+            current_agent_config = AgentConfig(
+                country=agent_identifier, # "FRANCE" or "ENTENTE_BLOC"
+                type=agent_type,
+                model_id=model_id,
+                # Other fields like temperature, context_provider can be added from game_config.args if needed
+                verbose_llm_debug=verbose_llm_debug,
             )
+
+            agent_id_str = f"{agent_identifier.lower().replace(' ', '_')}_{self.game_config.game_id}"
+
+            logger.info(
+                f"Creating agent for '{agent_identifier}' of type '{agent_type}' with model '{model_id if model_id else 'N/A'}'"
+            )
+
             try:
-                # Create agent configuration
-                agent_config = AgentConfig(
-                    country=power_name,
-                    type="llm",
-                    model_id=model_id_for_power,
-                    context_provider="auto",  # Will auto-select based on model capabilities
-                    verbose_llm_debug=self.game_config.args.verbose_llm_debug if hasattr(self.game_config.args, 'verbose_llm_debug') else False # Pass verbose_llm_debug
-                )
+                agent: Optional[BaseAgent] = None
+                if agent_type == "llm":
+                    agent = self.agent_factory.create_agent(
+                        agent_id=agent_id_str,
+                        country=config_details.get("country", agent_identifier), # Actual game power name
+                        config=current_agent_config,
+                        game_id=self.game_config.game_id,
+                    )
+                elif agent_type == "neutral":
+                    agent = self.agent_factory.create_agent(
+                        agent_id=agent_id_str,
+                        country=config_details.get("country", agent_identifier), # Actual game power name
+                        config=current_agent_config, # type="neutral"
+                        game_id=self.game_config.game_id,
+                    )
+                elif agent_type == "bloc_llm":
+                    bloc_name = config_details.get("bloc_name", agent_identifier)
+                    controlled_powers = config_details.get("controlled_powers")
+                    if not controlled_powers:
+                        logger.error(f"BlocLLMAgent '{agent_identifier}' missing 'controlled_powers'. Skipping.")
+                        continue
 
-                # Create agent using factory
-                agent_id = f"{power_name.lower()}_{self.game_config.game_id}"
-                agent = self.agent_factory.create_agent(
-                    agent_id=agent_id,
-                    country=power_name,
-                    config=agent_config,
-                    game_id=self.game_config.game_id,
-                )
+                    agent = self.agent_factory.create_agent(
+                        agent_id=agent_id_str,
+                        country=agent_identifier, # Not strictly used by BlocLLMAgent constructor signature's 'country'
+                        config=current_agent_config, # type="bloc_llm", model_id for bloc
+                        game_id=self.game_config.game_id,
+                        bloc_name=bloc_name,
+                        controlled_powers=controlled_powers,
+                    )
+                else:
+                    logger.warning(f"Unsupported agent type '{agent_type}' for '{agent_identifier}'. Skipping.")
+                    continue
 
-                self._initialize_agent_state_ext(agent)  # Call extended initializer
-                self.agents[power_name] = agent
-                logger.info(f"Agent for {power_name} created and initialized.")
+                if agent:
+                    self._initialize_agent_state_ext(agent)
+                    self.agents[agent_identifier] = agent # Store by "FRANCE" or "ENTENTE_BLOC"
+                    logger.info(f"Agent for '{agent_identifier}' created and initialized: {agent.__class__.__name__}.")
+
             except Exception as e:
                 logger.error(
-                    f"Failed to create or initialize agent for {power_name} with model {model_id_for_power}: {e}",
+                    f"Failed to create or initialize agent for '{agent_identifier}' (type {agent_type}): {e}",
                     exc_info=True,
                 )
                 # Continue with other agents
 
-        # Store in game_config as well
-        self.game_config.agents = self.agents
-        logger.info(f"All {len(self.agents)} agents initialized.")
+        self.game_config.agents = self.agents # Store the dict of created agents in GameConfig
+        logger.info(f"All {len(self.agents)} agent entities initialized: {list(self.agents.keys())}")
 
-    def get_agent(self, power_name: str) -> Optional[BaseAgent]:
+
+    def get_agent(self, agent_identifier: str) -> Optional[BaseAgent]:
         """
-        Retrieves an initialized agent by its power name.
+        Retrieves an initialized agent by its identifier (power name or bloc name).
 
         Args:
-            power_name: The name of the power whose agent is to be retrieved.
+            agent_identifier: The identifier of the agent (e.g., "FRANCE" or "ENTENTE_BLOC").
 
         Returns:
             The BaseAgent instance, or None if not found.
         """
-        return self.agents.get(power_name)
+        return self.agents.get(agent_identifier)

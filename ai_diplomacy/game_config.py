@@ -74,6 +74,11 @@ class GameConfig:
         # Initialize dev_mode first as it's used in log_to_file logic
         self.dev_mode: bool = getattr(args, "dev_mode", False)  # Added dev_mode
 
+        # New attributes for agent definitions
+        self.players_list: Optional[List[str]] = getattr(args, "players_list", None)
+        self.agent_types_list: Optional[List[str]] = getattr(args, "agent_types_list", None)
+        self.bloc_definitions_list: Optional[List[str]] = getattr(args, "bloc_definitions_list", None)
+
         # Determine log_to_file based on environment variable, args, and dev_mode
         log_to_file_env = os.getenv("LOG_TO_FILE")
         log_to_file_arg = getattr(args, "log_to_file", None) # Check if arg was explicitly passed
@@ -196,6 +201,13 @@ class GameConfig:
         logger.info(f"  Development Mode: {self.dev_mode}")
         logger.info(f"  Verbose LLM Debug Logging: {self.verbose_llm_debug}")
         logger.info(f"  Max Diary Tokens: {self.max_diary_tokens}")
+
+        if self.players_list:
+            logger.info(f"  Players List: {self.players_list}")
+        if self.agent_types_list:
+            logger.info(f"  Agent Types List: {self.agent_types_list}")
+        if self.bloc_definitions_list:
+            logger.info(f"  Bloc Definitions List: {self.bloc_definitions_list}")
 
     def _load_models_config(self):
         """Loads model assignments from the TOML configuration file."""

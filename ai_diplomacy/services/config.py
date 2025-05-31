@@ -47,6 +47,9 @@ class AgentConfig(BaseModel):
         default_factory=list, description="Allowed MCP tools"
     )
     verbose_llm_debug: bool = Field(False, description="Enable verbose LLM request/response logging")
+    temperature: float = Field(0.7, description="LLM temperature setting") # Added from BlocLLMAgent
+    max_tokens: Optional[int] = Field(default=2000, description="Maximum tokens for LLM response")
+
 
     @field_validator("country")
     @classmethod
@@ -56,7 +59,7 @@ class AgentConfig(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_agent_type(cls, v):
-        allowed_types = {"llm", "scripted", "human"}
+        allowed_types = {"llm", "scripted", "human", "neutral", "bloc_llm"} # Added neutral and bloc_llm
         if v not in allowed_types:
             raise ValueError(f"Agent type must be one of {allowed_types}")
         return v
