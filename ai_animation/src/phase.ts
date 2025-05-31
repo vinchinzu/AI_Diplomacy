@@ -13,8 +13,8 @@ import { PowerENUM } from "./types/map";
 import { notifyPhaseChange } from "./webhooks/phaseNotifier";
 
 const MOMENT_THRESHOLD = 8.0
-// If we're in debug mode, show it quick, otherwise show it for 30 seconds
-const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode ? 5000 : 30000
+// If we're in debug mode or instant mode, show it quick, otherwise show it for 30 seconds
+const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode || config.isInstantMode ? 100 : 30000
 
 // FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
 export function _setPhase(phaseIndex: number) {

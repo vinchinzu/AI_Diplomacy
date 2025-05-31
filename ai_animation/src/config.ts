@@ -18,5 +18,37 @@ export const config = {
   speechEnabled: import.meta.env.VITE_DEBUG_MODE ? false : true,
 
   // Webhook URL for phase change notifications (optional)
-  webhookUrl: import.meta.env.VITE_WEBHOOK_URL || ''
+  webhookUrl: import.meta.env.VITE_WEBHOOK_URL || '',
+
+  // Whether instant mode is enabled (makes all animations instant)
+  // Can be enabled via VITE_INSTANT_MODE env variable or debug menu
+  get isInstantMode(): boolean {
+    return import.meta.env.VITE_INSTANT_MODE === 'true' || this._instantModeOverride;
+  },
+
+  // Internal flag to allow runtime toggling of instant mode
+  _instantModeOverride: false,
+
+  /**
+   * Set instant mode state at runtime
+   * @param enabled Whether to enable instant mode
+   */
+  setInstantMode(enabled: boolean): void {
+    this._instantModeOverride = enabled;
+    console.log(`Instant mode ${enabled ? 'enabled' : 'disabled'}`);
+  },
+
+  /**
+   * Get effective animation duration (0 if instant mode, normal duration otherwise)
+   */
+  get effectiveAnimationDuration(): number {
+    return this.isInstantMode ? 0 : this.animationDuration;
+  },
+
+  /**
+   * Get effective playback speed (minimal if instant mode, normal speed otherwise)
+   */
+  get effectivePlaybackSpeed(): number {
+    return this.isInstantMode ? 10 : this.playbackSpeed;
+  }
 }

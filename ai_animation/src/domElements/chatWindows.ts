@@ -299,7 +299,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
                     }
                     advanceToNextPhase();
                   }
-                }, config.playbackSpeed + config.animationDuration); // Wait for both summary and animations
+                }, config.effectivePlaybackSpeed + config.effectiveAnimationDuration); // Wait for both summary and animations
               } else {
                 // For first phase, use shorter delay since there are no animations
                 if (config.isDebugMode) {
@@ -313,7 +313,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
                     }
                     advanceToNextPhase();
                   }
-                }, config.playbackSpeed); // Only wait for summary, no animation delay
+                }, config.effectivePlaybackSpeed); // Only wait for summary, no animation delay
               }
             }
           }
@@ -334,7 +334,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
         index++; // Only increment after animation completes
 
         // Schedule next message with proper delay
-        setTimeout(showNext, config.playbackSpeed / 2);
+        setTimeout(showNext, config.effectivePlaybackSpeed / 2);
         //showNext()
       };
 
@@ -481,7 +481,7 @@ function animateMessageWords(message: string, contentSpanId: string, targetPower
         if (onComplete) {
           onComplete(); // Call the completion callback
         }
-      }, Math.min(config.playbackSpeed / 3, 150));
+      }, Math.min(config.effectivePlaybackSpeed / 3, 150));
 
       return;
     }
@@ -498,7 +498,7 @@ function animateMessageWords(message: string, contentSpanId: string, targetPower
     // Calculate delay based on word length and playback speed
     // Longer words get slightly longer display time
     const wordLength = words[wordIndex - 1].length;
-    const delay = Math.max(30, Math.min(120, config.playbackSpeed / 10 * (wordLength / 4)));
+    const delay = Math.max(30, Math.min(120, config.effectivePlaybackSpeed / 10 * (wordLength / 4)));
     setTimeout(addNextWord, delay);
 
     // Scroll to ensure newest content is visible
@@ -784,8 +784,9 @@ export function addToNewsBanner(newText: string): void {
     console.log(`Adding to news banner: "${newText}"`);
   }
 
-  // Add a fade-out transition
-  bannerEl.style.transition = 'opacity 0.3s ease-out';
+  // Add a fade-out transition (instant in instant mode)
+  const transitionDuration = config.isInstantMode ? 0 : 0.3;
+  bannerEl.style.transition = `opacity ${transitionDuration}s ease-out`;
   bannerEl.style.opacity = '0';
 
   setTimeout(() => {
@@ -802,5 +803,5 @@ export function addToNewsBanner(newText: string): void {
 
     // Fade back in
     bannerEl.style.opacity = '1';
-  }, 300);
+  }, config.isInstantMode ? 0 : 300);
 }

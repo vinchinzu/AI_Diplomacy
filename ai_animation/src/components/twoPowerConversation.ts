@@ -445,7 +445,7 @@ async function animateMessages(
         // Scroll to bottom
         container.scrollTop = container.scrollHeight;
 
-        setTimeout(resolve, 300 + (1000 / config.playbackSpeed));
+        setTimeout(resolve, 300 + (1000 / config.effectivePlaybackSpeed));
       }, 100);
     });
   }
