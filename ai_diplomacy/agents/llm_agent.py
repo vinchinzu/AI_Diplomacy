@@ -37,7 +37,7 @@ class LLMAgent(BaseAgent):
         llm_coordinator: Optional[LLMCoordinator] = None,
         context_provider_factory: Optional[ContextProviderFactory] = None,
         prompt_loader: Optional[Callable[[str], Optional[str]]] = None,
-        llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
+        llm_caller_override: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
     ):
         """
         Initialize the LLM agent.
@@ -163,58 +163,90 @@ class LLMAgent(BaseAgent):
             )
 
             # Call LLM
-            result = await self.llm_coordinator.call_json(
-                prompt=prompt,
-                model_id=self.config.model_id,
-                agent_id=self.agent_id,
-                game_id=self.game_id,
-                phase=phase.phase_name,
-                system_prompt=self.system_prompt,
-                expected_fields=[constants.LLM_RESPONSE_KEY_ORDERS],
-                tools=(
-                    context_result.get("tools", [])
-                    if context_result.get("tools_available")
-                    else None
-                ),
-                llm_caller_override=self.llm_caller_override,
-            )
+            tools_definition = context_result.get("tools") if context_result.get("tools_available") else None
 
-            # Extract orders from response
-            orders = self._extract_orders_from_response(result, my_units)
+            if self.llm_caller_override:
+                result = await self.llm_caller_override(
+                    prompt=prompt,
+                    model_id=self.model_id,
+                    agent_id=self.agent_id,
+                    game_id=self.game_id,
+                    phase=phase.phase_name,
+                    system_prompt=self.system_prompt,
+                    expected_fields=[constants.LLM_RESPONSE_KEY_ORDERS],
+                    tools=tools_definition if tools_definition else None,
+                    verbose_llm_debug=self.config.verbose_llm_debug
+                )
+            else:
+                result = await self.llm_coordinator.call_json(
+                    prompt=prompt,
+                    model_id=self.model_id,
+                    agent_id=self.agent_id,
+                    game_id=self.game_id,
+                    phase=phase.phase_name,
+                    system_prompt=self.system_prompt,
+                    expected_fields=[constants.LLM_RESPONSE_KEY_ORDERS],
+                    tools=tools_definition if tools_definition else None,
+                    verbose_llm_debug=self.config.verbose_llm_debug
+                )
 
-            logger.info(
-                f"[{self.country}] Generated {len(orders)} orders using {context_result.get('provider_type', 'unknown')} context"
-            )
-            return orders
+            orders_data = result.get(constants.LLM_RESPONSE_KEY_ORDERS) if result else None
+            if orders_data:
+                orders = self._extract_orders_from_response(orders_data, my_units)
+                logger.info(
+                    f"[{self.country}] Generated {len(orders)} orders using {context_result.get('provider_type', 'unknown')} context"
+                )
+                return orders
+            else:
+                # Strict mode: If orders_data is not usable, raise an error instead of defaulting.
+                error_msg = f"[{self.country}] No valid '{constants.LLM_RESPONSE_KEY_ORDERS}' field in LLM response or response was None. Response: {result}"
+                logger.error(error_msg)
+                raise ValueError(error_msg) # This will propagate up
 
+        except ValueError as ve: # Catch our specific ValueError to re-raise
+            logger.error(f"[{self.country}] ValueError deciding orders: {ve}")
+            raise
         except Exception as e:
-            logger.error(f"[{self.country}] Error deciding orders: {e}", exc_info=True)
-            # Fallback: hold all units
-            return [Order(f"{unit} H") for unit in my_units]
+            # General errors still log and could potentially raise or return empty list depending on broader strategy
+            error_msg = f"[{self.country}] Unexpected error deciding orders: {e}"
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e # Propagate as a new error type to distinguish from direct LLM failure
 
     def _extract_orders_from_response(
-        self, response: Dict[str, Any], my_units: List[str]
+        self, response_orders_data: Any, my_units: List[str]
     ) -> List[Order]:
-        """Extract and validate orders from LLM response."""
+        """Extract and validate orders from LLM response. Raises ValueError on failure."""
         orders = []
+        # Argument renamed from 'response' to 'response_orders_data' to reflect it's the 'orders' part of the response
 
-        if constants.LLM_RESPONSE_KEY_ORDERS not in response:
-            logger.warning(f"[{self.country}] No '{constants.LLM_RESPONSE_KEY_ORDERS}' field in LLM response")
-            return [Order(f"{unit} H") for unit in my_units]  # Default to hold
+        if not isinstance(response_orders_data, list):
+            error_msg = f"[{self.country}] Orders field from LLM is not a list. Got: {type(response_orders_data)}"
+            logger.warning(error_msg)
+            raise ValueError(error_msg)
 
-        order_strings = response[constants.LLM_RESPONSE_KEY_ORDERS]
-        if not isinstance(order_strings, list):
-            logger.warning(f"[{self.country}] Orders field is not a list")
-            return [Order(f"{unit} H") for unit in my_units]
+        for item in response_orders_data:
+            if isinstance(item, str) and item.strip():
+                orders.append(Order(item.strip()))
+            elif isinstance(item, dict):
+                unit = item.get("unit")
+                action = item.get("action")
+                if isinstance(unit, str) and isinstance(action, str) and unit.strip() and action.strip():
+                    orders.append(Order(f"{unit.strip()} {action.strip()}"))
+                else:
+                    logger.warning(f"[{self.country}] Invalid order dictionary item: {item}")
+            else:
+                logger.warning(f"[{self.country}] Invalid item in orders list: {item}")
 
-        for order_str in order_strings:
-            if isinstance(order_str, str) and order_str.strip():
-                orders.append(Order(order_str.strip()))
-
-        # If no valid orders, default to holding
-        if not orders:
-            orders = [Order(f"{unit} H") for unit in my_units]
-
+        if not orders and my_units: # If we have units but extracted no valid orders
+            error_msg = f"[{self.country}] No valid orders extracted from LLM response, though units exist. LLM provided: {response_orders_data}"
+            logger.warning(error_msg)
+            raise ValueError(error_msg)
+        elif not my_units and orders: # If we have no units but LLM provided orders
+            logger.warning(f"[{self.country}] LLM provided orders but no units to command. Orders: {orders}")
+            # This case might be acceptable, return empty list as no orders can be actioned.
+            return []
+        
+        # Here, we only return if orders were successfully extracted for existing units, or if no units/no orders.
         return orders
 
     async def negotiate(self, phase: PhaseState) -> List[Message]:
@@ -264,29 +296,43 @@ class LLMAgent(BaseAgent):
             )
 
             # Call LLM
-            result = await self.llm_coordinator.call_json(
-                prompt=prompt,
-                model_id=self.config.model_id,
-                agent_id=self.agent_id,
-                game_id=self.game_id,
-                phase=phase.phase_name,
-                system_prompt=self.system_prompt,
-                expected_fields=[constants.LLM_RESPONSE_KEY_MESSAGES],
-                tools=(
-                    context_result.get("tools", [])
-                    if context_result.get("tools_available")
-                    else None
-                ),
-                llm_caller_override=self.llm_caller_override,
-            )
+            tools_definition = context_result.get("tools") if context_result.get("tools_available") else None
 
-            # Extract messages from response
-            messages = self._extract_messages_from_response(result, phase)
+            if self.llm_caller_override:
+                result = await self.llm_caller_override(
+                    prompt=prompt,
+                    model_id=self.model_id,
+                    agent_id=self.agent_id,
+                    game_id=self.game_id,
+                    phase=phase.phase_name,
+                    system_prompt=self.system_prompt,
+                    expected_fields=[constants.LLM_RESPONSE_KEY_MESSAGES],
+                    tools=tools_definition if tools_definition else None,
+                    verbose_llm_debug=self.config.verbose_llm_debug
+                )
+            else:
+                result = await self.llm_coordinator.call_json(
+                    prompt=prompt,
+                    model_id=self.model_id,
+                    agent_id=self.agent_id,
+                    game_id=self.game_id,
+                    phase=phase.phase_name,
+                    system_prompt=self.system_prompt,
+                    expected_fields=[constants.LLM_RESPONSE_KEY_MESSAGES],
+                    tools=tools_definition if tools_definition else None,
+                    verbose_llm_debug=self.config.verbose_llm_debug
+                )
 
-            logger.info(
-                f"[{self.country}] Generated {len(messages)} messages using {context_result.get('provider_type', 'unknown')} context"
-            )
-            return messages
+            messages_data = result.get(constants.LLM_RESPONSE_KEY_MESSAGES) if result else None
+            if messages_data:
+                messages = self._extract_messages_from_response(messages_data, phase)
+                logger.info(
+                    f"[{self.country}] Generated {len(messages)} messages using {context_result.get('provider_type', 'unknown')} context"
+                )
+                return messages
+            else:
+                logger.warning(f"[{self.country}] No '{constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response or response is None")
+                return []
 
         except Exception as e:
             logger.error(
@@ -295,32 +341,52 @@ class LLMAgent(BaseAgent):
             return []
 
     def _extract_messages_from_response(
-        self, response: Dict[str, Any], phase: PhaseState
+        self, response: Optional[Dict[str, Any]], phase: PhaseState
     ) -> List[Message]:
         """Extract and validate messages from LLM response."""
         messages = []
-
-        if constants.LLM_RESPONSE_KEY_MESSAGES not in response:
+        if response is None or constants.LLM_RESPONSE_KEY_MESSAGES not in response:
+            logger.warning(
+                f"[{self.country}] No '{constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response or response is None"
+            )
             return messages
 
-        message_dicts = response[constants.LLM_RESPONSE_KEY_MESSAGES]
-        if not isinstance(message_dicts, list):
+        message_data = response[constants.LLM_RESPONSE_KEY_MESSAGES]
+        if not isinstance(message_data, list):
+            logger.warning(f"[{self.country}] Messages field is not a list")
             return messages
 
-        for msg_dict in message_dicts:
-            if not isinstance(msg_dict, dict):
+        valid_recipients = phase.powers # Get all powers in the game as potential recipients
+
+        for msg_item in message_data:
+            if not isinstance(msg_item, dict):
+                logger.warning(f"[{self.country}] Invalid message item: {msg_item}")
                 continue
 
-            recipient = msg_dict.get(constants.LLM_MESSAGE_KEY_RECIPIENT, "").upper()
-            content = msg_dict.get(constants.LLM_MESSAGE_KEY_CONTENT, "")
-            message_type = msg_dict.get(constants.LLM_MESSAGE_KEY_TYPE, "private") # "private" remains hardcoded as it's an internal default
+            recipient = msg_item.get(constants.LLM_MESSAGE_KEY_RECIPIENT)
+            content = msg_item.get(constants.LLM_MESSAGE_KEY_CONTENT)
+            message_type_str = msg_item.get(constants.LLM_MESSAGE_KEY_TYPE)
 
-            if content and recipient:
-                # Validate recipient
-                if recipient in phase.powers or recipient == constants.MESSAGE_RECIPIENT_GLOBAL:
-                    messages.append(Message(recipient, content, message_type))
-                else:
-                    logger.warning(f"[{self.country}] Invalid recipient: {recipient}")
+            if not isinstance(recipient, str) or not recipient.strip():
+                logger.warning(f"[{self.country}] Invalid or missing recipient: {recipient}")
+                continue
+            if not isinstance(content, str) or not content.strip():
+                logger.warning(f"[{self.country}] Invalid or missing content for recipient {recipient}")
+                continue
+            
+            recipient_upper = recipient.upper()
+            if recipient_upper not in valid_recipients:
+                logger.warning(f"[{self.country}] Recipient '{recipient_upper}' is not a valid power.")
+                continue
+            
+            # Validate message_type
+            final_message_type = constants.MESSAGE_TYPE_BROADCAST # Default
+            if isinstance(message_type_str, str) and message_type_str.upper() in constants.VALID_MESSAGE_TYPES:
+                final_message_type = message_type_str.upper()
+            elif message_type_str is not None: # Log if a type was provided but invalid
+                logger.warning(f"[{self.country}] Invalid message type '{message_type_str}', defaulting to BROADCAST.")
+
+            messages.append(Message(recipient_upper, content.strip(), message_type=final_message_type))
 
         return messages
 
@@ -361,21 +427,33 @@ class LLMAgent(BaseAgent):
                 relationships=self.agent_state.relationships,
             )
 
-            result = await self.llm_coordinator.call_json(
-                prompt=prompt,
-                model_id=self.config.model_id,
-                agent_id=self.agent_id,
-                game_id=self.game_id,
-                phase=phase.phase_name,
-                system_prompt=self.system_prompt,
-                expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
-                llm_caller_override=self.llm_caller_override,
-            )
+            if self.llm_caller_override:
+                result = await self.llm_caller_override(
+                    prompt=prompt,
+                    model_id=self.model_id,
+                    agent_id=self.agent_id,
+                    game_id=self.game_id,
+                    phase=phase.phase_name,
+                    system_prompt=self.system_prompt,
+                    expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
+                    verbose_llm_debug=self.config.verbose_llm_debug
+                )
+            else:
+                result = await self.llm_coordinator.call_json(
+                    prompt=prompt,
+                    model_id=self.model_id,
+                    agent_id=self.agent_id,
+                    game_id=self.game_id,
+                    phase=phase.phase_name,
+                    system_prompt=self.system_prompt,
+                    expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
+                    verbose_llm_debug=self.config.verbose_llm_debug
+                )
+            
+            diary_entry = result.get(constants.LLM_RESPONSE_KEY_DIARY_ENTRY) if result else None
 
-            diary_text = result.get(
-                constants.LLM_RESPONSE_KEY_DIARY_ENTRY, f"Phase {phase.phase_name} completed."
-            )
-            self.agent_state.add_diary_entry(diary_text, phase.phase_name)
+            if diary_entry and isinstance(diary_entry, str):
+                self.agent_state.add_diary_entry(diary_entry, phase.phase_name)
 
         except Exception as e:
             logger.error(
@@ -426,8 +504,27 @@ class LLMAgent(BaseAgent):
             "country": self.country,
             "type": "LLMAgent",
             "model_id": self.config.model_id,
+            "context_provider_type": self.resolved_context_provider_type,
             "goals": self.agent_state.goals,
             "relationships": self.agent_state.relationships,
             "diary_entries": len(self.agent_state.private_diary),
             "journal_entries": len(self.agent_state.private_journal),
         }
+
+    async def consolidate_year_diary_entries(
+        self, year: str, game: Any, llm_log_path: Optional[str]
+    ) -> None:
+        """
+        Consolidates diary entries for a specific year using an LLM.
+        Placeholder implementation.
+        """
+        logger.info(f"[{self.country}] Attempting to consolidate diary entries for year {year}. (Placeholder)")
+        # TODO: Implement actual LLM-based diary consolidation logic
+        # 1. Collect all diary entries for the given 'year'.
+        # 2. Format them into a prompt asking the LLM to summarize.
+        # 3. Call the LLM (e.g., self.llm_coordinator.call_text or call_json).
+        # 4. Process the LLM's summary.
+        # 5. Replace the old entries with the summary or store them appropriately.
+        #    (e.g., self.agent_state.replace_diary_entries_for_year(year, summary_text))
+        # For now, just log and do nothing to prevent AttributeError.
+        pass

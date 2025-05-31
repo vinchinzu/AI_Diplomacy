@@ -199,12 +199,17 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
                 return [str(o) for o in order_objects]
             except asyncio.TimeoutError:
                 logger.error(f"❌ Timeout getting orders for {power_name} (LLMAgent) via decide_orders. Defaulting to no orders.")
-                return []
+                # Strict mode: re-raise to halt, or raise a specific error
+                raise RuntimeError(f"Timeout getting orders for {power_name}")
+            except ValueError as ve: # Catch specific error from LLMAgent for invalid/missing response
+                logger.error(f"❌ Invalid LLM response for orders for {power_name}: {ve}")
+                raise # Re-raise to halt the process for this power/game
             except Exception as e:
                 logger.error(f"❌ Error getting orders for {power_name} (LLMAgent) via decide_orders: {e}. Defaulting to no orders.", exc_info=True)
-                return []
+                # Strict mode: re-raise to halt
+                raise RuntimeError(f"General error getting orders for {power_name}: {e}") from e
         else:
-            logger.debug(f"Using callback get_valid_orders_func for {power_name} (agent type: {type(agent)})")
+            logger.debug(f"Using callback get_valid_orders_func for {power_name} (agent type: {type(agent)})" )
             try:
                 board_state = game.get_state()
                 possible_orders = gather_possible_orders(game, power_name)
@@ -221,7 +226,7 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
                 return orders
             except Exception as e:
                 logger.error(f"❌ Error getting orders for {power_name} via callback: {e}. Defaulting to no orders.", exc_info=True)
-                return []
+                raise RuntimeError(f"Error in callback order generation for {power_name}: {e}") from e
 
     async def _process_phase_results_and_updates(self, game: "Game", game_history: "GameHistory", all_orders_for_phase: Dict[str, List[str]], processed_phase_name: str):
         logger.info(f"Processing results for phase: {processed_phase_name}")
@@ -248,20 +253,14 @@ class PhaseOrchestrator: # Renamed from GamePhaseOrchestrator
             if agent:
                 logger.debug(f"Generating phase summary for {power_name}...")
                 try:
-                    logger.debug(f"✅ {power_name}: Phase summary processing placeholder (actual call handled by agent.update_state or internally)")
+                    # Create a simple PhaseState for the update method
+                    current_phase_state = PhaseState.from_game(game) # Assuming PhaseState is imported
+                    # Pass an empty list for events for now, as phase_events_summary_text is not a structured list of events
+                    await agent.update_state(current_phase_state, []) 
+                except AttributeError as ae:
+                    logger.error(f"❌ AttributeError during state update for {power_name} (likely an issue with game/agent state access): {ae}", exc_info=True)
                 except Exception as e:
                     logger.error(f"❌ Error during phase summary processing for {power_name}: {e}", exc_info=e)
-        for power_name in self.active_powers:
-            agent = self.agent_manager.get_agent(power_name)
-            if agent and isinstance(agent, LLMAgent):
-                logger.debug(f"Updating state for {power_name}...")
-                try:
-                    current_phase_state = PhaseState.from_game(game)
-                    await agent.update_state(current_phase_state, phase_events_summary_text)
-                except Exception as e:
-                    logger.error(f"❌ Error updating state for {power_name}: {e}", exc_info=True)
-            elif agent:
-                logger.debug(f"Skipping state update for non-LLMAgent {power_name}")
         current_phase = game.get_current_phase()
         current_year = extract_year_from_phase(current_phase)
         if current_year is not None and current_year > 1902:

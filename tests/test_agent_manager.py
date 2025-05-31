@@ -1,20 +1,13 @@
 import logging
 import pytest
 from pathlib import Path
-from ai_diplomacy.agent_manager import AgentManager
-from ai_diplomacy.model_utils import DEFAULT_AGENT_MANAGER_FALLBACK_MODEL # Moved import
-from ai_diplomacy.agents.llm_agent import LLMAgent
-from tests._shared_fixtures import create_game_config # Changed to absolute import
+from unittest.mock import patch
+from typing import List
 
-ALL_POWERS_IN_GAME = [
-    "AUSTRIA",
-    "ENGLAND",
-    "FRANCE",
-    "GERMANY",
-    "ITALY",
-    "RUSSIA",
-    "TURKEY",
-]
+from ai_diplomacy.agent_manager import AgentManager
+from ai_diplomacy.agents.llm_agent import LLMAgent
+from tests._shared_fixtures import create_game_config
+from tests.fixtures.assertions_agent_manager import assertion_map
 
 logger = logging.getLogger(__name__)
 
@@ -47,130 +40,35 @@ default_model = "my_global_default_from_toml"
 [powers]
 """
 
-def _assert_test_1_basic_assignment(assigned, manager, config, all_powers):
-    assert len(assigned) == 2
-    assigned_model_values = list(assigned.values())
-    assert "ollama/modelA" in assigned_model_values
-    assert "ollama/modelB" in assigned_model_values
-
-def _assert_test_2_primary_agent_specified(assigned, manager, config, all_powers):
-    assert len(assigned) == 3
-    assert assigned.get("FRANCE") == "gpt-4o"
-    other_models_count = 0
-    for power, model in assigned.items():
-        if power != "FRANCE":
-            other_models_count += 1
-            assert (
-                model == "ollama/modelC"
-                or model == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
-            )
-    assert other_models_count == 2
-
-def _assert_test_3_exclude_powers_randomize(assigned, manager, config, all_powers):
-    assert len(assigned) == 2
-    assert "ITALY" not in assigned
-    assert "TURKEY" not in assigned
-    for power_name in assigned.keys():
-        if config.args.exclude_powers is not None:
-            assert power_name not in config.args.exclude_powers
-
-def _assert_test_4_not_enough_fixed_models(assigned, manager, config, all_powers):
-    assert len(assigned) == 3
-    models_assigned = list(assigned.values())
-    assert models_assigned.count("only_one_model") == 3
-
-def _assert_test_5_num_players_zero(assigned, manager, config, all_powers):
-    assert len(assigned) == 0
-
-def _assert_test_6_num_players_one_primary(assigned, manager, config, all_powers):
-    assert len(assigned) == 1
-    assert assigned.get("GERMANY") == "claude-3"
-    manager.initialize_agents(assigned)
-    assert manager.get_agent("FRANCE") is None
-
-def _assert_test_7_primary_agent_excluded(assigned, manager, config, all_powers):
-    assert "FRANCE" not in assigned
-    assert len(assigned) == 1
-    assigned_power = list(assigned.keys())[0]
-    assert assigned_power != "FRANCE"
-    assert assigned[assigned_power] == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
-    manager.initialize_agents(assigned)
-    assert manager.get_agent("FRANCE") is None
-
-def _assert_test_8a_toml_respected_limited_players(assigned, manager, config, all_powers):
-    assert config.default_model_from_config == "toml_default_model"
-    assert config.power_model_assignments.get("FRANCE") == "toml_france_model"
-    assert len(assigned) == 2
-    chosen_powers = list(assigned.keys())
-    if "FRANCE" in chosen_powers:
-        assert assigned["FRANCE"] == "toml_france_model"
-    if "GERMANY" in chosen_powers:
-        assert assigned["GERMANY"] == "toml_germany_model"
-    for power, model_id in assigned.items():
-        if power not in ["FRANCE", "GERMANY"]:
-            assert model_id == "toml_default_model"
-        elif power == "FRANCE":
-            assert model_id == "toml_france_model"
-        elif power == "GERMANY":
-            assert model_id == "toml_germany_model"
-
-def _assert_test_8b_toml_respected_all_players(assigned, manager, config, all_powers):
-    assert config.default_model_from_config == "toml_default_model"
-    assert config.power_model_assignments.get("FRANCE") == "toml_france_model"
-    assert assigned.get("FRANCE") == "toml_france_model"
-    assert assigned.get("GERMANY") == "toml_germany_model"
-    for power in all_powers:
-        if power not in ["FRANCE", "GERMANY"]:
-            assert assigned.get(power) == "toml_default_model"
-
-def _assert_test_9_toml_cli_conflict(assigned, manager, config, all_powers):
-    assert len(assigned) == 1
-    assert assigned.get("FRANCE") == "cli_france_model_wins"
-
-def _assert_test_10_num_players_limits_toml(assigned, manager, config, all_powers):
-    assert len(assigned) == 3
-    for power_name, model_id in assigned.items():
-        assert model_id == f"toml_{power_name.lower()}"
-
-def _assert_test_11_default_model_from_config(assigned, manager, config, all_powers):
-    assert len(assigned) == 2
-    for model_id in assigned.values():
-        assert model_id == "my_global_default_from_toml"
-
-def _assert_test_12_fallback_model_no_config_default(assigned, manager, config, all_powers):
-    assert config.default_model_from_config is None
-    assert len(assigned) == 1
-    assert list(assigned.values())[0] == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
-
 @pytest.fixture
 def game_config_factory():
     return create_game_config
 
 PARAMETRIZED_TEST_CASES = [
-    ("test_1_basic_assignment", 2, None, None, ["ollama/modelA", "ollama/modelB"], None, False, None, _assert_test_1_basic_assignment),
-    ("test_2_primary_agent_specified", 3, "FRANCE", "gpt-4o", ["ollama/modelC"], None, False, None, _assert_test_2_primary_agent_specified),
-    ("test_3_exclude_powers_randomize", 2, None, None, ["modelX", "modelY", "modelZ"], ["ITALY", "TURKEY"], True, None, _assert_test_3_exclude_powers_randomize),
-    ("test_4_not_enough_fixed_models", 3, None, None, ["only_one_model"], None, False, None, _assert_test_4_not_enough_fixed_models),
-    ("test_5_num_players_zero", 0, None, None, None, None, False, None, _assert_test_5_num_players_zero),
-    ("test_6_num_players_one_primary", 1, "GERMANY", "claude-3", None, None, False, None, _assert_test_6_num_players_one_primary),
-    ("test_7_primary_agent_excluded", 1, "FRANCE", "gpt-4o", None, ["FRANCE"], False, None, _assert_test_7_primary_agent_excluded),
-    ("test_8a_toml_limited_players", 2, None, None, None, None, False, TOML_CONTENT_TEST_8, _assert_test_8a_toml_respected_limited_players),
-    ("test_8b_toml_all_players", 7, None, None, None, None, False, TOML_CONTENT_TEST_8, _assert_test_8b_toml_respected_all_players),
-    ("test_9_toml_cli_conflict", 1, "FRANCE", "cli_france_model_wins", None, None, False, TOML_CONTENT_TEST_9, _assert_test_9_toml_cli_conflict),
-    ("test_10_num_players_limits_toml", 3, None, None, None, None, False, TOML_CONTENT_TEST_10, _assert_test_10_num_players_limits_toml),
-    ("test_11_default_model_from_config", 2, None, None, None, None, False, TOML_CONTENT_TEST_11, _assert_test_11_default_model_from_config),
-    ("test_12_fallback_model_no_default", 1, None, None, None, None, False, None, _assert_test_12_fallback_model_no_config_default),
+    ("test_1_basic_assignment", 2, None, None, ["ollama/modelA", "ollama/modelB"], None, False, None),
+    ("test_2_primary_agent_specified", 3, "FRANCE", "gpt-4o", ["ollama/modelC"], None, False, None),
+    ("test_3_exclude_powers_randomize", 2, None, None, ["modelX", "modelY", "modelZ"], ["ITALY", "TURKEY"], True, None),
+    ("test_4_not_enough_fixed_models", 3, None, None, ["only_one_model"], None, False, None),
+    ("test_5_num_players_zero", 0, None, None, None, None, False, None),
+    ("test_6_num_players_one_primary", 1, "GERMANY", "claude-3", None, None, False, None),
+    ("test_7_primary_agent_excluded", 1, "FRANCE", "gpt-4o", None, ["FRANCE"], False, None),
+    ("test_8a_toml_limited_players", 2, None, None, None, None, False, TOML_CONTENT_TEST_8),
+    ("test_8b_toml_all_players", 7, None, None, None, None, False, TOML_CONTENT_TEST_8),
+    ("test_9_toml_cli_conflict", 1, "FRANCE", "cli_france_model_wins", None, None, False, TOML_CONTENT_TEST_9),
+    ("test_10_num_players_limits_toml", 3, None, None, None, None, False, TOML_CONTENT_TEST_10),
+    ("test_11_default_model_from_config", 2, None, None, None, None, False, TOML_CONTENT_TEST_11),
+    ("test_12_fallback_model_no_default", 1, None, None, None, None, False, None),
 ]
 
 @pytest.mark.parametrize(
-    "test_id, num_players, cli_power_name, cli_model_id, fixed_models, exclude_powers, randomize_fixed, toml_content, assertion_fn",
+    "test_id, num_players, cli_power_name, cli_model_id, fixed_models, exclude_powers, randomize_fixed, toml_content",
     PARAMETRIZED_TEST_CASES,
     ids=[case[0] for case in PARAMETRIZED_TEST_CASES]
 )
 @pytest.mark.unit
 def test_assign_models_parametrized(
-    game_config_factory, tmp_path,
-    test_id, num_players, cli_power_name, cli_model_id, fixed_models, exclude_powers, randomize_fixed, toml_content, assertion_fn
+    game_config_factory, tmp_path, all_powers,
+    test_id, num_players, cli_power_name, cli_model_id, fixed_models, exclude_powers, randomize_fixed, toml_content
 ):
     logger.info(f"--- Running Parametrized Test Case: {test_id} ---")
     models_config_file_path = None
@@ -178,32 +76,66 @@ def test_assign_models_parametrized(
         models_config_file_path = tmp_path / f"{test_id}_models.toml"
         with open(models_config_file_path, "w") as f:
             f.write(toml_content)
-    config = game_config_factory(
-        num_players=num_players,
-        power_name=cli_power_name,
-        model_id=cli_model_id,
-        fixed_models=fixed_models,
-        exclude_powers=exclude_powers,
-        randomize_fixed_models=randomize_fixed,
-        models_config_file=str(models_config_file_path) if models_config_file_path else None,
-        log_to_file=False
-    )
+    
+    config_params = {
+        "num_players": num_players,
+        "power_name": cli_power_name,
+        "model_id": cli_model_id,
+        "fixed_models": fixed_models,
+        "exclude_powers": exclude_powers,
+        "randomize_fixed_models": randomize_fixed,
+        "models_config_file": str(models_config_file_path) if models_config_file_path else None,
+        "log_to_file": False
+    }
+    config_params = {k: v for k, v in config_params.items() if v is not None or k == "models_config_file"}
+
+    config = game_config_factory(**config_params)
     manager = AgentManager(config)
-    assigned = manager.assign_models(ALL_POWERS_IN_GAME)
+    
+    assigned = manager.assign_models(all_powers)
     logger.info(f"Test Case {test_id} Assigned: {assigned}")
-    assertion_fn(assigned, manager, config, ALL_POWERS_IN_GAME)
-    if assigned:
-        manager.initialize_agents(assigned)
-        assert len(manager.agents) == len(assigned)
-        for power_name, model_id_assigned in assigned.items():
-            assert power_name in manager.agents
-            agent = manager.get_agent(power_name)
-            assert agent is not None
-            assert agent.country == power_name
-            assert isinstance(agent, LLMAgent)
-            assert agent.model_id == model_id_assigned
-    else:
-        manager.initialize_agents(assigned)
-        assert len(manager.agents) == 0
+    
+    current_assertion_fn = assertion_map[test_id]
+    current_assertion_fn(assigned, manager, config, all_powers)
+
+    with patch('ai_diplomacy.agents.llm_agent.LLMAgent.__init__', return_value=None, autospec=True) as mock_llm_agent_init:
+        if assigned:
+            manager.initialize_agents(assigned)
+            assert len(manager.agents) == len(assigned)
+            assert mock_llm_agent_init.call_count == len(assigned)
+
+            actual_calls_summary = []
+            for call_args_tuple in mock_llm_agent_init.call_args_list:
+                _, kwargs = call_args_tuple
+                actual_calls_summary.append({
+                    "power_name": kwargs.get('power_name'),
+                    "model_id": kwargs.get('model_id')
+                })
+
+            for power_name_assigned, model_id_assigned in assigned.items():
+                expected_call_found = False
+                for call_kwargs in mock_llm_agent_init.call_args_list:
+                    actual_kwargs = call_kwargs[1]
+                    if (actual_kwargs.get('power_name') == power_name_assigned and
+                        actual_kwargs.get('model_id') == model_id_assigned and
+                        actual_kwargs.get('config') == config and
+                        actual_kwargs.get('llm_coordinator') == manager.llm_coordinator):
+                        expected_call_found = True
+                        break
+                assert expected_call_found, f"LLMAgent.__init__ not called correctly for power {power_name_assigned} with model {model_id_assigned}.\nActual calls: {actual_calls_summary}"
+
+                agent_instance = manager.get_agent(power_name_assigned)
+                assert agent_instance is not None
+                assert isinstance(agent_instance, LLMAgent)
+
+            if test_id == "test_6_num_players_one_primary":
+                assert manager.get_agent("FRANCE") is None
+            elif test_id == "test_7_primary_agent_excluded":
+                 assert manager.get_agent("FRANCE") is None
+
+        else:
+            manager.initialize_agents(assigned)
+            assert len(manager.agents) == 0
+            assert mock_llm_agent_init.call_count == 0
 
 logger.info("--- All AgentManager tests collected (parametrized) ---")

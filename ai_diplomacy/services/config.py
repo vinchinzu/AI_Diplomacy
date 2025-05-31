@@ -46,6 +46,7 @@ class AgentConfig(BaseModel):
     tool_whitelist: List[str] = Field(
         default_factory=list, description="Allowed MCP tools"
     )
+    verbose_llm_debug: bool = Field(False, description="Enable verbose LLM request/response logging")
 
     @field_validator("country")
     @classmethod

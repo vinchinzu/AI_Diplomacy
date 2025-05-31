@@ -2,6 +2,7 @@ import argparse
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import os
+import pytest
 
 # Assuming GameConfig is imported from the correct path
 # Adjust the import path if GameConfig is located elsewhere.
@@ -51,7 +52,7 @@ def create_game_config(**kwargs: Any) -> GameConfig:
     # For tests, if log_to_file is True but log_dir is not specified, 
     # we should provide a default test log_dir to avoid cluttering the root directory.
     if args_dict.get("log_to_file") and args_dict.get("log_dir") is None:
-        test_log_dir_base = os.path.join(os.getcwd(), "test_logs")
+        test_log_dir_base = os.path.join(os.getcwd(), "logs", "test_logs")
         # Further isolate by game_id to prevent concurrent write issues if tests run in parallel
         # GameConfig itself will append the game_id to base_log_dir, so we just provide the base.
         args_dict["log_dir"] = test_log_dir_base
@@ -65,14 +66,24 @@ def create_game_config(**kwargs: Any) -> GameConfig:
     # If models_config_file is None, GameConfig should handle it gracefully.
     if "models_config_file" in args_dict and args_dict["models_config_file"] is not None:
         if not os.path.exists(args.models_config_file) and args.models_config_file == "models.toml":
-            # If the default "models.toml" is specified and doesn't exist, set it to None
-            # to prevent GameConfig from failing. Tests requiring it should create a dummy file.
-            # Or, better, they can override args.models_config_file to a specific test file.
-            print(f"Warning: Default models_config_file '{args.models_config_file}' not found. Setting to None for GameConfig creation.")
-            args.models_config_file = None
+            # If the default "models.toml" is specified and doesn't exist, skip the test.
+            # Tests requiring it should create a dummy file or ensure it exists.
+            pytest.skip(f"Default models_config_file '{args.models_config_file}' not found.")
 
 
     return GameConfig(args)
+
+@pytest.fixture(name="game_config")
+def game_config_fixture(**kwargs: Any) -> GameConfig:
+    """
+    Pytest fixture that provides a GameConfig instance with sensible defaults.
+    Allows overrides via kwargs passed during fixture parametrization or direct use.
+    Example: @pytest.mark.parametrize("game_config", [{"num_players": 2}], indirect=True)
+    """
+    # This internal function call allows monkeypatching create_game_config in tests if needed,
+    # though typically, overriding kwargs or monkeypatching the GameConfig object itself is preferred.
+    return create_game_config(**kwargs)
+
 
 # Example of a fixture using the factory:
 # import pytest

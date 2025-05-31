@@ -242,39 +242,48 @@ async def test_agent_with_context_providers():
     )
 
     # Test that agents can call decide_orders with context providers
-    mock_llm_orders_string_output = '{"orders": ["A PAR H"]}'
-    expected_agent_orders = [Order("A PAR H")]
+    mock_llm_orders_dict_output_france = {"orders": ["A PAR H"]}
+    expected_agent_orders_france = [Order("A PAR H")]
 
-    # Test inline_agent
-    mock_custom_llm_caller_inline = AsyncMock(return_value=mock_llm_orders_string_output)
+    mock_llm_orders_dict_output_germany = {"orders": ["A BER H"]}
+    expected_agent_orders_germany = [Order("A BER H")]
+
+    mock_llm_orders_dict_output_england = {"orders": ["F LON H"]}
+    expected_agent_orders_england = [Order("F LON H")]
+
+    # Test inline_agent (FRANCE)
+    mock_custom_llm_caller_inline = AsyncMock(return_value=mock_llm_orders_dict_output_france)
     inline_agent.llm_caller_override = mock_custom_llm_caller_inline
     orders = await inline_agent.decide_orders(phase_state)
-    assert orders == expected_agent_orders
+    assert orders == expected_agent_orders_france
     mock_custom_llm_caller_inline.assert_called_once()
-    actual_call_args_inline = mock_custom_llm_caller_inline.call_args
-    prompt_text_inline = actual_call_args_inline.kwargs["prompt"]
+    assert mock_custom_llm_caller_inline.call_args is not None
+    called_args_kwargs_inline = mock_custom_llm_caller_inline.call_args[1]
+    prompt_text_inline = called_args_kwargs_inline["prompt"]
     assert "Game Context and Relevant Information:" in prompt_text_inline
     assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_inline # Default from InlineContextProvider
 
-    # Test mcp_agent
-    mock_custom_llm_caller_mcp = AsyncMock(return_value=mock_llm_orders_string_output)
+    # Test mcp_agent (GERMANY)
+    mock_custom_llm_caller_mcp = AsyncMock(return_value=mock_llm_orders_dict_output_germany)
     mcp_agent.llm_caller_override = mock_custom_llm_caller_mcp
     orders = await mcp_agent.decide_orders(phase_state)
-    assert orders == expected_agent_orders
+    assert orders == expected_agent_orders_germany
     mock_custom_llm_caller_mcp.assert_called_once()
-    actual_call_args_mcp = mock_custom_llm_caller_mcp.call_args
-    prompt_text_mcp = actual_call_args_mcp.kwargs["prompt"]
+    assert mock_custom_llm_caller_mcp.call_args is not None
+    called_args_kwargs_mcp = mock_custom_llm_caller_mcp.call_args[1]
+    prompt_text_mcp = called_args_kwargs_mcp["prompt"]
     assert "Game Context and Relevant Information:" in prompt_text_mcp
     assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_mcp
 
-    # Test auto_agent
-    mock_custom_llm_caller_auto = AsyncMock(return_value=mock_llm_orders_string_output)
+    # Test auto_agent (ENGLAND)
+    mock_custom_llm_caller_auto = AsyncMock(return_value=mock_llm_orders_dict_output_england)
     auto_agent.llm_caller_override = mock_custom_llm_caller_auto
     orders = await auto_agent.decide_orders(phase_state)
-    assert orders == expected_agent_orders
+    assert orders == expected_agent_orders_england
     mock_custom_llm_caller_auto.assert_called_once()
-    actual_call_args_auto = mock_custom_llm_caller_auto.call_args
-    prompt_text_auto = actual_call_args_auto.kwargs["prompt"]
+    assert mock_custom_llm_caller_auto.call_args is not None
+    called_args_kwargs_auto = mock_custom_llm_caller_auto.call_args[1]
+    prompt_text_auto = called_args_kwargs_auto["prompt"]
     assert "Game Context and Relevant Information:" in prompt_text_auto
     assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_auto
 

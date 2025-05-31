@@ -26,7 +26,7 @@ class TestArgs:
         self.game_id = "test_mock_123"
         self.log_level = "INFO"
         self.log_to_file = False
-        self.log_dir = "./mock_test_logs"
+        self.log_dir = "logs/mock_test_logs"
         self.perform_planning_phase = False
         self.num_negotiation_rounds = 0
         self.negotiation_style = "simultaneous"
@@ -102,7 +102,7 @@ async def test_mock_get_valid_orders_success(common_mocks): # Removed mock_llm_c
         config=config,
         agent_goals=["Goal 1"],
         agent_relationships={"GERMANY": "Neutral"},
-        log_file_path="./mock_test_logs/orders.csv",  # Consider using tmp_path fixture for logs
+        log_file_path="logs/mock_test_logs/orders.csv",  # Consider using tmp_path fixture for logs
         phase=game.phase,  # Use game.phase
         llm_caller_override=mock_custom_llm_caller, # Pass the override
     )

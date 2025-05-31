@@ -19,13 +19,18 @@ def make_dummy_game_config(log_level="INFO", log_to_file=False, general_log_path
     args.dev_mode = False # Default, can be overridden in specific tests
     args.verbose_llm_debug = verbose_llm_debug
     
+    # Ensure models_config_file is a string, as GameConfig will use it with os.path.exists
+    # This path is used by GameConfig._load_models_config()
+    args.models_config_file = "dummy_test_models.toml" # Explicitly set to a string path
+
     # Add other attributes expected by GameConfig if not covered by getattr defaults
     # These are based on GameConfig structure.
     config_attrs = {
         "power_name": None, "model_id": None, "num_players": 7, "game_id_prefix": "diplomacy_game",
         "perform_planning_phase": False, "num_negotiation_rounds": 3, "negotiation_style": "simultaneous",
         "fixed_models": None, "randomize_fixed_models": False, "exclude_powers": None, "max_years": None,
-        "models_config_file": "models.toml", "max_diary_tokens": 6500,
+        # "models_config_file": "models.toml", # Now explicitly set above to "dummy_test_models.toml"
+        "max_diary_tokens": 6500,
     }
     for attr, val in config_attrs.items():
         if not hasattr(args, attr): # only set if not already set (e.g. by test-specific overrides)
@@ -239,4 +244,4 @@ class TestSetupLoggingFormatSelection(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main() 

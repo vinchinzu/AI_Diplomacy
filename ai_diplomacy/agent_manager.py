@@ -98,6 +98,7 @@ class AgentManager:
                     type="llm",
                     model_id=model_id_for_power,
                     context_provider="auto",  # Will auto-select based on model capabilities
+                    verbose_llm_debug=self.game_config.args.verbose_llm_debug if hasattr(self.game_config.args, 'verbose_llm_debug') else False # Pass verbose_llm_debug
                 )
 
                 # Create agent using factory

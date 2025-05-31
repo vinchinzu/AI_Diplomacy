@@ -2,10 +2,12 @@ import logging
 import asyncio
 from typing import List, Dict, TYPE_CHECKING
 
+from ..core.state import PhaseState # Added this import
+from ..agents.llm_agent import LLMAgent # Added this import
+
 if TYPE_CHECKING:
     from diplomacy import Game
     from ..game_history import GameHistory
-    from ..agents.llm_agent import LLMAgent # For type checking agent
     from ..agents.base import Message # For type checking messages_list_objects
     from ..core.state import PhaseState # For type checking current_phase_state
     from ..services.config import GameConfig # For num_negotiation_rounds
@@ -50,7 +52,9 @@ async def perform_negotiation_rounds(
     # Ensure the phase is known to GameHistory before adding messages.
     game_history.add_phase(current_phase_name)
 
-    num_rounds = max(1, getattr(config, "num_negotiation_rounds", 1))
+    # Directly use num_negotiation_rounds from config.
+    # GameConfig ensures this attribute exists and has a default if not set by args.
+    num_rounds = config.num_negotiation_rounds
 
     for round_num in range(1, num_rounds + 1):
         logger.info(f"Negotiation Round {round_num}/{num_rounds}")

@@ -238,6 +238,7 @@ async def llm_call_internal(
     model_id: str,
     prompt: str,
     system_prompt: Optional[str] = None,
+    verbose_llm_debug: bool = False,
     **kwargs: Any,
 ) -> str:
     """
@@ -248,18 +249,25 @@ async def llm_call_internal(
     prompt_options: Dict[str, Any] = {}
     if system_prompt:
         prompt_options["system"] = system_prompt
-    prompt_options.update(kwargs)
+    prompt_options.update(kwargs) # Ensure kwargs are included
 
-    async with serial_if_local(model_id):
-        response_obj = model_obj.prompt(prompt, **prompt_options)
+    # Added verbose logging for prompt
+    if verbose_llm_debug:
+        logger.info(f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}")
+        logger.info(f"[LLM Call - {agent_name} @ {phase_str}] User Prompt: {prompt!r}")
 
-        # Ensure we wait for the text to be fully generated.
+    async with serial_if_local(model_id):  # Use the new async context manager
+        response_obj: LLMResponse = await model_obj.prompt(
+            prompt, **prompt_options # kwargs are now in prompt_options
+        )
         response_text = await response_obj.text()
-
-        # Record usage after getting the response (fire-and-forget)
-        asyncio.create_task(record_usage(game_id, agent_name, phase_str, response_obj))
-
-        return response_text
+        # Added verbose logging for raw response
+        if verbose_llm_debug:
+            logger.info(f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}")
+        asyncio.create_task(
+            record_usage(game_id, agent_name, phase_str, response_obj)
+        )  # Record usage as a background task
+    return response_text
 
 
 # --- End of New Global Components ---
@@ -364,6 +372,7 @@ class LLMCoordinator:
         tools: Optional[List[Dict[str, Any]]] = None,
         expected_fields: Optional[List[str]] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
+        verbose_llm_debug: bool = False, # Added verbose_llm_debug
     ) -> Dict[str, Any]:
         """
         JSON completion call with parsing and validation.
@@ -378,6 +387,7 @@ class LLMCoordinator:
             tools: Optional tool definitions for MCP-capable models
             expected_fields: Optional list of required JSON fields
             llm_caller_override: Optional override for the LLM call logic.
+            verbose_llm_debug: Optional flag for verbose LLM call debugging
 
         Returns:
             Parsed JSON response
@@ -400,6 +410,7 @@ class LLMCoordinator:
             phase_str=phase,
             expected_json_fields=expected_fields,
             llm_caller_override=llm_caller_override,
+            verbose_llm_debug=verbose_llm_debug, # Pass it down
         )
 
         if not result.success:
@@ -420,6 +431,7 @@ class LLMCoordinator:
         response_type: str = constants.LLM_CALL_LOG_RESPONSE_TYPE_DEFAULT, # Default response type for logging
         log_to_file_path: Optional[str] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
+        verbose_llm_debug: bool = False, # Added verbose_llm_debug
     ) -> LLMCallResult:
         """
         Internal method for LLM calls with JSON parsing.
@@ -455,6 +467,7 @@ class LLMCoordinator:
                     model_id=model_id,
                     prompt=prompt,
                     system_prompt=system_prompt,
+                    verbose_llm_debug=verbose_llm_debug, # Pass verbose_llm_debug
                 )
 
             result.raw_response = raw_response

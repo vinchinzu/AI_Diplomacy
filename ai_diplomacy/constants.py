@@ -20,6 +20,8 @@ __all__ = [
     "LLM_MESSAGE_KEY_CONTENT",
     "LLM_MESSAGE_KEY_TYPE",
     "MESSAGE_RECIPIENT_GLOBAL",
+    "MESSAGE_TYPE_BROADCAST",
+    "VALID_MESSAGE_TYPES",
     # Prompt Template Filenames
     "PROMPT_TEMPLATE_CONTEXT",
     "PROMPT_TEMPLATE_FEW_SHOT",
@@ -78,6 +80,8 @@ LLM_MESSAGE_KEY_RECIPIENT = "recipient" # Used in LLMAgent
 LLM_MESSAGE_KEY_CONTENT = "content" # Used in LLMAgent
 LLM_MESSAGE_KEY_TYPE = "message_type" # Used in LLMAgent
 MESSAGE_RECIPIENT_GLOBAL = "GLOBAL" # Used in LLMAgent, orchestrators.negotiation
+MESSAGE_TYPE_BROADCAST = "BROADCAST"  # Added
+VALID_MESSAGE_TYPES = frozenset({"BROADCAST", "SECRET"})  # Added, assuming these are the valid types
 
 # --- Prompt Template Filenames ---
 PROMPT_TEMPLATE_CONTEXT = "context_prompt.txt" # Used in prompt_constructor
@@ -110,7 +114,7 @@ MCP_TOOL_RECENT_MESSAGES = "diplomacy.recent_messages" # Used in services.contex
 
 # --- LLM Coordinator & Usage Tracking ---
 LLM_USAGE_DATABASE_PATH = "ai_diplomacy_usage.db" # Used in services.llm_coordinator, services.usage_tracker
-LOCAL_LLM_SERIAL_ACCESS_PREFIXES = ["ollama/", "llamacpp/"] # Used in services.llm_coordinator
+LOCAL_LLM_SERIAL_ACCESS_PREFIXES = ["ollama/", "llamacpp/", "gemma"] # Added "gemma"
 LLM_CALL_RESULT_ERROR_NOT_INITIALIZED = "Not initialized" # Used in services.llm_coordinator
 LLM_CALL_REQUEST_ID_DEFAULT = "request" # Used in services.llm_coordinator
 LLM_CALL_LOG_RESPONSE_TYPE_DEFAULT = "llm_call" # Used in services.llm_coordinator

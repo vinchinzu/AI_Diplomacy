@@ -70,6 +70,16 @@ check_and_pull_ollama_model "$MODEL_NAME"
 COMMAND=${1:-"full"}
 
 case $COMMAND in
+  "integration-2p")
+    echo "🔎 Integration test: 2‑player quick (no negotiation)…"
+    check_and_pull_ollama_model "gemma3:4b"
+    python3 lm_game.py --preset 2p_quick
+    ;;
+  "integration-3p")
+    echo "🔎 Integration test: 3‑player with negotiation…"
+    check_and_pull_ollama_model "gemma3:4b"
+    python3 lm_game.py --preset 3p_neg
+    ;;
   "test-api")
     echo "🧪 Testing first API call..."
     python3 test_first_api_call.py --model "$MODEL_NAME" --test single
@@ -112,7 +122,7 @@ case $COMMAND in
     # Define a mixed list of models for the 7 powers for the full game.
     # Ensure these models are accessible (Ollama models pulled, API keys set for API models).
     # Austria, England, France, Germany, Italy, Russia, Turkey
-    FULL_GAME_MODELS_LIST="gpt-4o,llama3:latest,gpt-4o,gemma3:4b,gpt-4o,gemma3:4b,gemma3:4b"
+    FULL_GAME_MODELS_LIST="gpt-4o-mini,gemma3:4b,gpt-4o-mini,gemma3:4b,gemma3:4b,gemma3:4b,gemma3:4b"
 
     # Iterate through the FULL_GAME_MODELS_LIST and check/pull each model
     echo "Checking all models for the full game..."

@@ -54,7 +54,7 @@ def _prepare_config_for_test(
     num_sequential: int = 2,
     max_concurrent: int = 2,
     log_to_file_override: bool = True,
-    log_dir_override: str = "./pytest_logs"
+    log_dir_override: str = "logs/pytest_logs"
 ) -> GameConfig:
     """Helper function to create GameConfig for tests using the shared factory."""
 

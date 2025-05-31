@@ -71,4 +71,20 @@ class MovementPhaseStrategy:
                 current_phase_name, power_name, orders_by_power.get(power_name, [])
             )
 
+        # Handle Neutral Italy specifically - if it exists in game but not as an active LLM power
+        # This is a simplified approach for the WWI test scenario.
+        # A more robust solution would involve agent types (e.g., NeutralAgent).
+        #TODO
+        italy_power_name = "ITALY" # Standard name
+        if italy_power_name in game.powers and italy_power_name not in orchestrator.active_powers:
+            italy_units = game.get_units(italy_power_name)
+            if italy_units:
+                hold_orders = [f"{unit_name} H" for unit_name in italy_units]
+                orders_by_power[italy_power_name] = hold_orders
+                logger.info(f"Generated Hold orders for neutral {italy_power_name}: {hold_orders}")
+                game_history.add_orders(current_phase_name, italy_power_name, hold_orders)
+            else:
+                orders_by_power[italy_power_name] = [] # No units, no orders
+                game_history.add_orders(current_phase_name, italy_power_name, [])
+
         return orders_by_power 

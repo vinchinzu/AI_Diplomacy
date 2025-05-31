@@ -27,8 +27,12 @@ class BuildPhaseStrategy:
         current_phase_name = game.get_current_phase()
         orders_by_power: Dict[str, List[str]] = {}
         
+        game_state = game.get_state()
+        build_info = game_state.get('builds', {})
+
         powers_with_builds_or_disbands = [
-            p for p in orchestrator.active_powers if game.powers[p].n_builds != 0
+            p for p in orchestrator.active_powers 
+            if p in build_info and build_info[p].get('count', 0) != 0
         ]
 
         if not powers_with_builds_or_disbands:
