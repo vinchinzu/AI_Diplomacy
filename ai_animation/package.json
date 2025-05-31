@@ -10,9 +10,14 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest",
     "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.29",
     "@vitest/ui": "^3.1.4",
     "jsdom": "^26.1.0",
     "typescript": "~5.7.2",

@@ -4,7 +4,7 @@ import { config } from "../config";
 import { advanceToNextPhase } from "../phase";
 import { getPowerDisplayName, getAllPowerDisplayNames } from '../utils/powerNames';
 import { PowerENUM } from '../types/map';
-import { isInstantChatEnabled } from '../debug/instantChat';
+import { isInstantChatEnabled } from '../debug/instantMode';
 
 
 //TODO: Sometimes the LLMs use lists, and they don't work in the chats. The just appear as bullets within a single line.
@@ -168,7 +168,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
     console.log(`Found ${relevantMessages.length} messages for player ${gameState.currentPower} in phase ${phase.name}`);
   }
 
-  if (!stepMessages || isInstantChatEnabled()) {
+  if (!stepMessages || config.isInstantMode) {
     // Normal mode or instant chat mode: show all messages at once
     relevantMessages.forEach(msg => {
       const isNew = addMessageToChat(msg, phase.name);
@@ -761,6 +761,7 @@ function playRandomSoundEffect() {
 
   // Create an <audio> and play
   const audio = new Audio(`./sounds/${chosen}`);
+  if (config.isDebugMode || config.isTestingMode) { console.debug("Not playing sounds in debug or testing mode"); return }
   audio.play().catch(err => {
     // In case of browser auto-play restrictions, you may see warnings in console
     console.warn("Audio play was interrupted:", err);

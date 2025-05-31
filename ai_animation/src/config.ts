@@ -19,11 +19,16 @@ export const config = {
 
   // Webhook URL for phase change notifications (optional)
   webhookUrl: import.meta.env.VITE_WEBHOOK_URL || '',
+  get isTestingMode(): boolean {
+    // have playwrite inject a marker saying that it's testing to brower
+    return import.meta.env.VITE_TESTING_MODE == 'True' || window.isUnderTest;
+  },
+  _isTestingMode: false,
 
   // Whether instant mode is enabled (makes all animations instant)
   // Can be enabled via VITE_INSTANT_MODE env variable or debug menu
   get isInstantMode(): boolean {
-    return import.meta.env.VITE_INSTANT_MODE === 'true' || this._instantModeOverride;
+    return import.meta.env.VITE_INSTANT_MODE === 'True' || this._instantModeOverride;
   },
 
   // Internal flag to allow runtime toggling of instant mode
