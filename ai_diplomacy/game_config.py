@@ -105,10 +105,11 @@ class GameConfig:
 
 
         # --- Agent and Player Configuration (from TOML only) ---
-        self.players_list: List[str] = []
-        self.agent_types_list: List[str] = []
-        self.bloc_definitions_list: List[str] = []
-        self.llm_models_list: List[str] = []
+        self.players_list: List[str] = [] # List of agent IDs
+        self.agent_types_list: List[str] = [] # List of agent types, parallel to players_list
+        self.llm_models_list: List[str] = [] # List of models, parallel to players_list (empty for non-LLM)
+        self.bloc_definitions_map: Dict[str, List[str]] = {} # Maps bloc_name (agent_id) to list of power names
+        # self.bloc_definitions_list is removed as map is more useful internaly
 
         agent_entries_from_toml: Optional[List[Dict[str, Any]]] = None
         toml_config_source_for_agents: Optional[str] = None
@@ -227,9 +228,9 @@ class GameConfig:
         if self.agent_types_list:
             logger.info(f"  TOML Parsed Agent Types: {self.agent_types_list}")
         if self.llm_models_list:
-            logger.info(f"  TOML Parsed Agent LLM Models: {self.llm_models_list}")
-        if self.bloc_definitions_list:
-            logger.info(f"  TOML Parsed Bloc Definitions: {self.bloc_definitions_list}")
+            logger.info(f"  Agent LLM Models (after potential --fixed_models override): {self.llm_models_list}")
+        if self.bloc_definitions_map: # Corrected from bloc_definitions_list to bloc_definitions_map
+            logger.info(f"  TOML Parsed Bloc Definitions Map: {self.bloc_definitions_map}")
 
         if self.scenario_name_from_toml:
             logger.info(f"  Scenario Name (from TOML): {self.scenario_name_from_toml}")
@@ -286,13 +287,119 @@ class GameConfig:
         self.players_list = temp_players_list
         self.agent_types_list = temp_agent_types_list
         self.llm_models_list = temp_llm_models_list
-        self.bloc_definitions_list = temp_bloc_definitions_list
-        
+        # self.bloc_definitions_list = temp_bloc_definitions_list # Keep map instead
+        self.bloc_definitions_map = temp_bloc_definitions_map
+
         # Log what was parsed
         logger.info(f"Parsed from TOML - Players: {self.players_list}")
         logger.info(f"Parsed from TOML - Agent Types: {self.agent_types_list}")
         logger.info(f"Parsed from TOML - LLM Models: {self.llm_models_list}")
-        logger.info(f"Parsed from TOML - Bloc Definitions: {self.bloc_definitions_list}")
+        logger.info(f"Parsed from TOML - Bloc Definitions Map: {self.bloc_definitions_map}")
+
+
+    def build_agent_configurations(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Builds agent configurations based on parsed TOML data (players_list,
+        agent_types_list, llm_models_list, bloc_definitions_map).
+
+        This method replaces the manual construction of agent_configurations
+        that was previously in lm_game.py's main().
+
+        Returns:
+            A dictionary where keys are agent identifiers (player names or bloc names)
+            and values are dictionaries containing agent configuration details
+            (e.g., type, model_id, country, controlled_powers).
+        """
+        agent_configurations: Dict[str, Dict[str, Any]] = {}
+        
+        # Ensure lists are populated (they should be by _parse_agent_data_from_toml)
+        if not self.players_list or not self.agent_types_list:
+            logger.error("Cannot build agent configurations: players_list or agent_types_list is empty. Check TOML.")
+            # sys.exit(1) # Or raise an error
+            raise ValueError("Players list or agent types list is empty in GameConfig.")
+
+        # Validate list lengths
+        # LLM models list can be shorter if not all agents are LLM, or if models are reused.
+        # The check here is for basic consistency. More nuanced check for LLM model assignment is done inside the loop.
+        if len(self.players_list) != len(self.agent_types_list) or \
+           (self.llm_models_list and len(self.players_list) != len(self.llm_models_list) and any(at in ["llm", "bloc_llm"] for at in self.agent_types_list)):
+            llm_agent_count = sum(1 for at in self.agent_types_list if at in ["llm", "bloc_llm"])
+            # This condition is a bit complex: if llm_models_list is present AND its length doesn't match players_list,
+            # AND there's at least one LLM agent type, then we might have an issue.
+            # A more precise check: if llm_models_list exists and its length is less than llm_agent_count.
+            # However, GameConfig now populates llm_models_list to be parallel to players_list (with "" for non-LLM).
+            # So, the lengths should match if llm_models_list was populated by _parse_agent_data_from_toml.
+            if len(self.players_list) != len(self.llm_models_list):
+                 logger.error(
+                    "Mismatch in number of elements for players_list, agent_types_list, or llm_models_list in GameConfig. "
+                    f"Players: {len(self.players_list)}, Types: {len(self.agent_types_list)}, Models: {len(self.llm_models_list)}."
+                )
+                 raise ValueError("Configuration error: list length mismatch for agent properties.")
+
+        llm_model_idx = 0 # Used to pick models if llm_models_list is treated as a pool;
+                          # but now it's parallel, so direct indexing is used.
+
+        for i, player_identifier in enumerate(self.players_list):
+            agent_type = self.agent_types_list[i]
+            current_agent_setup: Dict[str, Any] = {"type": agent_type}
+            
+            model_for_this_agent = None
+            if agent_type in ["llm", "bloc_llm"]:
+                # llm_models_list is parallel, so self.llm_models_list[i] is the model for this agent.
+                # It could be an empty string if not specified in TOML.
+                model_for_this_agent = self.llm_models_list[i]
+                if not model_for_this_agent: # If model was empty string from TOML
+                    # Fallback to fixed_models (if it were still a concept) or a default model.
+                    # For now, we'll log a warning if an LLM agent type doesn't have a model.
+                    # The original code used a shared llm_models_to_use list and an index.
+                    # The new GameConfig structure with parallel lists simplifies this.
+                    logger.warning(
+                        f"LLM-based agent '{player_identifier}' (type: {agent_type}) has no model specified in TOML. "
+                        "Agent may not function correctly."
+                    )
+            current_agent_setup["model_id"] = model_for_this_agent
+
+            if agent_type == "llm":
+                current_agent_setup["country"] = player_identifier
+            elif agent_type == "neutral":
+                current_agent_setup["country"] = player_identifier
+            elif agent_type == "bloc_llm":
+                current_agent_setup["bloc_name"] = player_identifier
+                if player_identifier in self.bloc_definitions_map:
+                    current_agent_setup["controlled_powers"] = self.bloc_definitions_map[player_identifier]
+                    # Also store the original 'powers' key if other parts expect it (e.g. build_and_validate_agent_maps)
+                    current_agent_setup["powers"] = self.bloc_definitions_map[player_identifier]
+                else:
+                    logger.error(
+                        f"No definition found for bloc: {player_identifier} in bloc_definitions_map. "
+                        "Ensure it is defined in TOML 'agents' list with 'powers'. Skipping agent setup."
+                    )
+                    continue  # Skip this agent
+            elif agent_type == "human":
+                current_agent_setup["country"] = player_identifier # Humans can be associated with a country/power
+                logger.info(
+                    f"Human player identifier: {player_identifier}. Specific country/power assignment for human players "
+                    "is handled by AgentManager or game setup if applicable."
+                )
+                # Human agents are included in configurations for completeness, AgentManager decides how to handle.
+            elif agent_type == "null": # Example of another non-LLM agent type
+                current_agent_setup["country"] = player_identifier
+            else:
+                logger.warning(
+                    f"Unknown agent type: {agent_type} for player {player_identifier}. Skipping agent setup."
+                )
+                continue # Skip this agent
+            
+            agent_configurations[player_identifier] = current_agent_setup
+            
+        if not agent_configurations:
+            logger.warning(
+                "No agent configurations were successfully built. "
+                "This might be due to errors in TOML or empty agent lists."
+            )
+            # Depending on desired strictness, could raise an error here.
+
+        return agent_configurations
 
     def get_toml_value(self, key_path: str, default: Optional[Any] = None) -> Any:
         """Safely retrieve a value from the loaded TOML data using a dot-separated path."""

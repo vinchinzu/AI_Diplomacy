@@ -3,6 +3,10 @@
 # note the summaries aren't actually used so the model doesn't matter here
 # Defaulting all models to ollama/gemma3:4b as requested.
 MODEL_NAME="gpt-4o"
+# MODEL_NAME is primarily used by test scripts like test_first_api_call.py
+# and some lm_game_test.py configurations.
+# The main lm_game.py execution (e.g., "full" command) typically relies on
+# models specified in TOML files or the --fixed_models / agents list in TOML.
 export MODEL_NAME
 #MODEL_NAME="gemma3:latest"
 OLLAMA_PORT="${OLLAMA_PORT:-11434}"
@@ -114,10 +118,6 @@ case $COMMAND in
     ;;
   "full")
     echo "🎮 Running full game..."
-    #add a test query
-    #works
-    #curl "$OLLAMA_HOST/api/generate" -d '{"model": "gemma3:latest", "prompt": "Hello, world!"}'
-    # llm -m gemma3:latest "Hello, world!"
 
     # Define a mixed list of models for the 7 powers for the full game.
     # Ensure these models are accessible (Ollama models pulled, API keys set for API models).
@@ -133,6 +133,7 @@ case $COMMAND in
     echo "All models for the full game checked."
 
     python3 lm_game.py \
+         --config standard_game_config.toml \
          --max_years 1902 \
          --num_negotiation_rounds 1 \
          --fixed_models "$FULL_GAME_MODELS_LIST"
