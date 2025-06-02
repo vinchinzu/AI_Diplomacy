@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from .base import BaseAgent, Order, Message
 from ..core.state import PhaseState
 
+
 class NeutralAgent(BaseAgent):
     """
     An agent that represents a neutral power.
@@ -10,7 +11,7 @@ class NeutralAgent(BaseAgent):
 
     def __init__(self, agent_id: str, country: str):
         super().__init__(agent_id, country)
-        self.model_id = "neutral" # Explicitly set model_id for neutral type
+        self.model_id = "neutral"  # Explicitly set model_id for neutral type
 
     async def decide_orders(self, phase: PhaseState) -> List[Order]:
         """

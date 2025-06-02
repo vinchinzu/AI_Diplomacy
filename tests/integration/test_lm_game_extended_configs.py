@@ -1,8 +1,6 @@
 import pytest
-import asyncio
 import subprocess # To run lm_game.py as a script
 import sys
-import os
 import re # For log checking
 from pathlib import Path
 
@@ -168,6 +166,5 @@ def test_4p_bloc_game_wwi_preset():
     else:
         # If it somehow completes with 0, it might mean not all logic paths were hit,
         # or the game ended very early before potential issues.
-        print(f"INFO: test_4p_bloc_game_wwi_preset completed with return code 0. This might be unexpected if PhaseOrchestrator is not adapted.")
+        print("INFO: test_4p_bloc_game_wwi_preset completed with return code 0. This might be unexpected if PhaseOrchestrator is not adapted.")
 
-```

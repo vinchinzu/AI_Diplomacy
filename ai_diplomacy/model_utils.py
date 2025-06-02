@@ -2,11 +2,11 @@
 
 import logging
 import random
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .game_config import GameConfig
-from .constants import DEFAULT_AGENT_MANAGER_FALLBACK_MODEL # Import from constants
+from .constants import DEFAULT_AGENT_MANAGER_FALLBACK_MODEL  # Import from constants
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,10 @@ __all__ = ["assign_models_to_powers"]
 
 # DEFAULT_AGENT_MANAGER_FALLBACK_MODEL has been moved to constants.py
 
-def assign_models_to_powers(game_config: "GameConfig", all_game_powers: List[str]) -> Dict[str, str]:
+
+def assign_models_to_powers(
+    game_config: "GameConfig", all_game_powers: List[str]
+) -> Dict[str, str]:
     """
     Assigns LLM model IDs to each participating power in the game.
 
@@ -40,12 +43,9 @@ def assign_models_to_powers(game_config: "GameConfig", all_game_powers: List[str
     exclude_powers = game_config.exclude_powers or []
 
     # Start with TOML configurations from GameConfig
-    powers_and_models: Dict[str, str] = dict(
-        game_config.power_model_assignments
-    )
+    powers_and_models: Dict[str, str] = dict(game_config.power_model_assignments)
     default_model = (
-        game_config.default_model_from_config
-        or DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
+        game_config.default_model_from_config or DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
     )
     logger.info(
         f"Using default model: '{default_model}' (from TOML or AgentManager fallback)"
@@ -97,7 +97,7 @@ def assign_models_to_powers(game_config: "GameConfig", all_game_powers: List[str
     if game_config.randomize_fixed_models:
         random.shuffle(candidate_powers_for_filling_slots)
     else:
-        candidate_powers_for_filling_slots.sort() # Ensure deterministic order
+        candidate_powers_for_filling_slots.sort()  # Ensure deterministic order
 
     fixed_models_cli_list = (
         list(game_config.fixed_models) if game_config.fixed_models else []

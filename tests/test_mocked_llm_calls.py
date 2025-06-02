@@ -1,13 +1,10 @@
-import asyncio
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 
 # AgentLLMInterface was removed in refactor
 from ai_diplomacy.game_config import GameConfig
 from diplomacy import Game
 from ai_diplomacy.game_history import GameHistory
-from ai_diplomacy.agents.base import BaseAgent
-from ai_diplomacy.agents.llm_agent import LLMAgent
 from ai_diplomacy.general_utils import (
     gather_possible_orders,
     get_valid_orders,
@@ -65,7 +62,9 @@ def common_mocks():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_get_valid_orders_success(common_mocks): # Removed mock_llm_call_internal
+async def test_mock_get_valid_orders_success(
+    common_mocks,
+):  # Removed mock_llm_call_internal
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -104,17 +103,19 @@ async def test_mock_get_valid_orders_success(common_mocks): # Removed mock_llm_c
         agent_relationships={"GERMANY": "Neutral"},
         log_file_path="logs/mock_test_logs/orders.csv",  # Consider using tmp_path fixture for logs
         phase=game.phase,  # Use game.phase
-        llm_caller_override=mock_custom_llm_caller, # Pass the override
+        llm_caller_override=mock_custom_llm_caller,  # Pass the override
     )
 
-    mock_custom_llm_caller.assert_called_once() # Simplified assertion
+    mock_custom_llm_caller.assert_called_once()  # Simplified assertion
     # Sort both lists for comparison as order is not guaranteed
     assert sorted(orders) == sorted(["A PAR H", "A MAR H", "F BRE H"])
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_get_valid_orders_json_fail(common_mocks): # Removed mock_llm_call_internal
+async def test_mock_get_valid_orders_json_fail(
+    common_mocks,
+):  # Removed mock_llm_call_internal
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -140,7 +141,9 @@ async def test_mock_get_valid_orders_json_fail(common_mocks): # Removed mock_llm
             expected_fallback_orders.append(orders_for_loc[0])
     expected_fallback_orders.sort()
 
-    mock_response_malformed_json_string = '{"orders": ["A PAR H", "A MAR H", "F BRE H"' # Malformed
+    mock_response_malformed_json_string = (
+        '{"orders": ["A PAR H", "A MAR H", "F BRE H"'  # Malformed
+    )
     # fut = asyncio.Future() # No longer needed
     # fut.set_result(mock_response_malformed_json_string)
     # mock_llm_call_internal.return_value = fut # No longer needed
@@ -158,17 +161,19 @@ async def test_mock_get_valid_orders_json_fail(common_mocks): # Removed mock_llm
         game_id=config.game_id,
         config=config,
         phase=game.phase,
-        llm_caller_override=mock_custom_llm_caller, # Pass the override
+        llm_caller_override=mock_custom_llm_caller,  # Pass the override
     )
 
-    mock_custom_llm_caller.assert_called_once() # Simplified assertion
+    mock_custom_llm_caller.assert_called_once()  # Simplified assertion
     orders.sort()
     assert orders == expected_fallback_orders
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_get_valid_orders_empty_response(common_mocks): # Removed mock_llm_call_internal
+async def test_mock_get_valid_orders_empty_response(
+    common_mocks,
+):  # Removed mock_llm_call_internal
     game = common_mocks["game"]
     game_history = common_mocks["game_history"]
     config = common_mocks["config"]
@@ -210,11 +215,9 @@ async def test_mock_get_valid_orders_empty_response(common_mocks): # Removed moc
         game_id=config.game_id,
         config=config,
         phase=game.phase,
-        llm_caller_override=mock_custom_llm_caller, # Pass the override
+        llm_caller_override=mock_custom_llm_caller,  # Pass the override
     )
 
-    mock_custom_llm_caller.assert_called_once() # Simplified assertion
+    mock_custom_llm_caller.assert_called_once()  # Simplified assertion
     orders.sort()
     assert orders == expected_fallback_orders
-
-

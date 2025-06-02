@@ -9,6 +9,7 @@ from ..core.state import PhaseState
 
 __all__ = ["Order", "Message", "BaseAgent"]
 
+
 class Order:
     """Represents a single diplomatic order."""
 

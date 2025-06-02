@@ -7,7 +7,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 import yaml
 import logging
-from .. import constants # Import constants
+from .. import constants  # Import constants
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ __all__ = [
     "supports_tools",
     "resolve_context_provider",
 ]
+
 
 class GameConfig(BaseModel):
     """Game-level configuration."""
@@ -38,7 +39,8 @@ class AgentConfig(BaseModel):
     type: str = Field(..., description="Agent type: 'llm', 'scripted', etc.")
     model_id: Optional[str] = Field(None, description="LLM model identifier")
     context_provider: str = Field(
-        constants.CONTEXT_PROVIDER_AUTO, description="Context provider: 'inline', 'mcp', 'auto'"
+        constants.CONTEXT_PROVIDER_AUTO,
+        description="Context provider: 'inline', 'mcp', 'auto'",
     )
     personality_prompt: Optional[str] = Field(
         None, description="Path to personality prompt template"
@@ -46,10 +48,15 @@ class AgentConfig(BaseModel):
     tool_whitelist: List[str] = Field(
         default_factory=list, description="Allowed MCP tools"
     )
-    verbose_llm_debug: bool = Field(False, description="Enable verbose LLM request/response logging")
-    temperature: float = Field(0.7, description="LLM temperature setting") # Added from BlocLLMAgent
-    max_tokens: Optional[int] = Field(default=2000, description="Maximum tokens for LLM response")
-
+    verbose_llm_debug: bool = Field(
+        False, description="Enable verbose LLM request/response logging"
+    )
+    temperature: float = Field(
+        0.7, description="LLM temperature setting"
+    )  # Added from BlocLLMAgent
+    max_tokens: Optional[int] = Field(
+        default=2000, description="Maximum tokens for LLM response"
+    )
 
     @field_validator("country")
     @classmethod
@@ -59,7 +66,14 @@ class AgentConfig(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_agent_type(cls, v):
-        allowed_types = {"llm", "scripted", "human", "neutral", "bloc_llm"} # Added neutral and bloc_llm
+        allowed_types = {
+            "llm",
+            "scripted",
+            "human",
+            "neutral",
+            "bloc_llm",
+            "null",
+        }  # Added neutral and bloc_llm
         if v not in allowed_types:
             raise ValueError(f"Agent type must be one of {allowed_types}")
         return v
@@ -67,7 +81,11 @@ class AgentConfig(BaseModel):
     @field_validator("context_provider")
     @classmethod
     def validate_context_provider(cls, v):
-        allowed_providers = {constants.CONTEXT_PROVIDER_INLINE, constants.CONTEXT_PROVIDER_MCP, constants.CONTEXT_PROVIDER_AUTO}
+        allowed_providers = {
+            constants.CONTEXT_PROVIDER_INLINE,
+            constants.CONTEXT_PROVIDER_MCP,
+            constants.CONTEXT_PROVIDER_AUTO,
+        }
         if v not in allowed_providers:
             raise ValueError(f"Context provider must be one of {allowed_providers}")
         return v
@@ -110,7 +128,9 @@ class DiplomacyConfig(BaseModel):
         game_config = GameConfig(
             random_seed=getattr(args, "random_seed", None),
             use_mcp=getattr(args, "use_mcp", False),
-            token_budget=getattr(args, "max_diary_tokens", constants.DEFAULT_TOKEN_BUDGET),
+            token_budget=getattr(
+                args, "max_diary_tokens", constants.DEFAULT_TOKEN_BUDGET
+            ),
             max_years=getattr(args, "max_years", None),
             log_level=getattr(args, "log_level", constants.DEFAULT_LOG_LEVEL),
         )
@@ -187,7 +207,9 @@ MODEL_CAPABILITIES = {
 
 def supports_tools(model_id: str) -> bool:
     """Check if a model supports tool calling."""
-    return model_id in MODEL_CAPABILITIES[constants.MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS]
+    return (
+        model_id in MODEL_CAPABILITIES[constants.MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS]
+    )
 
 
 def resolve_context_provider(agent_config: AgentConfig) -> str:

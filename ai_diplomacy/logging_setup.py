@@ -8,11 +8,12 @@ This module provides functionalities to:
 - Support JSON-formatted logs via the `JsonFormatter` class, configurable through
   the `LOG_FORMAT=JSON` environment variable.
 """
+
 import logging
 import os
 import sys  # To get stdout for console handler
-import json # Added for JsonFormatter
-from datetime import datetime # Added for JsonFormatter timestamp
+import json  # Added for JsonFormatter
+from datetime import datetime  # Added for JsonFormatter timestamp
 from typing import TYPE_CHECKING, Dict
 
 if TYPE_CHECKING:
@@ -37,9 +38,7 @@ def get_log_paths(game_id: str, base_log_dir: str) -> Dict[str, str]:
     llm_log_path = os.path.join(
         game_id_specific_log_dir, f"{game_id}_llm_interactions.csv"
     )
-    general_log_path = os.path.join(
-        game_id_specific_log_dir, f"{game_id}_general.log"
-    )
+    general_log_path = os.path.join(game_id_specific_log_dir, f"{game_id}_general.log")
     results_dir = os.path.join(game_id_specific_log_dir, "results")
     manifestos_dir = os.path.join(results_dir, "manifestos")
 
@@ -57,10 +56,12 @@ class LLMVerboseFilter(logging.Filter):  # Removed comment: # Define the custom 
         super().__init__(name)
         self.verbose_llm_debug = verbose_llm_debug
 
-    def filter(self, record: logging.LogRecord) -> bool: # Added type hints
+    def filter(self, record: logging.LogRecord) -> bool:  # Added type hints
         if not self.verbose_llm_debug and record.levelno == logging.INFO:
             # Check logger name or message content for typical LLM verbose logs
-            msg_lower = record.getMessage().lower() # getMessage ensures msg % args is done
+            msg_lower = (
+                record.getMessage().lower()
+            )  # getMessage ensures msg % args is done
             is_llm_log = (
                 "llm_coordinator" in record.name
                 or "prompt:" in msg_lower
@@ -103,18 +104,20 @@ class JsonFormatter(logging.Formatter):
         # Ensure standard Formatter attributes are available, especially record.message and record.asctime
         # record.message is created from record.msg % record.args
         # record.asctime is created based on default_time_format
-        super().format(record) # This populates record.asctime and record.message
+        super().format(record)  # This populates record.asctime and record.message
 
         log_entry = {
-            "timestamp": getattr(record, 'asctime', datetime.fromtimestamp(record.created).isoformat()),
+            "timestamp": getattr(
+                record, "asctime", datetime.fromtimestamp(record.created).isoformat()
+            ),
             "level": record.levelname,
             "name": record.name,
-            "message": record.message, # Contains the fully formatted message string
-            "source": { # Grouping source information
+            "message": record.message,  # Contains the fully formatted message string
+            "source": {  # Grouping source information
                 "pathname": record.pathname,
                 "lineno": record.lineno,
                 "function": record.funcName,
-            }
+            },
             # "module": record.module, # Often redundant with pathname
             # "process_id": record.process, # Optional: process ID
             # "thread_name": record.threadName, # Optional: thread name
@@ -123,27 +126,52 @@ class JsonFormatter(logging.Formatter):
         # Add exception info if present and formatted
         if record.exc_info and record.exc_text:
             log_entry["exception"] = {
-                "type": record.exc_info[0].__name__ if record.exc_info[0] else "Exception",
+                "type": record.exc_info[0].__name__
+                if record.exc_info[0]
+                else "Exception",
                 "message": str(record.exc_info[1]) if record.exc_info[1] else "",
                 "stacktrace": record.exc_text,
             }
-        elif record.exc_info: # Fallback if exc_text is not pre-formatted (should be by super().format)
-             log_entry["exception_info"] = self.formatException(record.exc_info)
-
+        elif (
+            record.exc_info
+        ):  # Fallback if exc_text is not pre-formatted (should be by super().format)
+            log_entry["exception_info"] = self.formatException(record.exc_info)
 
         # Add any extra fields passed to the logger via logging.Logger.debug("...", extra=dict(...))
         # Standard LogRecord attributes that might be of interest are already handled or commented out.
         # User-defined extra fields:
         standard_record_keys = {
-            'args', 'asctime', 'created', 'exc_info', 'exc_text', 'filename',
-            'funcName', 'levelname', 'levelno', 'lineno', 'message', 'module',
-            'msecs', 'msg', 'name', 'pathname', 'process', 'processName',
-            'relativeCreated', 'stack_info', 'thread', 'threadName',
-            '_log', '_name', '_exc_info_hidden', # Internal/already processed
+            "args",
+            "asctime",
+            "created",
+            "exc_info",
+            "exc_text",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "message",
+            "module",
+            "msecs",
+            "msg",
+            "name",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "stack_info",
+            "thread",
+            "threadName",
+            "_log",
+            "_name",
+            "_exc_info_hidden",  # Internal/already processed
         }
         extra_fields = {}
         for key, value in record.__dict__.items():
-            if key not in standard_record_keys and key not in log_entry: # Avoid overwriting already set fields
+            if (
+                key not in standard_record_keys and key not in log_entry
+            ):  # Avoid overwriting already set fields
                 if isinstance(value, (str, bool, int, float, list, dict, type(None))):
                     extra_fields[key] = value
                 # else: # Potentially skip or convert non-basic types to string
@@ -155,14 +183,18 @@ class JsonFormatter(logging.Formatter):
             return json.dumps(log_entry, ensure_ascii=False)
         except TypeError as e:
             # Fallback for unserializable fields
-            fallback_timestamp = datetime.fromtimestamp(record.created).isoformat() if hasattr(record, 'created') else datetime.utcnow().isoformat()
+            fallback_timestamp = (
+                datetime.fromtimestamp(record.created).isoformat()
+                if hasattr(record, "created")
+                else datetime.utcnow().isoformat()
+            )
             error_log_entry = {
                 "timestamp": fallback_timestamp,
                 "level": "ERROR",
                 "name": "JsonFormatter.SerializationError",
                 "message": f"Error serializing log record: {e}. See original_record field.",
-                "original_record_name": getattr(record, 'name', 'Unknown'),
-                "original_record_msg_preview": getattr(record, 'msg', 'N/A')[:100]
+                "original_record_name": getattr(record, "name", "Unknown"),
+                "original_record_msg_preview": getattr(record, "msg", "N/A")[:100],
             }
             return json.dumps(error_log_entry, ensure_ascii=False)
 

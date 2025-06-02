@@ -7,10 +7,7 @@ from ai_diplomacy.services.context_provider import (
     ContextProvider,
 )
 from ai_diplomacy.core.state import PhaseState
-from datetime import datetime
-from typing import List, Any, Optional, Dict
-import logging
-import os
+from typing import List
 
 # Import the shared factory
 from ._shared_fixtures import create_game_config
@@ -76,7 +73,9 @@ def mock_load_prompt_file_func():
 
 @pytest.fixture
 def mock_game_config_results(tmp_path) -> GameConfig:
-    return create_game_config(game_id="results_test_game", log_dir=str(tmp_path / "test_results_logs"))
+    return create_game_config(
+        game_id="results_test_game", log_dir=str(tmp_path / "test_results_logs")
+    )
 
 
 @pytest.fixture
@@ -133,29 +132,52 @@ def mock_args_logging_setup():
 def minimal_game_config_logging_setup_debug_verbose_false(tmp_path):
     log_dir = tmp_path / "minimal_log_debug_vfalse"
     log_dir.mkdir()
-    return fakes_module.MinimalGameConfig_LoggingSetup(log_level="DEBUG", log_to_file=True, log_dir=str(log_dir), verbose_llm_debug=False)
+    return fakes_module.MinimalGameConfig_LoggingSetup(
+        log_level="DEBUG",
+        log_to_file=True,
+        log_dir=str(log_dir),
+        verbose_llm_debug=False,
+    )
 
 
 @pytest.fixture
 def minimal_game_config_logging_setup_debug_verbose_true(tmp_path):
     log_dir = tmp_path / "minimal_log_debug_vtrue"
     log_dir.mkdir()
-    return fakes_module.MinimalGameConfig_LoggingSetup(log_level="DEBUG", log_to_file=True, log_dir=str(log_dir), verbose_llm_debug=True)
+    return fakes_module.MinimalGameConfig_LoggingSetup(
+        log_level="DEBUG",
+        log_to_file=True,
+        log_dir=str(log_dir),
+        verbose_llm_debug=True,
+    )
 
 
 @pytest.fixture
 def minimal_game_config_logging_setup_info_verbose_false(tmp_path):
     log_dir = tmp_path / "minimal_log_info_vfalse"
     log_dir.mkdir()
-    return fakes_module.MinimalGameConfig_LoggingSetup(log_level="INFO", log_to_file=True, log_dir=str(log_dir), verbose_llm_debug=False)
+    return fakes_module.MinimalGameConfig_LoggingSetup(
+        log_level="INFO",
+        log_to_file=True,
+        log_dir=str(log_dir),
+        verbose_llm_debug=False,
+    )
 
 
 @pytest.fixture
 def fake_game_factory(fakes_module_param):
-    def _create_fake_game(phase="S1901M", powers_names=None, build_conditions=None, retreat_conditions=None):
+    def _create_fake_game(
+        phase="S1901M",
+        powers_names=None,
+        build_conditions=None,
+        retreat_conditions=None,
+    ):
         if powers_names is None:
             powers_names = ["FRANCE", "GERMANY"]
-        return fakes_module.FakeGame(phase, powers_names, build_conditions, retreat_conditions)
+        return fakes_module.FakeGame(
+            phase, powers_names, build_conditions, retreat_conditions
+        )
+
     return _create_fake_game
 
 
@@ -167,19 +189,27 @@ def mock_game_config_for_orchestrator():
 @pytest.fixture
 def mock_agent_manager_for_orchestrator():
     from ai_diplomacy.agent_manager import AgentManager
+
     manager = MagicMock(spec=AgentManager, spec_set=True, autospec=True)
     manager.get_agent = MagicMock()
     return manager
 
 
 @pytest.fixture
-def default_dummy_orchestrator(mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator):
+def default_dummy_orchestrator(
+    mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator
+):
     default_powers = ["FRANCE", "GERMANY"]
-    orchestrator = fakes_module.DummyOrchestrator(default_powers, mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator)
+    orchestrator = fakes_module.DummyOrchestrator(
+        default_powers,
+        mock_game_config_for_orchestrator,
+        mock_agent_manager_for_orchestrator,
+    )
     orchestrator._get_orders_for_power = AsyncMock(return_value=["WAIVE"])
     return orchestrator
 
-ALL_POWERS_IN_GAME_CONSTANT = [ # Renamed to avoid conflict if a global was imported elsewhere
+
+ALL_POWERS_IN_GAME_CONSTANT = [  # Renamed to avoid conflict if a global was imported elsewhere
     "AUSTRIA",
     "ENGLAND",
     "FRANCE",
@@ -189,6 +219,9 @@ ALL_POWERS_IN_GAME_CONSTANT = [ # Renamed to avoid conflict if a global was impo
     "TURKEY",
 ]
 
+
 @pytest.fixture
 def all_powers() -> List[str]:
-    return ALL_POWERS_IN_GAME_CONSTANT.copy() # Return a copy to prevent modification by tests
+    return (
+        ALL_POWERS_IN_GAME_CONSTANT.copy()
+    )  # Return a copy to prevent modification by tests

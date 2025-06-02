@@ -5,9 +5,11 @@ This module provides the LLMPromptStrategy class, which contains methods
 for building specific prompts required by LLM agents during different
 phases of a Diplomacy game (e.g., order generation, negotiation, diary entry).
 """
+
 from typing import List, Dict, Any
 
 __all__ = ["LLMPromptStrategy"]
+
 
 class LLMPromptStrategy:
     # Class docstring already exists and is good.
@@ -31,10 +33,16 @@ class LLMPromptStrategy:
         """
         Constructs the prompt for order generation.
         """
-        goals_str = "\n".join(f"- {goal}" for goal in goals) if goals else "No specific goals set."
-        relationships_str = "\n".join(
-            f"- {power}: {status}" for power, status in relationships.items()
-        ) if relationships else "No specific relationship data."
+        goals_str = (
+            "\n".join(f"- {goal}" for goal in goals)
+            if goals
+            else "No specific goals set."
+        )
+        relationships_str = (
+            "\n".join(f"- {power}: {status}" for power, status in relationships.items())
+            if relationships
+            else "No specific relationship data."
+        )
 
         tool_instruction = ""
         if tools_available:
@@ -42,7 +50,7 @@ class LLMPromptStrategy:
                 "\n\nIf you need to access external information or perform complex calculations "
                 "to make your decision, you can use the available tools. "
                 "To use a tool, output a JSON object with a 'tool_name' and 'tool_input' field. "
-                "For example: {\"tool_name\": \"calculator\", \"tool_input\": \"2+2\"}. "
+                'For example: {"tool_name": "calculator", "tool_input": "2+2"}. '
                 "Wait for the tool's response before proceeding with your orders. "
                 "If you do not need a tool, provide your orders directly."
             )
@@ -91,11 +99,17 @@ Ensure your orders are valid and strategically sound.
         """
         Constructs the prompt for generating diplomatic messages.
         """
-        goals_str = "\n".join(f"- {goal}" for goal in goals) if goals else "No specific goals set."
-        relationships_str = "\n".join(
-            f"- {power}: {status}" for power, status in relationships.items()
-        ) if relationships else "No specific relationship data."
-        
+        goals_str = (
+            "\n".join(f"- {goal}" for goal in goals)
+            if goals
+            else "No specific goals set."
+        )
+        relationships_str = (
+            "\n".join(f"- {power}: {status}" for power, status in relationships.items())
+            if relationships
+            else "No specific relationship data."
+        )
+
         active_powers_str = ", ".join(active_powers) if active_powers else "None"
 
         tool_instruction = ""
@@ -170,14 +184,26 @@ Ensure your messages are strategically sound and contribute to your goals.
         """
         units_str = ", ".join(power_units) if power_units else "None"
         centers_str = ", ".join(power_centers) if power_centers else "None"
-        goals_str = "\n".join(f"- {goal}" for goal in goals) if goals else "No specific goals set."
-        relationships_str = "\n".join(
-            f"- {power}: {status}" for power, status in relationships.items()
-        ) if relationships else "No specific relationship data."
-        
-        events_str = "\n".join(str(event) for event in events) if events else "No significant events."
+        goals_str = (
+            "\n".join(f"- {goal}" for goal in goals)
+            if goals
+            else "No specific goals set."
+        )
+        relationships_str = (
+            "\n".join(f"- {power}: {status}" for power, status in relationships.items())
+            if relationships
+            else "No specific relationship data."
+        )
 
-        game_status = "The game is now over." if is_game_over else "The game is ongoing."
+        events_str = (
+            "\n".join(str(event) for event in events)
+            if events
+            else "No significant events."
+        )
+
+        game_status = (
+            "The game is now over." if is_game_over else "The game is ongoing."
+        )
 
         prompt = f"""You are an AI agent playing as {country} in a game of Diplomacy.
 The phase '{phase_name}' has just concluded.
@@ -213,7 +239,7 @@ Do not add any commentary or explanation outside of the JSON structure.
         phase_name: str,
         power_units: List[str],
         power_centers: List[str],
-        all_power_centers: Dict[str, int], # Map of power_name to num_centers
+        all_power_centers: Dict[str, int],  # Map of power_name to num_centers
         is_game_over: bool,
         current_goals: List[str],
         relationships: Dict[str, str],
@@ -223,16 +249,29 @@ Do not add any commentary or explanation outside of the JSON structure.
         """
         units_str = ", ".join(power_units) if power_units else "None"
         centers_str = ", ".join(power_centers) if power_centers else "None"
-        current_goals_str = "\n".join(f"- {goal}" for goal in current_goals) if current_goals else "No specific goals currently set."
-        relationships_str = "\n".join(
-            f"- {power}: {status}" for power, status in relationships.items()
-        ) if relationships else "No specific relationship data."
-        
-        all_power_centers_str = "\n".join(
-            f"- {power}: {count} centers" for power, count in all_power_centers.items()
-        ) if all_power_centers else "Supply center data unavailable."
-        
-        game_status = "The game is now over." if is_game_over else "The game is ongoing."
+        current_goals_str = (
+            "\n".join(f"- {goal}" for goal in current_goals)
+            if current_goals
+            else "No specific goals currently set."
+        )
+        relationships_str = (
+            "\n".join(f"- {power}: {status}" for power, status in relationships.items())
+            if relationships
+            else "No specific relationship data."
+        )
+
+        all_power_centers_str = (
+            "\n".join(
+                f"- {power}: {count} centers"
+                for power, count in all_power_centers.items()
+            )
+            if all_power_centers
+            else "Supply center data unavailable."
+        )
+
+        game_status = (
+            "The game is now over." if is_game_over else "The game is ongoing."
+        )
 
         prompt = f"""You are an AI agent playing as {country} in a game of Diplomacy.
 The phase '{phase_name}' has just concluded.
@@ -274,6 +313,7 @@ Do not add any commentary or explanation outside of the JSON structure.
 """
         return prompt
 
+
 # Example Usage (can be removed or kept for testing)
 if __name__ == "__main__":
     strategy = LLMPromptStrategy()
@@ -312,7 +352,12 @@ if __name__ == "__main__":
         is_game_over=False,
         events=[
             {"type": "MOVE", "unit": "A WAR", "destination": "GAL", "success": True},
-            {"type": "ATTACK", "attacker": "TURKEY", "target_unit": "F SEV", "success": False},
+            {
+                "type": "ATTACK",
+                "attacker": "TURKEY",
+                "target_unit": "F SEV",
+                "success": False,
+            },
         ],
         goals=["Expand southwards", "Secure Warsaw"],
         relationships={"TURKEY": "Enemy", "GERMANY": "Neutral"},
@@ -326,7 +371,15 @@ if __name__ == "__main__":
         phase_name="Spring 1903 Build Phase",
         power_units=["F LON", "F EDI", "A LVP"],
         power_centers=["LONDON", "EDINBURGH", "LIVERPOOL"],
-        all_power_centers={"ENGLAND": 3, "FRANCE": 5, "GERMANY": 6, "RUSSIA": 4, "AUSTRIA": 3, "ITALY": 3, "TURKEY": 2},
+        all_power_centers={
+            "ENGLAND": 3,
+            "FRANCE": 5,
+            "GERMANY": 6,
+            "RUSSIA": 4,
+            "AUSTRIA": 3,
+            "ITALY": 3,
+            "TURKEY": 2,
+        },
         is_game_over=False,
         current_goals=["Prevent French naval dominance", "Secure North Sea"],
         relationships={"FRANCE": "Unfriendly", "GERMANY": "Neutral"},

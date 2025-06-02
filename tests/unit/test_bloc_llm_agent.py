@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 import json
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -9,21 +8,25 @@ from ai_diplomacy.core.state import PhaseState, PowerState
 from ai_diplomacy.services.config import AgentConfig
 # LLMCoordinator and ContextProviderFactory might be needed if not fully mocked out
 
+
 @pytest.fixture
 def default_agent_config():
     # Create a default AgentConfig for testing
     return AgentConfig(
-        country="ENTENTE_BLOC", # Bloc name as country for AgentConfig
+        country="ENTENTE_BLOC",  # Bloc name as country for AgentConfig
         type="bloc_llm",
         model_id="test_model_bloc",
         temperature=0.7,
         max_tokens=1500,
-        verbose_llm_debug=False
+        verbose_llm_debug=False,
     )
+
 
 @pytest.fixture
 def bloc_agent_entente(default_agent_config):
-    mock_llm_coordinator = MagicMock() # Simple mock, can be AsyncMock if methods are async
+    mock_llm_coordinator = (
+        MagicMock()
+    )  # Simple mock, can be AsyncMock if methods are async
     mock_llm_coordinator.get_completion = AsyncMock()
 
     mock_context_provider_factory = MagicMock()
@@ -36,8 +39,11 @@ def bloc_agent_entente(default_agent_config):
         game_id="test_game_bloc",
         llm_coordinator=mock_llm_coordinator,
         context_provider_factory=mock_context_provider_factory,
-        prompt_loader=MagicMock(return_value="Mocked Bloc Order Prompt Template Content {{ bloc_name }}") # Mock prompt_loader
+        prompt_loader=MagicMock(
+            return_value="Mocked Bloc Order Prompt Template Content {{ bloc_name }}"
+        ),  # Mock prompt_loader
     )
+
 
 @pytest.fixture
 def phase_state_for_bloc():
@@ -46,11 +52,8 @@ def phase_state_for_bloc():
     mock_phase.year = 1901
     mock_phase.season = "SPRING"
     mock_phase.scs = {"PAR": "FRANCE", "LON": "ENGLAND", "BER": "GERMANY"}
-    mock_phase.state = { # Simplified raw state for phase_key generation
-        'locations': {
-            'FRANCE': ['A PAR', 'F MAR'],
-            'ENGLAND': ['F LON', 'A LVP']
-        }
+    mock_phase.state = {  # Simplified raw state for phase_key generation
+        "locations": {"FRANCE": ["A PAR", "F MAR"], "ENGLAND": ["F LON", "A LVP"]}
     }
     mock_phase.history = "Some game history."
 
@@ -76,10 +79,11 @@ def phase_state_for_bloc():
     mock_phase.get_power_state = MagicMock(side_effect=get_power_state_side_effect)
     return mock_phase
 
+
 def test_bloc_agent_initialization(bloc_agent_entente):
     assert bloc_agent_entente.bloc_name == "ENTENTE"
     assert bloc_agent_entente.controlled_powers == ["FRANCE", "ENGLAND"]
-    assert bloc_agent_entente.country == "ENTENTE" # own identity
+    assert bloc_agent_entente.country == "ENTENTE"  # own identity
     assert bloc_agent_entente.model_id == "test_model_bloc"
     # Check superclass was initialized with representative country
     # The superclass LLMAgent stores its 'country' as self._country for LLMPromptStrategy
@@ -91,35 +95,53 @@ def test_bloc_agent_initialization(bloc_agent_entente):
     assert info["type"] == "BlocLLMAgent"
     assert info["bloc_name"] == "ENTENTE"
     assert info["controlled_powers"] == ["FRANCE", "ENGLAND"]
-    assert info["country"] == "ENTENTE" # From self.country
+    assert info["country"] == "ENTENTE"  # From self.country
+
 
 @pytest.mark.asyncio
-async def test_bloc_agent_decide_orders_prompt_construction(bloc_agent_entente, phase_state_for_bloc):
+async def test_bloc_agent_decide_orders_prompt_construction(
+    bloc_agent_entente, phase_state_for_bloc
+):
     # Test that the prompt is constructed (mocking LLM call)
     # Use a valid JSON string for the mock response to avoid JSONDecodeError in the tested code
-    bloc_agent_entente.llm_coordinator.get_completion.return_value = json.dumps({}) # Empty JSON
+    bloc_agent_entente.llm_coordinator.get_completion.return_value = json.dumps(
+        {}
+    )  # Empty JSON
 
-    with patch('ai_diplomacy.agents.bloc_llm_agent.PromptConstructor') as MockPromptConstructor:
+    with patch(
+        "ai_diplomacy.agents.bloc_llm_agent.PromptConstructor"
+    ) as MockPromptConstructor:
         mock_renderer_instance = MockPromptConstructor.return_value
-        mock_renderer_instance.render = MagicMock(return_value="Test Constructed Prompt")
+        mock_renderer_instance.render = MagicMock(
+            return_value="Test Constructed Prompt"
+        )
 
         await bloc_agent_entente.decide_orders(phase_state_for_bloc)
 
-        MockPromptConstructor.assert_called_once_with(template_string="Mocked Bloc Order Prompt Template Content {{ bloc_name }}")
+        MockPromptConstructor.assert_called_once_with(
+            template_string="Mocked Bloc Order Prompt Template Content {{ bloc_name }}"
+        )
         mock_renderer_instance.render.assert_called_once()
         # TODO: Deeper assertion on context passed to render if possible by inspecting call_args
 
+
 @pytest.mark.asyncio
-async def test_bloc_agent_decide_orders_parsing_and_caching(bloc_agent_entente, phase_state_for_bloc):
+async def test_bloc_agent_decide_orders_parsing_and_caching(
+    bloc_agent_entente, phase_state_for_bloc
+):
     mock_response_json = {
         "FRANCE": ["A PAR HLD", "F MAR SUP A PAR"],
-        "ENGLAND": ["F LON HLD", "A LVP S F LON"]
+        "ENGLAND": ["F LON HLD", "A LVP S F LON"],
     }
     # Simulate LLMCoordinator returning the JSON string
-    bloc_agent_entente.llm_coordinator.get_completion.return_value = json.dumps(mock_response_json)
+    bloc_agent_entente.llm_coordinator.get_completion.return_value = json.dumps(
+        mock_response_json
+    )
 
     # Call once to populate cache
-    returned_orders_france = await bloc_agent_entente.decide_orders(phase_state_for_bloc)
+    returned_orders_france = await bloc_agent_entente.decide_orders(
+        phase_state_for_bloc
+    )
 
     # Verify LLM was called once
     bloc_agent_entente.llm_coordinator.get_completion.assert_called_once()
@@ -130,7 +152,9 @@ async def test_bloc_agent_decide_orders_parsing_and_caching(bloc_agent_entente, 
     assert Order("F MAR SUP A PAR") in returned_orders_france
 
     # Verify cache content (using the new get_all_bloc_orders_for_phase method)
-    phase_key = bloc_agent_entente._cached_bloc_orders_phase_key # Get the key used by agent
+    phase_key = (
+        bloc_agent_entente._cached_bloc_orders_phase_key
+    )  # Get the key used by agent
     assert phase_key is not None, "Phase key was not set in cache"
 
     cached_orders_all = bloc_agent_entente.get_all_bloc_orders_for_phase(phase_key)
@@ -141,30 +165,43 @@ async def test_bloc_agent_decide_orders_parsing_and_caching(bloc_agent_entente, 
 
     # Call again, LLM should not be called (cache hit)
     bloc_agent_entente.llm_coordinator.get_completion.reset_mock()
-    returned_orders_france_cached = await bloc_agent_entente.decide_orders(phase_state_for_bloc)
+    returned_orders_france_cached = await bloc_agent_entente.decide_orders(
+        phase_state_for_bloc
+    )
     bloc_agent_entente.llm_coordinator.get_completion.assert_not_called()
     assert returned_orders_france_cached == returned_orders_france
 
 
 @pytest.mark.asyncio
-async def test_bloc_agent_decide_orders_json_decode_error(bloc_agent_entente, phase_state_for_bloc):
+async def test_bloc_agent_decide_orders_json_decode_error(
+    bloc_agent_entente, phase_state_for_bloc
+):
     bloc_agent_entente.llm_coordinator.get_completion.return_value = "This is not JSON"
 
     orders = await bloc_agent_entente.decide_orders(phase_state_for_bloc)
-    assert orders == [] # Should return empty list for the representative power
+    assert orders == []  # Should return empty list for the representative power
 
     phase_key = bloc_agent_entente._cached_bloc_orders_phase_key
-    assert phase_key is not None, "Phase key should still be set on error to cache the failure"
+    assert phase_key is not None, (
+        "Phase key should still be set on error to cache the failure"
+    )
     cached_orders = bloc_agent_entente.get_all_bloc_orders_for_phase(phase_key)
-    assert cached_orders == {} # Cache should be empty
+    assert cached_orders == {}  # Cache should be empty
+
 
 @pytest.mark.asyncio
-async def test_bloc_agent_decide_orders_controlled_power_mismatch(bloc_agent_entente, phase_state_for_bloc):
+async def test_bloc_agent_decide_orders_controlled_power_mismatch(
+    bloc_agent_entente, phase_state_for_bloc
+):
     mock_response_json = {
         "FRANCE": ["A PAR HLD"],
-        "GERMANY": ["A BER HLD"] # Germany is not in bloc_agent_entente.controlled_powers
+        "GERMANY": [
+            "A BER HLD"
+        ],  # Germany is not in bloc_agent_entente.controlled_powers
     }
-    bloc_agent_entente.llm_coordinator.get_completion.return_value = json.dumps(mock_response_json)
+    bloc_agent_entente.llm_coordinator.get_completion.return_value = json.dumps(
+        mock_response_json
+    )
 
     returned_orders = await bloc_agent_entente.decide_orders(phase_state_for_bloc)
     assert Order("A PAR HLD") in returned_orders
@@ -172,7 +209,7 @@ async def test_bloc_agent_decide_orders_controlled_power_mismatch(bloc_agent_ent
     phase_key = bloc_agent_entente._cached_bloc_orders_phase_key
     cached_orders = bloc_agent_entente.get_all_bloc_orders_for_phase(phase_key)
     assert "FRANCE" in cached_orders
-    assert "GERMANY" not in cached_orders # Germany's orders should be ignored
+    assert "GERMANY" not in cached_orders  # Germany's orders should be ignored
 
 
 # Helper for mocking async JSON response, if needed without full AsyncMock

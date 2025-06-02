@@ -1,8 +1,8 @@
 import unittest
 from ai_diplomacy.agents.llm_prompt_strategy import LLMPromptStrategy
 
-class TestLLMPromptStrategy(unittest.TestCase):
 
+class TestLLMPromptStrategy(unittest.TestCase):
     def setUp(self):
         self.strategy = LLMPromptStrategy()
         self.country = "FRANCE"
@@ -10,14 +10,36 @@ class TestLLMPromptStrategy(unittest.TestCase):
         self.relationships = {"ENGLAND": "Ally", "GERMANY": "Enemy", "ITALY": "Neutral"}
         self.formatted_diary = "[Spring1901] Made a deal with England.\n[Autumn1901] Germany attacked Belgium."
         self.context_text = "Strategic overview: Germany is aggressive."
-        self.active_powers = ["ENGLAND", "GERMANY", "ITALY", "RUSSIA", "AUSTRIA", "TURKEY"]
+        self.active_powers = [
+            "ENGLAND",
+            "GERMANY",
+            "ITALY",
+            "RUSSIA",
+            "AUSTRIA",
+            "TURKEY",
+        ]
         self.phase_name = "Autumn1901 Movement"
         self.power_units = ["A PAR", "F BRE", "A MAR"]
         self.power_centers = ["PARIS", "BREST", "MARSEILLES"]
         self.is_game_over = False
-        self.events = [{"type": "attack", "attacker": "GERMANY", "target": "BELGIUM", "success": True}]
-        self.all_power_centers = {"FRANCE": 3, "GERMANY": 4, "ENGLAND": 3, "ITALY": 3, "AUSTRIA": 3, "RUSSIA": 3, "TURKEY": 2}
-        
+        self.events = [
+            {
+                "type": "attack",
+                "attacker": "GERMANY",
+                "target": "BELGIUM",
+                "success": True,
+            }
+        ]
+        self.all_power_centers = {
+            "FRANCE": 3,
+            "GERMANY": 4,
+            "ENGLAND": 3,
+            "ITALY": 3,
+            "AUSTRIA": 3,
+            "RUSSIA": 3,
+            "TURKEY": 2,
+        }
+
         self.tool_instruction_snippet = "If you need to access external information"
         self.order_json_instruction = '"orders": ['
         self.message_json_instruction = '"messages": ['
@@ -50,7 +72,6 @@ class TestLLMPromptStrategy(unittest.TestCase):
         self.assertIn("Your Relationships with other powers:", prompt)
         self.assertIn("Recent Diary Entries:", prompt)
         self.assertIn("Game Context and Relevant Information:", prompt)
-
 
     def test_build_order_prompt_without_tools(self):
         prompt = self.strategy.build_order_prompt(
@@ -119,9 +140,9 @@ class TestLLMPromptStrategy(unittest.TestCase):
         self.assertIn(f"The phase '{self.phase_name}' has just concluded.", prompt)
         self.assertIn(", ".join(self.power_units), prompt)
         self.assertIn(", ".join(self.power_centers), prompt)
-        self.assertIn("The game is ongoing.", prompt) # from is_game_over = False
+        self.assertIn("The game is ongoing.", prompt)  # from is_game_over = False
         for event_dict in self.events:
-            self.assertIn(str(event_dict), prompt) # Check if event string is in prompt
+            self.assertIn(str(event_dict), prompt)  # Check if event string is in prompt
         for goal in self.goals:
             self.assertIn(goal, prompt)
         for power, status in self.relationships.items():
@@ -133,7 +154,9 @@ class TestLLMPromptStrategy(unittest.TestCase):
         self.assertIn("- Your Supply Centers:", prompt)
         self.assertIn("- Your Current Goals:", prompt)
         self.assertIn("- Your Relationships:", prompt)
-        self.assertIn(f"Events that occurred during the '{self.phase_name}' phase:", prompt)
+        self.assertIn(
+            f"Events that occurred during the '{self.phase_name}' phase:", prompt
+        )
 
     def test_build_diary_generation_prompt_game_over(self):
         prompt = self.strategy.build_diary_generation_prompt(
@@ -162,11 +185,13 @@ class TestLLMPromptStrategy(unittest.TestCase):
         self.assertIn(f"You are an AI agent playing as {self.country}", prompt)
         self.assertIn(f"The phase '{self.phase_name}' has just concluded.", prompt)
         self.assertIn(", ".join(self.power_units), prompt)
-        self.assertIn(f"({len(self.power_centers)}): {', '.join(self.power_centers)}", prompt)
+        self.assertIn(
+            f"({len(self.power_centers)}): {', '.join(self.power_centers)}", prompt
+        )
         for power, count in self.all_power_centers.items():
             self.assertIn(f"- {power}: {count} centers", prompt)
         self.assertIn("The game is ongoing.", prompt)
-        for goal in self.goals: # Current goals
+        for goal in self.goals:  # Current goals
             self.assertIn(goal, prompt)
         for power, status in self.relationships.items():
             self.assertIn(f"- {power}: {status}", prompt)
@@ -177,7 +202,6 @@ class TestLLMPromptStrategy(unittest.TestCase):
         self.assertIn("Your Current Situation:", prompt)
         self.assertIn("Overall Game State:", prompt)
         self.assertIn("- Supply Center Counts for all Powers:", prompt)
-
 
     def test_build_goal_analysis_prompt_game_over(self):
         prompt = self.strategy.build_goal_analysis_prompt(
@@ -192,5 +216,6 @@ class TestLLMPromptStrategy(unittest.TestCase):
         )
         self.assertIn("The game is now over.", prompt)
 
-if __name__ == '__main__':
-    unittest.main(argv=['first-arg-is-ignored'], exit=False) 
+
+if __name__ == "__main__":
+    unittest.main(argv=["first-arg-is-ignored"], exit=False)

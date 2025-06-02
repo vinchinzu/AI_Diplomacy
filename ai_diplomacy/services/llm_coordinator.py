@@ -29,7 +29,7 @@ from llm.models import (
 )  # Renamed to avoid conflict, used for type hinting
 from llm import Response as LLMResponse  # For type hinting
 
-from .. import constants # Import constants
+from .. import constants  # Import constants
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +41,12 @@ __all__ = [
     "record_usage",
     "get_usage_stats_by_country",
     "get_total_usage_stats",
-    "get_global_coordinator", # To access the singleton instance
+    "get_global_coordinator",  # To access the singleton instance
 ]
 
 # --- New Global Components based on the provided pattern ---
 
-DATABASE_PATH = constants.LLM_USAGE_DATABASE_PATH # Updated to use constant
+DATABASE_PATH = constants.LLM_USAGE_DATABASE_PATH  # Updated to use constant
 _local_lock = asyncio.Lock()  # Removed comment: Global lock for local LLM engines
 
 
@@ -74,7 +74,10 @@ async def serial_if_local(model_id: str) -> AsyncIterator[None]:
     model_id_lower = model_id.lower()
     # Case-insensitive check will be applied to these prefixes
     # These prefixes are taken from the original SERIAL_ACCESS_PREFIXES
-    if any(model_id_lower.startswith(prefix) for prefix in constants.LOCAL_LLM_SERIAL_ACCESS_PREFIXES):
+    if any(
+        model_id_lower.startswith(prefix)
+        for prefix in constants.LOCAL_LLM_SERIAL_ACCESS_PREFIXES
+    ):
         logger.debug(f"Acquiring lock for local model: {model_id}")
         async with _local_lock:
             logger.debug(f"Lock acquired for local model: {model_id}")
@@ -142,12 +145,12 @@ async def record_usage(game_id: str, agent: str, phase: str, response: LLMRespon
         logger.error(f"SQLite error in record_usage: {e}", exc_info=True)
     except AttributeError as e:
         model_id_for_log = "N/A"
-        if hasattr(response, 'model') and response.model is not None:
-            if hasattr(response.model, 'model_id'):
+        if hasattr(response, "model") and response.model is not None:
+            if hasattr(response.model, "model_id"):
                 model_id_for_log = response.model.model_id
             else:
                 model_id_for_log = "Unknown (model_id attribute missing)"
-        elif hasattr(response, 'model') and response.model is None:
+        elif hasattr(response, "model") and response.model is None:
             model_id_for_log = "N/A (response.model is None)"
 
         logger.error(
@@ -249,21 +252,26 @@ async def llm_call_internal(
     prompt_options: Dict[str, Any] = {}
     if system_prompt:
         prompt_options["system"] = system_prompt
-    prompt_options.update(kwargs) # Ensure kwargs are included
+    prompt_options.update(kwargs)  # Ensure kwargs are included
 
     # Added verbose logging for prompt
     if verbose_llm_debug:
-        logger.info(f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}")
+        logger.info(
+            f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}"
+        )
         logger.info(f"[LLM Call - {agent_name} @ {phase_str}] User Prompt: {prompt!r}")
 
     async with serial_if_local(model_id):  # Use the new async context manager
         response_obj: LLMResponse = await model_obj.prompt(
-            prompt, **prompt_options # kwargs are now in prompt_options
+            prompt,
+            **prompt_options,  # kwargs are now in prompt_options
         )
         response_text = await response_obj.text()
         # Added verbose logging for raw response
         if verbose_llm_debug:
-            logger.info(f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}")
+            logger.info(
+                f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}"
+            )
         asyncio.create_task(
             record_usage(game_id, agent_name, phase_str, response_obj)
         )  # Record usage as a background task
@@ -287,7 +295,7 @@ class LLMCallResult:
         raw_response: str,
         parsed_json: Optional[Dict[str, Any]] = None,
         success: bool = True,
-        error_message: str = constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED, # Default error message
+        error_message: str = constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED,  # Default error message
     ):
         self.raw_response = raw_response
         self.parsed_json = parsed_json
@@ -321,8 +329,8 @@ class LLMCoordinator:
         *,
         model_id: str,
         agent_id: str,
-        game_id: str = constants.DEFAULT_GAME_ID, # Updated to use constant
-        phase: str = constants.DEFAULT_PHASE_NAME, # Updated to use constant
+        game_id: str = constants.DEFAULT_GAME_ID,  # Updated to use constant
+        phase: str = constants.DEFAULT_PHASE_NAME,  # Updated to use constant
         system_prompt: Optional[str] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> str:
@@ -366,13 +374,13 @@ class LLMCoordinator:
         *,
         model_id: str,
         agent_id: str,
-        game_id: str = constants.DEFAULT_GAME_ID, # Updated to use constant
-        phase: str = constants.DEFAULT_PHASE_NAME, # Updated to use constant
+        game_id: str = constants.DEFAULT_GAME_ID,  # Updated to use constant
+        phase: str = constants.DEFAULT_PHASE_NAME,  # Updated to use constant
         system_prompt: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         expected_fields: Optional[List[str]] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
-        verbose_llm_debug: bool = False, # Added verbose_llm_debug
+        verbose_llm_debug: bool = False,  # Added verbose_llm_debug
     ) -> Dict[str, Any]:
         """
         JSON completion call with parsing and validation.
@@ -410,7 +418,7 @@ class LLMCoordinator:
             phase_str=phase,
             expected_json_fields=expected_fields,
             llm_caller_override=llm_caller_override,
-            verbose_llm_debug=verbose_llm_debug, # Pass it down
+            verbose_llm_debug=verbose_llm_debug,  # Pass it down
         )
 
         if not result.success:
@@ -426,12 +434,12 @@ class LLMCoordinator:
         agent_name: str,
         phase_str: str,
         system_prompt: Optional[str] = None,
-        request_identifier: str = constants.LLM_CALL_REQUEST_ID_DEFAULT, # Default request ID
+        request_identifier: str = constants.LLM_CALL_REQUEST_ID_DEFAULT,  # Default request ID
         expected_json_fields: Optional[list] = None,
-        response_type: str = constants.LLM_CALL_LOG_RESPONSE_TYPE_DEFAULT, # Default response type for logging
+        response_type: str = constants.LLM_CALL_LOG_RESPONSE_TYPE_DEFAULT,  # Default response type for logging
         log_to_file_path: Optional[str] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
-        verbose_llm_debug: bool = False, # Added verbose_llm_debug
+        verbose_llm_debug: bool = False,  # Added verbose_llm_debug
     ) -> LLMCallResult:
         """
         Internal method for LLM calls with JSON parsing.
@@ -442,7 +450,9 @@ class LLMCoordinator:
             log_llm_response,
         )  # Assuming this is still used for file logging
 
-        result = LLMCallResult("", None, False, constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED) # Use constant
+        result = LLMCallResult(
+            "", None, False, constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED
+        )  # Use constant
 
         try:
             logger.info(
@@ -467,7 +477,7 @@ class LLMCoordinator:
                     model_id=model_id,
                     prompt=prompt,
                     system_prompt=system_prompt,
-                    verbose_llm_debug=verbose_llm_debug, # Pass verbose_llm_debug
+                    verbose_llm_debug=verbose_llm_debug,  # Pass verbose_llm_debug
                 )
 
             result.raw_response = raw_response
@@ -503,7 +513,9 @@ class LLMCoordinator:
                     result.error_message = f"JSON parsing error: {e}"
             else:
                 result.success = False
-                result.error_message = constants.LLM_CALL_ERROR_EMPTY_RESPONSE # Use constant
+                result.error_message = (
+                    constants.LLM_CALL_ERROR_EMPTY_RESPONSE
+                )  # Use constant
 
         except Exception as e:
             logger.error(f"[{request_identifier}] LLM call failed: {e}", exc_info=True)
@@ -631,6 +643,7 @@ initialize_database()
 
 # Global coordinator instance
 _global_coordinator = LLMCoordinator()
+
 
 def get_global_coordinator() -> LLMCoordinator:
     """Returns the global singleton instance of LLMCoordinator."""

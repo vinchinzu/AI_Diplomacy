@@ -6,7 +6,7 @@ Verifies that the pluggable context provider system works correctly.
 
 import logging
 import pytest  # Add pytest
-from unittest.mock import patch, AsyncMock # Added AsyncMock
+from unittest.mock import AsyncMock  # Added AsyncMock
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
@@ -24,6 +24,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 @pytest.mark.unit
 def test_context_provider_factory():
@@ -50,6 +51,7 @@ def test_context_provider_factory():
     assert "inline" in available
 
     logger.info("✓ ContextProviderFactory working correctly")
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -106,6 +108,7 @@ async def test_inline_context_provider():
 
     logger.info("✓ InlineContextProvider working correctly")
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_mcp_context_provider():
@@ -147,6 +150,7 @@ async def test_mcp_context_provider():
 
     logger.info("✓ MCPContextProvider correctly shows tools not available")
 
+
 @pytest.mark.unit
 def test_config_context_provider():
     """Test that agent configs specify context providers correctly."""
@@ -186,6 +190,7 @@ def test_config_context_provider():
     assert resolved == "inline"
 
     logger.info("✓ Context provider configuration working correctly")
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -252,7 +257,9 @@ async def test_agent_with_context_providers():
     expected_agent_orders_england = [Order("F LON H")]
 
     # Test inline_agent (FRANCE)
-    mock_custom_llm_caller_inline = AsyncMock(return_value=mock_llm_orders_dict_output_france)
+    mock_custom_llm_caller_inline = AsyncMock(
+        return_value=mock_llm_orders_dict_output_france
+    )
     inline_agent.llm_caller_override = mock_custom_llm_caller_inline
     orders = await inline_agent.decide_orders(phase_state)
     assert orders == expected_agent_orders_france
@@ -261,10 +268,14 @@ async def test_agent_with_context_providers():
     called_args_kwargs_inline = mock_custom_llm_caller_inline.call_args[1]
     prompt_text_inline = called_args_kwargs_inline["prompt"]
     assert "Game Context and Relevant Information:" in prompt_text_inline
-    assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_inline # Default from InlineContextProvider
+    assert (
+        "=== YOUR POSSIBLE ORDERS ===" in prompt_text_inline
+    )  # Default from InlineContextProvider
 
     # Test mcp_agent (GERMANY)
-    mock_custom_llm_caller_mcp = AsyncMock(return_value=mock_llm_orders_dict_output_germany)
+    mock_custom_llm_caller_mcp = AsyncMock(
+        return_value=mock_llm_orders_dict_output_germany
+    )
     mcp_agent.llm_caller_override = mock_custom_llm_caller_mcp
     orders = await mcp_agent.decide_orders(phase_state)
     assert orders == expected_agent_orders_germany
@@ -276,7 +287,9 @@ async def test_agent_with_context_providers():
     assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_mcp
 
     # Test auto_agent (ENGLAND)
-    mock_custom_llm_caller_auto = AsyncMock(return_value=mock_llm_orders_dict_output_england)
+    mock_custom_llm_caller_auto = AsyncMock(
+        return_value=mock_llm_orders_dict_output_england
+    )
     auto_agent.llm_caller_override = mock_custom_llm_caller_auto
     orders = await auto_agent.decide_orders(phase_state)
     assert orders == expected_agent_orders_england
@@ -288,6 +301,7 @@ async def test_agent_with_context_providers():
     assert "=== YOUR POSSIBLE ORDERS ===" in prompt_text_auto
 
     logger.info("✓ Agents working correctly with context providers")
+
 
 @pytest.mark.unit
 def test_full_config_integration():
@@ -325,9 +339,7 @@ def test_full_config_integration():
     assert agents["FRANCE"].resolved_context_provider_type == "inline"
 
     assert isinstance(agents["GERMANY"], LLMAgent)
-    assert (
-        agents["GERMANY"].resolved_context_provider_type == "inline"
-    )  # Fallback
+    assert agents["GERMANY"].resolved_context_provider_type == "inline"  # Fallback
 
     assert isinstance(agents["ENGLAND"], LLMAgent)
     assert (
@@ -338,4 +350,6 @@ def test_full_config_integration():
     assert agents["RUSSIA"].get_agent_info()["type"] == "ScriptedAgent"
     assert not hasattr(agents["RUSSIA"], "resolved_context_provider_type")
 
-    logger.info("✓ Full configuration integration with context providers working correctly")
+    logger.info(
+        "✓ Full configuration integration with context providers working correctly"
+    )

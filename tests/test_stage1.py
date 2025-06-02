@@ -5,7 +5,7 @@ Verifies that the clean agent boundary works correctly.
 """
 
 import logging
-import pytest # Added import
+import pytest  # Added import
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.core.manager import GameEvent
 from ai_diplomacy.agents.factory import AgentFactory
@@ -17,6 +17,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 @pytest.mark.unit
 def test_agent_factory():
@@ -43,6 +44,7 @@ def test_agent_factory():
     assert scripted_agent.get_agent_info()["type"] == "ScriptedAgent"
 
     logger.info("✓ AgentFactory working correctly")
+
 
 @pytest.mark.unit
 def test_config_integration():
@@ -74,6 +76,7 @@ def test_config_integration():
 
     logger.info("✓ Configuration integration working correctly")
 
+
 @pytest.mark.unit
 def test_game_manager():
     """Test the core game manager."""
@@ -94,6 +97,7 @@ def test_game_manager():
     assert event.participants["country"] == "FRANCE"
 
     logger.info("✓ GameManager components working correctly")
+
 
 @pytest.mark.unit
 def test_clean_boundaries():
@@ -122,6 +126,7 @@ def test_clean_boundaries():
     config = AgentConfig(country="FRANCE", type="llm", model_id="gpt-4o-mini")
     # We need to import load_prompt_file for this direct instantiation
     from ai_diplomacy.llm_utils import load_prompt_file
+
     agent = LLMAgent("test", "FRANCE", config, prompt_loader=load_prompt_file)
 
     # Verify agent doesn't have direct game access

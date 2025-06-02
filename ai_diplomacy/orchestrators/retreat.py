@@ -4,6 +4,7 @@ Handles the strategy for the Retreat phase of a Diplomacy game.
 This module defines the RetreatPhaseStrategy class, which is responsible for
 collecting retreat orders from agents whose units must retreat.
 """
+
 import logging
 import asyncio
 from typing import Dict, List, TYPE_CHECKING, Set
@@ -20,9 +21,13 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["RetreatPhaseStrategy"]
 
+
 class RetreatPhaseStrategy:
     async def get_orders(
-        self, game: "Game", orchestrator: "PhaseOrchestrator", game_history: "GameHistory"
+        self,
+        game: "Game",
+        orchestrator: "PhaseOrchestrator",
+        game_history: "GameHistory",
     ) -> Dict[str, List[str]]:
         # Docstring already exists and is good.
         logger.info("Executing Retreat Phase actions via RetreatPhaseStrategy...")
@@ -39,7 +44,9 @@ class RetreatPhaseStrategy:
         )
 
         if not dislodged_powers_requiring_orders:
-            logger.info("No powers need to retreat or have dislodged units requiring orders this phase.")
+            logger.info(
+                "No powers need to retreat or have dislodged units requiring orders this phase."
+            )
             # Ensure all active powers (as defined by orchestrator, which might include non-retreating)
             # are in the output, even if with empty orders, for consistency with other phases.
             for p_name in orchestrator.active_powers:
@@ -47,7 +54,7 @@ class RetreatPhaseStrategy:
             return orders_by_power
 
         non_bloc_order_tasks = []
-        non_bloc_power_names_for_tasks = [] # To map results back
+        non_bloc_power_names_for_tasks = []  # To map results back
 
         for power_name in dislodged_powers_requiring_orders:
             agent = orchestrator.agent_manager.get_agent(power_name)
@@ -56,15 +63,21 @@ class RetreatPhaseStrategy:
                     f"No agent found for power {power_name} requiring retreat orders."
                 )
                 orders_by_power[power_name] = []
-                game_history.add_orders(current_phase_name, power_name, []) # Record empty orders
+                game_history.add_orders(
+                    current_phase_name, power_name, []
+                )  # Record empty orders
                 continue
 
             if isinstance(agent, BlocLLMAgent):
                 if agent.agent_id in processed_bloc_agent_ids:
-                    logger.debug(f"Skipping already processed bloc agent {agent.agent_id} for power {power_name}")
-                    continue # This specific power will be handled when its bloc agent is processed.
+                    logger.debug(
+                        f"Skipping already processed bloc agent {agent.agent_id} for power {power_name}"
+                    )
+                    continue  # This specific power will be handled when its bloc agent is processed.
                 else:
-                    logger.debug(f"Processing BlocLLMAgent {agent.agent_id} for retreats involving {power_name}...")
+                    logger.debug(
+                        f"Processing BlocLLMAgent {agent.agent_id} for retreats involving {power_name}..."
+                    )
                     try:
                         await agent.decide_orders(current_phase_state)
                         current_phase_key_for_bloc = (
@@ -74,35 +87,54 @@ class RetreatPhaseStrategy:
                             current_phase_state.season,
                             current_phase_state.name,
                         )
-                        all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(current_phase_key_for_bloc)
+                        all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(
+                            current_phase_key_for_bloc
+                        )
 
-                        for bloc_power_name, order_obj_list in all_bloc_orders_obj.items():
+                        for (
+                            bloc_power_name,
+                            order_obj_list,
+                        ) in all_bloc_orders_obj.items():
                             if bloc_power_name in dislodged_powers_requiring_orders:
                                 orders_str_list = [str(o) for o in order_obj_list]
                                 orders_by_power[bloc_power_name] = orders_str_list
-                                game_history.add_orders(current_phase_name, bloc_power_name, orders_str_list)
-                                logger.debug(f"✅ {bloc_power_name} (Bloc): Generated {len(orders_str_list)} retreat orders")
+                                game_history.add_orders(
+                                    current_phase_name, bloc_power_name, orders_str_list
+                                )
+                                logger.debug(
+                                    f"✅ {bloc_power_name} (Bloc): Generated {len(orders_str_list)} retreat orders"
+                                )
                             # else: power is in bloc but doesn't need to retreat
                         processed_bloc_agent_ids.add(agent.agent_id)
                     except Exception as e:
                         logger.error(
-                            f"❌ Error getting retreat orders for bloc agent {agent.agent_id}, power {power_name}: {e}", exc_info=e
+                            f"❌ Error getting retreat orders for bloc agent {agent.agent_id}, power {power_name}: {e}",
+                            exc_info=e,
                         )
                         # Handle errors for bloc members needing retreat
                         for bloc_member_power in agent.get_bloc_member_powers():
-                            if bloc_member_power in dislodged_powers_requiring_orders and bloc_member_power not in orders_by_power:
+                            if (
+                                bloc_member_power in dislodged_powers_requiring_orders
+                                and bloc_member_power not in orders_by_power
+                            ):
                                 orders_by_power[bloc_member_power] = []
-                                game_history.add_orders(current_phase_name, bloc_member_power, []) # Record empty orders due to error
-            else: # Not a BlocLLMAgent
+                                game_history.add_orders(
+                                    current_phase_name, bloc_member_power, []
+                                )  # Record empty orders due to error
+            else:  # Not a BlocLLMAgent
                 logger.debug(f"Queueing retreat order generation for {power_name}...")
                 non_bloc_order_tasks.append(
-                    orchestrator._get_orders_for_power(game, power_name, agent, game_history)
+                    orchestrator._get_orders_for_power(
+                        game, power_name, agent, game_history
+                    )
                 )
                 non_bloc_power_names_for_tasks.append(power_name)
 
         # Gather results from all non-bloc order generation tasks
         if non_bloc_order_tasks:
-            results = await asyncio.gather(*non_bloc_order_tasks, return_exceptions=True)
+            results = await asyncio.gather(
+                *non_bloc_order_tasks, return_exceptions=True
+            )
             for i, power_name in enumerate(non_bloc_power_names_for_tasks):
                 if isinstance(results[i], Exception):
                     logger.error(
@@ -127,4 +159,4 @@ class RetreatPhaseStrategy:
                 orders_by_power[p_name] = []
                 # Do not add to game_history here, as these powers didn't have actions for *this* phase (retreat)
 
-        return orders_by_power 
+        return orders_by_power

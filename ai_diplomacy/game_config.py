@@ -13,11 +13,12 @@ Key logging behaviors managed by this configuration:
       passing the `--log_to_file` command-line argument.
 - Log paths are derived using `logging_setup.get_log_paths`.
 """
+
 import os
 import logging
 import argparse
 from datetime import datetime
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING, Any
 import toml
 
 # Import GameHistory and DiplomacyAgent only for type hinting if they are complex
@@ -25,120 +26,147 @@ import toml
 if TYPE_CHECKING:
     from diplomacy import Game
     from .game_history import GameHistory
-
-    # from .agent import DiplomacyAgent # Assuming DiplomacyAgent is in agent.py - REMOVED
+    from .agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
-# Default values that might have been in parse_arguments defaults
+# Default values that might be used if not in TOML
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_GAME_ID_PREFIX = "diplomacy_game"
 DEFAULT_NUM_PLAYERS = 7
 DEFAULT_NUM_NEGOTIATION_ROUNDS = 3
-DEFAULT_NEGOTIATION_STYLE = "simultaneous"  # or "round-robin"
-# DEFAULT_GAME_SERVER_URL = "ws://localhost:8080" # Unused constant
+DEFAULT_NEGOTIATION_STYLE = "simultaneous"
+DEFAULT_MAX_DIARY_TOKENS = 6500
+DEFAULT_BASE_LOG_DIR = os.path.join(os.getcwd(), "logs")
 
 __all__ = ["GameConfig"]
+
 
 class GameConfig:
     # Class docstring already exists and is good.
 
     def __init__(self, args: argparse.Namespace):
         self.args = args
+        self._raw_toml_config: Dict[str, Any] = {}
 
-        self.power_name: Optional[str] = getattr(args, "power_name", None)
-        self.model_id: Optional[str] = getattr(args, "model_id", None)
-        self.num_players: int = getattr(args, "num_players", DEFAULT_NUM_PLAYERS)
-        self.game_id_prefix: str = getattr(
-            args, "game_id_prefix", DEFAULT_GAME_ID_PREFIX
-        )
-        self.log_level: str = getattr(args, "log_level", DEFAULT_LOG_LEVEL).upper()
-        self.perform_planning_phase: bool = getattr(
-            args, "perform_planning_phase", False
-        )
-        self.num_negotiation_rounds: int = getattr(
-            args, "num_negotiation_rounds", DEFAULT_NUM_NEGOTIATION_ROUNDS
-        )
-        self.negotiation_style: str = getattr(
-            args, "negotiation_style", DEFAULT_NEGOTIATION_STYLE
-        )
-        self.fixed_models: Optional[List[str]] = getattr(args, "fixed_models", None)
-        self.randomize_fixed_models: bool = getattr(
-            args, "randomize_fixed_models", False
-        )
-        self.exclude_powers: Optional[List[str]] = getattr(args, "exclude_powers", None)
-        self.max_years: Optional[int] = getattr(
-            args, "max_years", None
-        )  # Added from lm_game.py logic
-        
-        # Initialize dev_mode first as it's used in log_to_file logic
-        self.dev_mode: bool = getattr(args, "dev_mode", False)  # Added dev_mode
+        # --- Load Game Configuration TOML ---
+        self.game_config_file_path: Optional[str] = getattr(args, "game_config_file", None)
+        if self.game_config_file_path and os.path.exists(self.game_config_file_path):
+            try:
+                self._raw_toml_config = toml.load(self.game_config_file_path)
+                logger.info(f"Loaded game configuration from TOML file: {self.game_config_file_path}")
+            except toml.TomlDecodeError as e:
+                logger.error(f"Error decoding TOML from game config file '{self.game_config_file_path}': {e}", exc_info=True)
+                # Consider if this should be a fatal error, perhaps raise it
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error loading game config file '{self.game_config_file_path}': {e}", exc_info=True)
+                raise
+        elif self.game_config_file_path:
+            logger.error(f"Game configuration TOML file not found at '{self.game_config_file_path}'. This is required.")
+            raise FileNotFoundError(f"Game configuration TOML file not found: {self.game_config_file_path}")
+        else:
+            logger.error("No game configuration TOML file provided via --game-config-file argument.")
+            raise ValueError("Game configuration TOML file path is required.")
 
-        # New attributes for agent definitions
-        self.players_list: Optional[List[str]] = getattr(args, "players_list", None)
-        self.agent_types_list: Optional[List[str]] = getattr(args, "agent_types_list", None)
-        self.bloc_definitions_list: Optional[List[str]] = getattr(args, "bloc_definitions_list", None)
+        # --- Determine configuration values: CLI (for overrides) > TOML > Default ---
 
-        # Determine log_to_file based on environment variable, args, and dev_mode
+        # Core settings from TOML, with potential CLI overrides for a few specific ones
+        cli_log_level_override = getattr(args, "log_level", None)
+        self.log_level: str = (cli_log_level_override or self.get_toml_value("logging.log_level", DEFAULT_LOG_LEVEL)).upper()
+
+        self.power_name: Optional[str] = self.get_toml_value("scenario.power_name", None) # For single power scenarios
+        self.model_id: Optional[str] = self.get_toml_value("scenario.model_id", None) # For single power scenarios
+
+        self.num_players: int = self.get_toml_value("game_settings.num_players", DEFAULT_NUM_PLAYERS)
+        self.game_id_prefix: str = self.get_toml_value("game_settings.game_id_prefix", DEFAULT_GAME_ID_PREFIX)
+        self.perform_planning_phase: bool = self.get_toml_value("game_settings.perform_planning_phase", False)
+        self.num_negotiation_rounds: int = self.get_toml_value("game_settings.num_negotiation_rounds", DEFAULT_NUM_NEGOTIATION_ROUNDS)
+        self.negotiation_style: str = self.get_toml_value("game_settings.negotiation_style", DEFAULT_NEGOTIATION_STYLE)
+        self.max_years: Optional[int] = self.get_toml_value("game_settings.max_years", None)
+        self.max_diary_tokens: int = self.get_toml_value("game_settings.max_diary_tokens", DEFAULT_MAX_DIARY_TOKENS)
+
+        self.dev_mode: bool = self.get_toml_value("dev_settings.dev_mode", False)
+        self.verbose_llm_debug: bool = self.get_toml_value("dev_settings.verbose_llm_debug", False)
+
+
+        # Log to file logic: ENV > TOML > dev_mode consideration > Default
         log_to_file_env = os.getenv("LOG_TO_FILE")
-        log_to_file_arg = getattr(args, "log_to_file", None) # Check if arg was explicitly passed
+        log_to_file_toml = self.get_toml_value("logging.log_to_file", None)
 
         if log_to_file_env == "1":
             self.log_to_file: bool = True
-        elif log_to_file_arg is not None:
-            self.log_to_file: bool = log_to_file_arg
-        elif self.dev_mode:
-            self.log_to_file: bool = False  # Default to False in dev_mode
+        elif log_to_file_toml is not None:
+            self.log_to_file: bool = bool(log_to_file_toml)
+        elif self.dev_mode: # If dev_mode is true (from TOML) and no other setting, log to file is off
+            self.log_to_file: bool = False
+        else: # Default if not dev_mode and no other specifier
+            self.log_to_file: bool = True
+
+
+        # --- Agent and Player Configuration (from TOML only) ---
+        self.players_list: List[str] = []
+        self.agent_types_list: List[str] = []
+        self.bloc_definitions_list: List[str] = []
+        self.llm_models_list: List[str] = []
+
+        agent_entries_from_toml: Optional[List[Dict[str, Any]]] = None
+        toml_config_source_for_agents: Optional[str] = None
+
+        potential_dev_agents = self.get_toml_value("dev_settings.agents")
+        if isinstance(potential_dev_agents, list) and potential_dev_agents:
+            agent_entries_from_toml = potential_dev_agents
+            toml_config_source_for_agents = "dev_settings.agents"
         else:
-            self.log_to_file: bool = True   # Default to True if not dev_mode and no arg
+            potential_top_level_agents = self.get_toml_value("agents")
+            if isinstance(potential_top_level_agents, list) and potential_top_level_agents:
+                agent_entries_from_toml = potential_top_level_agents
+                toml_config_source_for_agents = "agents"
 
-        self.verbose_llm_debug: bool = getattr(
-            args, "verbose_llm_debug", False
-        )  # New attribute
-        self.max_diary_tokens: int = getattr(
-            args, "max_diary_tokens", 6500
-        )  # New attribute
+        if agent_entries_from_toml and toml_config_source_for_agents:
+            logger.info(f"Using agent configurations from TOML file (source: '{toml_config_source_for_agents}').")
+            self._parse_agent_data_from_toml(agent_entries_from_toml)
+        else:
+            logger.warning("No agent configurations found in TOML (checked 'dev_settings.agents' and 'agents'). Game might not function correctly without agent definitions.")
+            # Depending on game logic, this might be a fatal error.
+            # For now, lists will remain empty.
 
-        # --- Load Model Configuration from TOML ---
-        self.models_config_path: Optional[str] = getattr(
-            args, "models_config_file", "models.toml"
-        )
-        self.power_model_assignments: Dict[str, str] = {}
-        self.default_model_from_config: Optional[str] = None
-        self._load_models_config()
-        # --- End Model Configuration Loading ---
+        self.game_factory_path: Optional[str] = self.get_toml_value("scenario.game_factory", None)
+        self.scenario_name_from_toml: Optional[str] = self.get_toml_value("scenario.name", None)
 
-        # Generate game_id if not provided
+        # --- Model configuration is now part of agent definitions in the main TOML ---
+        # Removed self.models_config_path, self.power_model_assignments, self.default_model_from_config
+        # self.llm_models_list is populated by _parse_agent_data_from_toml
+
+        # Generate game_id: CLI override > TOML > auto-generated
         self.current_datetime_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.game_id: str = getattr(args, "game_id", None)
-        if not self.game_id:
-            self.game_id = f"{self.game_id_prefix}_{self.current_datetime_str}"
+        cli_game_id_override = getattr(args, "game_id", None)
+        toml_game_id = self.get_toml_value("game_settings.game_id", None)
+
+        if cli_game_id_override:
+            self.game_id: str = cli_game_id_override
+        elif toml_game_id:
+            self.game_id: str = toml_game_id
+        else:
+            self.game_id: str = f"{self.game_id_prefix}_{self.current_datetime_str}"
+
 
         # Configure paths
-        # Determine base_log_dir
-        # Default base log dir is os.path.join(os.getcwd(), "logs")
-        # It can be overridden by args.log_dir
-        # If args.log_dir is provided AND it already contains the game_id,
-        # then base_log_dir becomes the parent of args.log_dir.
-        # Otherwise, args.log_dir (if provided) or the default becomes base_log_dir.
+        # base_log_dir: CLI override > TOML > Default
+        cli_log_dir_override = getattr(args, "log_dir", None)
+        toml_base_log_dir = self.get_toml_value("logging.base_log_dir", None)
 
-        default_base_log_dir = os.path.join(os.getcwd(), "logs")
-        provided_log_dir = getattr(args, "log_dir", None)
-
-        if provided_log_dir:
-            if self.game_id in provided_log_dir and os.path.basename(provided_log_dir) == self.game_id:
-                # log_dir from args is already game-specific
-                self.base_log_dir = os.path.dirname(provided_log_dir)
-                # game_id_specific_log_dir will be set by get_log_paths using this base
-            else:
-                # log_dir from args is a new base
-                self.base_log_dir = provided_log_dir
+        if cli_log_dir_override:
+            self.base_log_dir = cli_log_dir_override
+            # If cli_log_dir_override already contains the game_id, adjust base_log_dir
+            if self.game_id in cli_log_dir_override and os.path.basename(cli_log_dir_override) == self.game_id:
+                 self.base_log_dir = os.path.dirname(cli_log_dir_override)
+        elif toml_base_log_dir:
+            self.base_log_dir = toml_base_log_dir
         else:
-            # No log_dir from args, use default
-            self.base_log_dir = default_base_log_dir
-
-        # Use the new helper function to get all paths
-        from .logging_setup import get_log_paths  # Local import to avoid circularity if moved
+            self.base_log_dir = DEFAULT_BASE_LOG_DIR
+        
+        from .logging_setup import get_log_paths # Local import
 
         log_paths = get_log_paths(self.game_id, self.base_log_dir)
         self.game_id_specific_log_dir: str = log_paths["game_id_specific_log_dir"]
@@ -147,55 +175,47 @@ class GameConfig:
         self.results_dir: str = log_paths["results_dir"]
         self.manifestos_dir: str = log_paths["manifestos_dir"]
 
-        # Ensure the directories exist if logging to file
         if self.log_to_file:
             os.makedirs(self.game_id_specific_log_dir, exist_ok=True)
             os.makedirs(self.results_dir, exist_ok=True)
             os.makedirs(self.manifestos_dir, exist_ok=True)
 
-        # Initialize game state placeholders (these will be populated later)
-        # Need to import these properly at runtime if used beyond type hints
-        from .game_history import GameHistory  # Runtime import
-
+        from .game_history import GameHistory
         self.game_history: "GameHistory" = GameHistory()
         self.game_instance: Optional["Game"] = None
-        self.powers_and_models: Optional[Dict[str, str]] = None
-        self.agents: Optional[Dict[str, "BaseAgent"]] = (
-            None  # Dict mapping power_name to BaseAgent instance
-        )
+        # Removed self.powers_and_models - model info is now tied to agents via llm_models_list
+        # Removed self.agents
+
+        self.power_to_agent_id_map: Dict[str, str] = {}
+        self.agent_to_powers_map: Dict[str, List[str]] = {}
 
         self.log_configuration()
 
     def log_configuration(self):
-        logger.info("Game Configuration Initialized:")
+        logger.info("Game Configuration Initialized (TOML-driven):")
+        logger.info(f"  Game Config File: {self.game_config_file_path}")
         logger.info(f"  Game ID: {self.game_id}")
         logger.info(f"  Log Level: {self.log_level}")
-        logger.info(f"  Number of Players (LLM-controlled): {self.num_players}")
+        # num_players is now what's set in TOML, or default. Actual player count from agent defs.
+        logger.info(f"  Configured Number of Players (game_settings.num_players): {self.num_players}")
         logger.info(f"  Log to File: {self.log_to_file}")
         if self.log_to_file:
             logger.info(f"  Base Log Directory: {self.base_log_dir}")
-            logger.info(
-                f"  Game-Specific Log Directory: {self.game_id_specific_log_dir}"
-            )
+            logger.info(f"  Game-Specific Log Directory: {self.game_id_specific_log_dir}")
             logger.info(f"  LLM Interaction Log: {self.llm_log_path}")
             logger.info(f"  General Log File: {self.general_log_path}")
             logger.info(f"  Results Directory: {self.results_dir}")
             logger.info(f"  Manifestos Directory: {self.manifestos_dir}")
 
-        if self.power_name and self.model_id:
+        if self.power_name and self.model_id: # For single agent test scenarios
             logger.info(
-                f"  Single Power Mode: {self.power_name} controlled by {self.model_id}"
+                f"  Single Power Mode Target: {self.power_name} with model {self.model_id}"
             )
 
         logger.info(f"  Perform Planning Phase: {self.perform_planning_phase}")
         logger.info(f"  Number of Negotiation Rounds: {self.num_negotiation_rounds}")
         logger.info(f"  Negotiation Style: {self.negotiation_style}")
-
-        if self.fixed_models:
-            logger.info(f"  Fixed Models: {self.fixed_models}")
-            logger.info(f"  Randomize Fixed Models: {self.randomize_fixed_models}")
-        if self.exclude_powers:
-            logger.info(f"  Excluded Powers: {self.exclude_powers}")
+        # Removed fixed_models, randomize_fixed_models, exclude_powers logging
         if self.max_years:
             logger.info(f"  Maximum Game Years: {self.max_years}")
         logger.info(f"  Development Mode: {self.dev_mode}")
@@ -203,114 +223,311 @@ class GameConfig:
         logger.info(f"  Max Diary Tokens: {self.max_diary_tokens}")
 
         if self.players_list:
-            logger.info(f"  Players List: {self.players_list}")
+            logger.info(f"  TOML Parsed Agent IDs (Players List): {self.players_list}")
         if self.agent_types_list:
-            logger.info(f"  Agent Types List: {self.agent_types_list}")
+            logger.info(f"  TOML Parsed Agent Types: {self.agent_types_list}")
+        if self.llm_models_list:
+            logger.info(f"  TOML Parsed Agent LLM Models: {self.llm_models_list}")
         if self.bloc_definitions_list:
-            logger.info(f"  Bloc Definitions List: {self.bloc_definitions_list}")
+            logger.info(f"  TOML Parsed Bloc Definitions: {self.bloc_definitions_list}")
 
-    def _load_models_config(self):
-        """Loads model assignments from the TOML configuration file."""
-        if not self.models_config_path or not os.path.exists(self.models_config_path):
-            logger.warning(
-                f"Models configuration file not found at '{self.models_config_path}'. Model assignments will rely on AgentManager defaults or command-line overrides."
-            )
+        if self.scenario_name_from_toml:
+            logger.info(f"  Scenario Name (from TOML): {self.scenario_name_from_toml}")
+        if self.game_factory_path:
+            logger.info(f"  Game Factory Path (from TOML): {self.game_factory_path}")
+
+    def _parse_agent_data_from_toml(self, agent_entries: List[Dict[str, Any]]) -> None:
+        """Parses the 'agents' list from pre-fetched TOML configuration data."""
+        if not isinstance(agent_entries, list):
+            logger.warning("'agents' data provided to _parse_agent_data_from_toml is not a list. Skipping agent parsing.")
             return
 
-        try:
-            config_data = toml.load(self.models_config_path)
-            self.default_model_from_config = config_data.get("default_model")
+        temp_players_list: List[str] = []
+        temp_agent_types_list: List[str] = []
+        temp_llm_models_list: List[str] = []
+        temp_bloc_definitions_map: Dict[str, List[str]] = {}
 
-            if self.default_model_from_config:
-                logger.info(
-                    f"Loaded default model from config: {self.default_model_from_config}"
-                )
+        for agent_entry in agent_entries:
+            if not isinstance(agent_entry, dict):
+                logger.warning(f"Invalid agent entry in TOML (not a dict): {agent_entry}")
+                continue
 
-            loaded_assignments = config_data.get("powers", {})
-            if isinstance(loaded_assignments, dict):
-                self.power_model_assignments = {
-                    str(k).upper(): str(v) for k, v in loaded_assignments.items()
-                }
-                logger.info(
-                    f"Loaded power-specific model assignments from '{self.models_config_path}': {self.power_model_assignments}"
-                )
+            agent_id = agent_entry.get("id")
+            agent_type = agent_entry.get("type")
+            model = agent_entry.get("model")
+
+            if not agent_id or not agent_type:
+                logger.warning(f"Agent entry in TOML missing 'id' or 'type': {agent_entry}")
+                continue
+
+            temp_players_list.append(agent_id)
+            temp_agent_types_list.append(agent_type.lower())
+
+            if agent_type.lower() in ["llm", "bloc_llm"]:
+                temp_llm_models_list.append(model if model else "") # Append model or empty string if None
             else:
-                logger.warning(
-                    f"'powers' section in '{self.models_config_path}' is not a valid dictionary. No power-specific models loaded from file."
+                temp_llm_models_list.append("") # Placeholder for non-LLM agents
+
+            if agent_type.lower() == "bloc_llm":
+                powers = agent_entry.get("powers")
+                if isinstance(powers, list) and all(isinstance(p, str) for p in powers):
+                    temp_bloc_definitions_map[agent_id] = powers
+                else:
+                    logger.warning(f"Bloc agent '{agent_id}' in TOML missing valid 'powers' list. This bloc might not be correctly configured.")
+        
+        # Convert bloc definitions map to the string list format if needed by other parts of the code
+        # Or adjust AgentManager to directly use the map.
+        # For now, reconstruct bloc_definitions_list if it was sourced from TOML.
+        temp_bloc_definitions_list = []
+        for bloc_name, bloc_powers in temp_bloc_definitions_map.items():
+            temp_bloc_definitions_list.append(f"{bloc_name}:{';'.join(bloc_powers)}")
+
+        # Assign to self if parsing was successful
+        self.players_list = temp_players_list
+        self.agent_types_list = temp_agent_types_list
+        self.llm_models_list = temp_llm_models_list
+        self.bloc_definitions_list = temp_bloc_definitions_list
+        
+        # Log what was parsed
+        logger.info(f"Parsed from TOML - Players: {self.players_list}")
+        logger.info(f"Parsed from TOML - Agent Types: {self.agent_types_list}")
+        logger.info(f"Parsed from TOML - LLM Models: {self.llm_models_list}")
+        logger.info(f"Parsed from TOML - Bloc Definitions: {self.bloc_definitions_list}")
+
+    def get_toml_value(self, key_path: str, default: Optional[Any] = None) -> Any:
+        """Safely retrieve a value from the loaded TOML data using a dot-separated path."""
+        keys = key_path.split('.')
+        value = self._raw_toml_config
+        try:
+            for key in keys:
+                value = value[key]
+            return value
+        except (KeyError, TypeError):
+            return default
+
+    def build_and_validate_agent_maps(
+        self,
+        game_instance: "Game",
+        agent_configurations: Dict[str, Dict[str, Any]],
+        initialized_agents: Dict[str, "BaseAgent"], # type: ignore # BaseAgent might not be defined if imports are minimal
+    ) -> None:
+        """
+        Builds and validates agent-power mappings based on agent_configurations
+        and the current game instance.
+
+        Populates `power_to_agent_id_map` and `agent_to_powers_map` on self.
+        Validates that:
+        - Every power in the game (from game_instance.powers) is mapped to an agent.
+        - Every agent ID derived from agent_configurations that controls powers
+          (excluding 'human' type not in initialized_agents) exists in initialized_agents.
+        - No two agents claim the same power.
+
+        Args:
+            game_instance: The initialized diplomacy.Game object.
+            agent_configurations: A dictionary where keys are agent IDs and values are
+                                  their configuration details (like type, country, controlled_powers).
+            initialized_agents: A dictionary of already initialized agent instances (excluding humans typically)
+                                managed by an AgentManager, mapping agent_id to agent object.
+
+        Raises:
+            ValueError: If any validation fails (e.g., unmapped power, agent claiming non-existent power,
+                        power claimed by multiple agents, agent in map not in initialized_agents).
+        """
+        logger.info("Building and validating agent-power mappings...")
+        self.power_to_agent_id_map.clear()
+        self.agent_to_powers_map.clear()
+
+        all_game_power_keys_upper = {p.upper() for p in game_instance.powers.keys()}
+
+        for agent_id, config_details in agent_configurations.items():
+            agent_type = config_details.get("type", "").lower()
+            controlled_powers_from_config: List[str] = []
+
+            if agent_type == "bloc_llm":
+                # 'powers' for bloc_llm, 'controlled_powers' might be post-parsing name
+                controlled_powers_from_config = config_details.get("powers", config_details.get("controlled_powers", []))
+            elif agent_type in ["llm", "neutral", "human", "null"]:
+                power = config_details.get("country") # 'country' is typical for single-power agents
+                if power and isinstance(power, str):
+                    controlled_powers_from_config = [power]
+            else:
+                logger.warning(f"Unknown or unhandled agent type '{agent_type}' for agent_id '{agent_id}' during map building. Skipping.")
+                continue
+
+            if not controlled_powers_from_config:
+                if agent_type not in ["human", "neutral"]: # Humans/Neutrals might legitimately have no powers assigned initially by some configs
+                    logger.warning(f"Agent '{agent_id}' of type '{agent_type}' has no controlled powers defined in configuration. Skipping power mapping for this agent.")
+                elif agent_type == "human" and not config_details.get("country"):
+                    logger.info(f"Human agent '{agent_id}' has no country/power assigned in configuration.")
+                # Allow agents (especially human/neutral) to exist without powers, but log it.
+                # They won't be in power_to_agent_id_map if they don't control powers.
+                self.agent_to_powers_map[agent_id] = [] # Still record the agent as existing
+                continue
+
+            current_agent_controlled_powers: List[str] = []
+            for power_name in controlled_powers_from_config:
+                power_name_upper = power_name.upper()
+                if power_name_upper not in all_game_power_keys_upper:
+                    err_msg = (
+                        f"Configuration error: Agent '{agent_id}' (type: '{agent_type}') claims power '{power_name_upper}' "
+                        f"which is not in the game instance's powers: {all_game_power_keys_upper}."
+                    )
+                    logger.error(err_msg)
+                    raise ValueError(err_msg)
+
+                if power_name_upper in self.power_to_agent_id_map:
+                    existing_agent_id = self.power_to_agent_id_map[power_name_upper]
+                    err_msg = (
+                        f"Configuration error: Power '{power_name_upper}' is claimed by multiple agents: "
+                        f"'{existing_agent_id}' and '{agent_id}'."
+                    )
+                    logger.error(err_msg)
+                    raise ValueError(err_msg)
+                
+                self.power_to_agent_id_map[power_name_upper] = agent_id
+                current_agent_controlled_powers.append(power_name_upper)
+            
+            if current_agent_controlled_powers: # Only add to agent_to_powers_map if they actually control powers
+                 self.agent_to_powers_map[agent_id] = current_agent_controlled_powers
+            elif agent_id not in self.agent_to_powers_map: # Ensure agent is listed even if it ended up with no valid powers
+                 self.agent_to_powers_map[agent_id] = []
+
+        # Validation 1: Every power in Game.powers has an entry in power_to_agent_id_map
+        mapped_powers = set(self.power_to_agent_id_map.keys())
+        unmapped_powers = all_game_power_keys_upper - mapped_powers
+        if unmapped_powers:
+            # This might be acceptable if some powers are meant to be passive/uncontrolled initially.
+            # However, for a fully specified game, this would be an error.
+            # Depending on strictness, this could be a warning or an error.
+            logger.warning(f"Validation Warning: The following game powers are not mapped to any agent: {unmapped_powers}. This may be intentional for uncontrolled powers.")
+            # If it must be an error: 
+            # err_msg = f"Validation failed: The following game powers are not mapped to any agent: {unmapped_powers}"
+            # logger.error(err_msg)
+            # raise ValueError(err_msg)
+
+        # Validation 2: Every agent_id in agent_to_powers_map (that is not human and controls powers)
+        # must exist in initialized_agents keys.
+        for agent_id_in_map, controlled_pws in self.agent_to_powers_map.items():
+            # Agent might be in agent_to_powers_map but control no powers (e.g. human observer)
+            if not controlled_pws:
+                continue # No powers to validate against initialized agents for this one
+            
+            agent_config = agent_configurations.get(agent_id_in_map, {})
+            agent_type = agent_config.get("type", "").lower()
+
+            if agent_type == "human":
+                # Human agents are often configured but not present in `initialized_agents` (which holds AI/bot instances).
+                logger.debug(f"Agent '{agent_id_in_map}' is human, skipping check against initialized AI agents.")
+                continue
+            
+            # NullAgents are also not AI agents in the typical sense, but they are initialized and present.
+            # The existing check for agent_id_in_map in initialized_agents is sufficient.
+            # if agent_type == "null":
+            #     logger.debug(f"Agent '{agent_id_in_map}' is null, skipping check against initialized agents for AI-specific properties.")
+            #     continue
+
+            if agent_id_in_map not in initialized_agents:
+                # This is a critical error if a non-human agent is supposed to control powers but isn't initialized.
+                err_msg = (
+                    f"Validation failed: Agent ID '{agent_id_in_map}' (type: '{agent_type}') controls powers {controlled_pws} "
+                    f"but is not found in initialized agents ({list(initialized_agents.keys())})."
                 )
+                logger.error(err_msg)
+                raise ValueError(err_msg)
 
-        except toml.TomlDecodeError as e:
-            logger.error(f"Error decoding TOML from '{self.models_config_path}': {e}")
-        except Exception as e:
-            logger.error(
-                f"Unexpected error loading models configuration from '{self.models_config_path}': {e}",
-                exc_info=True,
-            )
-
+        logger.info("Agent-power mappings built and validated.")
+        logger.info(f"  power_to_agent_id_map: {self.power_to_agent_id_map}")
+        logger.info(f"  agent_to_powers_map: {self.agent_to_powers_map}")
 
 # Example of how parse_arguments might look (to be kept in lm_game.py or similar entry point)
 # def parse_arguments_example() -> argparse.Namespace:
 #     parser = argparse.ArgumentParser(description="AI Diplomacy Game Runner")
-#     parser.add_argument("--power_name", type=str, help="Name of the power to control (e.g., FRANCE).")
-#     parser.add_argument("--model_id", type=str, help="Model ID for the LLM (e.g., ollama/llama3, gpt-4o).")
-#     parser.add_argument("--num_players", type=int, default=DEFAULT_NUM_PLAYERS, help="Number of LLM-controlled players.")
-#     # ... other arguments ...
+#     parser.add_argument("--game-config-file", type=str, required=True, help="Path to the game configuration TOML file.")
+#     parser.add_argument("--log-level", type=str, help="Override log level (e.g., DEBUG, INFO, WARNING). Overrides TOML.")
+#     parser.add_argument("--log-dir", type=str, help="Override base log directory. Overrides TOML.")
+#     parser.add_argument("--game-id", type=str, help="Override game ID. Overrides TOML and auto-generation.")
+#     # Removed other game-specific arguments as they should be in TOML
 #     return parser.parse_args()
 
 if __name__ == "__main__":
     # This is for example usage/testing of GameConfig
-    # In a real scenario, args would come from ArgumentParser in the main script.
-
     # Create a dummy argparse.Namespace for testing
+    # It should now primarily contain 'game_config_file' and optional overrides
+
+    # Create a dummy TOML file for testing
+    dummy_toml_content = """
+[scenario]
+name = "test_scenario_from_toml"
+# game_factory = "some.factory.path" # Optional
+
+[game_settings]
+num_players = 2
+game_id_prefix = "toml_test"
+perform_planning_phase = true
+num_negotiation_rounds = 1
+negotiation_style = "sequential"
+max_years = 1905
+max_diary_tokens = 7000
+# game_id = "my_toml_game_id" # Optional, can be overridden by CLI or generated
+
+[logging]
+log_level = "INFO" # Can be overridden by CLI
+log_to_file = true
+# base_log_dir = "/tmp/ai_diplomacy_logs" # Optional
+
+[dev_settings]
+dev_mode = false
+verbose_llm_debug = true
+
+agents = [
+    { id = "AGENT_ONE", type = "llm", model = "model_alpha" },
+    { id = "AGENT_TWO", type = "bloc_llm", model = "model_beta", powers = ["FRANCE", "GERMANY"] }
+]
+""" # End of TOML content string
+
+    dummy_toml_path = "temp_test_config.toml"
+    with open(dummy_toml_path, "w") as f:
+        f.write(dummy_toml_content)
+
     args_dict = {
-        "power_name": None,  # 'FRANCE',
-        "model_id": None,  # 'ollama/llama3',
-        "num_players": 3,
-        "game_id_prefix": "test_game",
-        "log_level": "DEBUG",
-        "perform_planning_phase": True,
-        "num_negotiation_rounds": 2,
-        "negotiation_style": "round-robin",
-        "fixed_models": ["ollama/mistral", "ollama/llama2"],
-        "randomize_fixed_models": True,
-        "exclude_powers": ["ITALY"],
-        "game_id": None,  # To test auto-generation
-        "max_years": 1,
-        "log_to_file": True,
-        "log_dir": None,  # Test default log directory creation
-        "models_config_file": None,  # Test default models configuration file
-        "dev_mode": True,  # For testing
-        "verbose_llm_debug": False,  # For testing
-        "max_diary_tokens": 6500,  # For testing
+        "game_config_file": dummy_toml_path,
+        "log_level": "DEBUG",  # CLI override for log level
+        "log_dir": None,       # No CLI override for log_dir, should use TOML or default
+        "game_id": None,       # No CLI override for game_id, should use TOML or generate
+        # All other game-specific args removed from CLI
     }
     test_args = argparse.Namespace(**args_dict)
 
-    # Setup basic logging for the test output
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.DEBUG, # Set basicConfig high to see all GameConfig logs
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    logger.info("--- Testing GameConfig Initialization ---")
-    config = GameConfig(test_args)
+    logger.info("--- Testing GameConfig Initialization (TOML-driven) ---")
+    try:
+        config = GameConfig(test_args)
 
-    # Example of accessing attributes
-    logger.info(f"Accessing config.game_id: {config.game_id}")
-    logger.info(f"Accessing config.llm_log_path: {config.llm_log_path}")
-    logger.info(
-        f"Accessing config.game_history (should be empty GameHistory object): {config.game_history}"
-    )
+        logger.info(f"Accessing config.game_id: {config.game_id}")
+        logger.info(f"Accessing config.llm_log_path: {config.llm_log_path}")
+        logger.info(f"Accessing config.log_level: {config.log_level}") # Should be DEBUG (CLI override)
+        logger.info(f"Accessing config.num_players: {config.num_players}") # Should be 2 (from TOML)
+        logger.info(f"Accessing config.players_list: {config.players_list}") # Should be ['AGENT_ONE', 'AGENT_TWO']
+        logger.info(f"Accessing config.llm_models_list: {config.llm_models_list}") # Should be ['model_alpha', 'model_beta']
+        logger.info(f"Accessing config.dev_mode: {config.dev_mode}") # Should be False (from TOML)
+        logger.info(f"Accessing config.log_to_file: {config.log_to_file}") # Should be True (from TOML)
 
-    # Test with a specific log_dir (game specific)
-    args_dict_log_dir = args_dict.copy()
-    args_dict_log_dir["log_dir"] = os.path.join(
-        os.getcwd(), "logs", "my_specific_game_log"
-    )
-    test_args_log_dir = argparse.Namespace(**args_dict_log_dir)
-    logger.info("--- Testing GameConfig with specific log_dir ---")
-    config_log_dir = GameConfig(test_args_log_dir)
-    logger.info(
-        f"Accessing config_log_dir.game_id_specific_log_dir: {config_log_dir.game_id_specific_log_dir}"
-    )
+        # Test case: CLI override for game_id
+        args_dict_game_id_override = args_dict.copy()
+        args_dict_game_id_override["game_id"] = "cli_overridden_game_id"
+        test_args_game_id_override = argparse.Namespace(**args_dict_game_id_override)
+        logger.info("--- Testing GameConfig with CLI game_id override ---")
+        config_gid_override = GameConfig(test_args_game_id_override)
+        logger.info(f"Accessing config_gid_override.game_id: {config_gid_override.game_id}") # Should be 'cli_overridden_game_id'
+
+    except Exception as e:
+        logger.error(f"Error during GameConfig test: {e}", exc_info=True)
+    finally:
+        if os.path.exists(dummy_toml_path):
+            os.remove(dummy_toml_path)
 
     logger.info("--- GameConfig Test Complete ---")

@@ -6,6 +6,7 @@ such as order gathering, LLM response processing, order validation,
 and logging of LLM interactions. It also includes a custom exception
 for handling invalid LLM outputs.
 """
+
 from dotenv import load_dotenv
 import logging
 import os
@@ -22,14 +23,14 @@ from .services.llm_coordinator import LLMCoordinator
 if TYPE_CHECKING:
     from .game_config import GameConfig
 
-logger = logging.getLogger("utils") # Consider using __name__
+logger = logging.getLogger("utils")  # Consider using __name__
 # logger.setLevel(logging.INFO) # Logging level should be configured by application
 # logging.basicConfig(level=logging.INFO) # BasicConfig should be called once at application entry point
 
 load_dotenv()
 
 __all__ = [
-    "assign_models_to_powers", # Deprecated, but might be kept for a version
+    "assign_models_to_powers",  # Deprecated, but might be kept for a version
     "gather_possible_orders",
     "LLMInvalidOutputError",
     "get_valid_orders",
@@ -401,7 +402,9 @@ async def get_valid_orders(
     log_file_path: Optional[str] = None,  # Already present
     phase: Optional[str] = None,  # Already present
     # dev_mode: bool = False # Added dev_mode, now part of config
-    llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None, # New parameter
+    llm_caller_override: Optional[
+        Callable[..., Awaitable[str]]
+    ] = None,  # New parameter
 ) -> List[str]:
     """
     Generates orders using the specified LLM model, then validates and returns them.
@@ -448,7 +451,7 @@ async def get_valid_orders(
                 phase if phase is not None else "UNKNOWN_PHASE"
             ),  # Using phase as phase_str
             request_identifier=f"{power_name}-{phase if phase is not None else 'unknown'}-order_gen",
-            llm_caller_override=llm_caller_override # Pass the override
+            llm_caller_override=llm_caller_override,  # Pass the override
         )
 
         llm_proposed_moves = _extract_moves_from_llm_response(

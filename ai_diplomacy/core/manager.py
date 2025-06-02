@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["GameEvent", "GameManager"]
 
+
 @dataclass
 class GameEvent:
     """Represents an event that occurred during a game phase."""

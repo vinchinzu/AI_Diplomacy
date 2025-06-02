@@ -1,13 +1,19 @@
 import logging
 import pytest
-from ai_diplomacy.services.config import AgentConfig, GameConfig, DiplomacyConfig, resolve_context_provider
+from ai_diplomacy.services.config import (
+    AgentConfig,
+    GameConfig,
+    DiplomacyConfig,
+    resolve_context_provider,
+)
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.mark.unit
-def test_config_context_provider_field(): # Renamed to avoid clash if merged later
+def test_config_context_provider_field():  # Renamed to avoid clash if merged later
     """Test that agent configs specify context providers correctly."""
     logger.info("Testing context provider configuration field...")
 
@@ -29,8 +35,9 @@ def test_config_context_provider_field(): # Renamed to avoid clash if merged lat
 
     logger.info("✓ Context provider configuration field working correctly")
 
+
 @pytest.mark.unit
-def test_resolve_context_provider_logic(): # Renamed
+def test_resolve_context_provider_logic():  # Renamed
     """Test resolve_context_provider function logic."""
     logger.info("Testing resolve_context_provider logic...")
     # Tool-capable model should resolve to MCP
@@ -64,7 +71,7 @@ def test_resolve_context_provider_logic(): # Renamed
 
 
 @pytest.mark.unit
-def test_full_config_integration_context_providers(): # Renamed
+def test_full_config_integration_context_providers():  # Renamed
     """Test creating agents from full configuration with context providers."""
     logger.info("Testing full configuration integration with context providers...")
 
@@ -92,7 +99,7 @@ def test_full_config_integration_context_providers(): # Renamed
 
     # Create agents from config
     # Note: AgentFactory internally calls resolve_context_provider during agent creation
-    factory = AgentFactory() 
+    factory = AgentFactory()
     agents = factory.create_agents_from_config(config, "test-game")
 
     assert len(agents) == 4
@@ -117,4 +124,6 @@ def test_full_config_integration_context_providers(): # Renamed
     assert agents["RUSSIA"].get_agent_info()["type"] == "ScriptedAgent"
     assert not hasattr(agents["RUSSIA"], "resolved_context_provider_type")
 
-    logger.info("✓ Full configuration integration with context providers working correctly") 
+    logger.info(
+        "✓ Full configuration integration with context providers working correctly"
+    )

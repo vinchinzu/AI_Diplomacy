@@ -18,6 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 @pytest.mark.unit
 def test_core_state():
     """Test PhaseState creation."""
@@ -42,6 +43,7 @@ def test_core_state():
     assert not phase.is_power_eliminated("FRANCE")
 
     logger.info("✓ PhaseState working correctly")
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -78,6 +80,7 @@ async def test_scripted_agent():
 
     logger.info("✓ ScriptedAgent working correctly")
 
+
 @pytest.mark.unit
 def test_config():
     """Test configuration system."""
@@ -95,6 +98,7 @@ def test_config():
     assert len(config.get_llm_agents()) == 1
 
     logger.info("✓ Configuration system working correctly")
+
 
 @pytest.mark.unit
 def test_llm_coordinator():

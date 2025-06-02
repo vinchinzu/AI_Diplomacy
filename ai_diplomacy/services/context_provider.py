@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from ..core.state import PhaseState
 from .config import AgentConfig
-from .. import constants # Import constants
+from .. import constants  # Import constants
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ __all__ = [
     "MCPContextProvider",
     "ContextProviderFactory",
 ]
+
 
 @dataclass
 class ContextData:

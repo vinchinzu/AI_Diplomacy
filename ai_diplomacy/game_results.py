@@ -5,6 +5,7 @@ This module provides the GameResultsProcessor class, which is responsible for
 saving the final game state, game history, agent manifestos (final states),
 and logging final game statistics including API usage.
 """
+
 import logging
 import os
 import json
@@ -29,11 +30,12 @@ if TYPE_CHECKING:
     from .game_history import (
         GameHistory,
     )  # Assuming GameHistory can be pickled or has a to_dict method
-    from .agents.base import BaseAgent # For type hinting
+    from .agents.base import BaseAgent  # For type hinting
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["GameResultsProcessor"]
+
 
 class GameResultsProcessor:
     # Class docstring already exists and is good.

@@ -1,7 +1,7 @@
 {# Prompt for a BlocLLMAgent to decide orders for all its controlled powers. #}
 You are the leader of the {{ bloc_name }}.
 You control the following powers: {{ controlled_powers_list|join(', ') }}.
-The current game year is {{ phase.year }}, season {{ phase.season }}. The phase is {{ phase.name }}.
+The current game year is {{ phase.year }}, season {{ phase.season }}. The phase is {{ phase.phase_name }}.
 
 Your objective is to achieve victory for your bloc by coordinating the actions of all your controlled powers.
 Review the current state of the game for each of your powers:
@@ -9,26 +9,19 @@ Review the current state of the game for each of your powers:
 {% for power_name in controlled_powers_list %}
 State for {{ power_name }}:
   Units:
-    {% set power_state = phase.get_power_state(power_name) %}
-    {% if power_state and power_state.units %}
-      {% for unit in power_state.units %}
+    {% set p_units = phase.units.get(power_name, []) %}
+    {% if p_units %}
+      {% for unit in p_units %}
     - {{ unit }}
       {% endfor %}
     {% else %}
     None
     {% endif %}
   Centers:
-    {% if power_state and power_state.centers %}
-      {% for center in power_state.centers %}
+    {% set p_centers = phase.supply_centers.get(power_name, []) %}
+    {% if p_centers %}
+      {% for center in p_centers %}
     - {{ center }}
-      {% endfor %}
-    {% else %}
-    None
-    {% endif %}
-  Orders from previous turn:
-    {% if power_state and power_state.orders %}
-      {% for order in power_state.orders %}
-    - {{ order }}
       {% endfor %}
     {% else %}
     None
@@ -36,15 +29,21 @@ State for {{ power_name }}:
 {% endfor %}
 
 Full list of supply centers and owners:
-{% for sc, owner in phase.scs.items() %}
-- {{ sc }}: {{ owner if owner else 'Unowned' }}
+{% for sc_owner_power, sc_list in phase.supply_centers.items() %}
+  {% for sc_name in sc_list %}
+- {{ sc_name }}: {{ sc_owner_power }}
+  {% endfor %}
+{% else %}
+No supply center data available.
 {% endfor %}
 
-{% if phase.history %}
-Recent history (last phase results):
-{{ phase.history }}
+{% if phase.recent_messages %}
+Recent Messages:
+  {% for msg in phase.recent_messages %}
+    {{ msg }} {# Assuming msg is a string or has a string representation #}
+  {% endfor %}
 {% else %}
-No recent history available for this phase object.
+No recent messages available in this phase object.
 {% endif %}
 
 Based on this information, provide a coordinated set of orders for ALL units belonging to ALL powers you control ({{ controlled_powers_list|join(', ') }}).

@@ -2,16 +2,16 @@ import logging
 import asyncio
 from typing import List, Dict, TYPE_CHECKING
 
-from ..core.state import PhaseState # Added this import
-from ..agents.llm_agent import LLMAgent # Added this import
+from ..core.state import PhaseState  # Added this import
+from ..agents.llm_agent import LLMAgent  # Added this import
 
 if TYPE_CHECKING:
     from diplomacy import Game
     from ..game_history import GameHistory
-    from ..agents.base import Message # For type checking messages_list_objects
-    from ..core.state import PhaseState # For type checking current_phase_state
-    from ..services.config import GameConfig # For num_negotiation_rounds
-    from ..agent_manager import AgentManager # For get_agent
+    from ..agents.base import Message  # For type checking messages_list_objects
+    from ..core.state import PhaseState  # For type checking current_phase_state
+    from ..services.config import GameConfig  # For num_negotiation_rounds
+    from ..agent_manager import AgentManager  # For get_agent
 """
 Handles the negotiation process between agents during a Diplomacy game phase.
 
@@ -19,18 +19,19 @@ This module provides the `perform_negotiation_rounds` asynchronous function,
 which manages multiple rounds of message exchange between active agents,
 allowing them to communicate and strategize.
 """
-from .. import constants # Import constants
+from .. import constants  # Import constants
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["perform_negotiation_rounds"]
 
+
 async def perform_negotiation_rounds(
     game: "Game",
     game_history: "GameHistory",
-    agent_manager: "AgentManager", # Added
-    active_powers: List[str], # Added
-    config: "GameConfig" # Added for num_negotiation_rounds
+    agent_manager: "AgentManager",  # Added
+    active_powers: List[str],  # Added
+    config: "GameConfig",  # Added for num_negotiation_rounds
 ):
     """
     Manages multiple rounds of diplomatic message exchange between active agents.
@@ -113,10 +114,16 @@ async def perform_negotiation_rounds(
 
         for sender_power, messages_to_send_dicts in all_proposed_messages.items():
             for msg_dict in messages_to_send_dicts:
-                recipient = msg_dict.get(constants.LLM_MESSAGE_KEY_RECIPIENT, constants.MESSAGE_RECIPIENT_GLOBAL).upper()
+                recipient = msg_dict.get(
+                    constants.LLM_MESSAGE_KEY_RECIPIENT,
+                    constants.MESSAGE_RECIPIENT_GLOBAL,
+                ).upper()
                 content = msg_dict.get(constants.LLM_MESSAGE_KEY_CONTENT, "")
-                
-                if recipient != constants.MESSAGE_RECIPIENT_GLOBAL and recipient not in active_powers:
+
+                if (
+                    recipient != constants.MESSAGE_RECIPIENT_GLOBAL
+                    and recipient not in active_powers
+                ):
                     logger.warning(
                         f"[{sender_power}] Tried to send message to invalid/inactive recipient '{recipient}'. Skipping."
                     )
@@ -130,8 +137,6 @@ async def perform_negotiation_rounds(
                 )
 
         if round_num < num_rounds:
-            logger.info(
-                f"End of Negotiation Round {round_num}. Next round starting..."
-            )
+            logger.info(f"End of Negotiation Round {round_num}. Next round starting...")
         else:
-            logger.info(f"Final Negotiation Round {round_num} completed.") 
+            logger.info(f"Final Negotiation Round {round_num} completed.")

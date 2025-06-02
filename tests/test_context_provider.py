@@ -1,6 +1,5 @@
 import logging
 import pytest
-from unittest.mock import AsyncMock
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.services.config import AgentConfig
 from ai_diplomacy.services.context_provider import (
@@ -11,6 +10,7 @@ from ai_diplomacy.services.context_provider import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 @pytest.mark.unit
 def test_context_provider_factory():
@@ -37,6 +37,7 @@ def test_context_provider_factory():
     assert "inline" in available
 
     logger.info("✓ ContextProviderFactory working correctly")
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -93,6 +94,7 @@ async def test_inline_context_provider():
 
     logger.info("✓ InlineContextProvider working correctly")
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_mcp_context_provider():
@@ -132,4 +134,4 @@ async def test_mcp_context_provider():
     assert result["tools_available"] is False
     assert "MCP tools not available" in result["context_text"]
 
-    logger.info("✓ MCPContextProvider correctly shows tools not available") 
+    logger.info("✓ MCPContextProvider correctly shows tools not available")

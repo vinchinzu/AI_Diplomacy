@@ -1,6 +1,7 @@
 import json
-import pytest # Added import
+import pytest  # Added import
 from ai_diplomacy.game_history import GameHistory, Phase
+
 
 @pytest.mark.unit
 def test_game_history_to_dict_serialization():
@@ -61,12 +62,11 @@ def test_game_history_to_dict_serialization():
     assert phase_2_dict["name"] == "F1901M"
     assert phase_2_dict["plans"]["AUSTRIA"] == "Plan for Austria in F1901M"
     assert phase_2_dict["messages"][0]["sender"] == "TURKEY"
-    json_string = json.dumps(
-        history_dict, indent=2
-    )
+    json_string = json.dumps(history_dict, indent=2)
     assert isinstance(json_string, str)
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
+
 
 @pytest.mark.unit
 def test_game_history_to_dict_empty():
@@ -82,6 +82,7 @@ def test_game_history_to_dict_empty():
     assert isinstance(json_string, str)
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
+
 
 @pytest.mark.unit
 def test_phase_add_orders_internal_consistency():
@@ -126,6 +127,7 @@ def test_phase_add_orders_internal_consistency():
         ["BOUNCED", "F ENG - MAO"],
     ]
 
+
 @pytest.mark.unit
 # Test with empty orders/results lists for a power
 def test_game_history_to_dict_empty_orders_for_power():
@@ -149,6 +151,7 @@ def test_game_history_to_dict_empty_orders_for_power():
     json_string = json.dumps(history_dict)
     reloaded_dict = json.loads(json_string)
     assert reloaded_dict == history_dict
+
 
 @pytest.mark.unit
 # Test with a phase that has no messages, plans, etc.

@@ -6,6 +6,7 @@ pathfinding (BFS), and functions to gather detailed information about units,
 supply centers, adjacencies, and potential threats or opportunities around
 a specific unit's location. This context is used to inform agent decision-making.
 """
+
 from collections import deque
 from typing import Dict, List, Callable, Optional, Any, Set, Tuple
 from diplomacy.engine.map import Map as GameMap
@@ -36,6 +37,7 @@ __all__ = [
     "generate_rich_order_context",
     "get_enemy_unit_context_for_orders",
 ]
+
 
 def build_diplomacy_graph(game_map: GameMap) -> Dict[str, Dict[str, List[str]]]:
     """

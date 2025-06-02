@@ -9,6 +9,7 @@ from .base import BaseAgent, Order, Message, PhaseState
 
 __all__ = ["ScriptedAgent"]
 
+
 class ScriptedAgent(BaseAgent):
     """
     Simple scripted agent with basic diplomatic heuristics.

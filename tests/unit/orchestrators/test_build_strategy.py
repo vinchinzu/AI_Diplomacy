@@ -1,36 +1,43 @@
 import pytest
-import asyncio
-import logging # Added import
+import logging  # Added import
 from unittest.mock import MagicMock, AsyncMock, call
 # SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
-# from types import SimpleNamespace 
+# from types import SimpleNamespace
 
 from ai_diplomacy.orchestrators.build import BuildPhaseStrategy
-from ai_diplomacy.game_history import GameHistory # Added import
+from ai_diplomacy.game_history import GameHistory  # Added import
 # FakeGame and DummyOrchestrator are now injected via fixtures from conftest
-# from tests._diplomacy_fakes import FakeGame, DummyOrchestrator 
+# from tests._diplomacy_fakes import FakeGame, DummyOrchestrator
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_generates_orders_for_building_power(fake_game_factory, default_dummy_orchestrator):
+async def test_build_generates_orders_for_building_power(
+    fake_game_factory, default_dummy_orchestrator
+):
     strat = BuildPhaseStrategy()
     powers = ["ENG", "FRA"]
     build_conditions = {"FRA": 1, "ENG": 0}
-    fake_game = fake_game_factory(phase="W1901B", powers_names=powers, build_conditions=build_conditions)
-    
+    fake_game = fake_game_factory(
+        phase="W1901B", powers_names=powers, build_conditions=build_conditions
+    )
+
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
-    
+
     mock_agent_fra = MagicMock(name="AgentFRA")
     mock_agent_eng = MagicMock(name="AgentENG")
 
     def get_agent_side_effect(power_name):
-        if power_name == "FRA": return mock_agent_fra
-        if power_name == "ENG": return mock_agent_eng
+        if power_name == "FRA":
+            return mock_agent_fra
+        if power_name == "ENG":
+            return mock_agent_eng
         return MagicMock()
+
     dummy_orchestrator.agent_manager.get_agent.side_effect = get_agent_side_effect
     dummy_orchestrator._get_orders_for_power = AsyncMock(return_value=["A PAR B"])
-    
+
     mock_game_history = MagicMock(spec=GameHistory, autospec=True)
     # Removed: mock_game_history.add_orders = MagicMock()
 
@@ -42,28 +49,35 @@ async def test_build_generates_orders_for_building_power(fake_game_factory, defa
         fake_game, "FRA", mock_agent_fra, mock_game_history
     )
     # Assert that game_history.add_orders was called for FRA with its orders
-    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "FRA", ["A PAR B"])
-    
+    mock_game_history.add_orders.assert_called_once_with(
+        fake_game.get_current_phase(), "FRA", ["A PAR B"]
+    )
+
     assert isinstance(orders, dict)
     assert set(orders.keys()) == set(powers)
     assert orders["FRA"] == ["A PAR B"]
     assert orders["ENG"] == []
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_generates_orders_for_disbanding_power(fake_game_factory, default_dummy_orchestrator):
+async def test_build_generates_orders_for_disbanding_power(
+    fake_game_factory, default_dummy_orchestrator
+):
     strat = BuildPhaseStrategy()
     powers = ["GER"]
-    build_conditions = {"GER": -1} # GER must disband 1
-    fake_game = fake_game_factory(phase="W1901B", powers_names=powers, build_conditions=build_conditions)
-    
+    build_conditions = {"GER": -1}  # GER must disband 1
+    fake_game = fake_game_factory(
+        phase="W1901B", powers_names=powers, build_conditions=build_conditions
+    )
+
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
-    
+
     mock_agent_ger = MagicMock(name="AgentGER")
     dummy_orchestrator.agent_manager.get_agent.return_value = mock_agent_ger
     dummy_orchestrator._get_orders_for_power = AsyncMock(return_value=["A BER D"])
-    
+
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
 
@@ -72,24 +86,31 @@ async def test_build_generates_orders_for_disbanding_power(fake_game_factory, de
     dummy_orchestrator._get_orders_for_power.assert_awaited_once_with(
         fake_game, "GER", mock_agent_ger, mock_game_history
     )
-    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "GER", ["A BER D"])
-    
+    mock_game_history.add_orders.assert_called_once_with(
+        fake_game.get_current_phase(), "GER", ["A BER D"]
+    )
+
     assert isinstance(orders, dict)
     assert orders["GER"] == ["A BER D"]
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_no_building_or_disbanding_powers(fake_game_factory, default_dummy_orchestrator):
+async def test_build_no_building_or_disbanding_powers(
+    fake_game_factory, default_dummy_orchestrator
+):
     strat = BuildPhaseStrategy()
     powers = ["ENG", "GER"]
     build_conditions = {"ENG": 0, "GER": 0}
-    fake_game = fake_game_factory(phase="W1901B", powers_names=powers, build_conditions=build_conditions)
-    
+    fake_game = fake_game_factory(
+        phase="W1901B", powers_names=powers, build_conditions=build_conditions
+    )
+
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
     # _get_orders_for_power should not be called as no power has builds/disbands
     # The default AsyncMock(return_value=["WAIVE"]) on default_dummy_orchestrator is fine
-    
+
     mock_game_history = MagicMock(spec=GameHistory, autospec=True)
     # Removed: mock_game_history.add_orders = MagicMock()
 
@@ -100,21 +121,28 @@ async def test_build_no_building_or_disbanding_powers(fake_game_factory, default
     mock_game_history.add_orders.assert_not_called()
     assert orders == {"ENG": [], "GER": []}
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_agent_fails_to_provide_orders(fake_game_factory, default_dummy_orchestrator):
+async def test_build_agent_fails_to_provide_orders(
+    fake_game_factory, default_dummy_orchestrator
+):
     strat = BuildPhaseStrategy()
     powers = ["ITA"]
     build_conditions = {"ITA": 1}
-    fake_game = fake_game_factory(phase="W1901B", powers_names=powers, build_conditions=build_conditions)
-    
+    fake_game = fake_game_factory(
+        phase="W1901B", powers_names=powers, build_conditions=build_conditions
+    )
+
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
-    
+
     mock_agent_ita = MagicMock(name="AgentITA")
     dummy_orchestrator.agent_manager.get_agent.return_value = mock_agent_ita
-    dummy_orchestrator._get_orders_for_power = AsyncMock(side_effect=Exception("LLM error"))
-    
+    dummy_orchestrator._get_orders_for_power = AsyncMock(
+        side_effect=Exception("LLM error")
+    )
+
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
 
@@ -123,24 +151,31 @@ async def test_build_agent_fails_to_provide_orders(fake_game_factory, default_du
     dummy_orchestrator._get_orders_for_power.assert_awaited_once_with(
         fake_game, "ITA", mock_agent_ita, mock_game_history
     )
-    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "ITA", [])
-    
+    mock_game_history.add_orders.assert_called_once_with(
+        fake_game.get_current_phase(), "ITA", []
+    )
+
     assert isinstance(orders, dict)
     assert orders["ITA"] == []
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_agent_not_found(fake_game_factory, default_dummy_orchestrator, caplog): # Added caplog
+async def test_build_agent_not_found(
+    fake_game_factory, default_dummy_orchestrator, caplog
+):  # Added caplog
     strat = BuildPhaseStrategy()
     powers = ["AUS"]
     build_conditions = {"AUS": 1}
-    fake_game = fake_game_factory(phase="W1901B", powers_names=powers, build_conditions=build_conditions)
-    
+    fake_game = fake_game_factory(
+        phase="W1901B", powers_names=powers, build_conditions=build_conditions
+    )
+
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
-    dummy_orchestrator.agent_manager.get_agent.return_value = None # Agent not found
+    dummy_orchestrator.agent_manager.get_agent.return_value = None  # Agent not found
     # _get_orders_for_power should not be called, default mock on orchestrator is fine.
-    
+
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
 
@@ -150,20 +185,25 @@ async def test_build_agent_not_found(fake_game_factory, default_dummy_orchestrat
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
     # game_history.add_orders should not be called as the power with builds has no agent
     mock_game_history.add_orders.assert_not_called()
-    
+
     assert isinstance(orders, dict)
     # Even if agent not found, the power should be in the final orders dict with an empty list
     assert orders == {"AUS": []}
     assert len(caplog.records) == 1
     assert "No agent found for active power AUS" in caplog.records[0].message
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_one_agent_fails_another_succeeds(fake_game_factory, default_dummy_orchestrator, caplog): # Added caplog
+async def test_build_one_agent_fails_another_succeeds(
+    fake_game_factory, default_dummy_orchestrator, caplog
+):  # Added caplog
     strat = BuildPhaseStrategy()
     powers = ["FRA", "GER"]
     build_conditions = {"FRA": 1, "GER": 1}
-    fake_game = fake_game_factory(phase="W1901B", powers_names=powers, build_conditions=build_conditions)
+    fake_game = fake_game_factory(
+        phase="W1901B", powers_names=powers, build_conditions=build_conditions
+    )
 
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
@@ -172,9 +212,12 @@ async def test_build_one_agent_fails_another_succeeds(fake_game_factory, default
     mock_agent_ger = MagicMock(name="AgentGER")
 
     def get_agent_side_effect(power_name):
-        if power_name == "FRA": return mock_agent_fra
-        if power_name == "GER": return mock_agent_ger
+        if power_name == "FRA":
+            return mock_agent_fra
+        if power_name == "GER":
+            return mock_agent_ger
         return None
+
     dummy_orchestrator.agent_manager.get_agent.side_effect = get_agent_side_effect
 
     async def get_orders_side_effect(game_obj, power_name_call, agent_obj, history_obj):
@@ -183,11 +226,16 @@ async def test_build_one_agent_fails_another_succeeds(fake_game_factory, default
         elif power_name_call == "GER":
             # Ensure the agent object passed is the correct one for GER before raising error
             if agent_obj is not mock_agent_ger:
-                 pytest.fail("Incorrect agent object passed to _get_orders_for_power for GER")
+                pytest.fail(
+                    "Incorrect agent object passed to _get_orders_for_power for GER"
+                )
             raise ValueError("GER LLM simulated error")
-        return [] # Should not be reached
-    dummy_orchestrator._get_orders_for_power = AsyncMock(side_effect=get_orders_side_effect)
-    
+        return []  # Should not be reached
+
+    dummy_orchestrator._get_orders_for_power = AsyncMock(
+        side_effect=get_orders_side_effect
+    )
+
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
 
@@ -196,19 +244,28 @@ async def test_build_one_agent_fails_another_succeeds(fake_game_factory, default
 
     assert dummy_orchestrator._get_orders_for_power.await_count == 2
     # Check calls with specific agent objects
-    dummy_orchestrator._get_orders_for_power.assert_any_await(fake_game, "FRA", mock_agent_fra, mock_game_history)
-    dummy_orchestrator._get_orders_for_power.assert_any_await(fake_game, "GER", mock_agent_ger, mock_game_history)
-    
+    dummy_orchestrator._get_orders_for_power.assert_any_await(
+        fake_game, "FRA", mock_agent_fra, mock_game_history
+    )
+    dummy_orchestrator._get_orders_for_power.assert_any_await(
+        fake_game, "GER", mock_agent_ger, mock_game_history
+    )
+
     expected_history_calls = [
         call(fake_game.get_current_phase(), "FRA", ["A PAR B"]),
-        call(fake_game.get_current_phase(), "GER", [])
+        call(fake_game.get_current_phase(), "GER", []),
     ]
-    mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
+    mock_game_history.add_orders.assert_has_calls(
+        expected_history_calls, any_order=True
+    )
     assert mock_game_history.add_orders.call_count == 2
-    
+
     assert isinstance(orders, dict)
     assert orders["FRA"] == ["A PAR B"]
     assert orders["GER"] == []
 
     assert len(caplog.records) == 1
-    assert "Error getting build orders for GER: GER LLM simulated error" in caplog.records[0].message
+    assert (
+        "Error getting build orders for GER: GER LLM simulated error"
+        in caplog.records[0].message
+    )

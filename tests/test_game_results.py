@@ -1,8 +1,8 @@
 import json
 import os
 from unittest.mock import MagicMock, mock_open, patch
-from pathlib import Path # Added import
-import pytest # Added import
+from pathlib import Path  # Added import
+import pytest  # Added import
 
 from ai_diplomacy.game_results import GameResultsProcessor
 from ai_diplomacy.game_history import GameHistory  # For creating mock GameHistory
@@ -10,8 +10,9 @@ from ai_diplomacy.game_config import GameConfig  # For mock GameConfig
 
 # from diplomacy import Game # For type hinting mock_game if needed, but MagicMock is often sufficient
 
+
 @pytest.mark.unit
-def test_save_game_state_writes_history_json(tmp_path): # Added tmp_path
+def test_save_game_state_writes_history_json(tmp_path):  # Added tmp_path
     """
     Test that save_game_state calls game_history.to_dict() and writes its output to a JSON file.
     """
@@ -36,7 +37,7 @@ def test_save_game_state_writes_history_json(tmp_path): # Added tmp_path
     mock_cli_args.game_id_prefix = (
         "test_prefix"  # GameConfig uses this if game_id is None
     )
-    mock_cli_args.log_dir = str(tmp_path) # Changed to tmp_path
+    mock_cli_args.log_dir = str(tmp_path)  # Changed to tmp_path
     # Add any other attributes GameConfig's __init__ might access from args
     mock_cli_args.power_name = None
     mock_cli_args.model_id = None
@@ -81,10 +82,14 @@ def test_save_game_state_writes_history_json(tmp_path): # Added tmp_path
     results_processor = GameResultsProcessor(mock_game_config)
 
     # Define expected file paths using tmp_path
-    results_dir_path = Path(mock_game_config.results_dir) # GameConfig sets this up
-    expected_history_filepath = results_dir_path / f"{mock_game_config.game_id}_game_history.json"
-    expected_final_state_filepath = results_dir_path / f"{mock_game_config.game_id}_final_state.json"
-    
+    results_dir_path = Path(mock_game_config.results_dir)  # GameConfig sets this up
+    expected_history_filepath = (
+        results_dir_path / f"{mock_game_config.game_id}_game_history.json"
+    )
+    expected_final_state_filepath = (
+        results_dir_path / f"{mock_game_config.game_id}_final_state.json"
+    )
+
     # Mock to_saved_game_format specifically for the call within save_game_state
     # This patch can remain as its output is what's being written.
     with patch(
@@ -101,16 +106,13 @@ def test_save_game_state_writes_history_json(tmp_path): # Added tmp_path
         # Assert the content of the history file
         with open(expected_history_filepath, "r", encoding="utf-8") as f:
             written_data_dict = json.load(f)
-        
+
         expected_history_dict = mock_game_history.to_dict()
         assert written_data_dict == expected_history_dict
         assert "phases" in written_data_dict
         assert len(written_data_dict["phases"]) == 1
         assert written_data_dict["phases"][0]["name"] == "S1901M"
-        assert (
-            written_data_dict["phases"][0]["plans"]["FRANCE"]
-            == "Test Plan S1901M"
-        )
+        assert written_data_dict["phases"][0]["plans"]["FRANCE"] == "Test Plan S1901M"
         assert (
             written_data_dict["phases"][0]["messages"][0]["content"]
             == "Test Message S1901M"
