@@ -1,16 +1,14 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch, call
-from typing import Optional, Callable
-import logging
+from typing import Callable, Optional
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from ai_diplomacy import constants
-from ai_diplomacy.agents.llm_agent import LLMAgent
-from ai_diplomacy.agents.base import Order, Message, PhaseState
+from ai_diplomacy.agents.base import Message, Order, PhaseState
 from ai_diplomacy.agents.factory import AgentFactory
-from ai_diplomacy.services.config import AgentConfig  # ContextProviderType removed
-from ai_diplomacy.services.context_provider import (
-    ContextProvider,
-)  # Changed BaseContextProvider to ContextProvider
+from ai_diplomacy.agents.llm_agent import LLMAgent
+from ai_diplomacy.llm_utils import load_prompt_file
+from ai_diplomacy.services.config import AgentConfig
+from ai_diplomacy.services.context_provider import ContextProvider
 
 
 class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
@@ -83,12 +81,10 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         self.mock_agent_state.add_journal_entry.reset_mock()  # New position
 
         self.agent_config = AgentConfig(
-            country="FRANCE",  # Corrected: 'power' to 'country'
-            type="llm",  # Added required 'type' field
+            country="FRANCE",
+            type="llm",
             model_id="test_model",
             context_provider="inline",
-            # agent_id is passed to LLMAgent constructor, not AgentConfig
-            # log_to_gcp and log_to_file are not standard fields, but allowed by extra='allow'
         )
 
         self.agent = LLMAgent(
@@ -1095,11 +1091,6 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         # This test is derived from test_agent_with_context_providers in the old test_stage2.py
         # It's kept separate as it tests factory and multi-agent context provider resolution.
 
-        logger = logging.getLogger(__name__)  # Required if using logger
-        logger.info(
-            "Testing agents with context providers (ported from test_stage2)..."
-        )
-
         # Create agents with different context provider configs
         inline_config = AgentConfig(
             country="FRANCE",
@@ -1211,8 +1202,49 @@ class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
         prompt_text_auto = called_args_kwargs_auto.get("prompt")
         self.assertIn("Game Context and Relevant Information:", prompt_text_auto)
 
-        logger.info("✓ Agents working correctly with context providers (ported)")
+    async def test_llm_agent_boundary(self):
+        """Test that LLMAgent maintains clean boundaries (no direct game access)."""
+        # This test is derived from test_clean_boundaries in the old test_stage1.py
 
+        # Use a minimal config for this boundary test
+        # self.agent_config is available from asyncSetUp, but we use a specific one here
+        # We create a new agent instance to ensure it's clean for this specific test
+        # and to avoid interference from mocks if they are not needed or configured differently.
 
-if __name__ == "__main__":
-    unittest.main()
+        # We can use the existing self.mock_llm_coordinator and self.mock_context_provider_factory
+        # if the agent initialization requires them.
+        # The original test directly instantiated LLMAgent.
+
+        agent_config_boundary = AgentConfig(country="AUSTRIA", type="llm", model_id="gpt-4o-mini-boundary")
+
+        # Minimal agent for boundary check, some dependencies might need to be mocked/provided
+        # if the constructor strictly requires them.
+        # The original test used: LLMAgent("test", "FRANCE", config, prompt_loader=load_prompt_file)
+        # The current LLMAgent constructor is:
+        #    agent_id: str,
+        #    country: str,
+        #    config: AgentConfig,
+        #    game_id: str = constants.DEFAULT_GAME_ID,
+        #    llm_coordinator: Optional[LLMCoordinator] = None,
+        #    context_provider_factory: Optional[ContextProviderFactory] = None,
+        #    prompt_loader: Optional[Callable[[str], Optional[str]]] = None, # loader for system prompt
+        #    llm_caller_override: Optional[Callable[..., Awaitable[Any]]] = None,
+
+        # Use existing mocks from asyncSetUp for coordinator and factory if they are suitable
+        # or create new minimal ones if needed.
+        # For this test, we mostly care about the attributes *not* present.
+        agent = LLMAgent(
+            agent_id="boundary_test_agent",
+            country="AUSTRIA",
+            config=agent_config_boundary,
+            game_id="boundary_test_game",
+            llm_coordinator=self.mock_llm_coordinator, # Can use the one from setUp
+            context_provider_factory=self.mock_context_provider_factory, # Can use the one from setUp
+            prompt_loader=load_prompt_file # As in original test
+        )
+
+        # Verify agent doesn't have direct game access
+        self.assertFalse(hasattr(agent, "game"))
+        self.assertTrue(hasattr(agent, "config"))
+        self.assertTrue(hasattr(agent, "llm_coordinator"))
+        self.assertTrue(hasattr(agent, "context_provider")) # Added check, as it's a key component

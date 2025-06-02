@@ -1,20 +1,16 @@
 import pytest
 import asyncio
-
-# import sqlite3 # No longer needed here
-from unittest.mock import MagicMock, AsyncMock, patch  # call might not be needed
 import logging
+from unittest.mock import MagicMock, AsyncMock, patch
 
-# Assuming llm_coordinator.py is in ai_diplomacy.services
-from ai_diplomacy.services import (
-    llm_coordinator,
-)  # llm_coordinator module itself for patching llm.get_async_model
+from ai_diplomacy import constants
+# llm_coordinator module itself is imported for patching llm.get_async_model within it
+from ai_diplomacy.services import llm_coordinator
 from ai_diplomacy.services.llm_coordinator import (
     LLMCallResult,
     LLMCoordinator,
     ModelPool,
 )
-from ai_diplomacy import constants  # Import constants at the top
 
 # DB-related fixtures and tests have been moved to tests/integration/services/test_llm_coordinator_db.py
 
@@ -147,8 +143,6 @@ async def test_llmcoordinator_call_text_default_game_phase(coordinator):
     model_id = "another_model"
     agent_id = "another_agent"
 
-    # constants is now imported at the top of the file
-
     await coordinator.call_text(
         prompt=prompt,
         model_id=model_id,
@@ -170,8 +164,6 @@ async def test_llmcoordinator_call_text_default_game_phase(coordinator):
 @pytest.mark.asyncio
 async def test_llmcoordinator_call_text_propagates_exception(coordinator):
     mock_custom_llm_caller = AsyncMock(side_effect=ValueError("LLM Internal Error"))
-
-    # constants is now imported at the top of the file
 
     with pytest.raises(ValueError, match="LLM Internal Error"):
         await coordinator.call_text(
@@ -214,7 +206,6 @@ async def test_llmcoordinator_call_json_success(
     )
 
     assert result == expected_dict
-    # constants is now imported at the top of the file
     mock_call_llm_with_json_parsing.assert_called_once_with(
         model_id="json_model",
         prompt="json prompt",
@@ -286,3 +277,11 @@ async def test_llmcoordinator_call_json_with_tools(
     args, kwargs = mock_call_llm_with_json_parsing.call_args
     assert kwargs.get("llm_caller_override") is None
     assert "Tools provided but MCP not yet implemented: 1 tools" in caplog.text
+
+
+@pytest.mark.unit
+def test_llm_coordinator():
+    """Test LLM coordinator initialization."""
+    # Just test initialization for now
+    coordinator = LLMCoordinator()
+    assert coordinator is not None

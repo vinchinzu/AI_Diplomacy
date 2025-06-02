@@ -1,5 +1,5 @@
-import logging
 import pytest
+
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.services.config import AgentConfig
 from ai_diplomacy.services.context_provider import (
@@ -9,14 +9,10 @@ from ai_diplomacy.services.context_provider import (
     ContextData,
 )
 
-logger = logging.getLogger(__name__)
-
 
 @pytest.mark.unit
 def test_context_provider_factory():
     """Test the context provider factory."""
-    logger.info("Testing ContextProviderFactory...")
-
     factory = ContextProviderFactory()
 
     # Test inline provider
@@ -36,15 +32,11 @@ def test_context_provider_factory():
     available = factory.get_available_providers()
     assert "inline" in available
 
-    logger.info("✓ ContextProviderFactory working correctly")
-
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_inline_context_provider():
     """Test the inline context provider."""
-    logger.info("Testing InlineContextProvider...")
-
     provider = InlineContextProvider()
 
     # Create test phase state
@@ -92,15 +84,11 @@ async def test_inline_context_provider():
     assert "F BRE" in context_text
     assert "Hello!" in context_text
 
-    logger.info("✓ InlineContextProvider working correctly")
-
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_mcp_context_provider():
     """Test the MCP context provider (should show tools are not available)."""
-    logger.info("Testing MCPContextProvider...")
-
     provider = MCPContextProvider()
 
     # Create test data (same as inline test)
@@ -133,5 +121,3 @@ async def test_mcp_context_provider():
     assert result["provider_type"] == "mcp"
     assert result["tools_available"] is False
     assert "MCP tools not available" in result["context_text"]
-
-    logger.info("✓ MCPContextProvider correctly shows tools not available")

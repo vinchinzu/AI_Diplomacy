@@ -1,6 +1,10 @@
 import unittest
+
+import pytest
+
+from ai_diplomacy import constants
 from ai_diplomacy.agents.agent_state import DiplomacyAgentState
-from ai_diplomacy import constants  # Import constants
+from ai_diplomacy.core.state import PhaseState
 
 
 class TestDiplomacyAgentState(unittest.TestCase):
@@ -341,5 +345,41 @@ class TestDiplomacyAgentState(unittest.TestCase):
         self.assertEqual(self.state.relationships["ITALY"], "Friendly")
 
 
-if __name__ == "__main__":
-    unittest.main(argv=["first-arg-is-ignored"], exit=False)
+@pytest.mark.unit
+def test_core_state():
+    """Test PhaseState creation."""
+    # Create a minimal test phase state
+    phase = PhaseState(
+        phase_name="S1901M",
+        year=1901,
+        season="SPRING",
+        phase_type="MOVEMENT",
+        powers=frozenset(["FRANCE", "GERMANY"]),
+        units={"FRANCE": ["A PAR", "F BRE"], "GERMANY": ["A BER", "F KIE"]},
+        supply_centers={
+            "FRANCE": ["PAR", "BRE", "MAR"],
+            "GERMANY": ["BER", "KIE", "MUN"],
+        },
+    )
+
+    assert phase.get_center_count("FRANCE") == 3
+    assert phase.get_center_count("GERMANY") == 3
+    assert not phase.is_power_eliminated("FRANCE")
+
+
+@pytest.mark.unit
+def test_phase_state_immutability():
+    """Test that PhaseState is immutable."""
+    phase = PhaseState(
+        phase_name="S1901M",
+        year=1901,
+        season="SPRING",
+        phase_type="MOVEMENT",
+        powers=frozenset(["FRANCE"]),
+        units={"FRANCE": ["A PAR"]},
+        supply_centers={"FRANCE": ["PAR"]},
+    )
+
+    # Try to modify it (should not work due to frozen=True)
+    with pytest.raises(AttributeError): # dataclasses(frozen=True) raise AttributeError
+        phase.year = 1902
