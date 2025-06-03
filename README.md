@@ -1,5 +1,5 @@
 # AI Diplomacy: LLM-Powered Strategic Gameplay
-## Created by Alex Duffy @Alx-Ai
+Created by Alex Duffy @Alx-Ai
 
 ## Overview
 
