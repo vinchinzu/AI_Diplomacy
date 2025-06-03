@@ -10,6 +10,7 @@ import { config } from "./config";
 import { debugMenuInstance } from "./debug/debugMenu";
 import { showTwoPowerConversation, closeTwoPowerConversation } from "./components/twoPowerConversation";
 import { PowerENUM } from "./types/map";
+import { notifyPhaseChange } from "./webhooks/phaseNotifier";
 
 const MOMENT_THRESHOLD = 8.0
 // If we're in debug mode, show it quick, otherwise show it for 30 seconds
@@ -17,6 +18,11 @@ const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode ? 5000 : 30000
 
 // FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
 export function _setPhase(phaseIndex: number) {
+  console.log(`[Phase] _setPhase called with index: ${phaseIndex}`);
+  
+  // Store the old phase index at the very beginning
+  const oldPhaseIndex = gameState.phaseIndex;
+  
   if (config.isDebugMode) {
     debugMenuInstance.updateTools()
   }
@@ -58,6 +64,9 @@ export function _setPhase(phaseIndex: number) {
 
   // Finally, update the gameState with the current phaseIndex
   gameState.phaseIndex = phaseIndex
+  
+  // Send webhook notification for phase change
+  notifyPhaseChange(oldPhaseIndex, phaseIndex);
 }
 
 

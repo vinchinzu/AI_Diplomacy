@@ -15,5 +15,8 @@ export const config = {
   soundEffectFrequency: 3,
 
   // Whether speech/TTS is enabled (can be toggled via debug menu)
-  speechEnabled: import.meta.env.VITE_DEBUG_MODE ? false : true
+  speechEnabled: import.meta.env.VITE_DEBUG_MODE ? false : true,
+
+  // Webhook URL for phase change notifications (optional)
+  webhookUrl: import.meta.env.VITE_WEBHOOK_URL || ''
 }

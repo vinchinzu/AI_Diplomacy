@@ -623,7 +623,6 @@ async def main():
         try:
             current_year = int(current_year_str)
             consolidation_year = current_year - 2  # Two years ago
-            
             logger.info(f"[DIARY CONSOLIDATION] Current year: {current_year}, Consolidation year: {consolidation_year}")
             logger.info(f"[DIARY CONSOLIDATION] Phase check - ends with 'M': {current_short_phase.endswith('M')}, starts with 'S': {current_short_phase.startswith('S')}")
             logger.info(f"[DIARY CONSOLIDATION] Consolidation year check: {consolidation_year} >= 1901: {consolidation_year >= 1901}")
