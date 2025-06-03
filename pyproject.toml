@@ -71,6 +71,9 @@ branch = true
 omit   = ["*/__init__.py", "*/migrations/*", "*/tests/*"]
 
 [tool.coverage.report]
-fail_under = 40          # start at 80 %, ratchet upward later
+fail_under = 50
 show_missing = true
 
+[tool.ruff]
+lint.select = ["F","B","E","I","UP","PL","D","PYI","RUF"]
+lint.ignore = ["D100","D104"]

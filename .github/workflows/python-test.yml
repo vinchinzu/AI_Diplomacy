@@ -39,12 +39,12 @@ jobs:
         else
           echo "No 'legacy interface' markers found. Check passed."
         fi
-    
-    #- name: Lint with Ruff
-     # uses: astral-sh/ruff-action@v3
-     # with:
-     #   args: "check --diff . && ruff format --check --diff ."
+
+    - name: Lint with Ruff
+      uses: astral-sh/ruff-action@v3 # Or the latest version of ruff-action
+      with:
+        args: "check . && ruff format --check ."
 
     - name: Run unit tests with pytest
       run: |
-        uv run pytest -q
+        uv run coverage run -m pytest && uv run coverage xml && uv run coverage report --fail-under=50
