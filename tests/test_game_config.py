@@ -2,37 +2,49 @@ import unittest
 import os
 import argparse
 from unittest import mock
+import importlib # For mocking dynamic imports
 
 from ai_diplomacy.game_config import GameConfig
+from diplomacy import Game # To check type of game factory output
+from scenarios import SCENARIO_REGISTRY, wwi_two_player, five_player_scenario # For assertions
 
+# Keep existing TestGameConfigLogToFile class and its methods
 
-class TestGameConfigLogToFile(unittest.TestCase):
-    def create_args_namespace(self, dev_mode=False, log_to_file_arg=None):
+class TestGameConfigLogToFile(unittest.TestCase): # Original class, ensure it's preserved
+    def create_args_namespace(self, dev_mode=False, log_to_file_arg=None, game_config_file="dummy_config.toml"):
         """Helper to create an argparse.Namespace with common defaults."""
         args = {
-            "power_name": None,
+            "game_config_file": game_config_file, # Added game_config_file
+            "power_name": None, # Minimal set of args for GameConfig
             "model_id": None,
-            "num_players": 7,
-            "game_id_prefix": "diplomacy_game",
+            # Keep other args minimal or as they were if GameConfig requires them
+            # For scenario loading tests, many of these might not be strictly necessary
+            # if the TOML mock provides all required fields.
             "log_level": "INFO",
-            "perform_planning_phase": False,
-            "num_negotiation_rounds": 3,
-            "negotiation_style": "simultaneous",
-            "fixed_models": None,
-            "randomize_fixed_models": False,
-            "exclude_powers": None,
-            "max_years": None,
-            "models_config_file": "models.toml",
-            "game_id": "test_game_config_log",
-            "log_dir": None,  # Important for path derivation
-            "verbose_llm_debug": False,
-            "max_diary_tokens": 6500,
-            # Test-specific values:
+            "game_id": "test_game_config_scenario",
+            "log_dir": None,
             "dev_mode": dev_mode,
-            # log_to_file_arg will be used to set 'log_to_file' only if not None
         }
-        if log_to_file_arg is not None:
+        if log_to_file_arg is not None: # From original helper
             args["log_to_file"] = log_to_file_arg
+        
+        # Add any other args that GameConfig constructor might expect even if not used by these tests
+        # Based on GameConfig structure, it seems to mostly pull from TOML or args for overrides.
+        # The critical one is game_config_file.
+        # The following are defaults from the original helper that might be good to keep for general stability
+        args.setdefault("num_players", 7)
+        args.setdefault("game_id_prefix", "diplomacy_game")
+        args.setdefault("perform_planning_phase", False)
+        args.setdefault("num_negotiation_rounds", 3)
+        args.setdefault("negotiation_style", "simultaneous")
+        args.setdefault("fixed_models", None)
+        args.setdefault("randomize_fixed_models", False)
+        args.setdefault("exclude_powers", None)
+        args.setdefault("max_years", None)
+        args.setdefault("models_config_file", "models.toml")
+        args.setdefault("verbose_llm_debug", False)
+        args.setdefault("max_diary_tokens", 6500)
+
 
         return argparse.Namespace(**args)
 
@@ -135,6 +147,127 @@ class TestGameConfigLogToFile(unittest.TestCase):
         config = GameConfig(args)
         self.assertFalse(config.log_to_file)
         mock_makedirs.assert_not_called()
+
+
+# New test class for scenario loading logic
+class TestGameConfigScenarioLoading(unittest.TestCase):
+
+    def create_gc_args(self, game_config_file="dummy_config.toml"):
+        """Simplified arg creator for scenario tests."""
+        return argparse.Namespace(
+            game_config_file=game_config_file,
+            # Add any other args that GameConfig's __init__ might access directly from 'args'
+            # before TOML is even loaded, if any. Usually, it's just game_config_file.
+            # For other args, GameConfig uses them as overrides *after* TOML.
+            # So, for these tests, we can keep it minimal.
+            log_level=None, # Allow TOML to specify
+            game_id=None,   # Allow TOML or auto-generation
+            log_dir=None,   # Allow TOML or default
+            dev_mode=False  # Default for these tests
+        )
+
+    @mock.patch("ai_diplomacy.game_config.toml.load")
+    def test_game_config_loads_scenario_from_registry(self, mock_toml_load):
+        """GameConfig loads a scenario factory from SCENARIO_REGISTRY via 'scenario.game_factory'."""
+        mock_toml_load.return_value = {
+            "scenario": {"game_factory": "wwi_two_player"},
+            "game_settings": {"num_players": 7}, # Minimal required by GameConfig
+            "logging": {"log_level": "INFO"},    # Minimal required
+            "agents": [{"id": "P1", "type": "human"}] # Minimal agent config
+        }
+        args = self.create_gc_args()
+        
+        config = GameConfig(args)
+        
+        self.assertIsNotNone(config.game_factory)
+        self.assertEqual(config.game_factory, SCENARIO_REGISTRY["wwi_two_player"])
+        # Test the "Done when" condition: GameConfig(game_factory_path="wwi_two_player") can create a Game
+        game = config.game_factory(entente_player="P1", central_player="P2")
+        self.assertIsInstance(game, Game)
+
+    @mock.patch("ai_diplomacy.game_config.toml.load")
+    def test_game_config_loads_scenario_by_name_from_registry(self, mock_toml_load):
+        """GameConfig loads a scenario factory using 'scenario.name' as key if 'game_factory' is absent."""
+        mock_toml_load.return_value = {
+            "scenario": {"name": "five_player_scenario"}, # No game_factory, should use name
+            "game_settings": {"num_players": 5},
+            "logging": {"log_level": "INFO"},
+            "agents": [{"id": "P1", "type": "human"}]
+        }
+        args = self.create_gc_args()
+        
+        config = GameConfig(args)
+        
+        self.assertIsNotNone(config.game_factory)
+        self.assertEqual(config.game_factory, SCENARIO_REGISTRY["five_player_scenario"])
+        game = config.game_factory()
+        self.assertIsInstance(game, Game)
+
+    @mock.patch("ai_diplomacy.game_config.importlib.import_module")
+    @mock.patch("ai_diplomacy.game_config.toml.load")
+    def test_game_config_dynamic_import_fallback(self, mock_toml_load, mock_import_module):
+        """GameConfig falls back to dynamic import if factory path not in registry."""
+        
+        # 1. Define a dummy module and function for the mock to return
+        mock_scenario_module = mock.MagicMock()
+        def dummy_unregistered_scenario(): return Game()
+        mock_scenario_module.unregistered_scenario_test_func = dummy_unregistered_scenario
+        
+        # 2. Configure mock_import_module to return this dummy module
+        # When import_module("some.external.module") is called, return our mock module
+        mock_import_module.return_value = mock_scenario_module
+        
+        # 3. Setup TOML to point to this "external" module
+        factory_path = "some.external.module.unregistered_scenario_test_func"
+        mock_toml_load.return_value = {
+            "scenario": {"game_factory": factory_path},
+            "game_settings": {"num_players": 7},
+            "logging": {"log_level": "INFO"},
+            "agents": [{"id": "P1", "type": "human"}]
+        }
+        args = self.create_gc_args()
+        
+        config = GameConfig(args)
+        
+        self.assertIsNotNone(config.game_factory)
+        self.assertEqual(config.game_factory, dummy_unregistered_scenario)
+        # Check that import_module was called with the module part of the path
+        mock_import_module.assert_called_once_with("some.external.module")
+        game = config.game_factory()
+        self.assertIsInstance(game, Game)
+
+    @mock.patch("ai_diplomacy.game_config.toml.load")
+    def test_game_config_invalid_factory_path(self, mock_toml_load):
+        """GameConfig raises ValueError for an invalid factory path."""
+        mock_toml_load.return_value = {
+            "scenario": {"game_factory": "nonexistent.bogus_factory"},
+            "game_settings": {"num_players": 7},
+            "logging": {"log_level": "INFO"},
+            "agents": [{"id": "P1", "type": "human"}]
+        }
+        args = self.create_gc_args()
+        
+        with self.assertRaises(ValueError) as context:
+            GameConfig(args)
+        
+        self.assertIn("nonexistent.bogus_factory", str(context.exception))
+        self.assertIn("not found in SCENARIO_REGISTRY", str(context.exception))
+        self.assertIn("could not be dynamically imported", str(context.exception))
+
+    @mock.patch("ai_diplomacy.game_config.toml.load")
+    def test_game_config_no_factory_or_name_provided(self, mock_toml_load):
+        """GameConfig raises ValueError if neither factory path nor scenario name is provided."""
+        mock_toml_load.return_value = {
+            "scenario": {}, # Empty scenario table
+            "game_settings": {"num_players": 7},
+            "logging": {"log_level": "INFO"},
+            "agents": [{"id": "P1", "type": "human"}]
+        }
+        args = self.create_gc_args()
+        
+        with self.assertRaises(ValueError) as context:
+            GameConfig(args)
+        self.assertIn("A game factory (via 'scenario.game_factory' or 'scenario.name' in TOML) is required", str(context.exception))
 
 
 if __name__ == "__main__":
