@@ -6,13 +6,6 @@
 import { config } from '../config';
 import { DebugMenu } from './debugMenu';
 
-/**
- * Gets whether instant chat is currently enabled
- * @deprecated Use config.isInstantMode instead
- */
-export function isInstantChatEnabled(): boolean {
-  return config.isInstantMode;
-}
 
 /**
  * Initializes the instant mode debug tool

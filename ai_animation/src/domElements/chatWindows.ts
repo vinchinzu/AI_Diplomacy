@@ -4,7 +4,6 @@ import { config } from "../config";
 import { advanceToNextPhase } from "../phase";
 import { getPowerDisplayName, getAllPowerDisplayNames } from '../utils/powerNames';
 import { PowerENUM } from '../types/map';
-import { isInstantChatEnabled } from '../debug/instantMode';
 
 
 //TODO: Sometimes the LLMs use lists, and they don't work in the chats. The just appear as bullets within a single line.
@@ -181,7 +180,7 @@ export function updateChatWindows(phase: any, stepMessages = false) {
     gameState.messagesPlaying = false;
 
     // If instant chat is enabled during stepwise mode, immediately proceed to next phase logic
-    if (stepMessages && isInstantChatEnabled()) {
+    if (stepMessages && config.isInstantMode) {
       // Trigger the same logic as the end of stepwise message display
       if (gameState.isPlaying && !gameState.isSpeaking) {
         if (gameState.gameData && gameState.gameData.phases) {

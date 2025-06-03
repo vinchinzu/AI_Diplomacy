@@ -28,11 +28,14 @@ export const config = {
   // Whether instant mode is enabled (makes all animations instant)
   // Can be enabled via VITE_INSTANT_MODE env variable or debug menu
   get isInstantMode(): boolean {
-    return import.meta.env.VITE_INSTANT_MODE === 'True' || this._instantModeOverride;
+    if (this._instantModeOverride !== null) {
+      return this._instantModeOverride
+    }
+    return import.meta.env.VITE_INSTANT_MODE === 'True'
   },
 
   // Internal flag to allow runtime toggling of instant mode
-  _instantModeOverride: false,
+  _instantModeOverride: null,
 
   /**
    * Set instant mode state at runtime

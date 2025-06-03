@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PowerENUMSchema } from './map';
+import { PowerENUM, PowerENUMSchema } from './map';
 
 /**
  * Schema for parsing Diplomacy phase names (e.g., "W1901R")
@@ -33,7 +33,7 @@ export const MomentCategorySchema = z.enum([
 /**
  * Schema for metadata about the moments analysis (comprehensive format)
  */
-export const MetadataSchema = z.object({
+export const MomentsMetadataSchema = z.object({
   game_results_folder: z.string(),
   analysis_timestamp: z.string(),
   model_used: z.string(),
@@ -89,7 +89,7 @@ export const MomentSchema = z.object({
  * Schema for the comprehensive format game_moments_data.json file
  */
 export const MomentsDataSchema = z.object({
-  metadata: MetadataSchema,
+  metadata: MomentsMetadataSchema,
   analysis_results: z.object({
     moments: z.array(MomentSchema),
     lies: z.array(LieSchema),
@@ -204,7 +204,7 @@ export type MomentsDataSchemaType = z.infer<typeof MomentsDataSchema>;
 
 // Normalized format for internal use
 export interface NormalizedMomentsData {
-  metadata: z.infer<typeof MetadataSchema>;
+  metadata: z.infer<typeof MomentsMetadataSchema>;
   power_models: Record<PowerENUM, string>;
   moments: Moment[];
 }
