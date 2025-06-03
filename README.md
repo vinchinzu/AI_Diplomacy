@@ -433,7 +433,17 @@ Detailed analysis of diplomatic deception:
 python analyze_lies_focused.py results/game_folder [--output report.md]
 ```
 
-### 3. Game Visualization (`ai_animation/`)
+### 3. Game Results Statistics (`analyze_game_results.py`)
+
+Aggregates win/loss statistics across all completed games:
+```bash
+python analyze_game_results.py
+# Creates model_power_statistics.csv
+```
+
+Analyzes all `*_FULL_GAME` folders to show how many times each model played as each power and won.
+
+### 4. Game Visualization (`ai_animation/`)
 
 Interactive 3D visualization of games:
 ```bash

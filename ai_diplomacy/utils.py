@@ -24,26 +24,30 @@ def assign_models_to_powers() -> Dict[str, str]:
     Example usage: define which model each power uses.
     Return a dict: { power_name: model_id, ... }
     POWERS = ['AUSTRIA', 'ENGLAND', 'FRANCE', 'GERMANY', 'ITALY', 'RUSSIA', 'TURKEY']
-    Models supported: o3-mini, o4-mini, o3, gpt-4o, gpt-4o-mini
-                    claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022, claude-3-7-sonnet-20250219 
+    Models supported: o3-mini, o4-mini, o3, gpt-4o, gpt-4o-mini, 
+                    claude-opus-4-20250514, claude-sonnet-4-20250514, claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022, claude-3-7-sonnet-20250219 
                     gemini-2.0-flash, gemini-2.5-flash-preview-04-17, gemini-2.5-pro-preview-03-25, 
                     deepseek-chat, deepseek-reasoner
-                    openrouter-meta-llama/llama-3.3-70b-instruct, openrouter-qwen/qwen3-235b-a22b, openrouter-microsoft/phi-4-reasoning-plus:free, openrouter-deepseek/deepseek-prover-v2:free, openrouter-meta-llama/llama-4-maverick:free, openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free, openrouter-google/gemma-3-12b-it:free
+                    openrouter-meta-llama/llama-3.3-70b-instruct, openrouter-qwen/qwen3-235b-a22b, openrouter-microsoft/phi-4-reasoning-plus:free,
+                    openrouter-deepseek/deepseek-prover-v2:free, openrouter-meta-llama/llama-4-maverick:free, openrouter-nvidia/llama-3.3-nemotron-super-49b-v1:free, 
+                    openrouter-google/gemma-3-12b-it:free, openrouter-google/gemini-2.5-flash-preview-05-20
     """
     
     # POWER MODELS
+    """
     return {
-        "AUSTRIA": "openrouter-meta-llama/llama-4-maverick",
-        "ENGLAND": "claude-opus-4-20250514",
-        "FRANCE": "deepseek-reasoner",
-        "GERMANY": "claude-sonnet-4-20250514",
-        "ITALY": "openrouter-google/gemini-2.5-flash-preview-05-20",
-        "RUSSIA": "gemini-2.5-pro-preview-05-06",
-        "TURKEY": "o3",
+        "AUSTRIA": "o3",
+        "ENGLAND": "gpt-4.1-2025-04-14",
+        "FRANCE": "o4-mini",
+        "GERMANY": "gpt-4o",
+        "ITALY": "gpt-4.1-2025-04-14",
+        "RUSSIA": "gpt-4o",
+        "TURKEY": "o4-mini",
     }
+    """
     
     # TEST MODELS
-    """
+    
     return {
         "AUSTRIA": "openrouter-google/gemini-2.5-flash-preview",
         "ENGLAND": "openrouter-google/gemini-2.5-flash-preview",
@@ -53,7 +57,7 @@ def assign_models_to_powers() -> Dict[str, str]:
         "RUSSIA": "openrouter-google/gemini-2.5-flash-preview",
         "TURKEY": "openrouter-google/gemini-2.5-flash-preview",
     }
-    """
+    
 
 def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
     """
