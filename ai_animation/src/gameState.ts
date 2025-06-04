@@ -34,23 +34,21 @@ function loadFileFromServer(filePath: string): Promise<string> {
     fetch(filePath)
       .then(response => {
         if (!response.ok) {
-          alert(`Couldn't load file, received reponse code ${response.status}`)
-          throw new Error(`Failed to load file: ${response.status}`);
+          reject(`Failed to load file: ${response.status}`);
         }
 
         // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
         // Check content type to avoid HTML errors
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('text/html')) {
-          alert(`Unable to load file ${filePath}, was presented HTML, contentType ${contentType}`)
-          throw new Error('Received HTML instead of JSON. Check the file path.');
+          reject('Received HTML instead of JSON. Check the file path.');
         }
         return response.text();
       })
       .then(data => {
         // Check for HTML content as a fallback
         if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-          throw new Error('Received HTML instead of JSON. Check the file path.');
+          reject('Received HTML instead of JSON. Check the file path.');
         }
         resolve(data)
       })
@@ -283,9 +281,13 @@ class GameState {
       if (contPlaying) {
         togglePlayback(true)
       }
-    }
-
-    )
+    }).catch(() => {
+      console.warn("caught error trying to advance game. Setting gameId to 0 and restarting...")
+      this.loadGameFile(0)
+      if (contPlaying) {
+        togglePlayback(true)
+      }
+    })
 
 
   }
@@ -301,25 +303,29 @@ class GameState {
 
     // Path to the default game file
     const gameFilePath = `./games/${gameId}/game.json`;
-    return loadFileFromServer(gameFilePath).then((data) => {
+    return new Promise((resolve, reject) => {
+      loadFileFromServer(gameFilePath).then((data) => {
 
-      return this.loadGameData(data);
-    })
-      .then(() => {
-        console.log(`Game file with id ${gameId} loaded and parsed successfully`);
-        // Explicitly hide standings board after loading game
-        hideStandingsBoard();
-        // Update rotating display and relationship popup with game data
-        if (this.gameData) {
-          updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
-          this.gameId = gameId
-          updateGameIdDisplay();
-        }
+        return this.loadGameData(data);
       })
-      .catch(error => {
-        // Use console.error instead of logger.log to avoid updating the info panel
-        console.error(`Error loading game ${gameFilePath}: ${error.message}`);
-      });
+        .then(() => {
+          console.log(`Game file with id ${gameId} loaded and parsed successfully`);
+          // Explicitly hide standings board after loading game
+          hideStandingsBoard();
+          // Update rotating display and relationship popup with game data
+          if (this.gameData) {
+            updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
+            this.gameId = gameId
+            updateGameIdDisplay();
+            resolve()
+          }
+        })
+        .catch(error => {
+          // Use console.error instead of logger.log to avoid updating the info panel
+          console.error(`Error loading game ${gameFilePath}: ${error}`);
+          reject()
+        });
+    })
   }
 
   checkPhaseHasMoment = (phaseName: string): Moment | null => {

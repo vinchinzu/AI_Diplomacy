@@ -83,7 +83,7 @@ export function togglePlayback(explicitSet: boolean) {
   if (gameState.isSpeaking) return;
 
   gameState.isPlaying = !gameState.isPlaying;
-  if (explicitSet !== undefined) {
+  if (typeof explicitSet === "boolean") {
     gameState.isPlaying = explicitSet
   }
 
