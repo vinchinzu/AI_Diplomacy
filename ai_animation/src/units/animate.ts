@@ -35,7 +35,7 @@ function createSpawnAnimation(newUnitMesh: THREE.Group): Tween {
   // Start the unit really high, and lower it to the board.
   newUnitMesh.position.setY(1000)
   return new Tween({ y: 1000 })
-    .to({ y: 10 }, 1000)
+    .to({ y: 10 }, config.effectiveAnimationDuration || 1000)
     .easing(Easing.Quadratic.Out)
     .onUpdate((object) => {
       newUnitMesh.position.setY(object.y)
@@ -54,7 +54,7 @@ function createMoveAnimation(unitMesh: THREE.Group, orderDestination: ProvinceEN
       x: destinationVector.x,
       y: 10,
       z: destinationVector.z
-    }, config.animationDuration)
+    }, config.effectiveAnimationDuration)
     .easing(Easing.Quadratic.InOut)
     .onUpdate(() => {
       unitMesh.position.y = 10 + Math.sin(Date.now() * 0.05) * 2;

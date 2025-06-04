@@ -9,20 +9,20 @@ import { speakSummary } from "./speech";
 import { config } from "./config";
 import { debugMenuInstance } from "./debug/debugMenu";
 import { showTwoPowerConversation, closeTwoPowerConversation } from "./components/twoPowerConversation";
-import { PowerENUM } from "./types/map";
+import { closeVictoryModal, showVictoryModal } from "./components/victoryModal";
 import { notifyPhaseChange } from "./webhooks/phaseNotifier";
 
 const MOMENT_THRESHOLD = 8.0
-// If we're in debug mode, show it quick, otherwise show it for 30 seconds
-const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode ? 5000 : 30000
+// If we're in debug mode or instant mode, show it quick, otherwise show it for 30 seconds
+const MOMENT_DISPLAY_TIMEOUT_MS = config.isDebugMode || config.isInstantMode ? 100 : 30000
 
 // FIXME: Going to previous phases is borked. Units do not animate properly, map doesn't update.
 export function _setPhase(phaseIndex: number) {
   console.log(`[Phase] _setPhase called with index: ${phaseIndex}`);
-  
+
   // Store the old phase index at the very beginning
   const oldPhaseIndex = gameState.phaseIndex;
-  
+
   if (config.isDebugMode) {
     debugMenuInstance.updateTools()
   }
@@ -64,7 +64,7 @@ export function _setPhase(phaseIndex: number) {
 
   // Finally, update the gameState with the current phaseIndex
   gameState.phaseIndex = phaseIndex
-  
+
   // Send webhook notification for phase change
   notifyPhaseChange(oldPhaseIndex, phaseIndex);
 }
@@ -115,8 +115,7 @@ export function displayPhase(skipMessages = false) {
   let index = gameState.phaseIndex
   if (index >= gameState.gameData.phases.length) {
     displayFinalPhase()
-    logger.log("Displayed final phase, moving to next game.")
-    gameState.loadNextGame()
+    logger.log("Displayed final phase.")
     return;
   }
   if (!gameState.gameData || !gameState.gameData.phases ||
@@ -281,24 +280,34 @@ function displayFinalPhase() {
 
   // Display victory message
   if (winner && maxCenters > 0) {
-    const victoryMessage = `🏆 GAME OVER - ${winner} WINS with ${maxCenters} supply centers! 🏆`;
-
-    // Add victory message to news banner with dramatic styling
-    addToNewsBanner(victoryMessage);
-
-    // Log the victory
-    logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
-
-    // Display final standings in console
-    const standings = Object.entries(finalPhase.state.centers)
+    // Create final standings
+    const finalStandings = Object.entries(finalPhase.state.centers)
       .map(([power, centers]) => ({
         power,
         centers: Array.isArray(centers) ? centers.length : 0
       }))
       .sort((a, b) => b.centers - a.centers);
 
+    // Show victory modal
+    showVictoryModal({
+      winner,
+      maxCenters,
+      finalStandings,
+      onClose: () => {
+        // Only proceed to next game if in playing mode
+        if (gameState.isPlaying) {
+          gameState.loadNextGame();
+        }
+      }
+    });
+    //setTimeout(closeVictoryModal, 10000)
+
+    // Log the victory
+    logger.log(`Victory! ${winner} wins the game with ${maxCenters} supply centers.`);
+
+    // Display final standings in console
     console.log("Final Standings:");
-    standings.forEach((entry, index) => {
+    finalStandings.forEach((entry, index) => {
       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "  ";
       console.log(`${medal} ${entry.power}: ${entry.centers} centers`);
     });
