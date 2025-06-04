@@ -20,13 +20,36 @@ enum AvailableMaps {
 
 /**
  * Return a random power from the PowerENUM for the player to control
+ * Only returns powers that have more than 2 supply centers in the last phase
  */
-function getRandomPower(): PowerENUM {
-  const values = Object.values(PowerENUM).filter(power =>
+function getRandomPower(gameData?: GameSchemaType): PowerENUM {
+  const allPowers = Object.values(PowerENUM).filter(power =>
     power !== PowerENUM.GLOBAL && power !== PowerENUM.EUROPE
   );
-  const idx = Math.floor(Math.random() * values.length);
-  return values[idx];
+  
+  // If no game data provided, return any random power
+  if (!gameData || !gameData.phases || gameData.phases.length === 0) {
+    const idx = Math.floor(Math.random() * allPowers.length);
+    return allPowers[idx];
+  }
+  
+  // Get the last phase to check supply centers
+  const lastPhase = gameData.phases[gameData.phases.length - 1];
+  
+  // Filter powers that have more than 2 supply centers
+  const eligiblePowers = allPowers.filter(power => {
+    const centers = lastPhase.state?.centers?.[power];
+    return centers && centers.length > 2;
+  });
+  
+  // If no powers have more than 2 centers, fall back to any power
+  if (eligiblePowers.length === 0) {
+    const idx = Math.floor(Math.random() * allPowers.length);
+    return allPowers[idx];
+  }
+  
+  const idx = Math.floor(Math.random() * eligiblePowers.length);
+  return eligiblePowers[idx];
 }
 
 function loadFileFromServer(filePath: string): Promise<string> {
@@ -155,8 +178,8 @@ class GameState {
           playBtn.disabled = false;
           speedSelector.disabled = false;
 
-          // Set the poewr if the game specifies it, else random.
-          this.currentPower = this.gameData.power !== undefined ? this.gameData.power : getRandomPower();
+          // Set the power if the game specifies it, else random.
+          this.currentPower = this.gameData.power !== undefined ? this.gameData.power : getRandomPower(this.gameData);
 
 
           const momentsFilePath = `./games/${this.gameId}/moments.json`;
