@@ -142,10 +142,14 @@ function animate() {
     gameState.unitAnimations.forEach((anim) => anim.update())
 
     // If all animations are complete and we're in playback mode
-    if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying && !gameState.isSpeaking) {
+    if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying && !gameState.isSpeaking && !gameState.nextPhaseScheduled) {
       // Schedule next phase after a pause delay
       console.log(`Scheduling next phase in ${config.effectivePlaybackSpeed}ms`);
-      gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.effectivePlaybackSpeed);
+      gameState.nextPhaseScheduled = true;
+      gameState.playbackTimer = setTimeout(() => {
+        gameState.nextPhaseScheduled = false;
+        advanceToNextPhase();
+      }, config.effectivePlaybackSpeed);
     }
   }
 
