@@ -8,6 +8,8 @@ services:
       - DISPLAY=:99
     ports:
       - "9222:9222"
+    ipc: host
+    shm_size: "1gb"
 
   diplomacy:
     build: ai_animation
