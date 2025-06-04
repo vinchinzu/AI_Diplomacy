@@ -144,8 +144,8 @@ function animate() {
     // If all animations are complete and we're in playback mode
     if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying && !gameState.isSpeaking) {
       // Schedule next phase after a pause delay
-      console.log(`Scheduling next phase in ${config.playbackSpeed}ms`);
-      gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
+      console.log(`Scheduling next phase in ${config.effectivePlaybackSpeed}ms`);
+      gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.effectivePlaybackSpeed);
     }
   }
 
@@ -272,7 +272,7 @@ speedSelector.addEventListener('change', e => {
   // If we're currently playing, restart the timer with the new speed
   if (gameState.isPlaying && gameState.playbackTimer) {
     clearTimeout(gameState.playbackTimer);
-    gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.playbackSpeed);
+    gameState.playbackTimer = setTimeout(() => advanceToNextPhase(), config.effectivePlaybackSpeed);
   }
 });
 

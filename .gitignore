@@ -150,3 +150,7 @@ game_moments.json
 game_moments_report.md
 /game_moments
 model_power_statistics.csv
+
+# Playwrite test results
+**/test-results/
+**/playwright-report/

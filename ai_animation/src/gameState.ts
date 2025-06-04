@@ -165,7 +165,7 @@ class GameState {
           loadFileFromServer(momentsFilePath)
             .then((data) => {
               const parsedData = JSON.parse(data);
-              
+
               // Check if this is the comprehensive format and normalize it
               if ('analysis_results' in parsedData && parsedData.analysis_results) {
                 // Transform comprehensive format to animation format
@@ -181,13 +181,13 @@ class GameState {
                 // Type assertion since we know this is the animation format after parsing
                 this.momentsData = validatedData as NormalizedMomentsData;
               }
-              
+
               logger.log(`Loaded ${this.momentsData.moments.length} moments from ${momentsFilePath}`);
             })
             .catch((error) => {
-              logger.log(`Could not load moments data: ${error.message}`);
               // Continue without moments data - it's optional
               this.momentsData = null;
+              throw error
             })
             .finally(() => {
               // Initialize chat windows for all powers

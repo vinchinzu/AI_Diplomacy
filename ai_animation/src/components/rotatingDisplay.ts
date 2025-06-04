@@ -1,28 +1,23 @@
 import { gameState } from "../gameState";
 import { PowerENUM } from "../types/map";
 import { GameSchemaType } from "../types/gameState";
-import { Chart } from "chart.js";
-import { getPowerDisplayName } from "../utils/powerNames";
 
 // Enum for the different display types
 export enum DisplayType {
-  CURRENT_STANDINGS = "current_standings",
   SC_HISTORY_CHART = "sc_history_chart",
   RELATIONSHIP_HISTORY_CHART = "relationship_history_chart"
 }
 
 // Configuration
 const ROTATION_INTERVAL_MS = 15000; // 15 seconds between rotations
-const POWER_COLORS: Record<PowerENUM, string> = {
-  [PowerENUM.AUSTRIA]: "#ff1a1a", // Bright red
-  [PowerENUM.ENGLAND]: "#1a1aff", // Bright blue
-  [PowerENUM.FRANCE]: "#00bfff", // Sky blue
-  [PowerENUM.GERMANY]: "#808080", // Gray
-  [PowerENUM.ITALY]: "#00cc00", // Bright green
-  [PowerENUM.RUSSIA]: "#e0e0e0", // Light gray/white
-  [PowerENUM.TURKEY]: "#ffcc00",  // Gold/yellow
-  [PowerENUM.GLOBAL]: "#ffffff", // White for global
-  [PowerENUM.EUROPE]: "#ffffff"  // White for europe
+const POWER_COLORS = {
+  AUSTRIA: "#ff1a1a", // Bright red
+  ENGLAND: "#1a1aff", // Bright blue
+  FRANCE: "#00bfff", // Sky blue
+  GERMANY: "#808080", // Gray
+  ITALY: "#00cc00", // Bright green
+  RUSSIA: "#e0e0e0", // Light gray/white
+  TURKEY: "#ffcc00"  // Gold/yellow
 };
 
 // Relationship value mapping
@@ -31,17 +26,11 @@ const RELATIONSHIP_VALUES = {
   "Unfriendly": -1,
   "Neutral": 0,
   "Friendly": 1,
-  "Ally": 2,
-  // Add lowercase versions for case-insensitive matching
-  "enemy": -2,
-  "unfriendly": -1,
-  "neutral": 0,
-  "friendly": 1,
-  "ally": 2
+  "Ally": 2
 };
 
 // Module state
-let currentDisplayType: DisplayType = DisplayType.CURRENT_STANDINGS;
+let currentDisplayType: DisplayType = DisplayType.RELATIONSHIP_HISTORY_CHART;
 let lastRenderedDisplayType: DisplayType | null = null;
 let rotationTimer: number | null = null;
 let containerElement: HTMLElement | null = null;
@@ -58,9 +47,6 @@ export function initRotatingDisplay(containerId: string): void {
     console.error(`Container element with ID "${containerId}" not found`);
     return;
   }
-
-  // Set initial display type
-  currentDisplayType = DisplayType.CURRENT_STANDINGS;
 
   // Start rotation timer
   startRotationTimer();
@@ -90,22 +76,14 @@ function startRotationTimer(): void {
  * Rotate to the next display type
  */
 function rotateToNextDisplay(): void {
-  // Skip rotation if playback is active to avoid interrupting animations/speech
-  if (gameState.isPlaying && (gameState.messagesPlaying || gameState.isSpeaking || gameState.isAnimating)) {
-    console.log("Skipping display rotation during active playback");
-    return;
-  }
 
   // Determine next display type
   switch (currentDisplayType) {
-    case DisplayType.CURRENT_STANDINGS:
-      currentDisplayType = DisplayType.SC_HISTORY_CHART;
-      break;
     case DisplayType.SC_HISTORY_CHART:
       currentDisplayType = DisplayType.RELATIONSHIP_HISTORY_CHART;
       break;
     case DisplayType.RELATIONSHIP_HISTORY_CHART:
-      currentDisplayType = DisplayType.CURRENT_STANDINGS;
+      currentDisplayType = DisplayType.SC_HISTORY_CHART;
       break;
   }
 
@@ -137,14 +115,6 @@ export function updateRotatingDisplay(
     return;
   }
 
-  // If we're in the middle of playback animations or speech, defer updates for charts
-  if (gameState.isPlaying &&
-    (gameState.messagesPlaying || gameState.isSpeaking || gameState.isAnimating) &&
-    currentDisplayType !== DisplayType.CURRENT_STANDINGS) {
-    console.log("Deferring chart update during active playback");
-    currentDisplayType = DisplayType.CURRENT_STANDINGS;
-  }
-
   // Check if we need to do a full re-render
   if (currentDisplayType !== lastRenderedDisplayType || forceUpdate) {
     // Clear the container
@@ -158,9 +128,6 @@ export function updateRotatingDisplay(
     setTimeout(() => {
       // Render the appropriate view based on current display type
       switch (currentDisplayType) {
-        case DisplayType.CURRENT_STANDINGS:
-          renderCurrentStandingsView(containerElement, gameData, currentPhaseIndex);
-          break;
         case DisplayType.SC_HISTORY_CHART:
           renderSCHistoryChartView(containerElement, gameData, currentPhaseIndex);
           break;
@@ -177,70 +144,6 @@ export function updateRotatingDisplay(
     }, 300);
   }
 }
-
-/**
- * Render the current standings view
- * @param container The container element
- * @param gameData The current game data
- * @param currentPhaseIndex The current phase index
- */
-function renderCurrentStandingsView(
-  container: HTMLElement,
-  gameData: GameSchemaType,
-  currentPhaseIndex: number
-): void {
-  // Get current phase
-  const currentPhase = gameData.phases[currentPhaseIndex];
-
-  // Get supply center counts
-  const centerCounts: Record<string, number> = {};
-  const unitCounts: Record<string, number> = {};
-
-  // Count supply centers by power
-  if (currentPhase.state?.centers) {
-    for (const [power, provinces] of Object.entries(currentPhase.state.centers)) {
-      centerCounts[power] = provinces.length;
-    }
-  }
-
-  // Count units by power
-  if (currentPhase.state?.units) {
-    for (const [power, units] of Object.entries(currentPhase.state.units)) {
-      unitCounts[power] = units.length;
-    }
-  }
-
-  // Combine all powers from both centers and units
-  const allPowers = new Set([
-    ...Object.keys(centerCounts),
-    ...Object.keys(unitCounts)
-  ]);
-
-  // Sort powers by supply center count (descending)
-  const sortedPowers = Array.from(allPowers).sort((a, b) => {
-    return (centerCounts[b] || 0) - (centerCounts[a] || 0);
-  });
-
-  // Build HTML for view
-  let html = `<strong>Council Standings</strong><br/>`;
-
-  sortedPowers.forEach(power => {
-    const centers = centerCounts[power] || 0;
-    const units = unitCounts[power] || 0;
-
-    html += `<div style="margin: 5px 0; display: flex; justify-content: space-between;">
-          <span class="power-${power.toLowerCase()}">${getPowerDisplayName(power as PowerENUM)}</span>
-          <span>${centers} SCs, ${units} units</span>
-        </div>`;
-  });
-
-  // Add victory condition reminder
-  html += `<hr style="border-color: #555; margin: 8px 0;"/>
-        <small>Victory: 18 supply centers</small>`;
-
-  container.innerHTML = html;
-}
-
 
 /**
  * Render the supply center history chart view
@@ -443,6 +346,12 @@ function renderSCHistoryChartView(
   // Add the SVG to the container
   container.appendChild(svg);
 
+  // Add phase info
+  const phaseInfo = document.createElement('div');
+  phaseInfo.style.fontSize = '12px';
+  phaseInfo.style.marginTop = '5px';
+  phaseInfo.innerHTML = `Current phase: ${gameData.phases[currentPhaseIndex].name}`;
+  container.appendChild(phaseInfo);
 }
 
 /**
@@ -452,7 +361,7 @@ function renderSCHistoryChartView(
  * @param currentPhaseIndex The current phase index
  * @param currentPlayerPower The power the current player is controlling
  */
-export function renderRelationshipHistoryChartView(
+function renderRelationshipHistoryChartView(
   container: HTMLElement,
   gameData: GameSchemaType,
   currentPhaseIndex: number,
@@ -492,7 +401,6 @@ export function renderRelationshipHistoryChartView(
             console.warn(`Unknown relationship value: ${relation}, defaulting to Neutral (0)`);
           }
 
-
           phaseData[power] = relationValue;
           otherPowers.add(power);
         }
@@ -501,7 +409,6 @@ export function renderRelationshipHistoryChartView(
 
     relationshipHistory.push(phaseData);
   }
-
 
   // Convert otherPowers Set to Array for easier iteration
   const powers = Array.from(otherPowers);
@@ -599,22 +506,18 @@ export function renderRelationshipHistoryChartView(
 
   // Draw lines for each power
   for (const power of powers) {
-
     // Create path for this power
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
 
     // Generate path data
     let pathData = "";
     let hasData = false;
-    let dataPoints = 0;
 
     for (let i = 0; i < relationshipHistory.length; i++) {
       if (relationshipHistory[i][power] !== undefined) {
         const relationValue = relationshipHistory[i][power];
         const x = xScale(i);
         const y = yScale(relationValue);
-
-        dataPoints++;
 
         if (!hasData) {
           pathData += `M ${x} ${y}`;
@@ -625,15 +528,12 @@ export function renderRelationshipHistoryChartView(
       }
     }
 
-
     if (hasData) {
       path.setAttribute("d", pathData);
       path.setAttribute("stroke", POWER_COLORS[power] || "#000000");
       path.setAttribute("stroke-width", "2");
       path.setAttribute("fill", "none");
       chart.appendChild(path);
-    } else {
-      console.log(`  No path data for ${power}, not adding to chart`);
     }
   }
 
@@ -683,4 +583,10 @@ export function renderRelationshipHistoryChartView(
   // Add the SVG to the container
   container.appendChild(svg);
 
+  // Add phase info
+  const phaseInfo = document.createElement('div');
+  phaseInfo.style.fontSize = '12px';
+  phaseInfo.style.marginTop = '5px';
+  phaseInfo.innerHTML = `Current phase: ${gameData.phases[currentPhaseIndex].name}`;
+  container.appendChild(phaseInfo);
 }

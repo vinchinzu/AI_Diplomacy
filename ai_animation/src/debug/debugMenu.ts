@@ -5,9 +5,10 @@
 
 import { updateNextMomentDisplay, initNextMomentTool } from "./nextMoment";
 import { initDebugProvinceHighlighting } from "./provinceHighlight";
-import { initInstantChatTool } from "./instantChat";
+import { initInstantChatTool as initInstantModeTool } from "./instantMode";
 import { initSpeechToggleTool } from "./speechToggle";
 import { initShowRandomMomentTool, updateMomentStatus } from "./showRandomMoment";
+import { initPhaseJumpTool, updatePhaseJumpOptions } from "./phaseJump";
 
 export class DebugMenu {
   private toggleBtn: HTMLButtonElement;
@@ -175,7 +176,8 @@ export class DebugMenu {
 
   private initTools(): void {
     initSpeechToggleTool(this);
-    initInstantChatTool(this);
+    initInstantModeTool(this);
+    initPhaseJumpTool(this);
     initNextMomentTool(this);
     initShowRandomMomentTool(this);
     initDebugProvinceHighlighting()
@@ -184,6 +186,7 @@ export class DebugMenu {
   public updateTools(): void {
     updateNextMomentDisplay();
     updateMomentStatus();
+    updatePhaseJumpOptions();
   }
 }
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PowerENUMSchema } from './map';
+import { PowerENUM, PowerENUMSchema } from './map';
 
 /**
  * Schema for parsing Diplomacy phase names (e.g., "W1901R")
@@ -33,7 +33,7 @@ export const MomentCategorySchema = z.enum([
 /**
  * Schema for metadata about the moments analysis (comprehensive format)
  */
-export const ComprehensiveMetadataSchema = z.object({
+export const MomentsMetadataSchema = z.object({
   game_results_folder: z.string(),
   analysis_timestamp: z.string(),
   model_used: z.string(),
@@ -41,37 +41,6 @@ export const ComprehensiveMetadataSchema = z.object({
   power_to_model: z.record(PowerENUMSchema, z.string())
 });
 
-/**
- * Schema for metadata about the moments analysis (animation format)
- */
-export const AnimationMetadataSchema = z.object({
-  timestamp: z.string(),
-  generated_at: z.string(),
-  source_folder: z.string(),
-  analysis_model: z.string(),
-  total_moments: z.number(),
-  moment_categories: z.object({
-    betrayals: z.number(),
-    collaborations: z.number(),
-    playing_both_sides: z.number(),
-    brilliant_strategies: z.number(),
-    strategic_blunders: z.number()
-  }),
-  score_distribution: z.object({
-    scores_9_10: z.number(),
-    scores_7_8: z.number(),
-    scores_4_6: z.number(),
-    scores_1_3: z.number()
-  })
-});
-
-/**
- * Union schema for metadata that can handle both formats
- */
-export const MomentsMetadataSchema = z.union([
-  AnimationMetadataSchema,
-  ComprehensiveMetadataSchema
-]);
 
 /**
  * Schema for diary context entries for each power
@@ -97,25 +66,11 @@ export const LieSchema = z.object({
   explanation: z.string()
 });
 
-/**
- * Schema for an individual moment in the game (animation format)
- */
-export const AnimationMomentSchema = z.object({
-  phase: z.string(),
-  category: MomentCategorySchema,
-  powers_involved: z.array(PowerENUMSchema),
-  promise_agreement: z.string(),
-  actual_action: z.string(),
-  impact: z.string(),
-  interest_score: z.number().min(0).max(10),
-  diary_context: DiaryContextSchema,
-  state_update_context: StateUpdateContextSchema
-});
 
 /**
  * Schema for an individual moment in the game (comprehensive format)
  */
-export const ComprehensiveMomentSchema = z.object({
+export const MomentSchema = z.object({
   phase: z.string(),
   category: MomentCategorySchema,
   powers_involved: z.array(PowerENUMSchema),
@@ -129,33 +84,19 @@ export const ComprehensiveMomentSchema = z.object({
   state_update_context: z.record(z.string()).optional()
 });
 
-/**
- * Union schema for moments that can handle both formats
- */
-export const MomentSchema = z.union([
-  AnimationMomentSchema,
-  ComprehensiveMomentSchema
-]);
-
-/**
- * Schema for the animation format moments.json file
- */
-export const AnimationMomentsDataSchema = z.object({
-  metadata: AnimationMetadataSchema,
-  power_models: z.record(PowerENUMSchema, z.string()),
-  moments: z.array(MomentSchema)
-});
 
 /**
  * Schema for the comprehensive format game_moments_data.json file
  */
-export const ComprehensiveMomentsDataSchema = z.object({
-  metadata: ComprehensiveMetadataSchema,
+export const MomentsDataSchema = z.object({
+  metadata: MomentsMetadataSchema,
   analysis_results: z.object({
-    moments: z.array(ComprehensiveMomentSchema),
+    moments: z.array(MomentSchema),
     lies: z.array(LieSchema),
     invalid_moves_by_model: z.record(z.string(), z.number())
   }),
+  power_models: z.record(PowerENUMSchema, z.string()),
+  moments: z.array(MomentSchema),
   summary: z.object({
     total_moments: z.number(),
     total_lies: z.number(),
@@ -179,13 +120,6 @@ export const ComprehensiveMomentsDataSchema = z.object({
   phases_analyzed: z.array(z.string())
 });
 
-/**
- * Schema for the complete moments.json file (supports both formats)
- */
-export const MomentsDataSchema = z.union([
-  AnimationMomentsDataSchema,
-  ComprehensiveMomentsDataSchema
-]);
 
 /**
  * Parses a phase name like "W1901R" into its components
@@ -217,21 +151,21 @@ export function parsePhase(phaseName: string): z.infer<typeof ParsedPhaseSchema>
  */
 function calculatePhaseOrder(season: 'S' | 'F' | 'W', year: number, phase: 'M' | 'R' | 'A'): number {
   const yearMultiplier = (year - 1901) * 9;
-  
+
   let seasonOffset = 0;
   switch (season) {
     case 'S': seasonOffset = 0; break;
     case 'F': seasonOffset = 3; break;
     case 'W': seasonOffset = 6; break;
   }
-  
+
   let phaseOffset = 0;
   switch (phase) {
     case 'M': phaseOffset = 0; break;
     case 'R': phaseOffset = 1; break;
     case 'A': phaseOffset = 2; break;
   }
-  
+
   return yearMultiplier + seasonOffset + phaseOffset;
 }
 
@@ -270,7 +204,7 @@ export type MomentsDataSchemaType = z.infer<typeof MomentsDataSchema>;
 
 // Normalized format for internal use
 export interface NormalizedMomentsData {
-  metadata: z.infer<typeof AnimationMetadataSchema> | z.infer<typeof ComprehensiveMetadataSchema>;
+  metadata: z.infer<typeof MomentsMetadataSchema>;
   power_models: Record<PowerENUM, string>;
   moments: Moment[];
 }
