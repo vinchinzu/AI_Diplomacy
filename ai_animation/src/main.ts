@@ -6,7 +6,7 @@ import { logger } from "./logger";
 import { loadBtn, prevBtn, nextBtn, speedSelector, fileInput, playBtn, mapView, loadGameBtnFunction } from "./domElements";
 import { updateChatWindows } from "./domElements/chatWindows";
 import { initStandingsBoard, hideStandingsBoard, showStandingsBoard } from "./domElements/standingsBoard";
-import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase, previousPhase } from "./phase";
+import { displayPhaseWithAnimation, advanceToNextPhase, resetToPhase, nextPhase, previousPhase, togglePlayback } from "./phase";
 import { config } from "./config";
 import { Tween, Group, Easing } from "@tweenjs/tween.js";
 import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatingDisplay";
@@ -186,58 +186,6 @@ function onWindowResize() {
 
 
 
-// --- PLAYBACK CONTROLS ---
-function togglePlayback() {
-  // If the game doesn't have any data, or there are no phases, return;
-  if (!gameState.gameData || gameState.gameData.phases.length <= 0) {
-    alert("This game file appears to be broken. Please reload the page and load a different game.")
-    throw Error("Bad gameState, exiting.")
-  };
-
-  // TODO: Likely not how we want to handle the speaking section of this. 
-  //   Should be able to pause the other elements while we're speaking
-  if (gameState.isSpeaking) return;
-
-  gameState.isPlaying = !gameState.isPlaying;
-
-  if (gameState.isPlaying) {
-    playBtn.textContent = "⏸ Pause";
-    prevBtn.disabled = true;
-    nextBtn.disabled = true;
-    logger.log("Starting playback...");
-
-    if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[1].start()
-    // Hide standings board when playback starts
-    hideStandingsBoard();
-
-    // Update rotating display
-    if (gameState.gameData) {
-      updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
-    }
-
-    // First, show the messages of the current phase if it's the initial playback
-    const phase = gameState.gameData.phases[gameState.phaseIndex];
-    if (phase.messages && phase.messages.length) {
-      // Show messages with stepwise animation
-      logger.log(`Playing ${phase.messages.length} messages from phase ${gameState.phaseIndex + 1}/${gameState.gameData.phases.length}`);
-      updateChatWindows(phase, true);
-    } else {
-      // No messages, go straight to unit animations
-      logger.log("No messages for this phase, proceeding to animations");
-      displayPhaseWithAnimation();
-    }
-  } else {
-    if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[0].pause();
-    playBtn.textContent = "▶ Play";
-    if (gameState.playbackTimer) {
-      clearTimeout(gameState.playbackTimer);
-      gameState.playbackTimer = null;
-    }
-    gameState.messagesPlaying = false;
-    prevBtn.disabled = false;
-    nextBtn.disabled = false;
-  }
-}
 
 
 
@@ -252,7 +200,6 @@ fileInput.addEventListener('change', e => {
     // Update rotating display and relationship popup with game data
     if (gameState.gameData) {
       updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
-      updateRelationshipPopup();
     }
   }
 });

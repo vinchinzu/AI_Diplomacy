@@ -7,10 +7,10 @@ import { prevBtn, nextBtn, playBtn, speedSelector, mapView, updateGameIdDisplay 
 import { createChatWindows } from "./domElements/chatWindows";
 import { logger } from "./logger";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
-import { displayInitialPhase } from "./phase";
+import { displayInitialPhase, togglePlayback } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
-import { MomentsDataSchema, MomentsDataSchemaType, Moment, NormalizedMomentsData } from "./types/moments";
+import { MomentsDataSchema, Moment, NormalizedMomentsData } from "./types/moments";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -273,18 +273,27 @@ class GameState {
    * Loads the next game in the order, reseting the board and gameState
    */
   loadNextGame = () => {
-    //
+    let gameId = this.gameId + 1
+    let contPlaying = false
+    if (this.isPlaying) {
+      contPlaying = true
+    }
+    this.loadGameFile(gameId).then(() => {
 
-    this.gameId += 1
+      if (contPlaying) {
+        togglePlayback(true)
+      }
+    }
 
-    // Try to load the next game, if it fails, show end screen forever
+    )
+
 
   }
 
   /*
    * Given a gameId, load that game's state into the GameState Object
    */
-  loadGameFile = (gameId: number) => {
+  loadGameFile = (gameId: number): Promise<void> => {
 
     if (gameId === null || gameId < 0) {
       throw Error(`Attempted to load game with invalid ID ${gameId}`)
@@ -292,18 +301,18 @@ class GameState {
 
     // Path to the default game file
     const gameFilePath = `./games/${gameId}/game.json`;
-    loadFileFromServer(gameFilePath).then((data) => {
-      this.gameId = gameId
+    return loadFileFromServer(gameFilePath).then((data) => {
 
       return this.loadGameData(data);
     })
       .then(() => {
-        console.log("Default game file loaded and parsed successfully");
+        console.log(`Game file with id ${gameId} loaded and parsed successfully`);
         // Explicitly hide standings board after loading game
         hideStandingsBoard();
         // Update rotating display and relationship popup with game data
         if (this.gameData) {
           updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
+          this.gameId = gameId
           updateGameIdDisplay();
         }
       })
