@@ -201,7 +201,7 @@ export function displayPhase(skipMessages = false) {
   _updateMapOwnership();
 
   // Add phase info to news banner if not already there
-  const phaseBannerText = `Phase: ${currentPhase.name}`;
+  const phaseBannerText = `Phase: ${currentPhase.name}: ${currentPhase.summary}`;
   addToNewsBanner(phaseBannerText);
 
   // Log phase details to console only, don't update info panel with this
@@ -277,10 +277,6 @@ export function advanceToNextPhase() {
 
   // First show summary if available
   if (currentPhase.summary && currentPhase.summary.trim() !== '') {
-    // Update the news banner with full summary
-    addToNewsBanner(`(${currentPhase.name}) ${currentPhase.summary}`);
-    console.log("Added summary to news banner, preparing to call speakSummary");
-
     // Speak the summary and advance after
     if (!gameState.isSpeaking) {
       speakSummary(currentPhase.summary)

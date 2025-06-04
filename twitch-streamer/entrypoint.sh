@@ -41,7 +41,6 @@ sleep 5 # let the page load or animations start
 #  - For audio:  pulse from the "default" device
 # Adjust your bitrate, resolution, frame rate, etc. as desired.
 exec ffmpeg -y \
-  -g 60 \
   -f x11grab -thread_queue_size 512 -r 30 -s 1920x1080 -i $DISPLAY \
   -f pulse -thread_queue_size 512 -i default \
   -c:v libx264 -preset veryfast -b:v 6000k -maxrate 6000k -bufsize 12000k \
