@@ -141,18 +141,17 @@ function animate() {
     // Call update on each active animation
     gameState.unitAnimations.forEach((anim) => anim.update())
 
-    // If all animations are complete and we're in playback mode
-    if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying && !gameState.isSpeaking && !gameState.nextPhaseScheduled) {
-      // Schedule next phase after a pause delay
-      console.log(`Scheduling next phase in ${config.effectivePlaybackSpeed}ms`);
-      gameState.nextPhaseScheduled = true;
-      gameState.playbackTimer = setTimeout(() => {
-        gameState.nextPhaseScheduled = false;
-        advanceToNextPhase();
-      }, config.effectivePlaybackSpeed);
-    }
   }
 
+  // If all animations are complete and we're in playback mode
+  if (gameState.unitAnimations.length === 0 && gameState.isPlaying && !gameState.messagesPlaying && !gameState.isSpeaking && !gameState.nextPhaseScheduled) {
+    // Schedule next phase after a pause delay
+    console.log(`Scheduling next phase in ${config.effectivePlaybackSpeed}ms`);
+    gameState.nextPhaseScheduled = true;
+    gameState.playbackTimer = setTimeout(() => {
+      advanceToNextPhase();
+    }, config.effectivePlaybackSpeed);
+  }
   // Update any pulsing or wave animations on supply centers or units
   if (gameState.scene.userData.animatedObjects) {
     gameState.scene.userData.animatedObjects.forEach(obj => {

@@ -61,6 +61,7 @@ export function _setPhase(phaseIndex: number) {
     } else {
       displayPhase()
     }
+    gameState.nextPhaseScheduled = false;
   }
 
   // Finally, update the gameState with the current phaseIndex
@@ -261,8 +262,6 @@ export function advanceToNextPhase() {
     logger.log("Cannot advance phase: invalid game state");
     return;
   }
-  // Reset the nextPhaseScheduled flag to allow scheduling the next phase
-  gameState.nextPhaseScheduled = false;
 
   // Get current phase
   const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
@@ -296,6 +295,8 @@ export function advanceToNextPhase() {
           if (gameState.isPlaying) {
             nextPhase();
           }
+        }).finally(() => {
+
         });
     } else {
       console.error("Attempted to start speaking when already speaking...")
@@ -305,6 +306,9 @@ export function advanceToNextPhase() {
     // No summary to speak, advance immediately
     nextPhase();
   }
+
+  // Reset the nextPhaseScheduled flag to allow scheduling the next phase
+  gameState.nextPhaseScheduled = false;
 }
 
 function displayFinalPhase() {
