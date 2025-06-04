@@ -14,6 +14,8 @@ services:
     ports:
       - "4173:4173"
       - "5173:5173"
+    volumes:
+      - ./ai_animation/public/games/:/app/dist/games
   diplomacy-dev:
     build: ai_animation
     ports:
