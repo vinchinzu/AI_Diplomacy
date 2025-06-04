@@ -37,15 +37,18 @@ export async function stopGamePlayback(page: Page): Promise<void> {
 }
 
 /**
- * Helper function to check if a victory message is present
+ * Helper function to check if a victory message is present (checks for victory modal)
  */
 export async function checkForVictoryMessage(page: Page): Promise<string | null> {
   try {
-    const newsText = await page.locator('#news-banner-content').textContent();
-    const victoryPattern = /GAME OVER.*WINS|VICTORIOUS|🏆.*WINS/i;
-
-    if (newsText && victoryPattern.test(newsText)) {
-      return newsText;
+    // Check for victory modal
+    const victoryModal = page.locator('.victory-modal-overlay');
+    if (await victoryModal.isVisible()) {
+      // Extract victory message from modal
+      const winnerText = await victoryModal.locator('h2').textContent();
+      if (winnerText) {
+        return winnerText;
+      }
     }
     return null;
   } catch {
@@ -127,11 +130,12 @@ export async function measureVictoryTiming(
         break;
       }
 
-      // Check if victory message disappeared (indicating new game started)
-      const currentVictoryMessage = await checkForVictoryMessage(page);
-      if (!currentVictoryMessage) {
+      // Check if victory modal disappeared (indicating new game started)
+      const victoryModal = page.locator('.victory-modal-overlay');
+      const isModalVisible = await victoryModal.isVisible();
+      if (!isModalVisible) {
         nextGameStarted = true;
-        console.log('Victory message disappeared, indicating new game started');
+        console.log('Victory modal disappeared, indicating new game started');
         break;
       }
     }

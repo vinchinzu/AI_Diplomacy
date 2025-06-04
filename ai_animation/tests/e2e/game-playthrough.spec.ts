@@ -41,11 +41,11 @@ test.describe('Game Playthrough Tests', () => {
     // Verify that victory message was displayed for a reasonable amount of time
     expect(result.displayDuration).toBeGreaterThan(50); // At least 50ms (reduced for instant mode)
 
-    // The victory message should still be visible when we detect it
+    // The victory modal should still be visible when we detect it
     if (result.victoryDetected) {
       const currentVictoryMessage = await checkForVictoryMessage(page);
       if (currentVictoryMessage) {
-        await expect(page.locator('#news-banner-content')).toContainText(/GAME OVER|VICTORIOUS|🏆/);
+        await expect(page.locator('.victory-modal-overlay')).toBeVisible();
       }
     }
   });
@@ -85,7 +85,6 @@ test.describe('Game Playthrough Tests', () => {
     await expect(page.locator('#prev-btn')).toBeVisible();
     await expect(page.locator('#next-btn')).toBeVisible();
     await expect(page.locator('canvas')).toBeVisible();
-    await expect(page.locator('#news-banner-content')).toBeVisible();
     await expect(page.locator('#phase-display')).toBeVisible();
     await expect(page.locator('#game-id-display')).toBeVisible();
 
