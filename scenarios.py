@@ -1,45 +1,50 @@
 from diplomacy import Game
+from typing import Callable
 
 
+SCENARIO_REGISTRY: dict[str, Callable[..., Game]] = {}
+
+def register_scenario(name: str):
+    def decorator(func: Callable[..., Game]):
+        SCENARIO_REGISTRY[name] = func
+        return func
+    return decorator
+
+@register_scenario("wwi_two_player")
 def wwi_two_player(
     entente_player: str, central_player: str, italy_controller: str | None = None
 ):
     """
-    Returns a Game object in the 1914 two‑player variant:
-      • entente_player controls England, France, Russia
-      • central_player controls Austria, Germany, Turkey
-      • Italy is neutral until Spring 1915 (coin flip not done here)
+    Returns a Game object in the 1914 two-player variant.
+
+    Player Assignments:
+      - entente_player controls England, France, Russia
+      - central_player controls Austria, Germany, Turkey
+      - Italy is neutral until Spring 1915 (actual neutrality mechanism,
+        like a coin flip for controller, is handled outside this scenario setup).
+
+    Notes on Implementation:
+    - This function primarily sets up the base Game object for the variant,
+      starting in 1914.
+    - The actual assignment of control to specific player entities (e.g.,
+      `entente_player`, `central_player`) and the creation of agents
+      (including one for a neutral or assigned Italy) are typically managed
+      by an AgentManager or similar game setup coordinator.
+    - Player identifiers (e.g., "ENTENTE_BLOC", "CENTRAL_BLOC", or the
+      provided entente_player/central_player strings) are used by the
+      AgentManager and become keys in agent configurations.
+    - Specialized agents, like a BlocLLMAgent, if used, are internally aware
+      of the standard powers they control based on their configuration.
+    - The `game.powers.keys()` will still list the standard seven great powers
+      (ENGLAND, FRANCE, RUSSIA, AUSTRIA, GERMANY, TURKEY, ITALY).
+    - If `game.set_owner()` were to be used directly (it is not, in this current
+      setup, to allow flexibility for the AgentManager), `game.get_owner(power_name)`
+      would then return the assigned bloc controller name for those powers.
+    - Metadata, such as a custom game description or victory conditions (e.g.,
+      `game.set_metadata("description", "WWI Two-Player Scenario...")`),
+      can be set on the game object here or by the coordinating setup logic.
     """
     game = Game(variant="standard", start_year=1914)  # Standard game has all 7 powers
-
-    # Define the bloc controllers as new "powers" in the game metadata/conceptually.
-    # The actual game.powers object will still list the original 7 great powers.
-    # We change ownership of these standard powers to our bloc controllers.
-
-    # Assign control of standard powers to the bloc entities
-    # for p_name in ("ENGLAND", "FRANCE", "RUSSIA"):
-    #     game.set_owner(power_name=p_name, new_owner_name=entente_player)
-
-    # for p_name in ("AUSTRIA", "GERMANY", "TURKEY"):
-    #     game.set_owner(power_name=p_name, new_owner_name=central_player)
-
-    # Set Italy's controller
-    # If italy_controller is None, we can assign it to a special neutral placeholder name
-    # or leave its original owner (ITALY) if that's desired for neutrality.
-    # For this scenario, we want it to be distinct until the coin flip.
-    # italy_actual_controller = italy_controller if italy_controller is not None else "NEUTRAL_ITALY_BLOC" # Not used by current AgentManager
-    # game.set_owner(power_name="ITALY", new_owner_name=italy_actual_controller)
-
-    # The game.powers.keys() will still be E,F,R,A,G,T,I.
-    # The game.get_owner(power_name) would return the bloc controller name if set_owner was used.
-    # AgentManager will create agents for entente_player, central_player, and NEUTRAL_ITALY.
-    # These names (e.g., "ENTENTE_BLOC") are passed as "player_identifier" to AgentManager
-    # and then become keys in agent_configurations.
-    # The BlocLLMAgent itself knows which standard powers it controls.
-
-    # game.set_metadata("combined_victory_centers", 24)  # custom win check
-    # game.set_metadata("description", f"WWI Two-Player Scenario: {entente_player} (ENG,FRA,RUS) vs {central_player} (AUS,GER,TUR). Italy controlled by {italy_controller if italy_controller else 'Neutral'}.")
-
     return game
 
 
@@ -48,31 +53,39 @@ def standard_game_template():  # Helper if common logic arises
     return Game()  # Variant "standard" is default
 
 
+@register_scenario("five_player_scenario")
 def five_player_scenario():
     """
     Game setup for 5 active players.
-    This function primarily serves as a named factory.
-    The actual designation of neutral powers is handled by agent type assignments
-    based on presets or command-line arguments.
+
+    This function primarily serves as a named factory for a standard game.
+    The actual designation of neutral powers (typically 2 for a 5-player game)
+    is handled by agent type assignments (e.g., 'neutral' or 'null_agent')
+    based on presets or command-line arguments processed by the AgentManager
+    or game setup coordinator.
     Returns a standard game instance.
     """
     game = standard_game_template()
     game.set_metadata(
         "description",
-        "Standard game, to be configured for 5 active players and 2 neutrals via agent types.",
+        "Standard game, intended for 5 active players. Neutral powers (2) to be configured by agent assignments.",
     )
     return game
 
 
+@register_scenario("six_player_scenario")
 def six_player_scenario():
     """
     Game setup for 6 active players.
-    Similar to five_player_scenario, actual agent setup is external.
+
+    Similar to five_player_scenario, this function acts as a named factory.
+    The actual designation of the neutral power (typically 1 for a 6-player game)
+    is handled externally by agent type assignments.
     Returns a standard game instance.
     """
     game = standard_game_template()
     game.set_metadata(
         "description",
-        "Standard game, to be configured for 6 active players and 1 neutral via agent types.",
+        "Standard game, intended for 6 active players. Neutral power (1) to be configured by agent assignments.",
     )
     return game
