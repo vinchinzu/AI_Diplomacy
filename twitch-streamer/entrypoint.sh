@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # X display can put a lock in, that sometimes will stay in the container. Nuke it as it isn't needed
-rm /tmp/.X99-lock
+rm -f /tmp/.X99-lock /tmp/.X1-lock
 set -e
 # Check if STREAM_KEY is empty
 if [ -z "$STREAM_KEY" ]; then
@@ -23,29 +23,45 @@ mkdir -p /home/chrome
 #   --disable-background-timer-throttling & related flags to prevent fps throttling in headless/Xvfb
 DISPLAY=$DISPLAY google-chrome \
   --remote-debugging-port=9222 \
-  --disable-gpu \
-  --disable-infobars \
+  --no-sandbox \
+  --disable-setuid-sandbox \
+  --disable-dev-shm-usage \
   --no-first-run \
   --disable-background-timer-throttling \
   --disable-renderer-backgrounding \
   --disable-backgrounding-occluded-windows \
+  --disable-features=TranslateUI \
+  --disable-ipc-flooding-protection \
+  --disable-frame-rate-limit \
+  --enable-precise-memory-info \
+  --max-gum-fps=30 \
   --user-data-dir=/home/chrome/chrome-data \
   --window-size=1920,1080 --window-position=0,0 \
   --kiosk \
+  --autoplay-policy=no-user-gesture-required \
+  --enable-gpu \
+  --use-gl=swiftshader \
+  --disable-gpu-vsync \
+  --force-device-scale-factor=1 \
   "http://diplomacy:4173" &
 
 sleep 5 # let the page load or animations start
 
+# Set PulseAudio environment
+export PULSE_RUNTIME_PATH=/tmp/pulse
+export PULSE_SERVER=unix:/tmp/pulse/native
+
 # Start streaming with FFmpeg.
 #  - For video: x11grab at 30fps
-#  - For audio: pulse from the default device
+#  - For audio: pulse from the dummy sink monitor
 exec ffmpeg -y \
-  -f x11grab -video_size 1920x1080 -framerate 30 -thread_queue_size 512 -i $DISPLAY \
-  -f pulse -thread_queue_size 512 -i default \
-  -c:v libx264 -preset ultrafast -b:v 6000k -maxrate 6000k -bufsize 12000k \
+  -f x11grab -video_size 1920x1080 -framerate 30 -thread_queue_size 1024 -i $DISPLAY \
+  -f pulse -thread_queue_size 1024 -i dummy_sink.monitor \
+  -c:v libx264 -preset fast -tune animation -b:v 4500k -maxrate 4500k -bufsize 9000k \
+  -g 60 -keyint_min 60 \
   -pix_fmt yuv420p \
-  -c:a aac -b:a 160k \
-  -vsync 1 -async 1 \
+  -c:a aac -b:a 128k \
+  -vsync cfr \
   -f flv "rtmp://ingest.global-contribute.live-video.net/app/$STREAM_KEY"
 
 # 'exec' ensures ffmpeg catches any SIGTERM and stops gracefully,

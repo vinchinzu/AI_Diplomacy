@@ -60,5 +60,22 @@ export const config = {
    */
   get effectivePlaybackSpeed(): number {
     return this.isInstantMode ? 10 : this.playbackSpeed;
+  },
+
+  // Animation timing configuration
+  animation: {
+    // Unit movement wave frequencies (Hz)
+    unitBobFrequency: 0.8,
+    fleetRollFrequency: 0.5,
+    fleetPitchFrequency: 0.3,
+    
+    // Supply center pulse frequency (Hz)
+    supplyPulseFrequency: 1.0,
+    
+    // Province highlight flash frequency (Hz)
+    provinceFlashFrequency: 2.0,
+    
+    // Maximum frame delta time (seconds) to prevent animation jumps
+    maxDeltaTime: 0.1
   }
 }

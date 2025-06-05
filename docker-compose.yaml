@@ -9,10 +9,14 @@ services:
     ports:
       - "9222:9222"
     ipc: host
-    shm_size: "1gb"
+    shm_size: "2gb"
 
   diplomacy:
-    build: ai_animation
+    build: 
+      context: ai_animation
+      args:
+        - VITE_ELEVENLABS_API_KEY=${VITE_ELEVENLABS_API_KEY}
+        - VITE_WEBHOOK_URL=${VITE_WEBHOOK_URL}
     env_file: "./ai_animation/.env"
     ports:
       - "4173:4173"

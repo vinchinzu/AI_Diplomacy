@@ -115,6 +115,10 @@ class GameState {
   // Camera Animation during playing
   cameraPanAnim: TweenGroup | undefined
 
+  // Global timing for animations
+  globalTime: number
+  deltaTime: number
+
   constructor(boardName: AvailableMaps) {
     this.phaseIndex = 0
     this.boardName = boardName
@@ -132,6 +136,8 @@ class GameState {
     this.scene = new THREE.Scene()
     this.unitMeshes = []
     this.unitAnimations = []
+    this.globalTime = 0
+    this.deltaTime = 0
     this.loadBoardState()
   }
 

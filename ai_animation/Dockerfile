@@ -13,6 +13,14 @@ RUN npm install
 # Now copy everything else
 COPY . .
 
+# Accept build arguments for environment variables
+ARG VITE_ELEVENLABS_API_KEY
+ARG VITE_WEBHOOK_URL
+
+# Set environment variables for the build
+ENV VITE_ELEVENLABS_API_KEY=$VITE_ELEVENLABS_API_KEY
+ENV VITE_WEBHOOK_URL=$VITE_WEBHOOK_URL
+
 # Build the production-ready files (dist/)
 RUN npm run build
 

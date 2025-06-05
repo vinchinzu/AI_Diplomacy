@@ -2,12 +2,15 @@ import { gameState } from "../gameState";
 import { provinceInput, highlightProvinceBtn } from "../domElements";
 import { ProvinceENUM } from "../types/map";
 import { MeshBasicMaterial } from "three";
+import { oscillate, msToSeconds } from "../utils/timing";
+import { config } from "../config";
 
 interface FlashAnimation {
   mesh: THREE.Mesh;
   originalColor: number;
   startTime: number;
   duration: number;
+  animationId?: number; // For cancelling the animation
 }
 
 let currentFlashAnimation: FlashAnimation | null = null;
@@ -46,23 +49,23 @@ export function highlightProvince(provinceName: string): void {
   currentFlashAnimation = {
     mesh: province.mesh,
     originalColor,
-    startTime: Date.now(),
+    startTime: performance.now(),
     duration: 2000 // 2 seconds
   };
 
   console.log(`Highlighting province: ${normalizedName}`);
 
   // Start the animation loop
-  animateFlash();
+  currentFlashAnimation.animationId = requestAnimationFrame(animateFlash);
 }
 
 /**
  * Animates the flashing effect
  */
-function animateFlash(): void {
+function animateFlash(currentTime: number = 0): void {
   if (!currentFlashAnimation) return;
 
-  const elapsed = Date.now() - currentFlashAnimation.startTime;
+  const elapsed = currentTime - currentFlashAnimation.startTime;
   const progress = elapsed / currentFlashAnimation.duration;
 
   if (progress >= 1) {
@@ -72,7 +75,9 @@ function animateFlash(): void {
   }
 
   // Calculate flash intensity using sine wave for smooth pulsing
-  const flashIntensity = Math.sin(elapsed * 0.01) * 0.5 + 0.5; // 0 to 1
+  // Use elapsed time in seconds for consistent animation speed
+  const elapsedSeconds = msToSeconds(elapsed);
+  const flashIntensity = oscillate(config.animation.provinceFlashFrequency, elapsedSeconds);
 
   // Interpolate between original color and bright yellow
   const material = currentFlashAnimation.mesh.material as MeshBasicMaterial;
@@ -98,7 +103,7 @@ function animateFlash(): void {
   material.color.setHex(newColor);
 
   // Continue animation
-  requestAnimationFrame(animateFlash);
+  currentFlashAnimation.animationId = requestAnimationFrame(animateFlash);
 }
 
 /**
@@ -106,6 +111,11 @@ function animateFlash(): void {
  */
 function stopCurrentFlash(): void {
   if (!currentFlashAnimation) return;
+
+  // Cancel the animation frame if it exists
+  if (currentFlashAnimation.animationId) {
+    cancelAnimationFrame(currentFlashAnimation.animationId);
+  }
 
   // Restore original color
   const material = currentFlashAnimation.mesh.material as MeshBasicMaterial;

@@ -8,6 +8,7 @@ import { logger } from "../logger";
 import { config } from "../config"; // Assuming config is defined in a separate file
 import { PowerENUM, ProvinceENUM } from "../types/map";
 import { UnitTypeENUM } from "../types/units";
+import { sineWave, getTimeInSeconds } from "../utils/timing";
 
 function getUnit(unitOrder: UnitOrder, power: string) {
   if (power === undefined) throw new Error("Must pass the power argument, cannot be undefined")
@@ -49,6 +50,10 @@ function createMoveAnimation(unitMesh: THREE.Group, orderDestination: ProvinceEN
   }
   unitMesh.userData.province = orderDestination;
   unitMesh.userData.isAnimating = true
+  
+  // Store animation start time for consistent wave motion
+  const animStartTime = getTimeInSeconds();
+  
   let anim = new Tween(unitMesh.position)
     .to({
       x: destinationVector.x,
@@ -57,10 +62,12 @@ function createMoveAnimation(unitMesh: THREE.Group, orderDestination: ProvinceEN
     }, config.effectiveAnimationDuration)
     .easing(Easing.Quadratic.InOut)
     .onUpdate(() => {
-      unitMesh.position.y = 10 + Math.sin(Date.now() * 0.05) * 2;
+      // Use elapsed time from animation start for consistent wave motion
+      const elapsedTime = getTimeInSeconds() - animStartTime;
+      unitMesh.position.y = 10 + sineWave(config.animation.unitBobFrequency, elapsedTime, 2); // 2 units amplitude
       if (unitMesh.userData.type === 'F') {
-        unitMesh.rotation.z = Math.sin(Date.now() * 0.03) * 0.1;
-        unitMesh.rotation.x = Math.sin(Date.now() * 0.02) * 0.1;
+        unitMesh.rotation.z = sineWave(config.animation.fleetRollFrequency, elapsedTime, 0.1);
+        unitMesh.rotation.x = sineWave(config.animation.fleetPitchFrequency, elapsedTime, 0.1);
       }
     })
     .onComplete(() => {

@@ -13,6 +13,7 @@ import { initRotatingDisplay, updateRotatingDisplay } from "./components/rotatin
 import { closeTwoPowerConversation, showTwoPowerConversation } from "./components/twoPowerConversation";
 import { PowerENUM } from "./types/map";
 import { debugMenuInstance } from "./debug/debugMenu";
+import { sineWave } from "./utils/timing";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -90,7 +91,7 @@ function initScene() {
   window.addEventListener('resize', onWindowResize);
 
   // Kick off animation loop
-  animate();
+  requestAnimationFrame(animate);
 
 }
 
@@ -133,14 +134,24 @@ function createCameraPan(): Group {
  * Main animation loop that runs continuously
  * Handles camera movement, animations, and game state transitions
  */
-function animate() {
+let lastTime = 0;
+function animate(currentTime: number = 0) {
+  // Calculate delta time in seconds
+  let deltaTime = lastTime ? (currentTime - lastTime) / 1000 : 0;
+  lastTime = currentTime;
+  
+  // Clamp delta time to prevent animation jumps when tab loses focus
+  deltaTime = Math.min(deltaTime, config.animation.maxDeltaTime);
+  
+  // Update global timing in gameState
+  gameState.deltaTime = deltaTime;
+  gameState.globalTime = currentTime / 1000; // Store in seconds
 
   requestAnimationFrame(animate);
   if (gameState.isPlaying) {
-    // Update the camera angle
-    // FIXME: This has to call the update functino twice inorder to avoid a bug in Tween.js, see here  https://github.com/tweenjs/tween.js/issues/677
-    gameState.cameraPanAnim.update();
-    gameState.cameraPanAnim.update();
+    // Update the camera angle with delta time
+    // Pass currentTime to update() to fix the Tween.js bug properly
+    gameState.cameraPanAnim.update(currentTime);
 
   } else {
     // Manual camera controls when not in playback mode
@@ -158,8 +169,8 @@ function animate() {
       console.log("All unit animations have completed");
     }
 
-    // Call update on each active animation
-    gameState.unitAnimations.forEach((anim) => anim.update())
+    // Call update on each active animation with current time
+    gameState.unitAnimations.forEach((anim) => anim.update(currentTime))
 
   }
 
@@ -184,18 +195,16 @@ function animate() {
     gameState.scene.userData.animatedObjects.forEach(obj => {
       if (obj.userData.pulseAnimation) {
         const anim = obj.userData.pulseAnimation;
-        anim.time += anim.speed;
+        // Use delta time for consistent animation speed regardless of frame rate
+        anim.time += anim.speed * deltaTime;
         if (obj.userData.glowMesh) {
-          const pulseValue = Math.sin(anim.time) * anim.intensity + 0.5;
+          const pulseValue = sineWave(config.animation.supplyPulseFrequency, anim.time, anim.intensity, 0.5);
           obj.userData.glowMesh.material.opacity = 0.2 + (pulseValue * 0.3);
-          obj.userData.glowMesh.scale.set(
-            1 + (pulseValue * 0.1),
-            1 + (pulseValue * 0.1),
-            1 + (pulseValue * 0.1)
-          );
+          const scale = 1 + (pulseValue * 0.1);
+          obj.userData.glowMesh.scale.set(scale, scale, scale);
         }
         // Subtle bobbing up/down
-        obj.position.y = 2 + Math.sin(anim.time) * 0.5;
+        obj.position.y = 2 + sineWave(config.animation.supplyPulseFrequency, anim.time, 0.5);
       }
     });
   }
