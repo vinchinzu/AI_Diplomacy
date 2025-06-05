@@ -386,22 +386,51 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         messages_list_for_parsing: Optional[List[str]] = None
         source_for_message_parsing_str = "game.messages" # default
 
+        # --- MODIFICATION START: Handle SortedDict for messages ---
+        raw_messages_source: Optional[Any] = None
         if gpd_object and hasattr(gpd_object, 'messages'):
-            gpd_messages = getattr(gpd_object, 'messages')
-            if isinstance(gpd_messages, list) and all(isinstance(s, str) for s in gpd_messages):
-                messages_list_for_parsing = gpd_messages
-                source_for_message_parsing_str = "process_return_value.messages"
-                logger.info(f"Using '{source_for_message_parsing_str}' (from GamePhaseData object) for parsing results.")
-            else:
-                logger.warning(f"'messages' attribute on GamePhaseData object is not a list of strings: {type(gpd_messages)}")
+            raw_messages_source = getattr(gpd_object, 'messages')
+            source_for_message_parsing_str = "process_return_value.messages"
+        elif hasattr(game, 'messages'):
+            raw_messages_source = game.messages
+            source_for_message_parsing_str = "game.messages"
 
-        if messages_list_for_parsing is None and hasattr(game, 'messages') and isinstance(game.messages, list):
-            # Check if all elements are strings, as some implementations might have mixed types or header elements
-            if all(isinstance(s, str) for s in game.messages):
-                messages_list_for_parsing = game.messages
-                logger.info(f"Using '{source_for_message_parsing_str}' for parsing results.")
+        if raw_messages_source is not None:
+            if isinstance(raw_messages_source, list) and all(isinstance(s, str) for s in raw_messages_source):
+                messages_list_for_parsing = raw_messages_source
+                logger.info(f"Using '{source_for_message_parsing_str}' (List[str]) for parsing results.")
+            elif hasattr(raw_messages_source, 'values') and callable(getattr(raw_messages_source, 'values')): # Check for dict-like (e.g. SortedDict)
+                # Attempt to treat as a dictionary of lists of strings (like SortedDict from diplomacy lib)
+                try:
+                    aggregated_messages: List[str] = []
+                    valid_dict_format = True
+                    for item_value in raw_messages_source.values():
+                        if isinstance(item_value, list) and all(isinstance(s, str) for s in item_value):
+                            aggregated_messages.extend(item_value)
+                        else:
+                            # If any value is not a list of strings, this format is not what we expect for SortedDict of messages
+                            valid_dict_format = False
+                            break
+                    
+                    if valid_dict_format:
+                        messages_list_for_parsing = aggregated_messages
+                        logger.info(f"Successfully aggregated messages from '{source_for_message_parsing_str}' (dict-like values) for parsing results.")
+                    else:
+                        logger.warning(
+                            f"'{source_for_message_parsing_str}' is dict-like, but its values are not all List[str]. "
+                            f"Actual type: {type(raw_messages_source)}. Cannot use for standard message parsing."
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Error processing '{source_for_message_parsing_str}' as a dict-like object: {e}. "
+                        f"Actual type: {type(raw_messages_source)}. Cannot use for message parsing."
+                    )
             else:
-                logger.warning("'game.messages' contains non-string elements, cannot use for parsing.")
+                logger.warning(
+                    f"'{source_for_message_parsing_str}' is not a List[str] or a recognized dict-like structure of messages. "
+                    f"Actual type: {type(raw_messages_source)}. Cannot use for message parsing."
+                )
+        # --- MODIFICATION END: Handle SortedDict for messages ---
         
         parsed_game_messages: Optional[Dict[str, List[str]]] = None
 
@@ -527,12 +556,22 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                         logger.info(f"No result strings found for {power_name_iter} from {source_of_results} (source was valid but empty for this power, or power had no orders submitted/resolved).")
                         order_results_for_power = []
                     else:
+                        # --- MODIFICATION START: Change fallback to error ---
                         # This means no valid source was identified AT ALL for this power after all checks.
-                        logger.warning(f"Could not find adjudicated results for {power_name_iter} via any known method. Falling back to N/A based on submitted orders.")
-                        power_orders_submitted = all_orders_for_phase.get(power_name_iter, [])
-                        # Only add N/A if orders were actually submitted, otherwise it's just an empty result.
-                        order_results_for_power = [["Result N/A"] for _ in power_orders_submitted] if power_orders_submitted else []
-
+                        error_message = f"CRITICAL: Could not find adjudicated results for {power_name_iter} via any known method in phase {processed_phase_name}."
+                        logger.error(error_message)
+                        logger.debug(f"All orders submitted for phase by all powers: {all_orders_for_phase}")
+                        logger.debug(f"Game object state (current_phase): {game.get_current_phase()}")
+                        logger.debug(f"Game object state (messages): {getattr(game, 'messages', 'N/A')}")
+                        logger.debug(f"Game object state (resolved_orders): {getattr(game, 'resolved_orders', 'N/A')}")
+                        logger.debug(f"Game object state (adjudicated_orders): {getattr(game, 'adjudicated_orders', 'N/A')}")
+                        logger.debug(f"Game object state (results): {getattr(game, 'results', 'N/A')}")
+                        if gpd_object:
+                             logger.debug(f"GPD object attributes: {dir(gpd_object)}")
+                             logger.debug(f"GPD object messages: {getattr(gpd_object, 'messages', 'N/A')}")
+                             logger.debug(f"GPD object resolved_orders: {getattr(gpd_object, 'resolved_orders', 'N/A')}")
+                        raise ValueError(error_message)
+                        # --- MODIFICATION END: Change fallback to error ---
 
                 except Exception as e:
                     logger.error(f"Error fetching or processing results for {power_name_iter}: {e}", exc_info=True)

@@ -22,6 +22,8 @@ from typing import Optional, List, Dict, TYPE_CHECKING, Any, Callable # Added Ca
 import toml
 import importlib # Added importlib
 
+logger = logging.getLogger(__name__)
+
 # Import GameHistory and DiplomacyAgent only for type hinting if they are complex
 # to avoid circular dependencies at runtime.
 if TYPE_CHECKING:
@@ -39,8 +41,6 @@ except ImportError:
     except ImportError:
         logger.error("Failed to import SCENARIO_REGISTRY. Registry-based scenario loading will fail.")
         SCENARIO_REGISTRY = {} # Define as empty to prevent NameError during runtime
-
-logger = logging.getLogger(__name__)
 
 # Default values that might be used if not in TOML
 DEFAULT_LOG_LEVEL = "INFO"
@@ -170,7 +170,22 @@ class GameConfig:
                     "Attempting dynamic import as a fallback."
                 )
                 try:
-                    module_str, func_str = self.game_factory_path.rsplit('.', 1)
+                    # Try splitting by '.' first, then by ':' if needed
+                    if '.' in self.game_factory_path:
+                        parts = self.game_factory_path.rsplit('.', 1)
+                        if len(parts) == 2:
+                            module_str, func_str = parts
+                        else: # Fallback or handle error if '.' is present but not as a separator
+                            logger.warning(f"Path '{self.game_factory_path}' contains '.' but not in a module.function format. Trying ':' next.")
+                            if ':' in self.game_factory_path:
+                                module_str, func_str = self.game_factory_path.rsplit(':', 1)
+                            else:
+                                raise ValueError("Path does not contain a valid separator ('.' or ':')")
+                    elif ':' in self.game_factory_path:
+                        module_str, func_str = self.game_factory_path.rsplit(':', 1)
+                    else:
+                        raise ValueError(f"Scenario factory path '{self.game_factory_path}' does not contain '.' or ':' to separate module and function.")
+                    
                     module = importlib.import_module(module_str)
                     self.game_factory = getattr(module, func_str)
                     logger.info(f"Successfully dynamically imported scenario factory: {self.game_factory_path}")

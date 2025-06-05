@@ -7,7 +7,7 @@ game_factory = "scenarios.wwi_two_player" # Points to the function
 [game_settings]
 game_id_prefix = "wwi_test"
 perform_planning_phase = false
-num_negotiation_rounds = 2
+num_negotiation_rounds = 0
 negotiation_style = "simultaneous"
 max_years = 1903 # Short game for testing
 max_diary_tokens = 6000
@@ -28,7 +28,7 @@ verbose_llm_debug = true
 # 2. Central
 # 3. Italy (Null)
 agents = [
-    { id = "ENTENTE_POWERS", type = "bloc_llm", model = "gpt-4-turbo", powers = ["ENGLAND", "FRANCE", "RUSSIA"] },
+    { id = "ENTENTE_POWERS", type = "bloc_llm", model = "gemma3:12b", powers = ["ENGLAND", "FRANCE", "RUSSIA"] },
     { id = "CENTRAL_POWERS", type = "bloc_llm", model = "gemma3:12b", powers = ["AUSTRIA", "GERMANY", "TURKEY"] },
     { id = "ITALY_NULL_AGENT", type = "null", country = "ITALY" } # Italy controlled by NullAgent
     # No model needed for "null" type. 'country' specifies the power it controls.
