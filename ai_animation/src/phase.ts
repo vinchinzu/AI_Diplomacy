@@ -279,28 +279,35 @@ export function advanceToNextPhase() {
     console.log(`Processing phase transition for ${currentPhase.name}`);
   }
 
+  // In streaming mode, add extra delay before speech to ensure phase is fully displayed
+  const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+  const speechDelay = isStreamingMode ? 2000 : 0; // 2 second delay in streaming mode
+  
   // First show summary if available
   if (currentPhase.summary && currentPhase.summary.trim() !== '') {
-    // Speak the summary and advance after
-    if (!gameState.isSpeaking) {
-      speakSummary(currentPhase.summary)
-        .then(() => {
-          console.log("Speech completed successfully");
-          if (gameState.isPlaying) {
-            nextPhase();
-          }
-        })
-        .catch((error) => {
-          console.error("Speech failed with error:", error);
-          if (gameState.isPlaying) {
-            nextPhase();
-          }
-        }).finally(() => {
-
-        });
-    } else {
-      console.error("Attempted to start speaking when already speaking...")
-    }
+    // Delay speech in streaming mode
+    setTimeout(() => {
+      // Speak the summary and advance after
+      if (!gameState.isSpeaking) {
+        speakSummary(currentPhase.summary)
+          .then(() => {
+            console.log("Speech completed successfully");
+            if (gameState.isPlaying) {
+              nextPhase();
+            }
+          })
+          .catch((error) => {
+            console.error("Speech failed with error:", error);
+            if (gameState.isPlaying) {
+              nextPhase();
+            }
+          }).finally(() => {
+            // Any cleanup code here
+          });
+      } else {
+        console.error("Attempted to start speaking when already speaking...");
+      }
+    }, speechDelay);
   } else {
     console.log("No summary available, skipping speech");
     // No summary to speak, advance immediately

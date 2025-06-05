@@ -4,6 +4,12 @@
 export const config = {
   // Default speed in milliseconds for animations and transitions
   playbackSpeed: 500,
+  
+  // Streaming mode specific timing
+  get streamingPlaybackSpeed(): number {
+    const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+    return isStreamingMode ? 1000 : this.playbackSpeed; // Slower for streaming
+  },
 
   // Whether to enable debug mode (faster animations, more console logging)
   isDebugMode: import.meta.env.VITE_DEBUG_MODE === 'true' || import.meta.env.VITE_DEBUG_MODE === 'True',
@@ -59,7 +65,7 @@ export const config = {
    * Get effective playback speed (minimal if instant mode, normal speed otherwise)
    */
   get effectivePlaybackSpeed(): number {
-    return this.isInstantMode ? 10 : this.playbackSpeed;
+    return this.isInstantMode ? 10 : this.streamingPlaybackSpeed;
   },
 
   // Animation timing configuration

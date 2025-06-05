@@ -231,7 +231,10 @@ export function updateChatWindows(phase: any, stepMessages = false) {
         index++; // Only increment after animation completes
 
         // Schedule next message with proper delay
-        setTimeout(showNext, config.effectivePlaybackSpeed / 2);
+        // In streaming mode, add extra delay to prevent message overlap
+        const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+        const messageDelay = isStreamingMode ? config.effectivePlaybackSpeed : config.effectivePlaybackSpeed / 2;
+        setTimeout(showNext, messageDelay);
       };
 
       // Add the message with word animation
@@ -394,7 +397,10 @@ function animateMessageWords(message: string, contentSpanId: string, targetPower
     // Calculate delay based on word length and playback speed
     // Longer words get slightly longer display time
     const wordLength = words[wordIndex - 1].length;
-    const delay = Math.max(30, Math.min(120, config.effectivePlaybackSpeed / 10 * (wordLength / 4)));
+    // In streaming mode, use a more consistent delay to prevent overlap
+    const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+    const baseDelay = isStreamingMode ? 150 : config.effectivePlaybackSpeed / 10;
+    const delay = Math.max(50, Math.min(200, baseDelay * (wordLength / 4)));
     setTimeout(addNextWord, delay);
 
     // Scroll to ensure newest content is visible

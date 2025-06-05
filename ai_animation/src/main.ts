@@ -79,7 +79,7 @@ function initScene() {
       if (isStreamingMode) {
         setTimeout(() => {
           togglePlayback()
-        }, 2000)
+        }, 5000) // Increased delay to 5 seconds for Chrome to stabilize
       }
     })
   }).catch(err => {
