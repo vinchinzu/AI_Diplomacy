@@ -8,7 +8,6 @@ from typing import Dict, TYPE_CHECKING, Optional, Any  # Added Any
 from .agents.factory import AgentFactory
 from .agents.base import BaseAgent
 from .services.config import AgentConfig  # AgentConfig from services
-# from .model_utils import assign_models_to_powers # This will be removed/commented
 
 if TYPE_CHECKING:
     from .game_config import GameConfig  # GameConfig from root
@@ -44,38 +43,6 @@ class AgentManager:
     # (determining which power gets which model) will be handled upstream
     # before initialize_agents is called. The new `agent_configurations`
     # argument to initialize_agents will carry this information.
-    #
-    # def assign_models(self, all_game_powers: List[str]) -> Dict[str, str]:
-    #     """
-    #     Assigns LLM model IDs to each participating power in the game.
-    #
-    #     This method considers:
-    #     - A specific power controlled by a specific model (from config.power_name & config.model_id).
-    #     - A list of fixed models to be assigned to other powers (from config.fixed_models).
-    #     - Randomization of fixed model assignments (config.randomize_fixed_models).
-    #     - Powers to be excluded (config.exclude_powers).
-    #     - The total number of LLM-controlled players (config.num_players).
-    #
-    #     Args:
-    #         all_game_powers: A list of all power names in the game (e.g., ["AUSTRIA", "ENGLAND", ...]).
-    #
-    #     Returns:
-    #         A dictionary mapping power names to their assigned model IDs.
-    #     """
-    #     logger.info("Assigning models to powers...") # Kept initial logging
-    #
-    #     # Call the new utility function
-    #     final_llm_assignments = assign_models_to_powers(
-    #         game_config=self.game_config,
-    #         all_game_powers=all_game_powers,
-    #     )
-    #
-    #     # Store in game_config as well
-    #     self.game_config.powers_and_models = final_llm_assignments
-    #     logger.info( # Added a log message here for clarity on what AgentManager is doing
-    #         f"AgentManager stored final model assignments from model_utils: {final_llm_assignments}"
-    #     )
-    #     return final_llm_assignments
 
     def _initialize_agent_state_ext(self, agent: BaseAgent):
         """
@@ -92,7 +59,6 @@ class AgentManager:
     def initialize_agents(
         self,
         agent_configurations: Dict[str, Dict[str, Any]],
-        # game_instance: Optional["Game"] = None # If needed by agents during init
     ):
         """
         Creates and initializes agent instances based on provided configurations.
@@ -102,8 +68,6 @@ class AgentManager:
                 (e.g., "FRANCE" or "ENTENTE_BLOC") and values are dictionaries
                 containing agent setup details like type, model_id, country (for single),
                 bloc_name, controlled_powers (for blocs).
-            # game_instance: Optionally, the initialized diplomacy.Game object, if agents
-            # need access to it during their construction (currently they don't directly).
         """
         logger.info(
             f"Initializing agents based on configurations: {list(agent_configurations.keys())}"
