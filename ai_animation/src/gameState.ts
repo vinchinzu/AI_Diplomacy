@@ -7,10 +7,10 @@ import { prevBtn, nextBtn, playBtn, speedSelector, mapView, updateGameIdDisplay 
 import { createChatWindows } from "./domElements/chatWindows";
 import { logger } from "./logger";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
-import { displayInitialPhase } from "./phase";
+import { displayInitialPhase, togglePlayback } from "./phase";
 import { Tween, Group as TweenGroup } from "@tweenjs/tween.js";
 import { hideStandingsBoard, } from "./domElements/standingsBoard";
-import { MomentsDataSchema, MomentsDataSchemaType, Moment, NormalizedMomentsData } from "./types/moments";
+import { MomentsDataSchema, Moment, NormalizedMomentsData } from "./types/moments";
 
 //FIXME: This whole file is a mess. Need to organize and format
 
@@ -20,13 +20,36 @@ enum AvailableMaps {
 
 /**
  * Return a random power from the PowerENUM for the player to control
+ * Only returns powers that have more than 2 supply centers in the last phase
  */
-function getRandomPower(): PowerENUM {
-  const values = Object.values(PowerENUM).filter(power =>
+function getRandomPower(gameData?: GameSchemaType): PowerENUM {
+  const allPowers = Object.values(PowerENUM).filter(power =>
     power !== PowerENUM.GLOBAL && power !== PowerENUM.EUROPE
   );
-  const idx = Math.floor(Math.random() * values.length);
-  return values[idx];
+  
+  // If no game data provided, return any random power
+  if (!gameData || !gameData.phases || gameData.phases.length === 0) {
+    const idx = Math.floor(Math.random() * allPowers.length);
+    return allPowers[idx];
+  }
+  
+  // Get the last phase to check supply centers
+  const lastPhase = gameData.phases[gameData.phases.length - 1];
+  
+  // Filter powers that have more than 2 supply centers
+  const eligiblePowers = allPowers.filter(power => {
+    const centers = lastPhase.state?.centers?.[power];
+    return centers && centers.length > 2;
+  });
+  
+  // If no powers have more than 2 centers, fall back to any power
+  if (eligiblePowers.length === 0) {
+    const idx = Math.floor(Math.random() * allPowers.length);
+    return allPowers[idx];
+  }
+  
+  const idx = Math.floor(Math.random() * eligiblePowers.length);
+  return eligiblePowers[idx];
 }
 
 function loadFileFromServer(filePath: string): Promise<string> {
@@ -34,23 +57,21 @@ function loadFileFromServer(filePath: string): Promise<string> {
     fetch(filePath)
       .then(response => {
         if (!response.ok) {
-          alert(`Couldn't load file, received reponse code ${response.status}`)
-          throw new Error(`Failed to load file: ${response.status}`);
+          reject(`Failed to load file: ${response.status}`);
         }
 
         // FIXME: This occurs because the server seems to resolve any URL to the homepage. This is the case for Vite's Dev Server.
         // Check content type to avoid HTML errors
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('text/html')) {
-          alert(`Unable to load file ${filePath}, was presented HTML, contentType ${contentType}`)
-          throw new Error('Received HTML instead of JSON. Check the file path.');
+          reject('Received HTML instead of JSON. Check the file path.');
         }
         return response.text();
       })
       .then(data => {
         // Check for HTML content as a fallback
         if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
-          throw new Error('Received HTML instead of JSON. Check the file path.');
+          reject('Received HTML instead of JSON. Check the file path.');
         }
         resolve(data)
       })
@@ -157,8 +178,8 @@ class GameState {
           playBtn.disabled = false;
           speedSelector.disabled = false;
 
-          // Set the poewr if the game specifies it, else random.
-          this.currentPower = this.gameData.power !== undefined ? this.gameData.power : getRandomPower();
+          // Set the power if the game specifies it, else random.
+          this.currentPower = this.gameData.power !== undefined ? this.gameData.power : getRandomPower(this.gameData);
 
 
           const momentsFilePath = `./games/${this.gameId}/moments.json`;
@@ -273,18 +294,31 @@ class GameState {
    * Loads the next game in the order, reseting the board and gameState
    */
   loadNextGame = () => {
-    //
+    let gameId = this.gameId + 1
+    let contPlaying = false
+    if (this.isPlaying) {
+      contPlaying = true
+    }
+    this.loadGameFile(gameId).then(() => {
 
-    this.gameId += 1
+      if (contPlaying) {
+        togglePlayback(true)
+      }
+    }).catch(() => {
+      console.warn("caught error trying to advance game. Setting gameId to 0 and restarting...")
+      this.loadGameFile(0)
+      if (contPlaying) {
+        togglePlayback(true)
+      }
+    })
 
-    // Try to load the next game, if it fails, show end screen forever
 
   }
 
   /*
    * Given a gameId, load that game's state into the GameState Object
    */
-  loadGameFile = (gameId: number) => {
+  loadGameFile = (gameId: number): Promise<void> => {
 
     if (gameId === null || gameId < 0) {
       throw Error(`Attempted to load game with invalid ID ${gameId}`)
@@ -292,25 +326,29 @@ class GameState {
 
     // Path to the default game file
     const gameFilePath = `./games/${gameId}/game.json`;
-    loadFileFromServer(gameFilePath).then((data) => {
-      this.gameId = gameId
+    return new Promise((resolve, reject) => {
+      loadFileFromServer(gameFilePath).then((data) => {
 
-      return this.loadGameData(data);
-    })
-      .then(() => {
-        console.log("Default game file loaded and parsed successfully");
-        // Explicitly hide standings board after loading game
-        hideStandingsBoard();
-        // Update rotating display and relationship popup with game data
-        if (this.gameData) {
-          updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
-          updateGameIdDisplay();
-        }
+        return this.loadGameData(data);
       })
-      .catch(error => {
-        // Use console.error instead of logger.log to avoid updating the info panel
-        console.error(`Error loading game ${gameFilePath}: ${error.message}`);
-      });
+        .then(() => {
+          console.log(`Game file with id ${gameId} loaded and parsed successfully`);
+          // Explicitly hide standings board after loading game
+          hideStandingsBoard();
+          // Update rotating display and relationship popup with game data
+          if (this.gameData) {
+            updateRotatingDisplay(this.gameData, this.phaseIndex, this.currentPower);
+            this.gameId = gameId
+            updateGameIdDisplay();
+            resolve()
+          }
+        })
+        .catch(error => {
+          // Use console.error instead of logger.log to avoid updating the info panel
+          console.error(`Error loading game ${gameFilePath}: ${error}`);
+          reject()
+        });
+    })
   }
 
   checkPhaseHasMoment = (phaseName: string): Moment | null => {

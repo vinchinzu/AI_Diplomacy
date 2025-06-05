@@ -1,6 +1,6 @@
 import { gameState } from "./gameState";
 import { logger } from "./logger";
-import { updatePhaseDisplay } from "./domElements";
+import { updatePhaseDisplay, playBtn, prevBtn, nextBtn } from "./domElements";
 import { initUnits } from "./units/create";
 import { updateSupplyCenterOwnership, updateLeaderboard, updateMapOwnership as _updateMapOwnership, updateMapOwnership } from "./map/state";
 import { updateChatWindows, addToNewsBanner } from "./domElements/chatWindows";
@@ -11,6 +11,7 @@ import { debugMenuInstance } from "./debug/debugMenu";
 import { showTwoPowerConversation, closeTwoPowerConversation } from "./components/twoPowerConversation";
 import { closeVictoryModal, showVictoryModal } from "./components/victoryModal";
 import { notifyPhaseChange } from "./webhooks/phaseNotifier";
+import { updateRotatingDisplay } from "./components/rotatingDisplay";
 
 const MOMENT_THRESHOLD = 8.0
 // If we're in debug mode or instant mode, show it quick, otherwise show it for 30 seconds
@@ -60,6 +61,7 @@ export function _setPhase(phaseIndex: number) {
     } else {
       displayPhase()
     }
+    gameState.nextPhaseScheduled = false;
   }
 
   // Finally, update the gameState with the current phaseIndex
@@ -69,6 +71,59 @@ export function _setPhase(phaseIndex: number) {
   notifyPhaseChange(oldPhaseIndex, phaseIndex);
 }
 
+// --- PLAYBACK CONTROLS ---
+export function togglePlayback(explicitSet: boolean) {
+  // If the game doesn't have any data, or there are no phases, return;
+  if (!gameState.gameData || gameState.gameData.phases.length <= 0) {
+    alert("This game file appears to be broken. Please reload the page and load a different game.")
+    throw Error("Bad gameState, exiting.")
+  };
+
+  // TODO: Likely not how we want to handle the speaking section of this. 
+  //   Should be able to pause the other elements while we're speaking
+  if (gameState.isSpeaking) return;
+
+  gameState.isPlaying = !gameState.isPlaying;
+  if (typeof explicitSet === "boolean") {
+    gameState.isPlaying = explicitSet
+  }
+
+  if (gameState.isPlaying) {
+    playBtn.textContent = "⏸ Pause";
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    logger.log("Starting playback...");
+
+    if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[1].start()
+
+    // Update rotating display
+    if (gameState.gameData) {
+      updateRotatingDisplay(gameState.gameData, gameState.phaseIndex, gameState.currentPower);
+    }
+
+    // First, show the messages of the current phase if it's the initial playback
+    const phase = gameState.gameData.phases[gameState.phaseIndex];
+    if (phase.messages && phase.messages.length) {
+      // Show messages with stepwise animation
+      logger.log(`Playing ${phase.messages.length} messages from phase ${gameState.phaseIndex + 1}/${gameState.gameData.phases.length}`);
+      updateChatWindows(phase, true);
+    } else {
+      // No messages, go straight to unit animations
+      logger.log("No messages for this phase, proceeding to animations");
+      displayPhaseWithAnimation();
+    }
+  } else {
+    if (gameState.cameraPanAnim) gameState.cameraPanAnim.getAll()[0].pause();
+    playBtn.textContent = "▶ Play";
+    if (gameState.playbackTimer) {
+      clearTimeout(gameState.playbackTimer);
+      gameState.playbackTimer = null;
+    }
+    gameState.messagesPlaying = false;
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
+  }
+}
 
 
 export function nextPhase() {
@@ -146,7 +201,7 @@ export function displayPhase(skipMessages = false) {
   _updateMapOwnership();
 
   // Add phase info to news banner if not already there
-  const phaseBannerText = `Phase: ${currentPhase.name}`;
+  const phaseBannerText = `Phase: ${currentPhase.name}: ${currentPhase.summary}`;
   addToNewsBanner(phaseBannerText);
 
   // Log phase details to console only, don't update info panel with this
@@ -207,8 +262,6 @@ export function advanceToNextPhase() {
     logger.log("Cannot advance phase: invalid game state");
     return;
   }
-  // Reset the nextPhaseScheduled flag to allow scheduling the next phase
-  gameState.nextPhaseScheduled = false;
 
   // Get current phase
   const currentPhase = gameState.gameData.phases[gameState.phaseIndex];
@@ -224,10 +277,6 @@ export function advanceToNextPhase() {
 
   // First show summary if available
   if (currentPhase.summary && currentPhase.summary.trim() !== '') {
-    // Update the news banner with full summary
-    addToNewsBanner(`(${currentPhase.name}) ${currentPhase.summary}`);
-    console.log("Added summary to news banner, preparing to call speakSummary");
-
     // Speak the summary and advance after
     if (!gameState.isSpeaking) {
       speakSummary(currentPhase.summary)
@@ -242,6 +291,8 @@ export function advanceToNextPhase() {
           if (gameState.isPlaying) {
             nextPhase();
           }
+        }).finally(() => {
+
         });
     } else {
       console.error("Attempted to start speaking when already speaking...")
@@ -251,6 +302,9 @@ export function advanceToNextPhase() {
     // No summary to speak, advance immediately
     nextPhase();
   }
+
+  // Reset the nextPhaseScheduled flag to allow scheduling the next phase
+  gameState.nextPhaseScheduled = false;
 }
 
 function displayFinalPhase() {

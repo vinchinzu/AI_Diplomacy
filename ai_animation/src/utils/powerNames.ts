@@ -25,7 +25,7 @@ export function getPowerDisplayName(power: PowerENUM | string): string {
       // Remove the extra long parts of some of the model names e.g. openroute-meta/llama-4-maverick -> llama-4-maverick
       let slashIdx = modelName?.indexOf("/")
       if (slashIdx >= 0) {
-        return modelName.slice(0, slashIdx)
+        return modelName.slice(slashIdx + 1, modelName.length)
       }
       return modelName;
     }

@@ -20,15 +20,15 @@ sleep 2
 mkdir -p /home/chrome
 
 # Launch Chrome in the background, pointing at your site.
-#   --app=... to open it as a single-window "app"
-#   --no-sandbox / --disable-gpu often needed in Docker
-#   --use-fake-device-for-media-stream / etc. if you need to simulate mic/cam
+#   --disable-background-timer-throttling & related flags to prevent fps throttling in headless/Xvfb
 DISPLAY=$DISPLAY google-chrome \
   --remote-debugging-port=9222 \
   --disable-gpu \
-  --disable-dev-shm-usage \
-  --no-first-run \
   --disable-infobars \
+  --no-first-run \
+  --disable-background-timer-throttling \
+  --disable-renderer-backgrounding \
+  --disable-backgrounding-occluded-windows \
   --user-data-dir=/home/chrome/chrome-data \
   --window-size=1920,1080 --window-position=0,0 \
   --kiosk \
@@ -37,13 +37,12 @@ DISPLAY=$DISPLAY google-chrome \
 sleep 5 # let the page load or animations start
 
 # Start streaming with FFmpeg.
-#  - For video:  x11grab from DISPLAY
-#  - For audio:  pulse from the "default" device
-# Adjust your bitrate, resolution, frame rate, etc. as desired.
+#  - For video: x11grab at 30fps
+#  - For audio: pulse from the default device
 exec ffmpeg -y \
-  -f x11grab -thread_queue_size 512 -r 30 -s 1920x1080 -i $DISPLAY \
+  -f x11grab -video_size 1920x1080 -framerate 30 -thread_queue_size 512 -i $DISPLAY \
   -f pulse -thread_queue_size 512 -i default \
-  -c:v libx264 -preset veryfast -b:v 6000k -maxrate 6000k -bufsize 12000k \
+  -c:v libx264 -preset ultrafast -b:v 6000k -maxrate 6000k -bufsize 12000k \
   -pix_fmt yuv420p \
   -c:a aac -b:a 160k \
   -vsync 1 -async 1 \
