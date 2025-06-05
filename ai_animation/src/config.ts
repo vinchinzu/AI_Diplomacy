@@ -6,7 +6,7 @@ export const config = {
   playbackSpeed: 500,
 
   // Whether to enable debug mode (faster animations, more console logging)
-  isDebugMode: import.meta.env.VITE_DEBUG_MODE || false,
+  isDebugMode: import.meta.env.VITE_DEBUG_MODE === 'true' || import.meta.env.VITE_DEBUG_MODE === 'True',
 
   // Duration of unit movement animation in ms
   animationDuration: 1500,
@@ -15,13 +15,15 @@ export const config = {
   soundEffectFrequency: 3,
 
   // Whether speech/TTS is enabled (can be toggled via debug menu)
-  speechEnabled: import.meta.env.VITE_DEBUG_MODE ? false : true,
+  get speechEnabled(): boolean {
+    return !(import.meta.env.VITE_DEBUG_MODE === 'true' || import.meta.env.VITE_DEBUG_MODE === 'True');
+  },
 
   // Webhook URL for phase change notifications (optional)
   webhookUrl: import.meta.env.VITE_WEBHOOK_URL || '',
   get isTestingMode(): boolean {
     // have playwrite inject a marker saying that it's testing to brower
-    return import.meta.env.VITE_TESTING_MODE == 'True' || window.isUnderTest;
+    return import.meta.env.VITE_TESTING_MODE === 'True' || import.meta.env.VITE_TESTING_MODE === 'true' || window.isUnderTest;
   },
   _isTestingMode: false,
 
@@ -31,7 +33,7 @@ export const config = {
     if (this._instantModeOverride !== null) {
       return this._instantModeOverride
     }
-    return import.meta.env.VITE_INSTANT_MODE === 'True'
+    return import.meta.env.VITE_INSTANT_MODE === 'True' || import.meta.env.VITE_INSTANT_MODE === 'true'
   },
 
   // Internal flag to allow runtime toggling of instant mode

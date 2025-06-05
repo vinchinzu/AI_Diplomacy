@@ -221,7 +221,11 @@ export function displayPhase(skipMessages = false) {
   // Only animate if not the first phase and animations are requested
   if (!isFirstPhase && !skipMessages) {
     if (previousPhase) {
-      createAnimationsForNextPhase();
+      // Don't create animations immediately if messages are still playing
+      // The main loop will handle this when messages finish
+      if (!gameState.messagesPlaying) {
+        createAnimationsForNextPhase();
+      }
     }
   } else {
     logger.log("No animations for this phase transition");

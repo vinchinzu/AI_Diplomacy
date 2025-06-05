@@ -201,6 +201,20 @@ export function updateChatWindows(phase: any, stepMessages = false) {
           console.log(`All messages displayed in ${Date.now() - messageStartTime}ms`);
         }
         gameState.messagesPlaying = false;
+        
+        // Trigger unit animations now that messages are done
+        // This imports a circular dependency, so we use a dynamic import
+        import('../units/animate').then(({ createAnimationsForNextPhase }) => {
+          const phaseIndex = gameState.phaseIndex;
+          const isFirstPhase = phaseIndex === 0;
+          const previousPhase = !isFirstPhase && phaseIndex > 0 ? gameState.gameData.phases[phaseIndex - 1] : null;
+          
+          if (!isFirstPhase && previousPhase) {
+            console.log("Messages complete, starting unit animations");
+            createAnimationsForNextPhase();
+          }
+        });
+        
         return;
       }
 
@@ -218,7 +232,6 @@ export function updateChatWindows(phase: any, stepMessages = false) {
 
         // Schedule next message with proper delay
         setTimeout(showNext, config.effectivePlaybackSpeed / 2);
-        //showNext()
       };
 
       // Add the message with word animation
@@ -227,8 +240,8 @@ export function updateChatWindows(phase: any, stepMessages = false) {
       // Handle non-new messages
       if (!isNew) {
         onMessageComplete(); // Skip animation for already seen messages
-      } else if (!config.isDebugMode) {
-        // Animate head and play sound for new messages
+      } else {
+        // Animate head and play sound for new messages (not just when not in debug mode)
         messageCounter++;
         animateHeadNod(msg, (messageCounter % config.soundEffectFrequency === 0));
       }
@@ -644,11 +657,28 @@ function playRandomSoundEffect() {
 
   // Create an <audio> and play
   const audio = new Audio(`./sounds/${chosen}`);
-  if (config.isDebugMode || config.isTestingMode) { console.debug("Not playing sounds in debug or testing mode"); return }
-  audio.play().catch(err => {
-    // In case of browser auto-play restrictions, you may see warnings in console
-    console.warn("Audio play was interrupted:", err);
-  });
+  audio.volume = 0.5; // Set volume to 50% to avoid being too loud
+  
+  if (config.isDebugMode || config.isTestingMode) { 
+    console.debug("Not playing sounds in debug or testing mode"); 
+    return;
+  }
+  
+  console.log(`Attempting to play sound: ${chosen}`);
+  
+  // Try to play the audio
+  const playPromise = audio.play();
+  
+  if (playPromise !== undefined) {
+    playPromise
+      .then(() => {
+        console.log(`Successfully played sound: ${chosen}`);
+      })
+      .catch(err => {
+        console.error(`Failed to play sound ${chosen}:`, err);
+        console.log('This might be due to browser autoplay policies. User interaction may be required.');
+      });
+  }
 }
 
 /**

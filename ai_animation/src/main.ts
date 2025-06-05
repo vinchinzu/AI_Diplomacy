@@ -17,11 +17,31 @@ import { debugMenuInstance } from "./debug/debugMenu";
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
 
-const isStreamingMode = import.meta.env.VITE_STREAMING_MODE
+const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true'
 
 // --- INITIALIZE SCENE ---
 function initScene() {
   gameState.createThreeScene()
+  
+  // Enable audio on first user interaction (to comply with browser autoplay policies)
+  let audioEnabled = false;
+  const enableAudio = () => {
+    if (!audioEnabled) {
+      console.log('User interaction detected, audio enabled');
+      audioEnabled = true;
+      // Create and play a silent audio to unlock audio context
+      const silentAudio = new Audio();
+      silentAudio.volume = 0;
+      silentAudio.play().catch(() => {});
+      
+      // Remove the listener after first interaction
+      document.removeEventListener('click', enableAudio);
+      document.removeEventListener('keydown', enableAudio);
+    }
+  };
+  
+  document.addEventListener('click', enableAudio);
+  document.addEventListener('keydown', enableAudio);
 
 
   // Initialize standings board

@@ -13,6 +13,7 @@ services:
 
   diplomacy:
     build: ai_animation
+    env_file: "./ai_animation/.env"
     ports:
       - "4173:4173"
       - "5173:5173"
