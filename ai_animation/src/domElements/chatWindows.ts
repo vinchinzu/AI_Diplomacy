@@ -404,7 +404,15 @@ function animateMessageWords(message: string, contentSpanId: string, targetPower
     setTimeout(addNextWord, delay);
 
     // Scroll to ensure newest content is visible
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // Use requestAnimationFrame to batch DOM updates in streaming mode
+    const isStreamingModeForScroll = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+    if (isStreamingModeForScroll) {
+      requestAnimationFrame(() => {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      });
+    } else {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
   };
 
   // Start animation

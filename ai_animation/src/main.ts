@@ -14,6 +14,7 @@ import { closeTwoPowerConversation, showTwoPowerConversation } from "./component
 import { PowerENUM } from "./types/map";
 import { debugMenuInstance } from "./debug/debugMenu";
 import { sineWave } from "./utils/timing";
+import { initializeBackgroundAudio, startBackgroundAudio } from "./backgroundAudio";
 
 //TODO: Create a function that finds a suitable unit location within a given polygon, for placing units better 
 //  Currently the location for label, unit, and SC are all the same manually picked location
@@ -23,6 +24,9 @@ const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import
 // --- INITIALIZE SCENE ---
 function initScene() {
   gameState.createThreeScene()
+  
+  // Initialize background audio for streaming mode
+  initializeBackgroundAudio();
   
   // Enable audio on first user interaction (to comply with browser autoplay policies)
   let audioEnabled = false;
@@ -34,6 +38,11 @@ function initScene() {
       const silentAudio = new Audio();
       silentAudio.volume = 0;
       silentAudio.play().catch(() => {});
+      
+      // Start background audio in streaming mode
+      if (isStreamingMode) {
+        startBackgroundAudio();
+      }
       
       // Remove the listener after first interaction
       document.removeEventListener('click', enableAudio);
@@ -78,8 +87,10 @@ function initScene() {
       }
       if (isStreamingMode) {
         setTimeout(() => {
-          togglePlayback()
-        }, 5000) // Increased delay to 5 seconds for Chrome to stabilize
+          togglePlayback();
+          // Try to start background audio when auto-starting
+          startBackgroundAudio();
+        }, 10000) // Increased delay to 10 seconds for Chrome to fully load in Docker
       }
     })
   }).catch(err => {
@@ -191,20 +202,25 @@ function animate(currentTime: number = 0) {
     }, config.effectivePlaybackSpeed);
   }
   // Update any pulsing or wave animations on supply centers or units
-  if (gameState.scene.userData.animatedObjects) {
+  // In streaming mode, reduce animation frequency
+  const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+  const frameSkip = isStreamingMode ? 2 : 1; // Skip every other frame in streaming
+  
+  if (gameState.scene.userData.animatedObjects && (Math.floor(currentTime / 16.67) % frameSkip === 0)) {
     gameState.scene.userData.animatedObjects.forEach(obj => {
       if (obj.userData.pulseAnimation) {
         const anim = obj.userData.pulseAnimation;
         // Use delta time for consistent animation speed regardless of frame rate
-        anim.time += anim.speed * deltaTime;
+        anim.time += anim.speed * deltaTime * frameSkip; // Compensate for skipped frames
         if (obj.userData.glowMesh) {
           const pulseValue = sineWave(config.animation.supplyPulseFrequency, anim.time, anim.intensity, 0.5);
           obj.userData.glowMesh.material.opacity = 0.2 + (pulseValue * 0.3);
           const scale = 1 + (pulseValue * 0.1);
           obj.userData.glowMesh.scale.set(scale, scale, scale);
         }
-        // Subtle bobbing up/down
-        obj.position.y = 2 + sineWave(config.animation.supplyPulseFrequency, anim.time, 0.5);
+        // Subtle bobbing up/down - reduce in streaming mode
+        const bobAmount = isStreamingMode ? 0.25 : 0.5;
+        obj.position.y = 2 + sineWave(config.animation.supplyPulseFrequency, anim.time, bobAmount);
       }
     });
   }

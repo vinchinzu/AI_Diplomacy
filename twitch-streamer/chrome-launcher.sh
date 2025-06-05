@@ -31,8 +31,12 @@ while true; do
       --use-fake-ui-for-media-stream \
       --enable-usermedia-screen-capturing \
       --enable-gpu \
-      --use-gl=swiftshader \
+      --use-gl=angle \
+      --use-angle=gl \
       --disable-gpu-vsync \
+      --disable-gpu-sandbox \
+      --enable-accelerated-2d-canvas \
+      --enable-accelerated-video-decode=false \
       --force-device-scale-factor=1 \
       --disable-web-security \
       --disable-features=VizDisplayCompositor \

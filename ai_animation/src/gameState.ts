@@ -376,6 +376,9 @@ class GameState {
     if (mapView === null) {
       throw Error("Cannot find mapView element, unable to continue.")
     }
+    
+    const isStreamingMode = import.meta.env.VITE_STREAMING_MODE === 'True' || import.meta.env.VITE_STREAMING_MODE === 'true';
+    
     this.scene.background = new THREE.Color(0x87CEEB);
 
     // Camera
@@ -386,14 +389,27 @@ class GameState {
       3000
     );
     this.camera.position.set(0, 800, 900); // MODIFIED: Increased z-value to account for map shift
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    
+    // Renderer with streaming optimizations
+    this.renderer = new THREE.WebGLRenderer({ 
+      antialias: !isStreamingMode, // Disable antialiasing in streaming mode
+      powerPreference: "high-performance",
+      preserveDrawingBuffer: isStreamingMode // Required for streaming
+    });
     this.renderer.setSize(mapView.clientWidth, mapView.clientHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    
+    // Force lower pixel ratio for streaming to reduce GPU load
+    if (isStreamingMode) {
+      this.renderer.setPixelRatio(1);
+    } else {
+      this.renderer.setPixelRatio(window.devicePixelRatio);
+    }
+    
     mapView.appendChild(this.renderer.domElement);
 
-    // Controls
+    // Controls with streaming optimizations
     this.camControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.camControls.enableDamping = true;
+    this.camControls.enableDamping = !isStreamingMode; // Disable damping for immediate response
     this.camControls.dampingFactor = 0.05;
     this.camControls.screenSpacePanning = true;
     this.camControls.minDistance = 100;
