@@ -149,7 +149,14 @@ function animate() {
     console.log(`Scheduling next phase in ${config.effectivePlaybackSpeed}ms`);
     gameState.nextPhaseScheduled = true;
     gameState.playbackTimer = setTimeout(() => {
-      advanceToNextPhase();
+      try {
+        advanceToNextPhase()
+      } catch {
+        // FIXME: This is a dumb patch for us not being able to find the unit we expect to find.
+        //    We should instead bee figuring out why units aren't where we expect them to be when the engine has said that is a valid move
+        nextPhase()
+        gameState.nextPhaseScheduled;
+      }
     }, config.effectivePlaybackSpeed);
   }
   // Update any pulsing or wave animations on supply centers or units
