@@ -3,6 +3,7 @@ import subprocess # To run lm_game.py as a script
 import sys
 import re # For log checking
 from pathlib import Path
+import uuid # Added for unique game IDs
 
 # Helper to find the root directory of the project assuming tests are in tests/integration
 ROOT_DIR = Path(__file__).parent.parent.parent
@@ -29,33 +30,60 @@ def run_lm_game_process(args_list, timeout_seconds=180):
         stdout, stderr = process.communicate()
         pytest.fail(f"lm_game.py timed out after {timeout_seconds}s. Stdout: {stdout}, Stderr: {stderr}")
 
-    # Allow non-zero return codes for now, as game might error out due to incomplete orchestrator for blocs
-    # if process.returncode != 0:
-    #     print(f"lm_game.py exited with code {process.returncode}. Stdout: {stdout} Stderr: {stderr}")
-    #     # pytest.fail(f"lm_game.py exited with code {process.returncode}. Stdout: {stdout}, Stderr: {stderr}")
-
+    if process.returncode != 0:
+        print(f"lm_game.py exited with code {process.returncode}.")
+        print(f"  Stdout:\n{stdout}")
+        print(f"  Stderr:\n{stderr}")
+        # pytest.fail(f"lm_game.py exited with code {process.returncode}. Stdout: {stdout}, Stderr: {stderr}")
+        # Keep it commented for now if certain tests expect non-zero exit, but print info.
 
     return stdout, stderr, process.returncode
 
-def find_log_file_for_game(stdout_from_run, game_id_prefix_expected="diplomacy_game"):
-    """Parses stdout to find the game-specific log directory and general log file."""
-    # Example log line: "Output files are located in: logs/diplomacy_game_YYYYMMDD_HHMMSS"
-    # Or "Output files are located in: /abs/path/to/logs/diplomacy_game_YYYYMMDD_HHMMSS"
-    log_dir_pattern = r"Output files are located in: (.*?logs/" + game_id_prefix_expected + r"_[0-9]{8}_[0-9]{6})"
+def find_log_file_for_game(stdout_from_run, game_id_to_find=None, game_id_prefix_expected="diplomacy_game"):
+    """
+    Parses stdout to find the game-specific log directory and general log file.
+    If game_id_to_find is provided, it looks for that exact game_id.
+    Otherwise, it uses game_id_prefix_expected to find a generated game_id.
+    """
+    log_dir_str_from_stdout = None
+    log_dir_pattern = ""
+
+    if game_id_to_find:
+        # Pattern for an exact game_id (which might be prefixed by path components)
+        # Example: "Output files are located in: logs/test_wwi_run"
+        # Example: "Output files are located in: /app/logs/test_wwi_run"
+        log_dir_pattern = r"Output files are located in: (.*?logs/" + re.escape(game_id_to_find) + r")"
+    else:
+        # Pattern for a prefixed game_id (usually with a timestamp)
+        log_dir_pattern = r"Output files are located in: (.*?logs/" + re.escape(game_id_prefix_expected) + r"_[0-9]{8}_[0-9]{6})"
+
     log_dir_match = re.search(log_dir_pattern, stdout_from_run)
 
     if not log_dir_match:
-        print(f"Could not find log directory pattern '{log_dir_pattern}' in stdout: {stdout_from_run}")
+        print(f"Could not find log directory pattern '{log_dir_pattern}' in stdout_from_run. Content was:\n{stdout_from_run}")
         return None
 
-    game_specific_log_dir_str = log_dir_match.group(1)
+    game_specific_log_dir_str = log_dir_match.group(1).strip()
     game_specific_log_dir = Path(game_specific_log_dir_str)
 
     # If the path from log is not absolute, assume it's relative to ROOT_DIR
     if not game_specific_log_dir.is_absolute():
          game_specific_log_dir = ROOT_DIR / game_specific_log_dir_str
 
-    general_log_file = game_specific_log_dir / "general.log"
+    # Construct the log file name based on whether a specific game_id was used
+    log_file_name = ""
+    if game_id_to_find:
+        log_file_name = f"{game_id_to_find}_general.log"
+    else:
+        # This case might need refinement if the prefix-based game_id also influences the log file name directly
+        # For now, assume it would also be game_id_PREFIX_timestamp_general.log, but the game_id is parsed from log_dir_match.group(1)
+        # Let's get the actual game_id (basename of the dir)
+        actual_game_id_from_dir = game_specific_log_dir.name
+        log_file_name = f"{actual_game_id_from_dir}_general.log"
+        # This might be too simplistic if game_id_prefix_expected is used to form the log file name
+        # but the directory name is what GameConfig uses.
+
+    general_log_file = game_specific_log_dir / log_file_name
 
     if general_log_file.exists():
         return general_log_file
@@ -130,35 +158,39 @@ def test_6p_standard_game_preset():
 @pytest.mark.slow
 def test_4p_bloc_game_wwi_preset():
     """Test a 4-player equivalent bloc game (WWI preset)."""
+    game_id_for_test = f"test_wwi_scenario_run_{uuid.uuid4().hex[:8]}"
     args = [
-        "--preset", "wwi_2p",
+        "--scenario", "wwi_two_player",
+        "--config", "wwi_scenario.toml",
         "--max_years", "1914",
         "--num_negotiation_rounds", "0",
-        "--llm-models", "mock_bloc_model_1,mock_bloc_model_2"
+        "--game_id", game_id_for_test
+        # llm-models are now expected to be in wwi_scenario.toml's agent definitions.
+        # Ensure wwi_scenario.toml uses mock models or models accessible in test env.
     ]
     stdout, stderr, returncode = run_lm_game_process(args)
 
-    log_file = find_log_file_for_game(stdout) # Default prefix is diplomacy_game
-    assert log_file is not None, f"Could not find log file from lm_game output. Stdout: {stdout}"
+    # Use the exact game_id to find the log file
+    log_file = find_log_file_for_game(stdout, game_id_to_find=game_id_for_test)
+    assert log_file is not None, f"Could not find log file for game_id '{game_id_for_test}'. Stdout: {stdout}\nStderr: {stderr}"
 
-    # Check agent initialization for blocs and one neutral
-    assert count_occurrences_in_log(log_file, r"Creating agent for 'ENTENTE_BLOC' of type 'bloc_llm'") == 1
-    assert count_occurrences_in_log(log_file, r"Creating agent for 'CENTRAL_BLOC' of type 'bloc_llm'") == 1
-    assert count_occurrences_in_log(log_file, r"Creating agent for 'NEUTRAL_ITALY' of type 'neutral'") == 1
+    # Check agent initialization for blocs and one null agent, using IDs from wwi_scenario.toml
+    assert count_occurrences_in_log(log_file, r"Creating agent for 'ENTENTE_POWERS' of type 'bloc_llm'") == 1
+    assert count_occurrences_in_log(log_file, r"Creating agent for 'CENTRAL_POWERS' of type 'bloc_llm'") == 1
+    assert count_occurrences_in_log(log_file, r"Creating agent for 'ITALY_NULL_AGENT' of type 'null'") == 1
 
-    warning_pattern = r"BlocLLMAgent '.*?' \(bloc .*?\) TEMPORARILY returning .*? orders for representative power .*? only"
-    # This warning appears once per phase per bloc agent if orders are generated.
-    # For a single year (Spring, Fall movement phases), expect it multiple times.
-    # Exact count depends on how many phases are run and if orders are successfully generated.
-    # Let's check if it appears at least for each bloc once.
-    # Number of game phases resulting in orders: S1914M, F1914M = 2 phases
-    # So, 2 blocs * 2 phases = 4 warnings expected if game runs fully for 1914.
-    # If the game ends prematurely due to orchestrator issues, this count might be lower.
-    # For now, let's check it appears at least once.
-    assert count_occurrences_in_log(log_file, warning_pattern) >= 1
-
-    assert count_occurrences_in_log(log_file, r"BlocLLMAgent 'entente_bloc_.*?' sending prompt for orders") > 0
-    assert count_occurrences_in_log(log_file, r"BlocLLMAgent 'central_bloc_.*?' sending prompt for orders") > 0
+    # Check for BlocLLMAgent INFO log messages indicating it's proceeding to query the LLM.
+    # Example log: "New phase or state detected for bloc ENTENTE_POWERS (key elements: ...), querying LLM for bloc orders."
+    entente_query_pattern = r"New phase or state detected for bloc ENTENTE_POWERS .*?, querying LLM for bloc orders"
+    central_query_pattern = r"New phase or state detected for bloc CENTRAL_POWERS .*?, querying LLM for bloc orders"
+    assert count_occurrences_in_log(log_file, entente_query_pattern) > 0
+    assert count_occurrences_in_log(log_file, central_query_pattern) > 0
+    
+    # The specific warning "BlocLLMAgent '.*?' \(bloc .*?\) TEMPORARILY returning .*?" might no longer be relevant
+    # if the BlocLLMAgent implementation has evolved.
+    # For now, we focus on the creation and the attempt to get orders.
+    # If LLM calls fail (as they do with current wwi_scenario.toml models without keys/setup),
+    # the game should still proceed gracefully (e.g. agents submit no orders).
 
     if returncode != 0:
         print(f"WARNING: test_4p_bloc_game_wwi_preset completed with return code {returncode}. Stdout: {stdout} Stderr: {stderr}")

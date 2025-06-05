@@ -134,6 +134,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--perform_planning_phase", type=lambda x: (str(x).lower() == "true"), default=None, help="Override perform_planning_phase from TOML.")
     parser.add_argument("--num_negotiation_rounds", type=int, default=None, help="Override num_negotiation_rounds from TOML.")
 
+    parser.add_argument(
+        "--scenario",
+        type=str,
+        default=None,
+        help="Specify a scenario name (e.g., wwi_two_player). This may override game_factory_path.",
+    )
 
     return parser.parse_args()
 
@@ -144,27 +150,44 @@ def get_game_from_factory(factory_path: str, player_names: List[str]) -> Game:
     try:
         module = importlib.import_module(module_name)
         factory_func: Callable[..., Game] = getattr(module, func_name)
-        # The wwi_two_player factory expects entente_player, central_player
-        # We need to map player_names (which are the agent names) to these roles.
-        # For wwi_2p, we expect two player_names.
-        if func_name == "wwi_two_player" and len(player_names) == 2:
-            # The factory uses these player_names (e.g., "ENTENTE_BLOC") in the game's metadata.
-            # It no longer uses set_owner; AgentManager is responsible for mapping these
-            # bloc names to the actual game powers (e.g., ENGLAND, FRANCE, RUSSIA for ENTENTE_BLOC).
-            return factory_func(
-                entente_player=player_names[0],
-                central_player=player_names[1],
-                italy_controller="NEUTRAL_ITALY",
-            )
+        # The wwi_two_player factory expects entente_player, central_player, and italy_controller
+        # player_names comes from config.players_list, which is sourced from TOML agents list.
+        # For wwi_two_player scenario, we expect 3 agent names from TOML.
+        if func_name == "wwi_two_player":
+            if len(player_names) == 3:
+                logger.info(
+                    f"Calling wwi_two_player factory with Entente: {player_names[0]}, "
+                    f"Central: {player_names[1]}, Italy: {player_names[2]}"
+                )
+                return factory_func(
+                    entente_player=player_names[0],
+                    central_player=player_names[1],
+                    italy_controller=player_names[2],
+                )
+            else:
+                logger.error(
+                    f"wwi_two_player factory expects 3 player names (Entente, Central, Italy) "
+                    f"but received {len(player_names)}: {player_names}. "
+                    "Please check agent definitions in the TOML configuration."
+                )
+                # Potentially raise an error or sys.exit here if this is critical
+                raise ValueError(f"Incorrect number of players for wwi_two_player factory: expected 3, got {len(player_names)}")
         else:
-            # Fallback for other factories or incorrect player count for wwi_2p
-            # This part might need adjustment depending on other factory signatures
+            # Fallback for other factories
             logger.warning(
-                f"Generic factory call for {factory_path}. Ensure player_names match factory needs."
+                f"Generic factory call for {factory_path}. Ensuring player_names match factory needs."
             )
-            return factory_func(
-                *player_names
-            )  # Or however generic factories are called
+            # This generic call might need adjustment based on other factories' signatures.
+            # If other factories take specific named arguments, this simple *player_names might not work.
+            try:
+                return factory_func(*player_names)
+            except TypeError as e:
+                logger.error(f"Error calling generic factory {factory_path} with player_names {player_names}: {e}")
+                logger.error(
+                    "This may indicate that the factory requires specific named arguments "
+                    "or a different number of arguments than provided."
+                )
+                raise
     except (ImportError, AttributeError, TypeError) as e:
         logger.error(f"Error loading game factory '{factory_path}': {e}", exc_info=True)
         raise
@@ -172,6 +195,15 @@ def get_game_from_factory(factory_path: str, player_names: List[str]) -> Game:
 
 async def main():
     args = parse_arguments()
+
+    # Handle --scenario argument
+    if args.scenario == "wwi_two_player":
+        # This will be picked up by GameConfig.
+        # If game_factory_path is also in TOML, GameConfig's logic
+        # should prioritize CLI args if they are not None.
+        # We are explicitly setting it on `args` before GameConfig reads from it.
+        args.game_factory_path = "scenarios:wwi_two_player"
+        logger.info(f"WWI two player scenario specified. Setting game_factory_path to '{args.game_factory_path}'.")
 
     if getattr(args, 'llm_models', None) and isinstance(args.llm_models, str):
         args.llm_models_list = [m.strip() for m in args.llm_models.split(",")]
@@ -279,10 +311,22 @@ async def main():
                         )
                 current_agent_setup["model_id"] = model_for_this_agent
 
-                if agent_type == "llm":
-                    current_agent_setup["country"] = player_identifier
-                elif agent_type == "neutral":
-                    current_agent_setup["country"] = player_identifier
+                if agent_type in ["llm", "neutral", "null"]:
+                    # Get the country from the parsed list in GameConfig
+                    country_for_agent = config.agent_countries_list[i]
+                    if country_for_agent:
+                        current_agent_setup["country"] = country_for_agent
+                    else:
+                        # Fallback or error if country is expected but not provided for these types
+                        logger.warning(
+                            f"Agent type '{agent_type}' for player '{player_identifier}' "
+                            f"expects a 'country' in TOML, but it's missing or empty. "
+                            f"AgentManager might fail if it's required. Player identifier '{player_identifier}' will be used as fallback."
+                        )
+                        # This fallback might be problematic if player_identifier is not a valid country name.
+                        # For "null" agent for Italy, player_identifier is "ITALY_NULL_AGENT", country is "ITALY".
+                        # The TOML should always provide `country` for these types.
+                        current_agent_setup["country"] = player_identifier # Potentially problematic fallback
                 elif agent_type == "bloc_llm":
                     current_agent_setup["bloc_name"] = player_identifier
                     if player_identifier in parsed_bloc_defs:

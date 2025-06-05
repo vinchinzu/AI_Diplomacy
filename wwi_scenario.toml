@@ -22,7 +22,8 @@ dev_mode = false
 verbose_llm_debug = true
 
 # Agent definitions for the WWI scenario
-# The order here matters for how run_wwi_test.py currently picks them up.
+# The order of agents in this list (e.g., Entente, Central, Italy) is important
+# as lm_game.py's wwi_two_player factory consumes them in that specific order.
 # 1. Entente
 # 2. Central
 # 3. Italy (Null)

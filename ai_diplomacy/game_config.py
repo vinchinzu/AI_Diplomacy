@@ -109,6 +109,7 @@ class GameConfig:
         self.agent_types_list: List[str] = []
         self.bloc_definitions_list: List[str] = []
         self.llm_models_list: List[str] = []
+        self.agent_countries_list: List[Optional[str]] = [] # For llm, neutral, null agents
 
         agent_entries_from_toml: Optional[List[Dict[str, Any]]] = None
         toml_config_source_for_agents: Optional[str] = None
@@ -131,7 +132,19 @@ class GameConfig:
             # Depending on game logic, this might be a fatal error.
             # For now, lists will remain empty.
 
-        self.game_factory_path: Optional[str] = self.get_toml_value("scenario.game_factory", None)
+        # Game factory path: CLI (via args from lm_game.py) > TOML > Default (None)
+        cli_game_factory_path_override = getattr(args, "game_factory_path", None)
+        if cli_game_factory_path_override:
+            self.game_factory_path: Optional[str] = cli_game_factory_path_override
+            logger.info(f"Using game_factory_path from CLI override: {self.game_factory_path}")
+        else:
+            self.game_factory_path: Optional[str] = self.get_toml_value("scenario.game_factory", None)
+            if self.game_factory_path:
+                logger.info(f"Using game_factory_path from TOML: {self.game_factory_path}")
+            else:
+                logger.info("No game_factory_path specified in CLI or TOML.")
+
+
         self.scenario_name_from_toml: Optional[str] = self.get_toml_value("scenario.name", None)
 
         # --- Model configuration is now part of agent definitions in the main TOML ---
@@ -228,6 +241,8 @@ class GameConfig:
             logger.info(f"  TOML Parsed Agent Types: {self.agent_types_list}")
         if self.llm_models_list:
             logger.info(f"  TOML Parsed Agent LLM Models: {self.llm_models_list}")
+        if self.agent_countries_list:
+            logger.info(f"  TOML Parsed Agent Countries: {self.agent_countries_list}")
         if self.bloc_definitions_list:
             logger.info(f"  TOML Parsed Bloc Definitions: {self.bloc_definitions_list}")
 
@@ -245,6 +260,7 @@ class GameConfig:
         temp_players_list: List[str] = []
         temp_agent_types_list: List[str] = []
         temp_llm_models_list: List[str] = []
+        temp_agent_countries_list: List[Optional[str]] = [] # To store country for llm, neutral, null agents
         temp_bloc_definitions_map: Dict[str, List[str]] = {}
 
         for agent_entry in agent_entries:
@@ -255,20 +271,27 @@ class GameConfig:
             agent_id = agent_entry.get("id")
             agent_type = agent_entry.get("type")
             model = agent_entry.get("model")
+            country = agent_entry.get("country") # Get country field
 
             if not agent_id or not agent_type:
                 logger.warning(f"Agent entry in TOML missing 'id' or 'type': {agent_entry}")
                 continue
 
             temp_players_list.append(agent_id)
-            temp_agent_types_list.append(agent_type.lower())
+            agent_type_lower = agent_type.lower()
+            temp_agent_types_list.append(agent_type_lower)
 
-            if agent_type.lower() in ["llm", "bloc_llm"]:
-                temp_llm_models_list.append(model if model else "") # Append model or empty string if None
+            if agent_type_lower in ["llm", "bloc_llm"]:
+                temp_llm_models_list.append(model if model else "")
             else:
-                temp_llm_models_list.append("") # Placeholder for non-LLM agents
+                temp_llm_models_list.append("")
 
-            if agent_type.lower() == "bloc_llm":
+            if agent_type_lower in ["llm", "neutral", "null"]:
+                temp_agent_countries_list.append(country if country else None)
+            else:
+                temp_agent_countries_list.append(None) # No specific country for bloc_llm itself
+
+            if agent_type_lower == "bloc_llm":
                 powers = agent_entry.get("powers")
                 if isinstance(powers, list) and all(isinstance(p, str) for p in powers):
                     temp_bloc_definitions_map[agent_id] = powers
@@ -286,12 +309,14 @@ class GameConfig:
         self.players_list = temp_players_list
         self.agent_types_list = temp_agent_types_list
         self.llm_models_list = temp_llm_models_list
+        self.agent_countries_list = temp_agent_countries_list # Store the parsed countries
         self.bloc_definitions_list = temp_bloc_definitions_list
         
         # Log what was parsed
         logger.info(f"Parsed from TOML - Players: {self.players_list}")
         logger.info(f"Parsed from TOML - Agent Types: {self.agent_types_list}")
         logger.info(f"Parsed from TOML - LLM Models: {self.llm_models_list}")
+        logger.info(f"Parsed from TOML - Agent Countries: {self.agent_countries_list}")
         logger.info(f"Parsed from TOML - Bloc Definitions: {self.bloc_definitions_list}")
 
     def get_toml_value(self, key_path: str, default: Optional[Any] = None) -> Any:

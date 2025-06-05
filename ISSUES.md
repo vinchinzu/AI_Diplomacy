@@ -12,7 +12,7 @@ This file tracks known issues, planned improvements, and ideas for future develo
     *   This should not require an LLM model to be assigned to Italy.
 *   **Proposed Solution Ideas:**
     *   Introduce a `NeutralAgent` or `ScriptedAgent` type (e.g., `HoldAgent(BaseAgent)`).
-    *   In `run_wwi_test.py` (or a general game configuration), assign this agent type to Italy.
+    *   In the game configuration (e.g., `wwi_scenario.toml`), assign this agent type to Italy.
     *   `AgentManager` would create this simple agent, which would not make LLM calls.
     *   Phase strategies would naturally call this agent's `decide_orders` method, which would return Hold orders.
     *   This approach avoids special-casing "ITALY" within phase strategies and is more extensible to other neutral/scripted powers.
