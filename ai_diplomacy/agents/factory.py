@@ -85,6 +85,8 @@ class AgentFactory:
             return self._create_scripted_agent(agent_id, country, config)
         elif config.type == "neutral":  # New condition for NeutralAgent
             return self._create_neutral_agent(agent_id, country, config)
+        elif config.type == "null": # "null" type will use NeutralAgent's creation logic
+            return self._create_neutral_agent(agent_id, country, config)
         elif config.type == "bloc_llm":  # New condition for BlocLLMAgent
             if not bloc_name or not controlled_powers:
                 raise ValueError(
@@ -268,6 +270,7 @@ class AgentFactory:
                 "scripted",
                 "neutral",
                 "bloc_llm",
+                "null", # Added "null" as a valid type
             ]:  # Added new types
                 logger.error(f"Invalid agent type: {config.type}")
                 return False

@@ -1,9 +1,9 @@
 from typing import List, Dict, Any
-from .base import BaseAgent, Order, Message
+from .base import BaseAgent, Order, Message, HoldBehaviourMixin
 from ..core.state import PhaseState
 
 
-class NeutralAgent(BaseAgent):
+class NeutralAgent(BaseAgent, HoldBehaviourMixin):
     """
     An agent that represents a neutral power.
     It always issues HOLD orders for all its units and does not engage in negotiation.
@@ -16,21 +16,9 @@ class NeutralAgent(BaseAgent):
     async def decide_orders(self, phase: PhaseState) -> List[Order]:
         """
         Decide what orders to submit for the current phase.
-        Neutral agents always HOLD all their units.
+        Neutral agents always HOLD all their units using HoldBehaviourMixin.
         """
-        orders = []
-        power_state = phase.get_power_state(self.country)
-        if power_state:
-            for unit in power_state.units:
-                # Assuming unit is a string like "A PAR", "F MAR", etc.
-                # Or if unit is an object, it should have a 'location' or 'name' attribute.
-                # For simplicity, let's assume unit string includes its location.
-                # A HOLD order is just the unit itself.
-                # Example: "A PAR H" or "F MAR H"
-                # The diplomacy library expects orders like: "A PAR HLD"
-                # Unit name is like "A PAR", "F MAR"
-                orders.append(Order(f"{unit} HLD"))
-        return orders
+        return self.get_hold_orders(phase)
 
     async def negotiate(self, phase: PhaseState) -> List[Message]:
         """

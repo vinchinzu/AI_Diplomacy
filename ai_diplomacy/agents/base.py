@@ -64,6 +64,37 @@ class Message:
         return hash((self.recipient, self.content, self.message_type))
 
 
+class HoldBehaviourMixin:
+    """
+    Mixin class providing a simple hold order generation behaviour.
+    Assumes the class using this mixin has a 'country' attribute (str).
+    """
+
+    def get_hold_orders(self, phase: PhaseState) -> List[Order]:
+        """
+        Generates hold orders for all units belonging to the agent.
+        """
+        units = []
+        # Attempt to get units using the NeutralAgent way first
+        try:
+            # Ensure self.country is uppercase for consistency if used in keys
+            power_state = phase.get_power_state(self.country.upper())
+            if power_state and hasattr(power_state, 'units'):
+                units = power_state.units
+            else:
+                # Fallback to NullAgent way if power_state is None or no units attribute
+                units = phase.game.get_units(self.country.upper())
+        except AttributeError:
+            # Fallback if get_power_state itself doesn't exist or another attribute error
+            # or if phase.game.get_units is preferred path for some reason
+            units = phase.game.get_units(self.country.upper())
+        
+        orders = []
+        for unit_name in units: # Assuming unit_name is a string or object convertible to string
+            orders.append(Order(f"{str(unit_name)} HLD"))
+        return orders
+
+
 class BaseAgent(ABC):
     """
     Abstract base class for all diplomacy agents.
