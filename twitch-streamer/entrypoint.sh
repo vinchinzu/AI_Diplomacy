@@ -10,8 +10,8 @@ fi
 # Start PulseAudio (virtual audio) in the background
 /twitch-streamer/pulse-virtual-audio.sh &
 
-# Start Xvfb (the in-memory X server) in the background
-Xvfb $DISPLAY -screen 0 1920x1080x24 &
+# Start Xvfb (the in-memory X server) in the background with optimizations
+Xvfb $DISPLAY -screen 0 1600x900x24 -ac -nolisten tcp &
 echo "Display is ${DISPLAY}"
 
 # Give Xvfb a moment to start
@@ -19,46 +19,42 @@ sleep 2
 
 mkdir -p /home/chrome
 
-# Launch Chrome in the background, pointing at your site.
-#   --disable-background-timer-throttling & related flags to prevent fps throttling in headless/Xvfb
-DISPLAY=$DISPLAY google-chrome \
-  --remote-debugging-port=9222 \
-  --no-sandbox \
-  --disable-setuid-sandbox \
-  --disable-dev-shm-usage \
-  --no-first-run \
-  --disable-background-timer-throttling \
-  --disable-renderer-backgrounding \
-  --disable-backgrounding-occluded-windows \
-  --disable-features=TranslateUI \
-  --disable-ipc-flooding-protection \
-  --disable-frame-rate-limit \
-  --enable-precise-memory-info \
-  --max-gum-fps=30 \
-  --user-data-dir=/home/chrome/chrome-data \
-  --window-size=1920,1080 --window-position=0,0 \
-  --kiosk \
-  --autoplay-policy=no-user-gesture-required \
-  --enable-gpu \
-  --use-gl=swiftshader \
-  --disable-gpu-vsync \
-  --force-device-scale-factor=1 \
-  "http://diplomacy:4173" &
+# Launch Chrome with restart capability
+/twitch-streamer/chrome-launcher.sh &
 
-sleep 5 # let the page load or animations start
+sleep 10 # let the page load or animations start
+
+# Simulate multiple clicks to enable audio and move mouse to corner
+echo "Simulating clicks for audio autoplay..."
+# Click on the play button area
+xdotool mousemove 960 540  # Move to center
+sleep 1
+xdotool click 1           # Left click
+sleep 0.5
+# Click multiple times to ensure audio starts
+xdotool click 1           # Second click
+sleep 0.2
+xdotool click 1           # Third click
+sleep 0.2
+# Try clicking on chat area in case it helps
+xdotool mousemove 300 300
+xdotool click 1
+sleep 0.5
+xdotool mousemove 1599 899  # Move to bottom right corner
 
 # Set PulseAudio environment
 export PULSE_RUNTIME_PATH=/tmp/pulse
 export PULSE_SERVER=unix:/tmp/pulse/native
+export PULSE_SINK=dummy_sink
 
 # Start streaming with FFmpeg.
 #  - For video: x11grab at 30fps
 #  - For audio: pulse from the dummy sink monitor
 exec ffmpeg -y \
-  -f x11grab -video_size 1920x1080 -framerate 30 -thread_queue_size 1024 -i $DISPLAY \
+  -f x11grab -video_size 1600x900 -framerate 15 -thread_queue_size 4096 -i $DISPLAY \
   -f pulse -thread_queue_size 1024 -i dummy_sink.monitor \
-  -c:v libx264 -preset fast -tune animation -b:v 4500k -maxrate 4500k -bufsize 9000k \
-  -g 60 -keyint_min 60 \
+  -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1000k -maxrate 1500k -bufsize 300k -profile:v baseline -level 3.0 -crf 32 -threads 1 -x264-params "nal-hrd=cbr:force-cfr=1:keyint=30" \
+  -g 40 -keyint_min 20 \
   -pix_fmt yuv420p \
   -c:a aac -b:a 128k \
   -vsync cfr \

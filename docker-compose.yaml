@@ -17,6 +17,9 @@ services:
       args:
         - VITE_ELEVENLABS_API_KEY=${VITE_ELEVENLABS_API_KEY}
         - VITE_WEBHOOK_URL=${VITE_WEBHOOK_URL}
+        - VITE_STREAMING_MODE=True
+        - VITE_DEBUG_MODE=False
+        - VITE_INSTANT_MODE=False
     env_file: "./ai_animation/.env"
     ports:
       - "4173:4173"

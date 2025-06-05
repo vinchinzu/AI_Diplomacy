@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   pulseaudio \
   fluxbox \
   dbus dbus-x11 \
+  xdotool \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome
@@ -38,10 +39,8 @@ ENV SCREEN_GEOMETRY=1920x1080x24
 RUN mkdir /twitch-streamer/
 COPY pulse-virtual-audio.sh /twitch-streamer/pulse-virtual-audio.sh
 COPY entrypoint.sh /twitch-streamer/entrypoint.sh
-RUN chmod +x /twitch-streamer/pulse-virtual-audio.sh /twitch-streamer/entrypoint.sh
+COPY chrome-launcher.sh /twitch-streamer/chrome-launcher.sh
+RUN chmod +x /twitch-streamer/pulse-virtual-audio.sh /twitch-streamer/entrypoint.sh /twitch-streamer/chrome-launcher.sh
 WORKDIR /twitch-streamer/
-
-# Switch to non-root user
-USER chrome
 
 ENTRYPOINT ["/twitch-streamer/entrypoint.sh"]
