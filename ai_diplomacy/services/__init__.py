@@ -20,7 +20,8 @@ from .context_provider import (
     ContextProviderFactory,
     ContextData,
 )
-from .llm_coordinator import (
+# Corrected import path for LLMCoordinator and related utilities
+from generic_llm_framework.llm_coordinator import (
     LLMCoordinator,
     LLMCallResult,
     get_usage_stats_by_country,

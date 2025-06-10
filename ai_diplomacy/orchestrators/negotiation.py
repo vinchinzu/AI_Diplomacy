@@ -8,7 +8,7 @@ from ..agents.llm_agent import LLMAgent  # Added this import
 if TYPE_CHECKING:
     from diplomacy import Game
     from ..game_history import GameHistory
-    from ..agents.base import Message  # For type checking messages_list_objects
+    from ..core.message import Message  # For type checking messages_list_objects
     from ..core.state import PhaseState  # For type checking current_phase_state
     from ..services.config import GameConfig  # For num_negotiation_rounds
     from ..agent_manager import AgentManager  # For get_agent

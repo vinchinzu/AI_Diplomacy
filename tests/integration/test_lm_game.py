@@ -180,6 +180,7 @@ class GameTester:
     async def _get_mocked_llm_call_internal(
         self, power_name_for_mock: str, *args, **kwargs
     ):
+        pass # Add pass to fix indentation error
     async def test_power_order_generation(self, power_name: str) -> bool:
         """Tests order generation for a single power."""
         agent = self.agent_manager.get_agent(power_name)

@@ -5,7 +5,9 @@ Useful for testing and as a baseline for LLM agent performance.
 
 import random
 from typing import List, Dict, Any, Optional
-from .base import BaseAgent, Order, Message, PhaseState
+from .base import BaseAgent, PhaseState # Corrected
+from ..core.order import Order # Corrected
+from ..core.message import Message # Corrected
 
 __all__ = ["ScriptedAgent"]
 
@@ -44,9 +46,9 @@ class ScriptedAgent(BaseAgent):
             "AUSTRIA",
             "TURKEY",
         ]
-        for country in all_countries:
-            if country != self.country:
-                self.relationships[country] = 0.0  # Neutral
+        for country_name in all_countries: # Renamed variable to avoid conflict
+            if country_name != self.country:
+                self.relationships[country_name] = 0.0  # Neutral
 
     async def decide_orders(self, phase: PhaseState) -> List[Order]:
         """
@@ -90,16 +92,16 @@ class ScriptedAgent(BaseAgent):
                 # Simple movement strategy
                 if self.personality == "aggressive":
                     # Try to move toward enemy supply centers
-                    order = self._aggressive_move(unit_type, location, phase)
+                    order_str = self._aggressive_move(unit_type, location, phase) # Renamed variable
                 elif self.personality == "defensive":
                     # Try to defend own supply centers
-                    order = self._defensive_move(unit_type, location, phase)
+                    order_str = self._defensive_move(unit_type, location, phase) # Renamed variable
                 else:
                     # Neutral: balanced expansion and defense
-                    order = self._neutral_move(unit_type, location, phase)
+                    order_str = self._neutral_move(unit_type, location, phase) # Renamed variable
 
-                if order:
-                    orders.append(Order(order))
+                if order_str:
+                    orders.append(Order(order_str))
 
         return orders
 
@@ -181,15 +183,15 @@ class ScriptedAgent(BaseAgent):
             builds_needed = center_count - unit_count
             # Simple build strategy: build armies in home centers
             # This would need map knowledge in real implementation
-            for i in range(builds_needed):
+            for _i in range(builds_needed): # Use _i if i is not used
                 orders.append(Order(f"A {self.country[:3]} B"))  # Build army in capital
         elif unit_count > center_count:
             # Must remove units
             removes_needed = unit_count - center_count
             # Remove the "least important" units (simplified)
-            for i in range(min(removes_needed, len(my_units))):
-                unit = my_units[i]
-                orders.append(Order(f"{unit} D"))  # Disband
+            for i_unit in range(min(removes_needed, len(my_units))): # Renamed loop variable
+                unit_to_remove = my_units[i_unit]
+                orders.append(Order(f"{unit_to_remove} D"))  # Disband
 
         return orders
 
@@ -256,12 +258,7 @@ class ScriptedAgent(BaseAgent):
         }
 
         personality_templates = templates.get(self.personality, templates["neutral"])
-        assert isinstance(
-            personality_templates, list
-        )  # Should always be a list due to fallback
-        if (
-            not personality_templates
-        ):  # Should not happen with the current templates dict
+        if not personality_templates: # Should not be reached
             return "Holding my cards close for now."
         return random.choice(personality_templates)
 
@@ -269,20 +266,20 @@ class ScriptedAgent(BaseAgent):
         """Identify a common threat for alliance building."""
         # Find the power with the most supply centers (excluding self and target)
         max_centers = 0
-        threat = None
+        common_threat = None # Renamed variable
 
-        for power in phase.powers:
+        for power_name in phase.powers:
             if (
-                power != self.country
-                and power != target
-                and not phase.is_power_eliminated(power)
+                power_name != self.country
+                and power_name != target
+                and not phase.is_power_eliminated(power_name)
             ):
-                center_count = phase.get_center_count(power)
+                center_count = phase.get_center_count(power_name)
                 if center_count > max_centers:
                     max_centers = center_count
-                    threat = power
+                    common_threat = power_name
 
-        return threat or "the leading power"
+        return common_threat or "the leading power"
 
     async def update_state(
         self, phase: PhaseState, events: List[Dict[str, Any]]
@@ -301,16 +298,16 @@ class ScriptedAgent(BaseAgent):
             if event_type == "attack":
                 # Someone attacked us or we attacked someone
                 attacker = event.get("attacker")
-                target = event.get("target")
+                target_power = event.get("target")
 
-                if target == self.country:
+                if target_power == self.country:
                     # We were attacked - decrease relationship
                     if attacker in self.relationships:
                         self.relationships[attacker] -= 0.3
                 elif attacker == self.country:
                     # We attacked someone - they probably don't like us now
-                    if target in self.relationships:
-                        self.relationships[target] -= 0.2
+                    if target_power in self.relationships:
+                        self.relationships[target_power] -= 0.2
 
             elif event_type == "support":
                 # Support relationships improve trust
@@ -323,9 +320,9 @@ class ScriptedAgent(BaseAgent):
                     self.relationships[supported] += 0.1
 
         # Clamp relationship values to [-1, 1]
-        for country in self.relationships:
-            self.relationships[country] = max(
-                -1.0, min(1.0, self.relationships[country])
+        for country_key in self.relationships:
+            self.relationships[country_key] = max(
+                -1.0, min(1.0, self.relationships[country_key])
             )
 
         # Update priorities based on game state
@@ -345,7 +342,7 @@ class ScriptedAgent(BaseAgent):
             self.priorities.append("consolidation")
 
         # Add defensive priority if someone is getting too strong
-        for power in phase.powers:
-            if power != self.country and phase.get_center_count(power) > 10:
+        for power_name in phase.powers:
+            if power_name != self.country and phase.get_center_count(power_name) > 10:
                 self.priorities.append("contain_leader")
                 break

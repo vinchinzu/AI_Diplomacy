@@ -3,7 +3,7 @@ import json
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from ai_diplomacy.agents.bloc_llm_agent import BlocLLMAgent
-from ai_diplomacy.agents.base import Order
+from ai_diplomacy.core.order import Order
 from ai_diplomacy.core.state import PhaseState # PowerState might not be directly used in mocks now
 from ai_diplomacy.services.config import AgentConfig
 from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator # For type hinting

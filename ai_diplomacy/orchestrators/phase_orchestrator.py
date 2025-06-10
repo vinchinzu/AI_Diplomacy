@@ -16,12 +16,14 @@ from diplomacy import Game
 from ..general_utils import gather_possible_orders  # Adjusted import
 from ..agents.llm_agent import LLMAgent  # Adjusted import
 from ..core.state import PhaseState  # Adjusted import
-from ..agents.base import BaseAgent, Order  # Adjusted import
+from ..agents.base import BaseAgent # Corrected: Order and Message removed
+from ..core.order import Order # Added: Correct import for Order
+from ..core.message import Message # Added: Correct import for Message
 from ..services.config import GameConfig  # Adjusted import
 from ..utils.phase_parsing import (
-    get_phase_type_from_game,
-    extract_year_from_phase,
-    PhaseType,
+    get_phase_type_from_game
+    extract_year_from_phase
+    PhaseType
 )  # Adjusted import
 
 # Import actual strategy classes
@@ -39,10 +41,10 @@ except ImportError:
 # Protocol for PhaseStrategy
 class PhaseStrategy(Protocol):
     async def get_orders(
-        self,
-        game: "Game",
-        orchestrator: "PhaseOrchestrator",
-        game_history: "GameHistory",
+        self
+        game: "Game"
+        orchestrator: "PhaseOrchestrator"
+        game_history: "GameHistory"
     ) -> Dict[str, List[str]]: ...
 
 
@@ -50,13 +52,14 @@ if TYPE_CHECKING:
     from diplomacy import Game
     from ..agent_manager import AgentManager  # Adjusted import
     from ..game_history import GameHistory  # Adjusted import
-    from ..agents.base import BaseAgent  # Adjusted import
+    from ..agents.base import BaseAgent # Corrected: Order and Message removed
+    # Order and Message already imported above, no need to re-import here if this block is separate
     from ..services.config import GameConfig  # Adjusted import
 """
 Orchestrates the main game loop and phase transitions in a Diplomacy game.
 
 This module defines the PhaseOrchestrator class, which is responsible for
-managing the overall game flow. It coordinates agent actions, negotiations,
+managing the overall game flow. It coordinates agent actions, negotiations
 order submissions, and game state processing across different game phases
 (Movement, Retreat, Build). It utilizes specific strategy classes for each
 phase type.
@@ -69,22 +72,22 @@ __all__ = ["PhaseOrchestrator", "PhaseStrategy"]  # Added PhaseStrategy Protocol
 
 GetValidOrdersFuncType = Callable[
     [
-        "Game",
-        str,
-        str,
-        Any,
-        str,
-        Dict[str, List[str]],
-        "GameHistory",
-        str,
-        "GameConfig",
-        Optional[List[str]],
-        Optional[Dict[str, str]],
-        Optional[str],
-        str,
-        str,
-    ],
-    Coroutine[Any, Any, List[str]],
+        "Game"
+        str
+        str
+        Any
+        str
+        Dict[str, List[str]]
+        "GameHistory"
+        str
+        "GameConfig"
+        Optional[List[str]]
+        Optional[Dict[str, str]]
+        Optional[str]
+        str
+        str
+    ]
+    Coroutine[Any, Any, List[str]]
 ]
 
 
@@ -92,9 +95,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
     # Class docstring already exists and is good.
 
     def __init__(
-        self,
-        game_config: "GameConfig",
-        agent_manager: "AgentManager",
+        self
+        game_config: "GameConfig"
+        agent_manager: "AgentManager"
         get_valid_orders_func: GetValidOrdersFuncType,  # This might be removed if all agents use the new API
     ):
         self.config = game_config
@@ -112,9 +115,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         self._phase_map: Dict[
             PhaseType, PhaseStrategy
         ] = {  # Ensure correct type hint for _phase_map
-            PhaseType.MVT: MovementPhaseStrategy(),
-            PhaseType.RET: RetreatPhaseStrategy(),
-            PhaseType.BLD: BuildPhaseStrategy(),
+            PhaseType.MVT: MovementPhaseStrategy()
+            PhaseType.RET: RetreatPhaseStrategy()
+            PhaseType.BLD: BuildPhaseStrategy()
         }
 
     async def run_game_loop(self, game: "Game", game_history: "GameHistory"):
@@ -245,8 +248,8 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
             )
         except AttributeError as e:
             logger.error(
-                f"AttributeError in game loop: {e}. This might indicate an issue with the game object's structure.",
-                exc_info=True,
+                f"AttributeError in game loop: {e}. This might indicate an issue with the game object's structure."
+                exc_info=True
             )
         except Exception as e:
             logger.error(
@@ -258,19 +261,19 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
             )
 
     async def _get_orders_for_power(
-        self,
-        game: "Game",
-        power_name: str,
-        agent: "BaseAgent",
-        game_history: "GameHistory",
+        self
+        game: "Game"
+        power_name: str
+        agent: "BaseAgent"
+        game_history: "GameHistory"
     ) -> List[str]:
         current_phase_state = PhaseState.from_game(game)
         if isinstance(agent, LLMAgent):
             logger.debug(f"Using LLMAgent.decide_orders() for {power_name}")
             try:
                 order_objects: List[Order] = await asyncio.wait_for(
-                    agent.decide_orders(current_phase_state),
-                    timeout=constants.ORDER_DECISION_TIMEOUT_SECONDS,
+                    agent.decide_orders(current_phase_state)
+                    timeout=constants.ORDER_DECISION_TIMEOUT_SECONDS
                 )
                 logger.debug(
                     f"✅ {power_name} (LLMAgent): Generated {len(order_objects)} orders via decide_orders"
@@ -291,8 +294,8 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 raise  # Re-raise to halt the process for this power/game
             except Exception as e:
                 logger.error(
-                    f"❌ Error getting orders for {power_name} (LLMAgent) via decide_orders: {e}. Defaulting to no orders.",
-                    exc_info=True,
+                    f"❌ Error getting orders for {power_name} (LLMAgent) via decide_orders: {e}. Defaulting to no orders."
+                    exc_info=True
                 )
                 # Strict mode: re-raise to halt
                 raise RuntimeError(
@@ -310,23 +313,23 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 mock_relationships: Dict[str, str] = {}
                 mock_private_diary = "(No diary for non-LLMAgent)"
                 orders = await self.get_valid_orders_func(
-                    game,
-                    getattr(agent, "model_id", "unknown_model"),
-                    getattr(agent, "system_prompt", mock_system_prompt),
-                    board_state,
-                    power_name,
-                    possible_orders,
-                    game_history,
-                    getattr(agent, "goals", mock_goals),
-                    getattr(agent, "relationships", mock_relationships),
+                    game
+                    getattr(agent, "model_id", "unknown_model")
+                    getattr(agent, "system_prompt", mock_system_prompt)
+                    board_state
+                    power_name
+                    possible_orders
+                    game_history
+                    getattr(agent, "goals", mock_goals)
+                    getattr(agent, "relationships", mock_relationships)
                     getattr(
-                        agent,
-                        "format_private_diary_for_prompt",
-                        lambda: mock_private_diary,
-                    )(),
-                    self.config.llm_log_path,
-                    game.get_current_phase(),
-                    self.config,
+                        agent
+                        "format_private_diary_for_prompt"
+                        lambda: mock_private_diary
+                    )()
+                    self.config.llm_log_path
+                    game.get_current_phase()
+                    self.config
                 )
                 logger.debug(
                     f"✅ {power_name} (Callback): Generated {len(orders)} orders"
@@ -334,19 +337,19 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 return orders
             except Exception as e:
                 logger.error(
-                    f"❌ Error getting orders for {power_name} via callback: {e}. Defaulting to no orders.",
-                    exc_info=True,
+                    f"❌ Error getting orders for {power_name} via callback: {e}. Defaulting to no orders."
+                    exc_info=True
                 )
                 raise RuntimeError(
                     f"Error in callback order generation for {power_name}: {e}"
                 ) from e
 
     async def _process_phase_results_and_updates(
-        self,
-        game: "Game",
-        game_history: "GameHistory",
-        all_orders_for_phase: Dict[str, List[str]],
-        processed_phase_name: str,
+        self
+        game: "Game"
+        game_history: "GameHistory"
+        all_orders_for_phase: Dict[str, List[str]]
+        processed_phase_name: str
     ):
         logger.info(f"Processing results for phase: {processed_phase_name}")
         for power_name, orders in all_orders_for_phase.items():
@@ -599,13 +602,13 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                     await agent.update_state(current_phase_state, [])
                 except AttributeError as ae:
                     logger.error(
-                        f"❌ AttributeError during state update for {power_name} (likely an issue with game/agent state access): {ae}",
-                        exc_info=True,
+                        f"❌ AttributeError during state update for {power_name} (likely an issue with game/agent state access): {ae}"
+                        exc_info=True
                     )
                 except Exception as e:
                     logger.error(
-                        f"❌ Error during phase summary processing for {power_name}: {e}",
-                        exc_info=e,
+                        f"❌ Error during phase summary processing for {power_name}: {e}"
+                        exc_info=e
                     )
         current_phase = game.get_current_phase()
         current_year = extract_year_from_phase(current_phase)
@@ -627,6 +630,6 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                         logger.debug(f"✅ {power_name}: Consolidated diary entries")
                     except Exception as e:
                         logger.error(
-                            f"❌ Error consolidating diary for {power_name}: {e}",
-                            exc_info=e,
+                            f"❌ Error consolidating diary for {power_name}: {e}"
+                            exc_info=e
                         )

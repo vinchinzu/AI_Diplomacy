@@ -226,4 +226,3 @@ class TestGenericLLMAgent:
         assert call_args.kwargs.get("phase") == "decide_action"
         # System prompt should default to the one from prompt_strategy
         assert call_args.kwargs.get("system_prompt") == mock_prompt_strategy.system_prompt_template
-```

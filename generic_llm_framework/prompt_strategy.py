@@ -151,12 +151,6 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
                 current_goals=context.get("current_goals", []),
                 relationships=context.get("relationships", {})
             )
-        else:
-            logger.warning(f"Unknown action_type '{action_type}' for DiplomacyPromptStrategy. Falling back to generic system prompt or error.")
-            # Fallback or error, or try to use a generic prompt if BasePromptStrategy has one
-            # For now, let's indicate an issue.
-            # return super().build_prompt(action_type, context) # If BasePromptStrategy had a default
-            raise ValueError(f"Unsupported action_type for DiplomacyPromptStrategy: {action_type}")
         elif action_type == 'decide_bloc_orders': # For BlocLLMAgent
             # This action_type implies the context contains a pre-rendered prompt
             if "prompt_content" not in context:
@@ -166,8 +160,11 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
             # or passed in context if generic_agent needs to set it.
             # For now, assume prompt_content is the full user prompt.
             return context["prompt_content"]
-        else:
+        else: # This is the single, final else block
             logger.warning(f"Unknown action_type '{action_type}' for DiplomacyPromptStrategy. Falling back to generic system prompt or error.")
+            # Fallback or error, or try to use a generic prompt if BasePromptStrategy has one
+            # For now, let's indicate an issue.
+            # return super().build_prompt(action_type, context) # If BasePromptStrategy had a default
             raise ValueError(f"Unsupported action_type for DiplomacyPromptStrategy: {action_type}")
 
     # The existing Diplomacy-specific methods (build_order_prompt, etc.) remain below.
@@ -503,4 +500,3 @@ if __name__ == "__main__":
     )
     print("\n--- DIPLOMACY NEGOTIATION PROMPT ---")
     print(negotiation_prompt)
-```

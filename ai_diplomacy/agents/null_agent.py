@@ -1,6 +1,9 @@
 from typing import List, Dict, Any, Optional
 
-from .base import BaseAgent, Order, Message, HoldBehaviourMixin
+from .base import BaseAgent
+from ..core.order import Order
+from ..core.message import Message
+from .mixins.hold_behaviour_mixin import HoldBehaviourMixin
 from ..core.state import PhaseState
 
 class NullAgent(BaseAgent, HoldBehaviourMixin):

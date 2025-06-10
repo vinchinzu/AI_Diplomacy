@@ -14,12 +14,8 @@ from ..services.config import (
     AgentConfig,
     DiplomacyConfig,
 )  # DiplomacyConfig might not be used here directly anymore
-from ..services.llm_coordinator import LLMCoordinator # This should be generic_llm_framework.llm_coordinator if LLMCoordinator is instantiated here with that type.
-                                                      # However, __init__ takes an optional LLMCoordinator.
-                                                      # If none is provided, it instantiates one.
-                                                      # The type hint for the parameter should be the generic one.
-                                                      # The default instantiation should also be the generic one.
-from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator_type # For type hinting
+# Removed incorrect import: from ..services.llm_coordinator import LLMCoordinator
+from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator_type # For type hinting and instantiation
 from ..services.context_provider import ContextProviderFactory
 from generic_llm_framework.llm_utils import load_prompt_file # Updated import
 

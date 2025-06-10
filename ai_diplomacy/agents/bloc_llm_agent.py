@@ -4,7 +4,8 @@ from typing import List, Dict, Any, Optional
 import jinja2 # Import jinja2
 
 from .llm_agent import LLMAgent
-from .base import Order  # Order and Message are needed
+from ..core.order import Order # Corrected import
+from ..core.message import Message # Added import, needed by LLMAgent methods
 from ..core.state import PhaseState
 from ..services.config import AgentConfig
 # LLMCoordinator is now from generic_llm_framework, LLMAgent's __init__ handles it.

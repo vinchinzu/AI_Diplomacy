@@ -1,4 +1,5 @@
 import unittest
+from ai_diplomacy.core.message import Message
 from unittest.mock import MagicMock, AsyncMock, patch, call
 from typing import Optional, Callable, List, Dict, Any
 import logging
@@ -6,7 +7,9 @@ import logging
 from ai_diplomacy import constants as diplomacy_constants
 from generic_llm_framework import constants as generic_constants
 from ai_diplomacy.agents.llm_agent import LLMAgent
-from ai_diplomacy.agents.base import Order, Message, PhaseState
+from ai_diplomacy.core.order import Order
+from ai_diplomacy.core.message import Message
+from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.services.config import AgentConfig
 from ai_diplomacy.services.context_provider import ContextProvider, ContextData # Added ContextData
 from ai_diplomacy.agents.factory import AgentFactory # For test_agent_with_various_context_providers
@@ -16,6 +19,10 @@ from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCo
 from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy # Renamed, not aliased here for clarity in patches
 from generic_llm_framework.agent import GenericLLMAgent as FrameworkGenericLLMAgent
 
+# Updated patch paths
+from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator
+from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy # Renamed, not aliased here for clarity in patches
+from generic_llm_framework.agent import GenericLLMAgent as FrameworkGenericLLMAgent
 
 class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
     def _create_mock_prompt_loader(self) -> Callable[[str], Optional[str]]:

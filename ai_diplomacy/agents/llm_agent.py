@@ -3,10 +3,17 @@ LLM-based agent implementation.
 Extracts all LLM-specific logic from the original DiplomacyAgent while implementing the clean BaseAgent interface.
 """
 
+# Core components from this project
+from ..core.message import Message
+from ..core.order import Order
+from .base import BaseAgent, PhaseState # BaseAgent for inheritance, PhaseState for type hinting
+from ..services.config import AgentConfig, resolve_context_provider # resolve_context_provider moved here
+from ..services.context_provider import ContextProviderFactory, ContextData # ContextData remains here
+
 import logging
 from typing import List, Dict, Optional, Any, Callable, Awaitable
 
-from .base import BaseAgent, Order, Message, PhaseState # Remains for Diplomacy BaseAgent interface
+# Remains for Diplomacy BaseAgent interface
 from .agent_state import DiplomacyAgentState # Remains for LLMAgent's internal state
 # Updated imports for generic framework
 from generic_llm_framework.agent import GenericLLMAgent
@@ -19,7 +26,6 @@ from .. import constants as diplomacy_constants # Alias for diplomacy-specific c
 logger = logging.getLogger(__name__)
 
 __all__ = ["LLMAgent"]
-
 
 class LLMAgent(BaseAgent):
     """
@@ -80,7 +86,7 @@ class LLMAgent(BaseAgent):
 
         # System prompt loading (Diplomacy-specific part)
         self.system_prompt = self._load_system_prompt() # This is the diplomacy system prompt.
-                                                    # GenericAgent's config will also get a system_prompt.
+                                                        # GenericAgent's config will also get a system_prompt.
 
         # Generic Agent instantiation
         # We need to ensure the config passed to GenericLLMAgent is suitable.

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock  # Added AsyncMock
 from ai_diplomacy.core.state import PhaseState
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.llm_agent import LLMAgent
-from ai_diplomacy.agents.base import Order  # Import Order
+from ai_diplomacy.core.order import Order  # Import Order
 from ai_diplomacy.services.config import DiplomacyConfig, AgentConfig, GameConfig
 from ai_diplomacy.services.context_provider import (
     ContextProviderFactory,
