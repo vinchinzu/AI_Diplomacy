@@ -23,8 +23,11 @@ from ai_diplomacy.game_history import GameHistory
 from ai_diplomacy.general_utils import (
     get_valid_orders,
     gather_possible_orders,
-    LLMInvalidOutputError,  # Added for except block
+    LLMInvalidOutputError,
 )
+from ai_diplomacy.agents.base import PhaseState # Added import
+from ai_diplomacy import constants as diplomacy_constants # Added import
+
 
 # Use the shared factory for GameConfig
 # from ._shared_fixtures import create_game_config # This should be from tests._shared_fixtures
@@ -140,7 +143,12 @@ class GameTester:
         fixed_models_list = self.config.args.fixed_models
         for i, power in enumerate(test_powers):
             powers_and_models[power] = fixed_models_list[i]
-        self.agent_manager.initialize_agents(powers_and_models)
+
+        agent_configurations = {
+            p_name: {"type": "llm", "model_id": m_id, "country": p_name}
+            for p_name, m_id in powers_and_models.items()
+        }
+        self.agent_manager.initialize_agents(agent_configurations)
         if not self.agent_manager.agents:
             logger.error("❌ No agents were initialized")
             return False
@@ -172,22 +180,6 @@ class GameTester:
     async def _get_mocked_llm_call_internal(
         self, power_name_for_mock: str, *args, **kwargs
     ):
-        """Helper to provide a mocked llm_call_internal behavior for a specific power."""
-        mock_orders_db = {
-            "FRANCE": ["A PAR H", "A MAR H", "F BRE H"],
-            "GERMANY": ["A BER H", "A MUN H", "F KIE H"],
-            "ENGLAND": ["F LON H", "F EDI H", "A LVP H"],
-        }
-        selected_orders = mock_orders_db.get(
-            power_name_for_mock, [f"A {power_name_for_mock[:3].upper()} H"]
-        )
-        # Create a dictionary, then dump it to a JSON string.
-        mock_orders_dict = {"orders": selected_orders}
-        mock_response_json_string = json.dumps(mock_orders_dict)
-
-        mock_full_response = f"Reasoning:\n- Mock reasoning for {power_name_for_mock}\n- These are test orders for validation\n\nPARSABLE OUTPUT:\n{mock_response_json_string}"
-        return mock_full_response
-
     async def test_power_order_generation(self, power_name: str) -> bool:
         """Tests order generation for a single power."""
         agent = self.agent_manager.get_agent(power_name)
@@ -196,97 +188,79 @@ class GameTester:
                 f"Agent for {power_name} not found during order generation test."
             )
             return False
-        current_phase = self.game.current_short_phase
+        if not agent:
+            logger.error(
+                f"Agent for {power_name} not found during order generation test."
+            )
+            return False
+
+        phase_state = PhaseState.from_game(self.game) # Create PhaseState
         logger.info(
-            f"[{power_name}] Current phase for order generation: {current_phase}"
+            f"[{power_name}] Current phase for order generation: {phase_state.phase_name}"
         )
-        board_state = self.game.get_state()
-        possible_orders = gather_possible_orders(self.game, power_name)
-        logger.info(f"Possible orders for {power_name}: {list(possible_orders.keys())}")
-        log_file_path = os.path.join(
-            self.config.game_id_specific_log_dir, "test_orders.csv"
-        )
-        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+        # board_state and possible_orders are now encapsulated or handled within agent.decide_orders or its context prep
+
         logger.info(f"🚀 Generating orders for {power_name}...")
         start_time = time.time()
 
-        # Ensure agent.model_id, agent.system_prompt etc are correctly populated by AgentManager
-        orders_callable = get_valid_orders(
-            game=self.game,
-            model_id=agent.model_id,
-            agent_system_prompt=agent.system_prompt,
-            board_state=board_state,
-            power_name=power_name,
-            possible_orders=possible_orders,
-            game_history=self.game_history,
-            game_id=self.config.game_id,
-            config=self.config,
-            agent_goals=agent.agent_state.goals,
-            agent_relationships=agent.agent_state.relationships,
-            agent_private_diary_str=agent.agent_state.format_private_diary_for_prompt(),
-            log_file_path=log_file_path,
-            phase=current_phase,
-        )
         orders = None
         try:
             if self.config.args.use_mocks:
-                # Define the side effect function for the custom caller
-                async def mock_side_effect_for_override(*args_inner, **kwargs_inner):
-                    # power_name is from the outer scope of test_power_order_generation
-                    return await self._get_mocked_llm_call_internal(
-                        power_name, *args_inner, **kwargs_inner
+                if hasattr(agent, "generic_agent") and agent.generic_agent is not None: # Check if LLMAgent
+                    agent.generic_agent.decide_action = AsyncMock()
+
+                    # Define mock orders based on power_name
+                    mock_orders_db = {
+                        "FRANCE": ["A PAR H", "A MAR H", "F BRE H"],
+                        "GERMANY": ["A BER H", "A MUN H", "F KIE H"],
+                        "ENGLAND": ["F LON H", "F EDI H", "A LVP H"],
+                    }
+                    selected_orders = mock_orders_db.get(
+                        power_name, [f"A {power_name[:3].upper()} H"] # Default mock order
                     )
+                    agent.generic_agent.decide_action.return_value = {
+                        diplomacy_constants.LLM_RESPONSE_KEY_ORDERS: selected_orders
+                    }
+                else: # Fallback for non-LLM agents or if generic_agent is not set up as expected
+                    logger.warning(f"Mocking not fully applied for {power_name} as it's not a standard LLMAgent or generic_agent is missing.")
+                    # Potentially, could mock agent.decide_orders directly if it's an AsyncMock in a base class
+                    # For now, it might proceed without specific mock orders for this type.
+                    pass # Let it proceed, it might fail or return empty if not an LLM agent.
 
-                mock_custom_llm_caller = AsyncMock(
-                    side_effect=mock_side_effect_for_override
-                )
+            orders = await agent.decide_orders(phase_state)
 
-                # Re-create orders_callable with the llm_caller_override
-                orders_callable_with_override = get_valid_orders(
-                    game=self.game,
-                    model_id=agent.model_id,
-                    agent_system_prompt=agent.system_prompt,
-                    board_state=board_state,
-                    power_name=power_name,
-                    possible_orders=possible_orders,
-                    game_history=self.game_history,
-                    game_id=self.config.game_id,
-                    config=self.config,
-                    agent_goals=agent.agent_state.goals,
-                    agent_relationships=agent.agent_state.relationships,
-                    agent_private_diary_str=agent.agent_state.format_private_diary_for_prompt(),
-                    log_file_path=log_file_path,
-                    phase=current_phase,
-                    llm_caller_override=mock_custom_llm_caller,  # Add this
-                )
-                orders = await orders_callable_with_override
-            else:
-                # For non-mock scenarios, call the original orders_callable
-                # which does not have (and doesn't need) the override
-                orders = await orders_callable
-        except LLMInvalidOutputError as e:
+        except LLMInvalidOutputError as e: # This error might be raised by LLMAgent's _extract_orders_from_response
             logger.error(
-                f"DEV_MODE: LLMInvalidOutputError for {power_name} ({agent.model_id}): {e}"
+                f"DEV_MODE: LLMInvalidOutputError for {power_name} ({agent.model_id if hasattr(agent, 'model_id') else 'N/A'}): {e}"
             )
-            # Log details as before
             return False
+        except Exception as e: # Catch other potential errors during decide_orders
+            logger.error(
+                f"Exception during decide_orders for {power_name}: {e}", exc_info=True
+            )
+            return False
+
 
         end_time = time.time()
         duration = end_time - start_time
         logger.info(f"⏱️  Order generation for {power_name} took {duration:.2f} seconds")
-        logger.info(f"📋 Generated orders for {power_name}: {orders}")
+
+        # Orders are now List[Order] objects
+        order_strings = [str(o) for o in orders] if orders else []
+        logger.info(f"📋 Generated orders for {power_name}: {order_strings}")
 
         if self.config.args.use_mocks and orders is not None:
-            mock_db = {
+            mock_db_strings = {
                 "FRANCE": ["A PAR H", "A MAR H", "F BRE H"],
                 "GERMANY": ["A BER H", "A MUN H", "F KIE H"],
                 "ENGLAND": ["F LON H", "F EDI H", "A LVP H"],
             }
-            expected_mocked_orders = mock_db.get(
+            expected_mocked_order_strings = mock_db_strings.get(
                 power_name, [f"A {power_name[:3].upper()} H"]
             )
-            assert sorted(orders) == sorted(expected_mocked_orders), (
-                f"Mock orders mismatch for {power_name}: expected {expected_mocked_orders}, got {orders}"
+            # Compare list of strings
+            assert sorted(order_strings) == sorted(expected_mocked_order_strings), (
+                f"Mock orders mismatch for {power_name}: expected {expected_mocked_order_strings}, got {order_strings}"
             )
 
         if orders and len(orders) > 0:
@@ -316,11 +290,12 @@ class GameTester:
                 original_test_powers = [
                     p.strip().upper() for p in self.config.args.test_powers.split(",")
                 ]
-                power_index = original_test_powers.index(power_name)
-                model_to_use_for_power = self.config.args.fixed_models[power_index]
-                self.agent_manager.initialize_agents(
-                    {power_name: model_to_use_for_power}
-                )
+                power_index = original_test_powers.index(power_name) # type: ignore
+                model_to_use_for_power = self.config.args.fixed_models[power_index] # type: ignore
+                agent_config_for_power = {
+                    power_name: {"type": "llm", "model_id": model_to_use_for_power, "country": power_name}
+                }
+                self.agent_manager.initialize_agents(agent_config_for_power)
             except (ValueError, IndexError) as e:
                 logger.error(
                     f"❌ Failed to determine model for {power_name} for sequential test: {e}"
@@ -453,8 +428,11 @@ async def test_order_generation_scenario(
     # test_power_order_generation expects agent to be in agent_manager
     assert isinstance(
         tester.agent_manager, AgentManager
-    )  # Ensure agent_manager is AgentManager
-    tester.agent_manager.initialize_agents({power_to_test: config.args.fixed_models[0]})
+    )
+    agent_config_for_power = {
+        power_to_test: {"type": "llm", "model_id": config.args.fixed_models[0], "country": power_to_test}
+    }
+    tester.agent_manager.initialize_agents(agent_config_for_power)
 
     success = await tester.test_power_order_generation(power_to_test)
     assert success, (
@@ -535,11 +513,16 @@ async def test_concurrent_calls_scenario(
     # Initialize agents that will be used in the concurrent test
     powers_and_models_for_concurrent = {}
     for i, power_name in enumerate(powers_to_test_list):
-        powers_and_models_for_concurrent[power_name] = config.args.fixed_models[i]
+        powers_and_models_for_concurrent[power_name] = config.args.fixed_models[i] # type: ignore
+
+    agent_configurations_for_concurrent = {
+        p_name: {"type": "llm", "model_id": m_id, "country": p_name}
+        for p_name, m_id in powers_and_models_for_concurrent.items()
+    }
     assert isinstance(
         tester.agent_manager, AgentManager
-    )  # Ensure agent_manager is AgentManager
-    tester.agent_manager.initialize_agents(powers_and_models_for_concurrent)
+    )
+    tester.agent_manager.initialize_agents(agent_configurations_for_concurrent)
 
     success = await tester.test_concurrent_calls(
         powers_to_test_list, max_concurrent_calls

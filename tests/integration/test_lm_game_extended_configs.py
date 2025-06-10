@@ -133,6 +133,16 @@ def test_5p_standard_game_preset():
     assert count_occurrences_in_log(log_file, r"Creating agent for '.*?' of type 'llm'") == 5
     assert count_occurrences_in_log(log_file, r"Creating agent for '.*?' of type 'neutral'") == 2
 
+    # New log checks for LLMAgent initialization
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for ENGLAND.*?GenericAgent also initialized.") >= 1
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for FRANCE.*?GenericAgent also initialized.") >= 1
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for GERMANY.*?GenericAgent also initialized.") >= 1
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for RUSSIA.*?GenericAgent also initialized.") >= 1
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for TURKEY.*?GenericAgent also initialized.") >= 1
+
+    # Placeholder for GenericLLMAgent (pattern might need adjustment based on actual log)
+    # assert count_occurrences_in_log(log_file, r"GenericLLMAgent 'england_.*?' initialized") >= 1
+
 
 @pytest.mark.integration
 @pytest.mark.slow
@@ -153,6 +163,12 @@ def test_6p_standard_game_preset():
     assert count_occurrences_in_log(log_file, r"Creating agent for 'ITALY' of type 'neutral'") >= 1
     assert count_occurrences_in_log(log_file, r"Creating agent for '.*?' of type 'llm'") == 6
     assert count_occurrences_in_log(log_file, r"Creating agent for '.*?' of type 'neutral'") == 1
+
+    # New log checks for LLMAgent initialization (example for one agent)
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for ENGLAND.*?GenericAgent also initialized.") >= 1
+    # Add more for other LLM agents if needed, or a general count:
+    assert count_occurrences_in_log(log_file, r"Initialized LLMAgent for .*?GenericAgent also initialized.") == 6
+
 
 @pytest.mark.integration
 @pytest.mark.slow
@@ -178,6 +194,13 @@ def test_4p_bloc_game_wwi_preset():
     assert count_occurrences_in_log(log_file, r"Creating agent for 'ENTENTE_POWERS' of type 'bloc_llm'") == 1
     assert count_occurrences_in_log(log_file, r"Creating agent for 'CENTRAL_POWERS' of type 'bloc_llm'") == 1
     assert count_occurrences_in_log(log_file, r"Creating agent for 'ITALY_NULL_AGENT' of type 'null'") == 1
+
+    # New log checks for BlocLLMAgent initialization
+    assert count_occurrences_in_log(log_file, r"BlocLLMAgent 'ENTENTE_POWERS' initialized") == 1
+    assert count_occurrences_in_log(log_file, r"BlocLLMAgent 'CENTRAL_POWERS' initialized") == 1
+    # Placeholder for GenericLLMAgent if BlocLLMAgents use it internally and log similarly
+    # This depends on BlocLLMAgent's structure. If it wraps GenericLLMAgent, a similar pattern might apply.
+    # e.g., assert count_occurrences_in_log(log_file, r"GenericLLMAgent 'entente_powers_.*?' initialized") >= 1
 
     # Check for BlocLLMAgent INFO log messages indicating it's proceeding to query the LLM.
     # Example log: "New phase or state detected for bloc ENTENTE_POWERS (key elements: ...), querying LLM for bloc orders."

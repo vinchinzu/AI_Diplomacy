@@ -216,6 +216,147 @@ class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
         )
         self.assertIn("The game is now over.", prompt)
 
+    # Tests for build_prompt dispatcher
+    def test_build_prompt_decide_diplomacy_orders(self):
+        action_type = "decide_diplomacy_orders"
+        context_for_orders = {
+            "country": self.country,
+            "goals": self.goals,
+            "relationships": self.relationships,
+            "formatted_diary": self.formatted_diary,
+            "context_text": self.context_text,
+            "tools_available": True,
+            # other keys like phase_name, power_units, power_centers are not directly used by build_order_prompt
+            # but might be part of a larger context object in practice.
+            # For this test, only include what build_order_prompt expects.
+        }
+        expected_mock_return = "mocked_order_prompt_value"
+
+        with unittest.mock.patch.object(
+            self.strategy, "build_order_prompt", return_value=expected_mock_return
+        ) as mock_build_order_prompt:
+            returned_prompt = self.strategy.build_prompt(action_type, context_for_orders)
+
+            mock_build_order_prompt.assert_called_once_with(
+                country=self.country,
+                goals=self.goals,
+                relationships=self.relationships,
+                formatted_diary=self.formatted_diary,
+                context_text=self.context_text,
+                tools_available=True,
+            )
+            self.assertEqual(returned_prompt, expected_mock_return)
+
+    def test_build_prompt_generate_diplomacy_messages(self):
+        action_type = "generate_diplomacy_messages"
+        context_for_messages = {
+            "country": self.country,
+            "active_powers": self.active_powers,
+            "goals": self.goals,
+            "relationships": self.relationships,
+            "formatted_diary": self.formatted_diary,
+            "context_text": self.context_text,
+            "tools_available": False,
+        }
+        expected_mock_return = "mocked_negotiation_prompt_value"
+
+        with unittest.mock.patch.object(
+            self.strategy, "build_negotiation_prompt", return_value=expected_mock_return
+        ) as mock_build_negotiation_prompt:
+            returned_prompt = self.strategy.build_prompt(action_type, context_for_messages)
+
+            mock_build_negotiation_prompt.assert_called_once_with(
+                country=self.country,
+                active_powers=self.active_powers,
+                goals=self.goals,
+                relationships=self.relationships,
+                formatted_diary=self.formatted_diary,
+                context_text=self.context_text,
+                tools_available=False,
+            )
+            self.assertEqual(returned_prompt, expected_mock_return)
+
+    def test_build_prompt_generate_diplomacy_diary(self):
+        action_type = "generate_diplomacy_diary"
+        context_for_diary = {
+            "country": self.country,
+            "phase_name": self.phase_name,
+            "power_units": self.power_units,
+            "power_centers": self.power_centers,
+            "is_game_over": self.is_game_over,
+            "events": self.events,
+            "goals": self.goals,
+            "relationships": self.relationships,
+        }
+        expected_mock_return = "mocked_diary_prompt_value"
+
+        with unittest.mock.patch.object(
+            self.strategy, "build_diary_generation_prompt", return_value=expected_mock_return
+        ) as mock_build_diary_prompt:
+            returned_prompt = self.strategy.build_prompt(action_type, context_for_diary)
+
+            mock_build_diary_prompt.assert_called_once_with(
+                country=self.country,
+                phase_name=self.phase_name,
+                power_units=self.power_units,
+                power_centers=self.power_centers,
+                is_game_over=self.is_game_over,
+                events=self.events,
+                goals=self.goals,
+                relationships=self.relationships,
+            )
+            self.assertEqual(returned_prompt, expected_mock_return)
+
+    def test_build_prompt_analyze_diplomacy_goals(self):
+        action_type = "analyze_diplomacy_goals"
+        context_for_goals = {
+            "country": self.country,
+            "phase_name": self.phase_name,
+            "power_units": self.power_units,
+            "power_centers": self.power_centers,
+            "all_power_centers": self.all_power_centers,
+            "is_game_over": self.is_game_over,
+            "current_goals": self.goals, # Note: key is 'current_goals' in context
+            "relationships": self.relationships,
+        }
+        expected_mock_return = "mocked_goal_analysis_prompt_value"
+
+        with unittest.mock.patch.object(
+            self.strategy, "build_goal_analysis_prompt", return_value=expected_mock_return
+        ) as mock_build_goal_prompt:
+            returned_prompt = self.strategy.build_prompt(action_type, context_for_goals)
+
+            mock_build_goal_prompt.assert_called_once_with(
+                country=self.country,
+                phase_name=self.phase_name,
+                power_units=self.power_units,
+                power_centers=self.power_centers,
+                all_power_centers=self.all_power_centers,
+                is_game_over=self.is_game_over,
+                current_goals=self.goals,
+                relationships=self.relationships,
+            )
+            self.assertEqual(returned_prompt, expected_mock_return)
+
+    def test_build_prompt_decide_bloc_orders_success(self):
+        action_type = "decide_bloc_orders"
+        context_for_bloc = {"prompt_content": "test bloc prompt content"}
+
+        # We don't need to mock any specialized method here
+        returned_prompt = self.strategy.build_prompt(action_type, context_for_bloc)
+        self.assertEqual(returned_prompt, "test bloc prompt content")
+
+    def test_build_prompt_decide_bloc_orders_missing_content(self):
+        action_type = "decide_bloc_orders"
+        context_for_bloc_empty = {}
+        with self.assertRaisesRegex(ValueError, "Context for decide_bloc_orders must contain 'prompt_content'"):
+            self.strategy.build_prompt(action_type, context_for_bloc_empty)
+
+    def test_build_prompt_invalid_action_type(self):
+        action_type = "some_invalid_action_type"
+        with self.assertRaisesRegex(ValueError, f"Unknown action type for prompt building: {action_type}"):
+            self.strategy.build_prompt(action_type, {})
+
 
 if __name__ == "__main__":
     unittest.main(argv=["first-arg-is-ignored"], exit=False)

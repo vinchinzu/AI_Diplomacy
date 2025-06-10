@@ -191,6 +191,71 @@ async def test_llmcoordinator_call_text_propagates_exception(coordinator):
     )
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_call_text_uses_internal_call(mock_llm_call_internal, coordinator):
+    mock_llm_call_internal.return_value = "Internal response text"
+
+    prompt = "Hello internal"
+    model_id = "internal_model"
+    agent_id = "internal_agent"
+    game_id = "internal_game"
+    phase = "internal_phase"
+    system_prompt = "Internal system instructions"
+    verbose_llm_debug = True # Test this flag is passed
+
+    response = await coordinator.call_text(
+        prompt=prompt,
+        model_id=model_id,
+        agent_id=agent_id,
+        game_id=game_id,
+        phase=phase,
+        system_prompt=system_prompt,
+        llm_caller_override=None, # Explicitly None
+        verbose_llm_debug=verbose_llm_debug,
+    )
+
+    assert response == "Internal response text"
+    mock_llm_call_internal.assert_called_once_with(
+        game_id=game_id,
+        agent_name=agent_id, # Note: llm_call_internal takes agent_name
+        phase_str=phase,
+        model_id=model_id,
+        prompt=prompt,
+        system_prompt=system_prompt,
+        tools=None, # tools default to None in call_text
+        verbose_llm_debug=verbose_llm_debug,
+        log_to_file_path=None, # log_to_file_path defaults to None
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_call_text_internal_call_exception(mock_llm_call_internal, coordinator):
+    mock_llm_call_internal.side_effect = ValueError("Internal LLM Error")
+
+    with pytest.raises(ValueError, match="Internal LLM Error"):
+        await coordinator.call_text(
+            prompt="Error prompt internal",
+            model_id="error_model_internal",
+            agent_id="error_agent_internal",
+            llm_caller_override=None, # Explicitly None
+        )
+
+    mock_llm_call_internal.assert_called_once()
+    # We can also check specific args if needed, similar to the success case
+    call_args = mock_llm_call_internal.call_args[1]
+    assert call_args['prompt'] == "Error prompt internal"
+    assert call_args['model_id'] == "error_model_internal"
+    assert call_args['agent_name'] == "error_agent_internal"
+    assert call_args['game_id'] == generic_constants.DEFAULT_GAME_ID # Check defaults
+    assert call_args['phase_str'] == generic_constants.DEFAULT_PHASE_NAME # Check defaults
+    assert call_args['system_prompt'] is None # Check defaults
+    assert call_args['verbose_llm_debug'] is False # Check defaults
+
+
 # Tests for LLMCoordinator.call_json
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -286,3 +351,533 @@ async def test_llmcoordinator_call_json_with_tools(
     args, kwargs = mock_call_llm_with_json_parsing.call_args
     assert kwargs.get("llm_caller_override") is None
     assert "Tools provided but MCP not yet implemented: 1 tools" in caplog.text
+
+
+# Tests for LLMCoordinator.call_llm_with_json_parsing
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_call_json_parsing_success_no_override(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_llm_call_internal.return_value = '{"key": "value", "num": 123}'
+    mock_extract_json.return_value = {"key": "value", "num": 123}
+    expected_fields = ["key", "num"]
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_1",
+        prompt="json prompt",
+        expected_json_fields=expected_fields,
+        agent_name="test_agent_json",
+        verbose_llm_debug=True, # Test this flag
+    )
+
+    assert result.success is True
+    assert result.raw_response == '{"key": "value", "num": 123}'
+    assert result.parsed_json == {"key": "value", "num": 123}
+    assert result.error_message is None
+    mock_llm_call_internal.assert_called_once()
+    args = mock_llm_call_internal.call_args[1]
+    assert args['model_id'] == "json_model_1"
+    assert args['prompt'] == "json prompt"
+    assert args['agent_name'] == "test_agent_json"
+    assert args['verbose_llm_debug'] is True
+    mock_extract_json.assert_called_once_with('{"key": "value", "num": 123}', expected_fields)
+    mock_log_response.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock) # Still need to patch to ensure it's NOT called
+async def test_call_json_parsing_success_with_override(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_override_caller = AsyncMock(return_value='{"key_override": "value_override"}')
+    mock_extract_json.return_value = {"key_override": "value_override"}
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_override",
+        prompt="json prompt override",
+        llm_caller_override=mock_override_caller,
+        agent_name="override_agent",
+        game_id="override_game",
+        phase_str="override_phase",
+    )
+
+    assert result.success is True
+    assert result.raw_response == '{"key_override": "value_override"}'
+    assert result.parsed_json == {"key_override": "value_override"}
+    mock_llm_call_internal.assert_not_called()
+    mock_override_caller.assert_called_once_with(
+        model_id="json_model_override", # Override receives all params
+        prompt="json prompt override",
+        system_prompt=None,
+        tools=None,
+        agent_name="override_agent",
+        game_id="override_game",
+        phase_str="override_phase",
+        log_to_file_path=None,
+        verbose_llm_debug=False, # Default for this param
+    )
+    mock_extract_json.assert_called_once_with('{"key_override": "value_override"}', None) # No expected_fields
+    mock_log_response.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_call_json_parsing_missing_expected_fields(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_llm_call_internal.return_value = '{"key": "value"}' # "num" is missing
+    mock_extract_json.return_value = {"key": "value"}
+    expected_fields = ["key", "num"]
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_missing",
+        prompt="json prompt missing",
+        expected_json_fields=expected_fields,
+    )
+
+    assert result.success is False
+    assert result.raw_response == '{"key": "value"}'
+    assert result.parsed_json == {"key": "value"}
+    assert "Missing expected JSON fields: {'num'}" in result.error_message
+    mock_extract_json.assert_called_once_with('{"key": "value"}', expected_fields)
+    mock_log_response.assert_called_once() # Logged even on failure
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_call_json_parsing_empty_response(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_llm_call_internal.return_value = "   " # Empty/whitespace response
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_empty", prompt="json prompt empty"
+    )
+
+    assert result.success is False
+    assert result.raw_response == "   "
+    assert result.parsed_json is None
+    assert result.error_message == generic_constants.LLM_CALL_ERROR_EMPTY_RESPONSE
+    mock_extract_json.assert_not_called()
+    mock_log_response.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_call_json_parsing_json_error(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_llm_call_internal.return_value = "{not_json}"
+    mock_extract_json.side_effect = ValueError("Bad JSON")
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_bad", prompt="json prompt bad"
+    )
+
+    assert result.success is False
+    assert result.raw_response == "{not_json}"
+    assert result.parsed_json is None
+    assert "JSON parsing failed: Bad JSON. Raw response: {not_json}" in result.error_message
+    mock_extract_json.assert_called_once_with("{not_json}", None)
+    mock_log_response.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_call_json_parsing_llm_call_exception_internal(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_llm_call_internal.side_effect = Exception("LLM exploded")
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_explode", prompt="json prompt explode"
+    )
+
+    assert result.success is False
+    assert result.raw_response is None
+    assert result.parsed_json is None
+    assert "LLM call failed: LLM exploded" in result.error_message
+    mock_extract_json.assert_not_called()
+    mock_log_response.assert_not_called() # Not called if llm_call_internal fails before response
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+async def test_call_json_parsing_llm_call_exception_override(
+    mock_extract_json, mock_log_response, coordinator
+):
+    mock_override_caller = AsyncMock(side_effect=Exception("Override exploded"))
+
+    result = await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_explode_override",
+        prompt="json prompt explode override",
+        llm_caller_override=mock_override_caller,
+    )
+
+    assert result.success is False
+    assert result.raw_response is None
+    assert result.parsed_json is None
+    assert "LLM call failed: Override exploded" in result.error_message
+    mock_extract_json.assert_not_called()
+    mock_log_response.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
+@patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_call_json_parsing_log_to_file_path(
+    mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
+):
+    mock_llm_call_internal.return_value = '{"data": "logged"}'
+    mock_extract_json.return_value = {"data": "logged"}
+    log_path = "/test/debug/llm_calls.log"
+
+    await coordinator.call_llm_with_json_parsing(
+        model_id="json_model_log",
+        prompt="json prompt log",
+        log_to_file_path=log_path,
+        agent_name="log_agent",
+        game_id="log_game",
+        phase_str="log_phase",
+        system_prompt="log_system"
+    )
+
+    mock_log_response.assert_called_once()
+    log_args = mock_log_response.call_args[0] # Positional arguments
+    log_kwargs = mock_log_response.call_args[1] # Keyword arguments
+
+    assert log_kwargs['raw_response'] == '{"data": "logged"}'
+    assert log_kwargs['parsed_response'] == {"data": "logged"}
+    assert log_kwargs['model_id'] == "json_model_log"
+    assert log_kwargs['prompt'] == "json prompt log"
+    assert log_kwargs['system_prompt'] == "log_system"
+    assert log_kwargs['agent_name'] == "log_agent"
+    assert log_kwargs['game_id'] == "log_game"
+    assert log_kwargs['phase'] == "log_phase"
+    assert log_kwargs['log_file_path'] == log_path
+    assert log_kwargs['error_message'] is None
+    assert log_kwargs['expected_json_fields'] is None
+    assert log_kwargs['tools'] is None
+
+
+# Tests for LLMCoordinator.request
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_llmcoordinator_request_with_override(coordinator):
+    mock_custom_llm_caller = AsyncMock(return_value="Override response for request")
+
+    game_id = "req_game_override"
+    agent_name = "req_agent_override"
+    phase_str = "req_phase_override"
+    model_id = "req_model_override"
+    prompt_text = "Request prompt override"
+    system_prompt_text = "Request system prompt override"
+
+    response = await coordinator.request(
+        game_id=game_id,
+        agent_name=agent_name,
+        phase_str=phase_str,
+        model_id=model_id,
+        prompt_text=prompt_text,
+        system_prompt_text=system_prompt_text,
+        llm_caller_override=mock_custom_llm_caller,
+    )
+
+    assert response == "Override response for request"
+    mock_custom_llm_caller.assert_called_once_with(
+        game_id=game_id,
+        agent_name=agent_name,
+        phase_str=phase_str,
+        model_id=model_id,
+        prompt=prompt_text, # 'prompt' in the override call
+        system_prompt=system_prompt_text, # 'system_prompt' in the override call
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_llmcoordinator_request_with_override_exception(coordinator):
+    mock_custom_llm_caller = AsyncMock(side_effect=ValueError("Request Override Error"))
+
+    with pytest.raises(ValueError, match="Request Override Error"):
+        await coordinator.request(
+            game_id="req_game_exc",
+            agent_name="req_agent_exc",
+            phase_str="req_phase_exc",
+            model_id="req_model_exc",
+            prompt_text="Request prompt exc",
+            system_prompt_text="Request system prompt exc",
+            llm_caller_override=mock_custom_llm_caller,
+        )
+    mock_custom_llm_caller.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_request_uses_internal_call(mock_llm_call_internal, coordinator):
+    mock_llm_call_internal.return_value = "Internal response for request"
+
+    game_id = "req_game_internal"
+    agent_name = "req_agent_internal"
+    phase_str = "req_phase_internal"
+    model_id = "req_model_internal"
+    prompt_text = "Request prompt internal"
+    system_prompt_text = "Request system prompt internal"
+
+    response = await coordinator.request(
+        game_id=game_id,
+        agent_name=agent_name,
+        phase_str=phase_str,
+        model_id=model_id,
+        prompt_text=prompt_text,
+        system_prompt_text=system_prompt_text,
+        llm_caller_override=None, # Explicitly None
+    )
+
+    assert response == "Internal response for request"
+    mock_llm_call_internal.assert_called_once_with(
+        game_id=game_id,
+        agent_name=agent_name,
+        phase_str=phase_str,
+        model_id=model_id,
+        prompt=prompt_text,
+        system_prompt=system_prompt_text,
+        tools=None,
+        verbose_llm_debug=False, # Default from call_text
+        log_to_file_path=None,   # Default from call_text
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_request_internal_call_exception(mock_llm_call_internal, coordinator):
+    mock_llm_call_internal.side_effect = ValueError("Request Internal LLM Error")
+
+    with pytest.raises(ValueError, match="Request Internal LLM Error"):
+        await coordinator.request(
+            game_id="req_game_internal_exc",
+            agent_name="req_agent_internal_exc",
+            phase_str="req_phase_internal_exc",
+            model_id="req_model_internal_exc",
+            prompt_text="Request prompt internal exc",
+            system_prompt_text="Request system prompt internal exc",
+            llm_caller_override=None,
+        )
+    mock_llm_call_internal.assert_called_once()
+
+
+# Test for LLMCoordinator.get_model
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get") # Patching ModelPool.get directly
+async def test_llmcoordinator_get_model(mock_model_pool_get, coordinator):
+    mock_model_instance = MagicMock(name="MockModelInstance")
+    mock_model_pool_get.return_value = mock_model_instance
+    model_id_to_get = "test_model_for_get_model"
+
+    # The coordinator's get_model is synchronous, but ModelPool.get might be underlyingly async if it calls llm.get_async_model
+    # However, the LLMCoordinator.get_model itself is defined as `def get_model`, not `async def`.
+    # And ModelPool.get is also synchronous.
+    # The actual model fetching (`llm.get_async_model`) is async, but that's handled within ModelPool.
+    # So, no `await` needed for coordinator.get_model.
+
+    retrieved_model = coordinator.get_model(model_id_to_get)
+
+    mock_model_pool_get.assert_called_once_with(model_id_to_get)
+    assert retrieved_model == mock_model_instance
+
+
+# Tests for llm_call_internal free function
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.logger")
+@patch("generic_llm_framework.llm_coordinator.asyncio.create_task")
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock)
+@patch("generic_llm_framework.llm_coordinator.serial_if_local")
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get")
+async def test_llm_call_internal_success_no_system_prompt_no_tools(
+    mock_model_pool_get, mock_serial_if_local, mock_record_usage, mock_create_task, mock_logger
+):
+    mock_model_obj = MagicMock()
+    # mock_model_obj.prompt = AsyncMock(return_value=MagicMock(text="Test LLM response")) # if .text is an attribute
+    # If .text is an async method:
+    mock_llm_response_obj = AsyncMock()
+    mock_llm_response_obj.text = AsyncMock(return_value="Test LLM response")
+    mock_model_obj.prompt = AsyncMock(return_value=mock_llm_response_obj)
+
+    mock_model_pool_get.return_value = mock_model_obj
+
+    # Mock for serial_if_local context manager
+    mock_serial_cm = AsyncMock()
+    mock_serial_cm.__aenter__.return_value = None
+    mock_serial_if_local.return_value = mock_serial_cm
+
+    model_id = "test_model"
+    prompt = "Test prompt"
+
+    response_text = await llm_coordinator.llm_call_internal(
+        model_id=model_id, prompt=prompt, agent_name="test_agent", game_id="test_game", phase_str="test_phase"
+    )
+
+    assert response_text == "Test LLM response"
+    mock_model_pool_get.assert_called_once_with(model_id)
+    mock_serial_if_local.assert_called_once_with(model_id)
+    mock_model_obj.prompt.assert_called_once_with(prompt, system=None, tools=None)
+    # mock_llm_response_obj.text.assert_called_once() # If .text is an async method and you want to ensure it was awaited
+
+    # Check that record_usage was scheduled with asyncio.create_task
+    mock_create_task.assert_called_once()
+    # Get the first argument of the first call to create_task, which should be the record_usage coroutine
+    # This is a bit tricky as the coroutine object itself is passed. We check if the mock_record_usage was the one.
+    # A more robust way might be to check that mock_record_usage itself was eventually called,
+    # but that requires running the event loop or more complex async testing.
+    # For now, checking it was passed to create_task is a good indicator.
+    assert mock_create_task.call_args[0][0].__qualname__ == mock_record_usage.__qualname__
+    # We can also check the arguments passed to record_usage if it were called directly,
+    # but since it's create_task'd, we'd need to inspect the coroutine object more deeply or await it.
+    # Let's assume for now that if create_task is called with it, it's correct.
+    # To actually test record_usage args, we might need to patch asyncio.create_task to run the coro immediately.
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.logger")
+@patch("generic_llm_framework.llm_coordinator.asyncio.create_task")
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock)
+@patch("generic_llm_framework.llm_coordinator.serial_if_local")
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get")
+async def test_llm_call_internal_success_with_system_prompt_and_tools(
+    mock_model_pool_get, mock_serial_if_local, mock_record_usage, mock_create_task, mock_logger
+):
+    mock_model_obj = MagicMock()
+    mock_llm_response_obj = AsyncMock()
+    mock_llm_response_obj.text = AsyncMock(return_value="Response with tools")
+    mock_model_obj.prompt = AsyncMock(return_value=mock_llm_response_obj)
+    mock_model_pool_get.return_value = mock_model_obj
+
+    mock_serial_cm = AsyncMock(); mock_serial_cm.__aenter__.return_value = None
+    mock_serial_if_local.return_value = mock_serial_cm
+
+    model_id = "tool_model"
+    prompt = "Tool prompt"
+    system_prompt = "Use tools wisely"
+    tools_def = [{"type": "function", "function": {"name": "get_weather"}}]
+    # llm library expects tools in a specific format for some models, llm_call_internal handles this conversion if needed.
+    # For this test, we assume the format passed to model.prompt is what the underlying llm library expects.
+
+    response_text = await llm_coordinator.llm_call_internal(
+        model_id=model_id, prompt=prompt, system_prompt=system_prompt, tools=tools_def,
+        agent_name="tool_agent", game_id="tool_game", phase_str="tool_phase"
+    )
+
+    assert response_text == "Response with tools"
+    mock_model_obj.prompt.assert_called_once_with(prompt, system=system_prompt, tools=tools_def)
+    mock_create_task.assert_called_once() # record_usage scheduled
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.logger")
+@patch("generic_llm_framework.llm_coordinator.asyncio.create_task") # Keep patching create_task
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock) # Keep patching record_usage
+@patch("generic_llm_framework.llm_coordinator.serial_if_local")
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get")
+async def test_llm_call_internal_verbose_logging(
+    mock_model_pool_get, mock_serial_if_local, mock_record_usage, mock_create_task, mock_logger
+):
+    mock_model_obj = MagicMock()
+    mock_llm_response_obj = AsyncMock()
+    mock_llm_response_obj.text = AsyncMock(return_value="Verbose response")
+    mock_model_obj.prompt = AsyncMock(return_value=mock_llm_response_obj)
+    mock_model_pool_get.return_value = mock_model_obj
+
+    mock_serial_cm = AsyncMock(); mock_serial_cm.__aenter__.return_value = None
+    mock_serial_if_local.return_value = mock_serial_cm
+
+    await llm_coordinator.llm_call_internal(
+        model_id="verbose_model", prompt="verbose_prompt", system_prompt="verbose_system",
+        verbose_llm_debug=True, agent_name="v_agent", game_id="v_game", phase_str="v_phase"
+    )
+
+    # Check for logger.info calls
+    # There should be one for the prompt and one for the response.
+    assert mock_logger.info.call_count >= 2
+    # Check that specific parts of the prompt and response were logged
+    # This is a bit fragile as it depends on exact log formatting.
+    # A more robust check might involve checking that certain keywords are present in log calls.
+    # Example (adjust based on actual log messages):
+    found_prompt_log = any("LLM Call (verbose):" in call.args[0] and "verbose_prompt" in call.args[0] for call in mock_logger.info.call_args_list)
+    found_response_log = any("LLM Response (verbose):" in call.args[0] and "Verbose response" in call.args[0] for call in mock_logger.info.call_args_list)
+    assert found_prompt_log
+    assert found_response_log
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.asyncio.create_task") # Patch create_task
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock) # Patch record_usage
+@patch("generic_llm_framework.llm_coordinator.serial_if_local")
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get")
+async def test_llm_call_internal_exception_from_model_prompt(
+    mock_model_pool_get, mock_serial_if_local, mock_record_usage, mock_create_task # Add mock_create_task
+):
+    mock_model_obj = MagicMock()
+    mock_model_obj.prompt = AsyncMock(side_effect=ValueError("Model prompt error"))
+    mock_model_pool_get.return_value = mock_model_obj
+
+    mock_serial_cm = AsyncMock(); mock_serial_cm.__aenter__.return_value = None
+    mock_serial_if_local.return_value = mock_serial_cm
+
+    with pytest.raises(ValueError, match="Model prompt error"):
+        await llm_coordinator.llm_call_internal(
+            model_id="error_model", prompt="error_prompt",
+            agent_name="e_agent", game_id="e_game", phase_str="e_phase"
+        )
+
+    mock_create_task.assert_not_called() # record_usage should not be scheduled
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@patch("generic_llm_framework.llm_coordinator.asyncio.create_task") # Patch create_task
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock) # Patch record_usage
+@patch("generic_llm_framework.llm_coordinator.serial_if_local")
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get")
+async def test_llm_call_internal_exception_from_model_pool_get(
+    mock_model_pool_get, mock_serial_if_local, mock_record_usage, mock_create_task # Add mock_create_task
+):
+    mock_model_pool_get.side_effect = Exception("ModelPool.get failed")
+
+    with pytest.raises(Exception, match="ModelPool.get failed"):
+        await llm_coordinator.llm_call_internal(
+            model_id="get_fail_model", prompt="get_fail_prompt",
+            agent_name="gf_agent", game_id="gf_game", phase_str="gf_phase"
+        )
+
+    mock_serial_if_local.assert_not_called()
+    mock_create_task.assert_not_called() # record_usage should not be scheduled
