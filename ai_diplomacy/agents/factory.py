@@ -14,9 +14,14 @@ from ..services.config import (
     AgentConfig,
     DiplomacyConfig,
 )  # DiplomacyConfig might not be used here directly anymore
-from ..services.llm_coordinator import LLMCoordinator
+from ..services.llm_coordinator import LLMCoordinator # This should be generic_llm_framework.llm_coordinator if LLMCoordinator is instantiated here with that type.
+                                                      # However, __init__ takes an optional LLMCoordinator.
+                                                      # If none is provided, it instantiates one.
+                                                      # The type hint for the parameter should be the generic one.
+                                                      # The default instantiation should also be the generic one.
+from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator_type # For type hinting
 from ..services.context_provider import ContextProviderFactory
-from ..llm_utils import load_prompt_file
+from generic_llm_framework.llm_utils import load_prompt_file # Updated import
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +37,7 @@ class AgentFactory:
 
     def __init__(
         self,
-        llm_coordinator: Optional[LLMCoordinator] = None,
+        llm_coordinator: Optional[GenericLLMCoordinator_type] = None, # Use type hint for generic coordinator
         context_provider_factory: Optional[ContextProviderFactory] = None,
     ):
         """
@@ -42,7 +47,7 @@ class AgentFactory:
             llm_coordinator: Shared LLM coordinator instance (will create if None)
             context_provider_factory: Shared context provider factory (will create if None)
         """
-        self.llm_coordinator = llm_coordinator or LLMCoordinator()
+        self.llm_coordinator = llm_coordinator or GenericLLMCoordinator_type() # Instantiate generic coordinator
         self.context_provider_factory = (
             context_provider_factory or ContextProviderFactory()
         )

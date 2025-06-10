@@ -1,10 +1,10 @@
 import unittest
-from ai_diplomacy.agents.llm_prompt_strategy import LLMPromptStrategy
+from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy
 
 
-class TestLLMPromptStrategy(unittest.TestCase):
+class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
     def setUp(self):
-        self.strategy = LLMPromptStrategy()
+        self.strategy = DiplomacyPromptStrategy() # Use new class name
         self.country = "FRANCE"
         self.goals = ["Expand East", "Secure borders"]
         self.relationships = {"ENGLAND": "Ally", "GERMANY": "Enemy", "ITALY": "Neutral"}

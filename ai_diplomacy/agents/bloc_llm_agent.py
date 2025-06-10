@@ -7,9 +7,13 @@ from .llm_agent import LLMAgent
 from .base import Order  # Order and Message are needed
 from ..core.state import PhaseState
 from ..services.config import AgentConfig
-from ..services.llm_coordinator import LLMCoordinator
-from ..services.context_provider import ContextProviderFactory  # , ContextProvider
-from ..llm_utils import load_prompt_file  # For prompt loading
+# LLMCoordinator is now from generic_llm_framework, LLMAgent's __init__ handles it.
+# from ..services.llm_coordinator import LLMCoordinator
+from generic_llm_framework.llm_coordinator import LLMCoordinator # Ensure LLMAgent gets this type
+from ..services.context_provider import ContextProviderFactory
+# load_prompt_file is now from generic_llm_framework.llm_utils
+from generic_llm_framework.llm_utils import load_prompt_file
+from .. import constants as diplomacy_constants # For diplomacy specific constants
 
 logger = logging.getLogger(__name__)
 
@@ -25,37 +29,43 @@ class BlocLLMAgent(LLMAgent):
         agent_id: str,
         bloc_name: str,
         controlled_powers: List[str],
-        config: AgentConfig,
-        game_id: str,
+        config: AgentConfig, # AgentConfig for LLMAgent
+        game_id: str, # Diplomacy game_id
+        # llm_coordinator, context_provider_factory are passed to super()
+        # which now expects the generic LLMCoordinator
         llm_coordinator: LLMCoordinator,
         context_provider_factory: ContextProviderFactory,
-        prompt_loader: Optional[callable] = None,
+        prompt_loader: Optional[callable] = None, # Remains for bloc_order_prompt.j2
     ):
         if not controlled_powers:
-            raise ValueError(
-                "BlocLLMAgent must be initialized with at least one controlled power."
-            )
-        # representative_country is used for super() call, mainly for initializing
-        # things like self.model_id, self.config from LLMAgent.
-        # The actual "country" context for BlocLLMAgent operations will be the bloc_name or all controlled_powers.
+            raise ValueError("BlocLLMAgent must be initialized with at least one controlled power.")
+
         representative_country = controlled_powers[0]
+
+        # Ensure prompt_loader defaults to the generic load_prompt_file if None
+        effective_prompt_loader = prompt_loader or load_prompt_file
 
         super().__init__(
             agent_id=agent_id,
-            country=representative_country,  # Used by superclass for some logging/state
-            config=config,  # Contains model_id, temperature, max_tokens etc.
-            game_id=game_id,
-            llm_coordinator=llm_coordinator,
-            context_provider_factory=context_provider_factory,
-            prompt_loader=prompt_loader or load_prompt_file,
+            country=representative_country,
+            config=config,
+            game_id=game_id, # Passed to LLMAgent -> GenericLLMAgent config
+            llm_coordinator=llm_coordinator, # Passed to LLMAgent -> GenericLLMAgent
+            context_provider_factory=context_provider_factory, # Used by LLMAgent
+            prompt_loader=effective_prompt_loader, # Used by LLMAgent for its system prompt
+            # llm_caller_override is not explicitly handled here, LLMAgent's default is None
         )
         self.bloc_name = bloc_name
         self.controlled_powers = [p.upper() for p in controlled_powers]
 
-        # Override self.country to be the bloc_name for clarity in agent's own identity.
-        # The superclass (LLMAgent) might use its self.country for some context,
-        # but BlocLLMAgent specific methods will use bloc_name or controlled_powers.
-        self.country = bloc_name
+        # self.country in LLMAgent is set to representative_country.
+        # For BlocLLMAgent's own identity in logging or specific logic, bloc_name is clearer.
+        # We can use self.bloc_name directly instead of overriding self.country after super init,
+        # as self.generic_agent.agent_id will be bloc_agent_id.
+        # LLMAgent's self.power_name is representative_country.
+        # GenericAgent's self.agent_id is bloc_agent_id.
+        # For clarity, let's keep self.country as representative_country as set by super()
+        # and use self.bloc_name explicitly for bloc identity.
 
         # Cache for bloc orders
         self._cached_bloc_orders_this_phase: Dict[str, List[Order]] = {}
@@ -122,188 +132,151 @@ class BlocLLMAgent(LLMAgent):
             self._cached_bloc_orders_this_phase = {}  # Clear previous cache
 
             try:
-                order_prompt_template_content = self.prompt_loader(
-                    "bloc_order_prompt.j2"
-                )
+                # self.prompt_loader is set in super().__init__
+                order_prompt_template_content = self.prompt_loader("bloc_order_prompt.j2")
             except FileNotFoundError:
-                logger.error(
-                    f"{self.agent_id}: bloc_order_prompt.j2 not found. Cannot generate bloc orders."
-                )
-                self._cached_bloc_orders_phase_key = (
-                    current_phase_key  # Cache empty result for this phase
-                )
-                return []  # Return empty for representative if prompt missing
+                logger.error(f"{self.agent_id}: bloc_order_prompt.j2 not found. Cannot generate bloc orders.")
+                self._cached_bloc_orders_phase_key = current_phase_key
+                return []
             except Exception as e:
-                logger.error(
-                    f"{self.agent_id}: Error loading bloc_order_prompt.j2: {e}",
-                    exc_info=True,
-                )
+                logger.error(f"{self.agent_id}: Error loading bloc_order_prompt.j2: {e}", exc_info=True)
                 self._cached_bloc_orders_phase_key = current_phase_key
                 return []
 
             prompt_context = {
                 "bloc_name": self.bloc_name,
                 "controlled_powers_list": self.controlled_powers,
-                "phase": phase,  # Pass the whole PhaseState object to the template
+                "phase": phase,
             }
 
-            # Use Jinja2 directly
             try:
                 template = jinja2.Template(order_prompt_template_content)
-                full_prompt = template.render(prompt_context)
+                rendered_bloc_prompt = template.render(prompt_context)
             except jinja2.TemplateSyntaxError as e:
-                logger.error(
-                    f"{self.agent_id}: Jinja2 template syntax error in bloc_order_prompt.j2: {e}",
-                    exc_info=True,
-                )
+                logger.error(f"{self.agent_id}: Jinja2 template syntax error: {e}", exc_info=True)
                 self._cached_bloc_orders_phase_key = current_phase_key
-                return [] # Return empty for representative if template error
-            except Exception as e: # Catch any other Jinja rendering errors
-                logger.error(
-                    f"{self.agent_id}: Error rendering Jinja2 template bloc_order_prompt.j2: {e}",
-                    exc_info=True,
-                )
+                return []
+            except Exception as e:
+                logger.error(f"{self.agent_id}: Error rendering Jinja2 template: {e}", exc_info=True)
                 self._cached_bloc_orders_phase_key = current_phase_key
                 return []
 
-            logger.debug(
-                f"BlocLLMAgent '{self.agent_id}' sending prompt for orders (first 500 chars): {full_prompt[:500]}..."
-            )
-            llm_response_text = ""
+            logger.debug(f"BlocLLMAgent '{self.agent_id}' using pre-rendered prompt for orders (first 500 chars): {rendered_bloc_prompt[:500]}...")
+
+            # Prepare state for GenericLLMAgent, using the pre-rendered prompt
+            # The action_type 'decide_bloc_orders' will instruct DiplomacyPromptStrategy to use this prompt directly.
+            bloc_action_context = {
+                "prompt_content": rendered_bloc_prompt,
+                # Other context elements for DiplomacyPromptStrategy if it were to add headers/footers,
+                # but for 'decide_bloc_orders' it uses prompt_content directly.
+                "action_type": "decide_bloc_orders" # This is more of a hint for prompt strategy
+            }
+
+            # Update GenericAgent's config for this specific call (e.g., phase, and importantly, the system_prompt if bloc needs a different one)
+            # The generic_agent's system_prompt is by default the one loaded by LLMAgent (representative country's or default diplomacy).
+            # If bloc orders need a different system context, it should be set here or in the jinja template.
+            # For now, we assume the jinja template contains all necessary instructions, including any system-like messages.
+            self.generic_agent.config["phase"] = phase.phase_name
+            # self.generic_agent.config["system_prompt"] = "You are a bloc coordinator..." # If needed to override
+
+            parsed_llm_orders = {}
             try:
-                # Use max_tokens from self.config (AgentConfig)
-                max_tokens_to_use = (
-                    self.config.max_tokens
-                    if self.config.max_tokens is not None
-                    else 2000
-                )  # Default if None
-
-                # BlocLLMAgent expects a JSON object where keys are power names.
-                # LLMAgent uses call_json with expected_fields=["orders"].
-                # Here, the top-level keys are the power names themselves.
-                # We can use call_json and let it parse the JSON. If expected_fields is None/empty,
-                # it should return the whole parsed dict.
-                parsed_llm_orders = await self.llm_coordinator.call_json(
-                    prompt=full_prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id, # self.agent_id is the bloc agent's ID
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt, # Inherited from LLMAgent
-                    # expected_fields=None, # Let call_json return the full parsed dictionary
-                    # tools=None, # No specific tools defined here for bloc order generation yet
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                    # Temperature and max_tokens are not direct params of call_json.
-                    # They are usually handled by the underlying llm library via model defaults or if 
-                    # call_json passes **kwargs to a lower level call that uses them.
-                    # For now, relying on model/coordinator defaults. If direct control is needed,
-                    # LLMCoordinator.request or a direct call to llm_call_internal might be an alternative, 
-                    # but call_json is simpler if it works.
+                # self.generic_agent is inherited from LLMAgent
+                # LLMAgent's prompt_strategy is DiplomacyPromptStrategy, which now handles 'decide_bloc_orders'
+                # The state passed to decide_action is the context for DiplomacyPromptStrategy.build_prompt
+                parsed_llm_orders = await self.generic_agent.decide_action(
+                    state=bloc_action_context, # This context will be used by DiplomacyPromptStrategy
+                    possible_actions=None # No separate possible_actions for bloc, it's in the prompt
                 )
 
-                logger.debug(
-                    f"BlocLLMAgent '{self.agent_id}' raw LLM response (from call_json): {parsed_llm_orders}"
-                )
+                if parsed_llm_orders.get("error"):
+                    logger.error(f"BlocLLMAgent '{self.agent_id}' error from generic_agent.decide_action: {parsed_llm_orders['error']}")
+                    self._cached_bloc_orders_this_phase = {} # Clear/set empty on error
+                    self._cached_bloc_orders_phase_key = current_phase_key
+                    return []
 
-                # No need for json.loads, as call_json returns a dict.
-                # parsed_llm_orders: Dict[str, List[str]] = json.loads(llm_response_text)
+
+                logger.debug(f"BlocLLMAgent '{self.agent_id}' raw LLM response (from generic_agent.decide_action): {parsed_llm_orders}")
 
                 valid_parsed_orders: Dict[str, List[Order]] = {}
+                # parsed_llm_orders is already a dict from generic_agent.decide_action (which calls call_json)
                 for power, orders_str_list in parsed_llm_orders.items():
-                    power_upper = power.upper()  # Normalize key from LLM
-                    if power_upper in self.controlled_powers:
-                        if isinstance(orders_str_list, list) and all(
-                            isinstance(o, str) for o in orders_str_list
-                        ):
-                            valid_parsed_orders[power_upper] = [
-                                Order(o) for o in orders_str_list
-                            ]
+                    # Check if the key is one of the controlled powers before processing
+                    if power.upper() in self.controlled_powers:
+                        if isinstance(orders_str_list, list) and all(isinstance(o, str) for o in orders_str_list):
+                            valid_parsed_orders[power.upper()] = [Order(o) for o in orders_str_list]
                         else:
-                            logger.warning(
-                                f"{self.agent_id}: Invalid order list format for power {power_upper} in LLM response. Skipping. Data: {orders_str_list}"
-                            )
-                    else:
-                        logger.warning(
-                            f"{self.agent_id}: LLM response included orders for unexpected/uncontrolled power '{power_upper}'. Ignoring."
-                        )
+                            logger.warning(f"{self.agent_id}: Invalid order list format for power {power} in LLM response. Skipping. Data: {orders_str_list}")
+                    # Do not log warning for non-controlled powers if they are not expected in response,
+                    # unless the prompt specifically asks for orders ONLY for controlled powers.
+                    # If the LLM might return orders for other powers, this check is useful.
+                    elif power != "error" and power != "details": # Skip our own error keys
+                        logger.warning(f"{self.agent_id}: LLM response included orders for non-controlled or unexpected key '{power}'. Ignoring.")
 
                 self._cached_bloc_orders_this_phase = valid_parsed_orders
-                logger.info(
-                    f"BlocLLMAgent '{self.agent_id}' successfully parsed orders for {list(self._cached_bloc_orders_this_phase.keys())}"
-                )
+                logger.info(f"BlocLLMAgent '{self.agent_id}' successfully parsed orders for {list(self._cached_bloc_orders_this_phase.keys())}")
                 logger.debug(f"Parsed orders: {self._cached_bloc_orders_this_phase}")
 
-            except json.JSONDecodeError as e:
-                logger.error(
-                    f"BlocLLMAgent '{self.agent_id}' failed to parse LLM JSON response: {e}. Response (first 500 chars): {llm_response_text[:500]}"
-                )
-                # Cache is already empty if new phase, or keep old cache if error on update?
-                # For safety, let's ensure it's empty for this attempt.
-                self._cached_bloc_orders_this_phase = {}
-            except Exception as e:
-                logger.error(
-                    f"BlocLLMAgent '{self.agent_id}' error during LLM call or parsing: {e}",
-                    exc_info=True,
-                )
+            except Exception as e: # Catch errors from generic_agent.decide_action or subsequent parsing
+                logger.error(f"BlocLLMAgent '{self.agent_id}' error during bloc order generation via generic_agent: {e}", exc_info=True)
                 self._cached_bloc_orders_this_phase = {}
 
             self._cached_bloc_orders_phase_key = current_phase_key
 
-        # To conform to BaseAgent.decide_orders, return orders for the representative country.
-        # The orchestrator can use get_all_bloc_orders_for_phase to get all orders.
-        # self.country for LLMAgent was set to representative_country in super().__init__
-        # but we overrode self.country to bloc_name. So use controlled_powers[0].
-        representative_country_for_return = self.controlled_powers[0]
-        orders_for_representative = self._cached_bloc_orders_this_phase.get(
-            representative_country_for_return, []
-        )
+        # Return orders for the representative country (first in list)
+        representative_power_name = self.controlled_powers[0]
+        orders_for_representative = self._cached_bloc_orders_this_phase.get(representative_power_name, [])
 
-        if self._cached_bloc_orders_this_phase and not orders_for_representative:
-            logger.warning(
-                f"BlocLLMAgent '{self.agent_id}' (bloc {self.bloc_name}) generated bloc orders, "
-                f"but no orders found for representative power {representative_country_for_return}. "
-                f"Returning empty list for it. Full bloc orders cached for powers: {list(self._cached_bloc_orders_this_phase.keys())}"
-            )
+        if not orders_for_representative and self._cached_bloc_orders_this_phase:
+             logger.warning(f"BlocLLMAgent '{self.agent_id}' got bloc orders, but none for representative {representative_power_name}.")
         elif self._cached_bloc_orders_this_phase:
-            logger.info(
-                f"BlocLLMAgent '{self.agent_id}' (bloc {self.bloc_name}) returning "
-                f"{len(orders_for_representative)} orders for representative power {representative_country_for_return}. "
-                f"Full bloc orders cached for powers: {list(self._cached_bloc_orders_this_phase.keys())}"
-            )
+            logger.info(f"BlocLLMAgent '{self.agent_id}' returning {len(orders_for_representative)} orders for representative {representative_power_name}.")
 
         return orders_for_representative
 
     def get_all_bloc_orders_for_phase(
-        self, phase_key_tuple: tuple
+        self, phase_key_tuple: tuple # This argument might need re-evaluation if phase state representation changes.
     ) -> Dict[str, List[Order]]:
         """
         Allows an orchestrator to retrieve all cached orders for all controlled powers for a given phase key.
         The phase_key_tuple must match the one used internally for caching.
         """
+        # TODO: Review phase_key_tuple generation and usage for consistency.
         if self._cached_bloc_orders_phase_key == phase_key_tuple:
             return self._cached_bloc_orders_this_phase
         else:
             logger.warning(
                 f"{self.agent_id}: Request for bloc orders for phase key {phase_key_tuple}, "
                 f"but cache is for {self._cached_bloc_orders_phase_key if self._cached_bloc_orders_phase_key else 'None'}. "
-                "This may happen if get_all_bloc_orders_for_phase is called before decide_orders for the current phase, "
-                "or if the phase key construction differs."
+                "Ensure decide_orders() was called for this phase and key matches."
             )
             return {}
 
-    # Inherit negotiate and update_state from LLMAgent.
-    # For negotiate, the LLMAgent's default uses self.country, which is bloc_name.
-    # This means the bloc negotiates as a single entity, which is intended.
-    # The prompt strategy for negotiation in LLMAgent would need to be aware of this.
-    # For update_state (diary), it will also use self.country (bloc_name).
+    # negotiate() and update_state() are inherited from LLMAgent.
+    # LLMAgent now uses self.generic_agent for these.
+    # The self.generic_agent.agent_id is the bloc's agent_id.
+    # The self.diplomacy_prompt_strategy is used by self.generic_agent.
+    #   - For negotiation, DiplomacyPromptStrategy.build_prompt with 'generate_diplomacy_messages'
+    #     uses context['country'], which LLMAgent provides as its self.power_name (representative_country).
+    #     This means negotiation prompts will be from the perspective of the representative_country.
+    #     This might need adjustment if bloc-wide negotiation perspective is desired.
+    #     The `self.generic_agent.generate_communication` is called with `self.power_name` as agent_id for prompt.
+    #
+    #   - For update_state (diary/goals), LLMAgent's new helpers call generic_agent.decide_action
+    #     with context that includes `country=self.power_name`. So diary/goals are also from
+    #     representative country's perspective. This might also need adjustment for bloc-level diary/goals.
 
     def get_agent_info(self) -> Dict[str, Any]:
         """
         Return basic information about this agent.
         """
-        info = super().get_agent_info()  # Calls LLMAgent's get_agent_info
-        info["type"] = "BlocLLMAgent"
+        # LLMAgent.get_agent_info() now includes generic_agent_info.
+        # We just need to add BlocLLMAgent specific fields or override 'type'.
+        info = super().get_agent_info()
+        info["diplomacy_agent_type"] = "BlocLLMAgent" # Override the type from LLMAgent
         info["bloc_name"] = self.bloc_name
         info["controlled_powers"] = self.controlled_powers
-        # The 'country' in info will be bloc_name due to self.country = bloc_name in __init__
+        # The 'country' in info (from LLMAgent's get_agent_info) will be the representative_country.
+        # This is acceptable as it indicates the "main" country for superclass purposes.
+        # The generic_agent_info.agent_id will be the bloc's agent_id.
         return info

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 from ai_diplomacy.services.config import AgentConfig
-from ai_diplomacy.services.llm_coordinator import LLMCoordinator
+from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated import
 from ai_diplomacy.services.context_provider import (
     ContextProviderFactory,
     ContextProvider,

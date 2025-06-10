@@ -8,7 +8,7 @@ import logging
 from typing import Dict, List, Optional, Any  # Added Any for game type placeholder
 
 # from .game_state import GameState # Removed unused import
-from .prompt_utils import load_prompt  # Changed from .utils to .prompt_utils
+from generic_llm_framework.llm_utils import load_prompt_file as load_prompt # UPDATED IMPORT
 from .possible_order_context import generate_rich_order_context
 from .game_history import GameHistory  # Assuming GameHistory is correctly importable
 from . import constants  # Import constants
