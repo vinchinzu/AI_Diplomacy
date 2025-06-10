@@ -10,12 +10,13 @@ import os
 import logging
 import re
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List # Added List
+import csv # Added csv
 
 import json_repair
 import json5
 
-logger = logging.getLogger(__name__)  # Removed comment: # Logger for this module
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "load_prompt_file",
@@ -23,6 +24,7 @@ __all__ = [
     "extract_json_from_text",
     "extract_relationships",
     "extract_goals",
+    "log_llm_response", # Added log_llm_response
 ]
 
 # Constants for relationship extraction
@@ -320,3 +322,90 @@ def extract_goals(data) -> Optional[list]:
         if key in data and isinstance(data[key], list):
             return data[key]
     return None
+
+
+# Moved from ai_diplomacy/general_utils.py
+def log_llm_response(
+    log_file_path: str,
+    model_name: str,
+    # Optional for non-power-specific calls like summary, but agent_id is more generic
+    agent_id: Optional[str],
+    phase: str,
+    response_type: str,
+    # raw_input_prompt: str, # Decided not to log the full prompt to save space
+    raw_response: str,
+    success: str,  # Assuming success is a string like "TRUE" or "FALSE: reason"
+    request_identifier: Optional[str] = None, # Optional request identifier
+    turn_number: Optional[int] = None, # Optional turn number
+) -> None:
+    """
+    Log minimal LLM response metadata to a CSV file.
+
+    Args:
+        log_file_path: Path to the CSV log file.
+        model_name: Name/ID of the LLM used.
+        agent_id: Identifier of the agent making the call.
+        phase: Current phase or step in the process.
+        response_type: Type of response (e.g., "order_generation", "negotiation_analysis").
+        raw_response: The raw text string received from the LLM.
+        success: String indicating success status (e.g., "TRUE", "FALSE: error message").
+        request_identifier: Optional unique ID for the request.
+        turn_number: Optional turn number if applicable.
+    """
+    try:
+        # Ensure directory exists
+        log_dir = os.path.dirname(log_file_path)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+
+        log_fields = [
+            "timestamp",
+            "request_id",
+            "turn",
+            "model",
+            "agent_id",
+            "phase",
+            "response_type",
+            "success",
+            "raw_response_excerpt", # Log an excerpt to keep file size manageable
+        ]
+
+        # Prepare excerpt
+        # Using a constant for max length, defined in generic_llm_framework.constants
+        # from . import constants as generic_constants # This would create a circular dependency if constants need llm_utils
+        # For now, let's use a local sensible default or assume it's passed if critical.
+        # Decided to use a hardcoded MAX_CONTENT_LOG_LENGTH for now to avoid import cycle.
+        # Better would be to pass it from coordinator or have it in a base constants file.
+        MAX_CONTENT_LOG_LENGTH = 500 # Matching the one in constants.py for now
+        response_excerpt = (
+            raw_response[:MAX_CONTENT_LOG_LENGTH] + "..."
+            if len(raw_response) > MAX_CONTENT_LOG_LENGTH
+            else raw_response
+        )
+
+        # Get current timestamp
+        import datetime # Moved import here
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+        log_row = [
+            timestamp,
+            request_identifier or "",
+            str(turn_number) if turn_number is not None else "",
+            model_name,
+            agent_id or "",
+            phase,
+            response_type,
+            success,
+            response_excerpt,
+        ]
+
+        file_exists = os.path.isfile(log_file_path)
+        with open(log_file_path, mode="a", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile)
+            if not file_exists:
+                writer.writerow(log_fields)
+            writer.writerow(log_row)
+    except Exception as e:
+        # Use a logger specific to this module (llm_utils)
+        logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)

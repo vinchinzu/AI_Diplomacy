@@ -10,7 +10,7 @@ from ai_diplomacy.core.state import PhaseState
 
 from ai_diplomacy.agents.scripted_agent import ScriptedAgent
 from ai_diplomacy.services.config import DiplomacyConfig, AgentConfig, GameConfig
-from ai_diplomacy.services.llm_coordinator import LLMCoordinator
+from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated import
 
 # Set up logging
 logging.basicConfig(

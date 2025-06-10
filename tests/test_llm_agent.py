@@ -1,1217 +1,683 @@
 import unittest
+from ai_diplomacy.core.message import Message
 from unittest.mock import MagicMock, AsyncMock, patch, call
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Dict, Any
 import logging
 
-from ai_diplomacy import constants
+from ai_diplomacy import constants as diplomacy_constants
+from generic_llm_framework import constants as generic_constants
 from ai_diplomacy.agents.llm_agent import LLMAgent
-from ai_diplomacy.agents.base import Order, Message, PhaseState
-from ai_diplomacy.agents.factory import AgentFactory
-from ai_diplomacy.services.config import AgentConfig  # ContextProviderType removed
-from ai_diplomacy.services.context_provider import (
-    ContextProvider,
-)  # Changed BaseContextProvider to ContextProvider
+from ai_diplomacy.core.order import Order
+from ai_diplomacy.core.message import Message
+from ai_diplomacy.core.state import PhaseState
+from ai_diplomacy.services.config import AgentConfig
+from ai_diplomacy.services.context_provider import ContextProvider, ContextData # Added ContextData
+from ai_diplomacy.agents.factory import AgentFactory # For test_agent_with_various_context_providers
 
+# Updated patch paths
+from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator
+from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy # Renamed, not aliased here for clarity in patches
+from generic_llm_framework.agent import GenericLLMAgent as FrameworkGenericLLMAgent
+
+# Updated patch paths
+from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator
+from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy # Renamed, not aliased here for clarity in patches
+from generic_llm_framework.agent import GenericLLMAgent as FrameworkGenericLLMAgent
 
 class TestLLMAgent(unittest.IsolatedAsyncioTestCase):
     def _create_mock_prompt_loader(self) -> Callable[[str], Optional[str]]:
-        # Helper to create a new mock loader for each test if needed, or use a shared one
         return MagicMock(spec=Callable[[str], Optional[str]])
 
     @patch("ai_diplomacy.agents.llm_agent.ContextProviderFactory", autospec=True)
-    @patch("ai_diplomacy.agents.llm_agent.LLMCoordinator", autospec=True)
-    @patch("ai_diplomacy.agents.llm_agent.LLMPromptStrategy", autospec=True)
+    @patch("ai_diplomacy.agents.llm_agent.GenericLLMAgent", autospec=True)
+    @patch("ai_diplomacy.agents.llm_agent.DiplomacyPromptStrategy", autospec=True)
     @patch("ai_diplomacy.agents.llm_agent.DiplomacyAgentState", autospec=True)
+    @patch("ai_diplomacy.agents.llm_agent.load_prompt_file", autospec=True) # Patches the imported generic load_prompt_file
     async def asyncSetUp(
         self,
+        mock_load_prompt_file,
         MockDiplomacyAgentState,
-        MockLLMPromptStrategy,
-        MockLLMCoordinator,
+        MockDiplomacyPromptStrategy,
+        MockGenericLLMAgent,
         MockContextProviderFactory,
     ):
-        # Store mocks for later use in tests
         self.MockDiplomacyAgentState = MockDiplomacyAgentState
-        self.MockLLMPromptStrategy = MockLLMPromptStrategy
-        self.MockLLMCoordinator = MockLLMCoordinator
+        self.MockDiplomacyPromptStrategy = MockDiplomacyPromptStrategy
+        self.MockGenericLLMAgent = MockGenericLLMAgent
         self.MockContextProviderFactory = MockContextProviderFactory
+        self.mock_load_prompt_file = mock_load_prompt_file # This is the one used by LLMAgent for its _load_system_prompt
 
-        self.mock_agent_state = MockDiplomacyAgentState.return_value
-        self.mock_prompt_strategy = MockLLMPromptStrategy.return_value
-        self.mock_llm_coordinator = MockLLMCoordinator.return_value
-        self.mock_context_provider_factory = MockContextProviderFactory.return_value
+        self.mock_agent_state = self.MockDiplomacyAgentState.return_value
+        self.mock_diplomacy_prompt_strategy_instance = self.MockDiplomacyPromptStrategy.return_value
 
-        # Configure mock_agent_state attributes
+        self.mock_generic_agent_instance = self.MockGenericLLMAgent.return_value
+        self.mock_generic_agent_instance.decide_action = AsyncMock()
+        self.mock_generic_agent_instance.generate_communication = AsyncMock()
+        self.mock_generic_agent_instance.update_internal_state = AsyncMock()
+        self.mock_generic_agent_instance.get_agent_info = MagicMock(return_value={"generic_key": "generic_value"})
+
+        self.mock_llm_coordinator = AsyncMock(spec=GenericLLMCoordinator) # LLMAgent takes this
+        self.mock_context_provider_factory_instance = MockContextProviderFactory.return_value # Renamed for clarity
+
         self.mock_agent_state.goals = ["Initial Goal"]
-        self.mock_agent_state.relationships = {
-            "GERMANY": "Neutral",
-            "ITALY": "Friendly",
-        }
-        self.mock_agent_state.format_private_diary_for_prompt = MagicMock(
-            return_value="Formatted diary from mock"
-        )
-        self.mock_agent_state._update_relationships_from_events = (
-            MagicMock()
-        )  # If this method is called on the mock
-        self.mock_agent_state.private_diary = []  # Initialize as empty list
-        self.mock_agent_state.private_journal = []  # Initialize as empty list
+        self.mock_agent_state.relationships = {"GERMANY": "Neutral", "ITALY": "Friendly"}
+        self.mock_agent_state.format_private_diary_for_prompt = MagicMock(return_value="Formatted diary from mock")
+        self.mock_agent_state._update_relationships_from_events = MagicMock()
+        self.mock_agent_state.private_diary = []
+        self.mock_agent_state.private_journal = []
 
-        self.mock_context_provider = AsyncMock(
-            spec=ContextProvider, autospec=True
-        )  # Changed BaseContextProvider to ContextProvider
-        self.mock_context_provider.get_provider_type.return_value = (
-            "inline"  # Changed to string
-        )
+        self.mock_context_provider = AsyncMock(spec=ContextProvider, autospec=True)
+        self.mock_context_provider.get_provider_type.return_value = "inline"
         self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Default context",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )  # Added provider_type and tools
-        self.mock_context_provider_factory.get_provider.return_value = (
-            self.mock_context_provider
+            return_value={"context_text": "Default context", "tools_available": False, "provider_type": "inline", "tools": []}
         )
+        self.mock_context_provider_factory_instance.get_provider.return_value = self.mock_context_provider # Corrected factory usage
 
-        self.mock_llm_caller_override = AsyncMock(
-            return_value={"orders": ["A PAR H"]}
-        )  # Changed to return dict
+        self.mock_load_prompt_file.return_value = "Default system prompt from loader"
 
-        self.mock_prompt_loader = self._create_mock_prompt_loader()
-        self.mock_prompt_loader.return_value = "Default system prompt from loader"
-
-        self.mock_agent_state.add_journal_entry.reset_mock()  # New position
+        self.mock_agent_state.add_journal_entry.reset_mock()
 
         self.agent_config = AgentConfig(
-            country="FRANCE",  # Corrected: 'power' to 'country'
-            type="llm",  # Added required 'type' field
-            model_id="test_model",
-            context_provider="inline",
-            # agent_id is passed to LLMAgent constructor, not AgentConfig
-            # log_to_gcp and log_to_file are not standard fields, but allowed by extra='allow'
+            country="FRANCE", type="llm", model_id="test_model", context_provider="inline",
+            prompt_strategy_config=None
         )
 
         self.agent = LLMAgent(
-            agent_id="test_agent_007",  # agent_id is used here
-            country="FRANCE",
-            config=self.agent_config,
-            game_id="test_game",
+            agent_id="test_agent_007", country="FRANCE", config=self.agent_config, game_id="test_game",
             llm_coordinator=self.mock_llm_coordinator,
-            context_provider_factory=self.mock_context_provider_factory,
-            prompt_loader=self.mock_prompt_loader,
-            llm_caller_override=None,  # Override typically set per test or not at all for most
+            context_provider_factory=self.mock_context_provider_factory_instance, # Use instance
+            prompt_loader=self.mock_load_prompt_file,
+            llm_caller_override=None,
         )
-        self.agent.llm_caller_override = (
-            self.mock_llm_caller_override
-        )  # Assign after agent init for specific tests
 
     async def test_initialization(self):
-        # Re-init agent without override for this specific test to avoid interference
-        agent = LLMAgent(
-            agent_id="test_agent_init",
-            country="FRANCE",
-            config=self.agent_config,
-            game_id="test_game_init",
-            llm_coordinator=self.mock_llm_coordinator,
-            context_provider_factory=self.mock_context_provider_factory,
-            prompt_loader=self.mock_prompt_loader,
-            llm_caller_override=None,
-        )
         self.MockDiplomacyAgentState.assert_called_with(country="FRANCE")
-        self.MockLLMPromptStrategy.assert_called_once()
-        self.assertEqual(agent.llm_coordinator, self.mock_llm_coordinator)
-        self.mock_context_provider_factory.get_provider.assert_called_with("inline")
-        self.assertEqual(agent.context_provider, self.mock_context_provider)
-        self.mock_agent_state.add_journal_entry.assert_any_call(  # any_call due to multiple inits
+        self.MockDiplomacyPromptStrategy.assert_called_with(config=self.agent_config.prompt_strategy_config)
+        self.MockGenericLLMAgent.assert_called_once()
+        generic_agent_args = self.MockGenericLLMAgent.call_args[1]
+        self.assertEqual(generic_agent_args['agent_id'], "test_agent_007")
+        self.assertEqual(generic_agent_args['config']['model_id'], "test_model")
+        self.assertEqual(generic_agent_args['config']['system_prompt'], "Default system prompt from loader")
+        self.assertEqual(generic_agent_args['llm_coordinator'], self.mock_llm_coordinator)
+        self.assertEqual(generic_agent_args['prompt_strategy'], self.mock_diplomacy_prompt_strategy_instance)
+        self.assertEqual(self.agent.resolved_context_provider_type, "inline")
+        self.mock_agent_state.add_journal_entry.assert_any_call(
             f"Agent initialized with model {self.agent_config.model_id}, context provider: inline"
         )
-        self.mock_prompt_loader.assert_any_call("france_system_prompt.txt")
-        found_default_call = False
-        for c in self.mock_prompt_loader.call_args_list:
-            if (
-                c == call("system_prompt.txt")
-                and self.mock_prompt_loader("france_system_prompt.txt") is None
-            ):
-                found_default_call = True
-                break
-        # This assertion depends on whether france_system_prompt.txt mock returns something.
-        # If it returns the default prompt, then the default specific call should not happen.
-        if self.mock_prompt_loader("france_system_prompt.txt") is not None:
-            self.assertFalse(
-                found_default_call,
-                "Default prompt should not have been loaded if power-specific succeeded",
-            )
+        self.mock_load_prompt_file.assert_any_call("france_system_prompt.txt")
 
-    @patch("ai_diplomacy.agents.llm_agent.llm_utils.load_prompt_file", autospec=True)
-    async def test_initialization_no_prompt_loader(
-        self, mock_llm_utils_load_prompt_file
-    ):
-        mock_llm_utils_load_prompt_file.return_value = "Prompt from llm_utils"
-        agent = LLMAgent(
-            agent_id="test_agent_no_loader",
-            country="FRANCE",
-            config=self.agent_config,
-            game_id="test_game_no_loader",
-            llm_coordinator=self.mock_llm_coordinator,
-            context_provider_factory=self.mock_context_provider_factory,
-            prompt_loader=None,
-            llm_caller_override=None,
-        )
-        self.assertIsNotNone(agent.system_prompt)
-        mock_llm_utils_load_prompt_file.assert_any_call("france_system_prompt.txt")
+    @patch("ai_diplomacy.agents.llm_agent.load_prompt_file", autospec=True)
+    async def test_initialization_no_prompt_loader_uses_direct_import(self, mock_direct_load_p_file):
+        mock_direct_load_p_file.return_value = "Prompt from direct llm_utils"
+        with patch("ai_diplomacy.agents.llm_agent.GenericLLMAgent", autospec=True) as MockGenericAgentForThisTest:
+            mock_generic_instance_local = MockGenericAgentForThisTest.return_value
+            agent = LLMAgent(
+                agent_id="test_agent_no_loader", country="FRANCE", config=self.agent_config,
+                game_id="test_game_no_loader", llm_coordinator=self.mock_llm_coordinator,
+                context_provider_factory=self.mock_context_provider_factory_instance,
+                prompt_loader=None, llm_caller_override=None,
+            )
+            self.assertIsNotNone(agent.system_prompt)
+            mock_direct_load_p_file.assert_any_call("france_system_prompt.txt")
+            self.assertNotEqual(agent.generic_agent, self.mock_generic_agent_instance)
+            self.assertEqual(agent.generic_agent, mock_generic_instance_local)
 
     async def test_load_system_prompt_power_specific(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = (
-            None  # Ensure no override for this part of init
-        )
-        self.mock_prompt_loader.reset_mock()
-        self.mock_prompt_loader.side_effect = [
-            "Power-specific prompt via loader",
-            "Default prompt via loader",
-        ]
+        self.mock_load_prompt_file.reset_mock(side_effect=True)
+        self.mock_load_prompt_file.side_effect = ["Power-specific prompt", "Default prompt"]
         prompt = self.agent._load_system_prompt()
-        self.assertEqual(prompt, "Power-specific prompt via loader")
-        self.mock_prompt_loader.assert_any_call("france_system_prompt.txt")
-        found_default_call = any(
-            c == call("system_prompt.txt")
-            for c in self.mock_prompt_loader.call_args_list
-        )
-        self.assertFalse(found_default_call)
+        self.assertEqual(prompt, "Power-specific prompt")
+        self.mock_load_prompt_file.assert_any_call("france_system_prompt.txt")
+        was_default_called = any(c == call(diplomacy_constants.DEFAULT_SYSTEM_PROMPT_FILENAME) for c in self.mock_load_prompt_file.call_args_list)
+        self.assertFalse(was_default_called, "Default prompt should not have been loaded.")
 
     async def test_load_system_prompt_default(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        self.mock_prompt_loader.reset_mock()
-        self.mock_prompt_loader.side_effect = [None, "Default prompt via loader"]
+        self.mock_load_prompt_file.reset_mock(side_effect=True)
+        self.mock_load_prompt_file.side_effect = [None, "Default prompt from loader"]
         prompt = self.agent._load_system_prompt()
-        self.assertEqual(prompt, "Default prompt via loader")
-        self.mock_prompt_loader.assert_has_calls(
-            [call("france_system_prompt.txt"), call("system_prompt.txt")],
-            any_order=False,
-        )  # any_order=False is default but good to be explicit
+        self.assertEqual(prompt, "Default prompt from loader")
+        self.mock_load_prompt_file.assert_has_calls([
+            call("france_system_prompt.txt"), call(diplomacy_constants.DEFAULT_SYSTEM_PROMPT_FILENAME)], any_order=False)
 
     async def test_load_system_prompt_failure(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        self.mock_prompt_loader.reset_mock()
-        self.mock_prompt_loader.side_effect = [None, None]
+        self.mock_load_prompt_file.reset_mock(side_effect=True)
+        self.mock_load_prompt_file.side_effect = [None, None]
         prompt = self.agent._load_system_prompt()
         self.assertIsNone(prompt)
-        self.mock_prompt_loader.assert_has_calls(
-            [call("france_system_prompt.txt"), call("system_prompt.txt")],
-            any_order=False,
-        )
 
     async def test_decide_orders_no_units(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = []
-        mock_phase_state.phase_name = "Spring1901"
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.get_power_units.return_value = []
         orders = await self.agent.decide_orders(mock_phase_state)
         self.assertEqual(orders, [])
-        mock_phase_state.get_power_units.assert_called_once_with("FRANCE")
+        self.mock_generic_agent_instance.decide_action.assert_not_called()
 
     async def test_decide_orders_successful(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None  # Test regular LLM Coordinator path
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR", "F BRE"]
-        mock_phase_state.phase_name = "Spring1901"
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Test context",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_order_prompt.return_value = "Test order prompt"
-        self.mock_llm_coordinator.call_json.return_value = {
-            "orders": ["A PAR H", "F BRE M MAR"]
-        }
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.get_power_units.return_value = ["A PAR"]
+        mock_phase_state.phase_name="S1901M"; mock_phase_state.get_all_possible_orders.return_value = {}
+        mock_phase_state.get_power_centers.return_value = ["PAR"]
+        mock_possible_orders = {"A PAR": ["A PAR H", "A PAR M MAR"]}
+        mock_phase_state.get_all_possible_orders.return_value = mock_possible_orders
+        mock_phase_state.get_power_centers.return_value = ["PAR"]
+
+        context_provider_return_value = {"context_text": "Ctx", "tools_available": False, "tools": ["tool1", "tool2"]}
+        self.mock_context_provider.provide_context.return_value = context_provider_return_value
+        self.mock_generic_agent_instance.decide_action.return_value = {diplomacy_constants.LLM_RESPONSE_KEY_ORDERS: ["A PAR H"]}
+
+        # Clear previous config if any, to ensure we test the update
+        self.agent.generic_agent.config.pop("phase", None)
+        self.agent.generic_agent.config.pop("tools", None)
+
         orders = await self.agent.decide_orders(mock_phase_state)
-        self.mock_context_provider.provide_context.assert_called_once()
-        self.mock_prompt_strategy.build_order_prompt.assert_called_once_with(
-            country="FRANCE",
-            goals=self.mock_agent_state.goals,
-            relationships=self.mock_agent_state.relationships,
-            formatted_diary=self.mock_agent_state.format_private_diary_for_prompt.return_value,
-            context_text="Test context",
-            tools_available=False,
-        )
-        self.mock_llm_coordinator.call_json.assert_called_once_with(
-            prompt="Test order prompt",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=["orders"],
-            tools=None,
-        )
-        self.assertEqual(len(orders), 2)
-        self.assertEqual(orders[0], Order("A PAR H"))
-        self.assertEqual(orders[1], Order("F BRE M MAR"))
 
-    async def test_decide_orders_llm_error(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR", "F BRE"]
-        mock_phase_state.phase_name = "Spring1901"
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Test context",
-                "provider_type": "inline",
-                "tools_available": False,
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_order_prompt.return_value = "Test order prompt"
-        self.mock_llm_coordinator.call_json.side_effect = Exception("LLM exploded")
-        orders = await self.agent.decide_orders(mock_phase_state)
-        self.assertEqual(len(orders), 2)
-        self.assertEqual(orders[0].order_text, "A PAR H")
-        self.assertEqual(orders[1].order_text, "F BRE H")
+        self.mock_generic_agent_instance.decide_action.assert_called_once()
+        call_args = self.mock_generic_agent_instance.decide_action.call_args
+        passed_state = call_args[1]['state']
+        passed_possible_actions = call_args[1]['possible_actions']
 
-    async def test_decide_orders_bad_llm_response(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR"]
-        mock_phase_state.phase_name = "Spring1901"
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Test context",
-                "provider_type": "inline",
-                "tools_available": False,
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_order_prompt.return_value = "Test order prompt"
-        self.mock_llm_coordinator.call_json.return_value = {}
-        orders = await self.agent.decide_orders(mock_phase_state)
-        self.assertEqual(len(orders), 1)
-        self.assertEqual(orders[0].order_text, "A PAR H")
+        # Assertions for state keys and values
+        self.assertEqual(passed_state['country'], "FRANCE")
+        self.assertEqual(passed_state['goals'], self.mock_agent_state.goals)
+        self.assertEqual(passed_state['relationships'], self.mock_agent_state.relationships)
+        self.assertEqual(passed_state['formatted_diary'], self.mock_agent_state.format_private_diary_for_prompt.return_value)
+        self.assertEqual(passed_state['context_text'], "Ctx")
+        self.assertEqual(passed_state['tools_available'], False) # from context_provider_return_value
+        self.assertEqual(passed_state['phase_name'], "S1901M")
+        self.assertEqual(passed_state['power_units'], ["A PAR"])
+        self.assertEqual(passed_state['power_centers'], ["PAR"])
 
-    async def test_decide_orders_context_tools_available(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR"]
-        mock_phase_state.phase_name = "Spring1901"
-        mock_tools = [{"type": "function", "function": {"name": "test_tool"}}]
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Context with tools",
-                "tools_available": True,
-                "tools_definition": mock_tools,
-                "provider_type": "inline",
-                "tools": mock_tools,
-            }
-        )
-        self.mock_prompt_strategy.build_order_prompt.return_value = "Prompt with tools"
-        self.mock_llm_coordinator.call_json.return_value = {"orders": ["A PAR H"]}
-        await self.agent.decide_orders(mock_phase_state)
-        self.mock_prompt_strategy.build_order_prompt.assert_called_with(
-            country="FRANCE",
-            goals=self.mock_agent_state.goals,
-            relationships=self.mock_agent_state.relationships,
-            formatted_diary=self.mock_agent_state.format_private_diary_for_prompt.return_value,
-            context_text="Context with tools",
-            tools_available=True,
-        )
-        self.mock_llm_coordinator.call_json.assert_called_with(
-            prompt="Prompt with tools",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=["orders"],
-            tools=mock_tools,
-        )
+        # Verify possible_actions argument
+        self.assertEqual(passed_possible_actions, mock_possible_orders)
 
-    async def test_decide_orders_context_empty_text(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR"]
-        mock_phase_state.phase_name = "Spring1901"
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_order_prompt.return_value = (
-            "Prompt with empty context"
-        )
-        self.mock_llm_coordinator.call_json.return_value = {"orders": ["A PAR H"]}
-        await self.agent.decide_orders(mock_phase_state)
-        self.mock_prompt_strategy.build_order_prompt.assert_called_with(
-            country="FRANCE",
-            goals=self.mock_agent_state.goals,
-            relationships=self.mock_agent_state.relationships,
-            formatted_diary=self.mock_agent_state.format_private_diary_for_prompt.return_value,
-            context_text="",
-            tools_available=False,
-        )
-        self.mock_llm_coordinator.call_json.assert_called_with(
-            prompt="Prompt with empty context",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=["orders"],
-            tools=None,
-        )
+        # Verify generic_agent.config updates
+        self.assertEqual(self.agent.generic_agent.config.get("phase"), "S1901M")
+        self.assertEqual(self.agent.generic_agent.config.get("tools"), context_provider_return_value["tools"])
+
+        self.assertEqual(orders, [Order("A PAR H")])
+
+    async def test_decide_orders_generic_agent_error(self):
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.get_power_units.return_value = ["A PAR"]
+        self.mock_generic_agent_instance.decide_action.return_value = {"error": "Exploded"}
+        with self.assertRaisesRegex(ValueError, "GenericAgent reported error deciding orders: Exploded"):
+            await self.agent.decide_orders(mock_phase_state)
+
+    async def test_decide_orders_bad_llm_response_from_generic_agent(self):
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.get_power_units.return_value = ["A PAR"]
+        self.mock_generic_agent_instance.decide_action.return_value = {"other_key": "val"}
+        with self.assertRaisesRegex(ValueError, f"No valid '{diplomacy_constants.LLM_RESPONSE_KEY_ORDERS}' field"):
+            await self.agent.decide_orders(mock_phase_state)
 
     async def test_decide_orders_context_provider_exception(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR"]
-        mock_phase_state.phase_name = "Spring1901"
-        self.mock_context_provider.provide_context = AsyncMock(
-            side_effect=Exception("Context Provider Failed")
-        )
-        orders = await self.agent.decide_orders(mock_phase_state)
-        self.assertEqual(len(orders), 1)
-        self.assertEqual(orders[0].order_text, "A PAR H")
-        self.mock_llm_coordinator.call_json.assert_not_called()
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.get_power_units.return_value = ["A PAR"]
+        self.mock_context_provider.provide_context.side_effect = Exception("CtxFail")
+        with self.assertRaisesRegex(RuntimeError, "Unexpected error deciding orders: CtxFail"):
+            await self.agent.decide_orders(mock_phase_state)
 
     def test_extract_orders_from_response(self):
-        # Create a minimal agent for this synchronous test
-        temp_agent_config = AgentConfig(
-            country="FRANCE",
-            type="llm",
-            model_id="dummy_model",
-            context_provider="inline",
-        )
-        agent = LLMAgent(
-            agent_id="dummy_agent_extract",
-            country="FRANCE",
-            config=temp_agent_config,
-            game_id="dummy_game",
-            llm_coordinator=MagicMock(),
-            context_provider_factory=MagicMock(),
-            prompt_loader=MagicMock(),
-            llm_caller_override=None,
-        )
-        units = ["A PAR", "F BRE", "A MAR"]
-        response = {"orders": ["A PAR H", "F BRE M MAR", "INVALID ORDER STRING"]}
-        expected_orders = [
-            Order("A PAR H"),
-            Order("F BRE M MAR"),
-            Order("INVALID ORDER STRING"),
-        ]
-        actual_orders = agent._extract_orders_from_response(response, units)
-        self.assertEqual(actual_orders, expected_orders)
-        response_dict_order = {
-            "orders": [{"unit": "A PAR", "action": "H"}, "F BRE M MAR"]
-        }
-        expected_orders_dict = [Order("A PAR H"), Order("F BRE M MAR")]
-        actual_orders_dict = agent._extract_orders_from_response(
-            response_dict_order, units
-        )
-        self.assertEqual(actual_orders_dict, expected_orders_dict)
-        response_all_dict_order = {
-            "orders": [
-                {"unit": "A PAR", "action": "H"},
-                {"unit": "F BRE", "action": "M MAR"},
-            ]
-        }
-        expected_all_dict_orders = [Order("A PAR H"), Order("F BRE M MAR")]
-        actual_all_dict_orders = agent._extract_orders_from_response(
-            response_all_dict_order, units
-        )
-        self.assertEqual(actual_all_dict_orders, expected_all_dict_orders)
-        response_partial_dict = {
-            "orders": [{"action": "H"}, {"unit": "F BRE"}, "A MAR H"]
-        }
-        expected_partial_dict_orders = [Order("A MAR H")]
-        units_for_partial = ["X YZ", "F BRE", "A MAR"]
-        actual_partial_dict_orders = agent._extract_orders_from_response(
-            response_partial_dict, units_for_partial
-        )
-        self.assertEqual(actual_partial_dict_orders, expected_partial_dict_orders)
+        agent = LLMAgent("id", "FRANCE", self.agent_config, llm_coordinator=self.mock_llm_coordinator, context_provider_factory=self.mock_context_provider_factory_instance, prompt_loader=self.mock_load_prompt_file)
+        with self.assertRaises(ValueError): agent._extract_orders_from_response(None, ["A PAR"])
+        with self.assertRaises(ValueError): agent._extract_orders_from_response("text", ["A PAR"])
+        with self.assertRaises(ValueError): agent._extract_orders_from_response([], ["A PAR"]) # Empty orders with units
+        self.assertEqual(agent._extract_orders_from_response([], []), []) # Empty orders, no units
+        self.assertEqual(agent._extract_orders_from_response(["A PAR H"], []), []) # Orders but no units
 
-    def test_extract_orders_edge_cases(self):
-        temp_agent_config = AgentConfig(
-            country="FRANCE",
-            type="llm",
-            model_id="dummy_model",
-            context_provider="inline",
-        )
-        agent = LLMAgent(
-            agent_id="dummy_agent_extract_edge",
-            country="FRANCE",
-            config=temp_agent_config,
-            game_id="dummy_game_edge",
-            llm_coordinator=MagicMock(),
-            context_provider_factory=MagicMock(),
-            prompt_loader=MagicMock(),
-            llm_caller_override=None,
-        )
-        units = ["A PAR"]
-        # Method now returns default Hold orders for the units if response is None or malformed
-        default_hold = [Order("A PAR H")]
-        self.assertEqual(agent._extract_orders_from_response(None, units), default_hold)
-        self.assertEqual(agent._extract_orders_from_response({}, units), default_hold)
-        self.assertEqual(
-            agent._extract_orders_from_response({"orders": None}, ["A PAR"]),
-            default_hold,
-        )  # provide units list
-        self.assertEqual(
-            agent._extract_orders_from_response({"orders": []}, ["A PAR"]), default_hold
-        )  # provide units list
-        self.assertEqual(
-            agent._extract_orders_from_response({"orders": "not a list"}, units),
-            default_hold,
-        )
-        self.assertEqual(
-            agent._extract_orders_from_response({"orders": [123, True]}, units),
-            default_hold,
-        )  # No valid orders, defaults to hold
-        self.assertEqual(
-            agent._extract_orders_from_response({"orders": [{"unit": "A PAR"}]}, units),
-            default_hold,
-        )  # Missing action
-        self.assertEqual(
-            agent._extract_orders_from_response({"orders": [{"action": "H"}]}, units),
-            default_hold,
-        )  # Missing unit
-        self.assertEqual(
-            agent._extract_orders_from_response(
-                {"orders": [{"unit": 123, "action": "H"}]}, units
-            ),
-            default_hold,
-        )  # Invalid unit type
-        self.assertEqual(
-            agent._extract_orders_from_response(
-                {"orders": [{"unit": "A PAR", "action": True}]}, units
-            ),
-            default_hold,
-        )  # Invalid action type
-        # Test with no units, should return empty list if orders are empty or invalid
-        self.assertEqual(agent._extract_orders_from_response({"orders": []}, []), [])
+    def test_extract_orders_from_response_varied_inputs(self):
+        agent = LLMAgent("id_extract_orders", "FRANCE", self.agent_config, llm_coordinator=self.mock_llm_coordinator,
+                         context_provider_factory=self.mock_context_provider_factory_instance,
+                         prompt_loader=self.mock_load_prompt_file)
+
+        # Mock power units for these tests
+        power_units_france = ["A PAR", "F MAR", "A BUD", "A VIE", "A TRI"]
+
+        # 1. Already covered by test_extract_orders_from_response for None, "not a list"
+
+        # 2. Empty list of orders (with units)
+        self.assertEqual(agent._extract_orders_from_response([], power_units_france), [])
+
+        # 3. List with mixed valid string orders and invalid items
+        mixed_input = ["A PAR H", None, "F MAR S A PAR", 123, {"order": "A BUD H"}, "", "  A VIE H  ", "A CON H"] # A CON not in power_units
+        expected_mixed = [Order("A PAR H"), Order("F MAR S A PAR"), Order("A VIE H")] # A BUD H from dict is ignored, A CON H ignored
+        self.assertEqual(agent._extract_orders_from_response(mixed_input, power_units_france), expected_mixed)
+
+        # 4. List with dictionary orders (some valid, some not)
+        dict_input = [
+            {"unit": "A PAR", "action": "H"},                                      # Valid
+            {"unit": "F MAR", "action": "S A PAR"},                                # Valid
+            {"unit": "A VIE"},                                                      # Missing 'action'
+            {"action": "H BUD"},                                                    # Missing 'unit'
+            {"unit": "A TRI", "action": None},                                      # 'action' is None
+            {"unit": None, "action": "M VEN"},                                      # 'unit' is None
+            {"unit": "A BUD", "action": ["H", "M TYR"]},                            # 'action' is a list
+            {"unit": "A ROM", "action": "H"},                                      # Unit 'A ROM' not in power_units_france
+            {"unit": 123, "action": "H"},                                           # unit is not string
+            {"unit": "A BRE", "action": 456},                                       # action is not string
+        ]
+        # A BRE is not in power_units_france, but this test focuses on structure first.
+        # The filtering by power_units is tested in scenario 5 & implicitly by A ROM H.
+        expected_dict = [Order("A PAR H"), Order("F MAR S A PAR")]
+        self.assertEqual(agent._extract_orders_from_response(dict_input, power_units_france), expected_dict)
+
+        # 5. Orders for units the power does not possess
+        foreign_orders_input = ["A ROM H", "F NAP M ION", "A PAR H"] # A PAR H is a valid own unit
+        power_units_minimal = ["A PAR"]
+        expected_foreign = [Order("A PAR H")]
+        self.assertEqual(agent._extract_orders_from_response(foreign_orders_input, power_units_minimal), expected_foreign)
+        self.assertEqual(agent._extract_orders_from_response(["A ROM H"], power_units_minimal), [])
+
+
+        # 6. Strings with only whitespace (and mixed with valid)
+        whitespace_input = ["A PAR H", "   ", "\t\n", "  F MAR H  "]
+        expected_whitespace = [Order("A PAR H"), Order("F MAR H")]
+        self.assertEqual(agent._extract_orders_from_response(whitespace_input, power_units_france), expected_whitespace)
+        self.assertEqual(agent._extract_orders_from_response(["   ", "\t\n"], power_units_france), [])
+
 
     async def test_negotiate_successful(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        # Agent computes active_powers as: [p for p in phase.powers if not phase.is_power_eliminated(p) and p != self.country]
+        mock_phase_state = MagicMock(spec=PhaseState)
         mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND", "GERMANY"])
-        mock_phase_state.is_power_eliminated.side_effect = (
-            lambda p: False
-        )  # No one eliminated
-        expected_active_powers = ["ENGLAND", "GERMANY"]  # FRANCE is self.country
+        mock_phase_state.get_power_units.return_value = ["A PAR"] # Example units
+        mock_phase_state.get_power_centers.return_value = ["PAR"] # Example centers
+        mock_phase_state.phase_name="S1901D"
 
-        mock_phase_state.phase_name = "Spring1901Diplomacy"
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Negotiation context",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_negotiation_prompt.return_value = (
-            "Test negotiation prompt"
-        )
-        self.mock_llm_coordinator.call_json.return_value = {
-            "messages": [{"recipient": "ENGLAND", "content": "Hello England"}]
+        # Mock is_power_eliminated to control which powers are "living"
+        def mock_is_power_eliminated(power_name):
+            if power_name == "GERMANY":
+                return True # Germany is eliminated
+            return False # France and England are not
+        mock_phase_state.is_power_eliminated.side_effect = mock_is_power_eliminated
+
+        context_provider_return_value = {"context_text": "CtxNego", "tools_available": True, "tools": ["nego_tool"]}
+        self.mock_context_provider.provide_context.return_value = context_provider_return_value
+        self.mock_generic_agent_instance.generate_communication.return_value = {
+            diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES: [{"recipient": "ENGLAND", "content": "Hi"}]
         }
-        messages = await self.agent.negotiate(mock_phase_state)
-        self.mock_context_provider.provide_context.assert_called_once()
-        self.mock_prompt_strategy.build_negotiation_prompt.assert_called_once()
-        prompt_args = self.mock_prompt_strategy.build_negotiation_prompt.call_args[1]
-        self.assertEqual(prompt_args["country"], "FRANCE")
-        self.assertCountEqual(prompt_args["active_powers"], expected_active_powers)
-        self.mock_llm_coordinator.call_json.assert_called_once_with(
-            prompt="Test negotiation prompt",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=["messages"],
-            tools=None,
-        )
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(
-            messages[0],
-            Message(
-                "ENGLAND",
-                "Hello England",
-                message_type=constants.MESSAGE_TYPE_BROADCAST,
-            ),
-        )
 
-    async def test_negotiate_llm_error(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.phase_name = "TestNegotiateLLMErrorPhase"
-        mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Context",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_llm_coordinator.call_json.side_effect = Exception(
-            "LLM negotiation error"
-        )
+        # Clear previous config if any
+        self.agent.generic_agent.config.pop("phase", None)
+        self.agent.generic_agent.config.pop("tools", None)
+
+        messages = await self.agent.negotiate(mock_phase_state)
+
+        self.mock_generic_agent_instance.generate_communication.assert_called_once()
+        call_args = self.mock_generic_agent_instance.generate_communication.call_args
+        passed_state = call_args[1]['state']
+        passed_recipients = call_args[1]['recipients']
+
+        # Assertions for state keys and values
+        self.assertEqual(passed_state['country'], "FRANCE")
+        self.assertEqual(passed_state['goals'], self.mock_agent_state.goals)
+        self.assertEqual(passed_state['relationships'], self.mock_agent_state.relationships)
+        self.assertEqual(passed_state['formatted_diary'], self.mock_agent_state.format_private_diary_for_prompt.return_value)
+        self.assertEqual(passed_state['context_text'], "CtxNego")
+        self.assertEqual(passed_state['tools_available'], True) # from context_provider_return_value
+        self.assertEqual(passed_state['phase_name'], "S1901D")
+        self.assertEqual(passed_state['power_units'], ["A PAR"])
+        self.assertEqual(passed_state['power_centers'], ["PAR"])
+        self.assertEqual(passed_state['all_powers'], list(mock_phase_state.powers))
+        self.assertEqual(passed_state['living_powers'], ["FRANCE", "ENGLAND"]) # Based on mock_is_power_eliminated
+
+        # Verify recipients argument
+        self.assertEqual(passed_recipients, ["ENGLAND"]) # Only ENGLAND is living and not FRANCE
+
+        # Verify generic_agent.config updates
+        self.assertEqual(self.agent.generic_agent.config.get("phase"), "S1901D")
+        self.assertEqual(self.agent.generic_agent.config.get("tools"), context_provider_return_value["tools"])
+
+        self.assertEqual(messages[0], Message("ENGLAND", "Hi", message_type=diplomacy_constants.MESSAGE_TYPE_BROADCAST))
+
+    async def test_negotiate_generic_agent_error(self):
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"]); mock_phase_state.is_power_eliminated.return_value = False
+        self.mock_generic_agent_instance.generate_communication.return_value = {"error": "CommExploded"}
         messages = await self.agent.negotiate(mock_phase_state)
         self.assertEqual(messages, [])
 
-    async def test_negotiate_bad_llm_response(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.phase_name = "TestNegotiatePhase"
-        mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Context",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_llm_coordinator.call_json.return_value = {}
+    async def test_negotiate_bad_llm_response_from_generic_agent(self):
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"]); mock_phase_state.is_power_eliminated.return_value = False
+        self.mock_generic_agent_instance.generate_communication.return_value = {"other": "data"}
         messages = await self.agent.negotiate(mock_phase_state)
         self.assertEqual(messages, [])
-
-    async def test_negotiate_context_tools_available(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"])
-        mock_phase_state.is_power_eliminated.side_effect = lambda p: False
-        expected_active_powers = ["ENGLAND"]
-        mock_phase_state.phase_name = "Spring1901Diplomacy"
-        mock_tools = [{"type": "function", "function": {"name": "negotiation_tool"}}]
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Negotiation context with tools",
-                "tools_available": True,
-                "tools_definition": mock_tools,
-                "provider_type": "inline",
-                "tools": mock_tools,
-            }
-        )
-        self.mock_prompt_strategy.build_negotiation_prompt.return_value = (
-            "Negotiation prompt with tools"
-        )
-        self.mock_llm_coordinator.call_json.return_value = {
-            "messages": [{"recipient": "ENGLAND", "content": "Tool talk"}]
-        }
-        await self.agent.negotiate(mock_phase_state)
-        self.mock_prompt_strategy.build_negotiation_prompt.assert_called_with(
-            country="FRANCE",
-            active_powers=expected_active_powers,
-            goals=self.mock_agent_state.goals,
-            relationships=self.mock_agent_state.relationships,
-            formatted_diary=self.mock_agent_state.format_private_diary_for_prompt.return_value,
-            context_text="Negotiation context with tools",
-            tools_available=True,
-        )
-        self.mock_llm_coordinator.call_json.assert_called_with(
-            prompt="Negotiation prompt with tools",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=["messages"],
-            tools=mock_tools,
-        )
-
-    async def test_negotiate_context_empty_text(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"])
-        mock_phase_state.is_power_eliminated.side_effect = lambda p: False
-        expected_active_powers = ["ENGLAND"]
-        mock_phase_state.phase_name = "Spring1901Diplomacy"
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_negotiation_prompt.return_value = (
-            "Negotiation prompt with empty context"
-        )
-        self.mock_llm_coordinator.call_json.return_value = {
-            "messages": [{"recipient": "ENGLAND", "content": "Empty context talk"}]
-        }
-        await self.agent.negotiate(mock_phase_state)
-        self.mock_prompt_strategy.build_negotiation_prompt.assert_called_with(
-            country="FRANCE",
-            active_powers=expected_active_powers,
-            goals=self.mock_agent_state.goals,
-            relationships=self.mock_agent_state.relationships,
-            formatted_diary=self.mock_agent_state.format_private_diary_for_prompt.return_value,
-            context_text="",
-            tools_available=False,
-        )
-        self.mock_llm_coordinator.call_json.assert_called_with(
-            prompt="Negotiation prompt with empty context",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=["messages"],
-            tools=None,
-        )
 
     async def test_negotiate_context_provider_exception(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.phase_name = "TestNegotiateContextErrorPhase"
-        mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        self.mock_context_provider.provide_context = AsyncMock(
-            side_effect=Exception("Context Provider Failed")
-        )
+        mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.powers = frozenset(["FRANCE", "ENGLAND"]); mock_phase_state.is_power_eliminated.return_value = False
+        self.mock_context_provider.provide_context.side_effect = Exception("CtxFailNego")
         messages = await self.agent.negotiate(mock_phase_state)
         self.assertEqual(messages, [])
-        self.mock_llm_coordinator.call_json.assert_not_called()
+        self.mock_generic_agent_instance.generate_communication.assert_not_called()
 
     def test_extract_messages_from_response(self):
-        temp_agent_config = AgentConfig(
-            country="FRANCE",
-            type="llm",
-            model_id="dummy_model",
-            context_provider="inline",
-        )
-        agent = LLMAgent(
-            agent_id="dummy_agent_extract_msg",
-            country="FRANCE",
-            config=temp_agent_config,
-            game_id="dummy_game_msg",
-            llm_coordinator=MagicMock(),
-            context_provider_factory=MagicMock(),
-            prompt_loader=MagicMock(),
-            llm_caller_override=None,
-        )
-        mock_phase_state = MagicMock(spec=PhaseState)
-        mock_phase_state.powers = frozenset(["ENGLAND", "GERMANY", "ITALY", "FRANCE"])
-        response = {
-            "messages": [
-                {"recipient": "ENGLAND", "content": "Hello England"},
-                {
-                    "recipient": "GERMANY",
-                    "content": "Hi Germany",
-                    "message_type": "SECRET",
-                },
-                {"recipient": "ITALY", "content": "Ciao Italy"},
-            ]
-        }
+        agent = LLMAgent("id", "FRANCE", self.agent_config, llm_coordinator=self.mock_llm_coordinator, context_provider_factory=self.mock_context_provider_factory_instance, prompt_loader=self.mock_load_prompt_file)
+        mock_phase = MagicMock(spec=PhaseState); mock_phase.powers = ["ENGLAND"]
+        self.assertEqual(agent._extract_messages_from_response(None, mock_phase), [])
+        self.assertEqual(agent._extract_messages_from_response({}, mock_phase), [])
+        self.assertEqual(agent._extract_messages_from_response({diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES: "text"}, mock_phase), [])
+
+    def test_extract_messages_from_response_varied_inputs(self):
+        agent = LLMAgent("id_extract_msgs", "FRANCE", self.agent_config, llm_coordinator=self.mock_llm_coordinator,
+                         context_provider_factory=self.mock_context_provider_factory_instance,
+                         prompt_loader=self.mock_load_prompt_file)
+
+        mock_phase = MagicMock(spec=PhaseState)
+        mock_phase.powers = frozenset(["FRANCE", "ENGLAND", "GERMANY", "ITALY"])
+
+        # 1. Test with None, not a list, or empty list for llm_response_messages
+        self.assertEqual(agent._extract_messages_from_response(None, mock_phase), [])
+        self.assertEqual(agent._extract_messages_from_response("not a list", mock_phase), [])
+        self.assertEqual(agent._extract_messages_from_response([], mock_phase), [])
+
+        # 2. List of message dicts with various issues
+        messages_input = [
+            {"recipient": "ENGLAND", "content": "Hello England!", "message_type": "BROADCAST"},  # Valid
+            {"recipient": "GERMANY", "content": "Secret proposal", "message_type": "SECRET_PROPOSAL"},  # Valid
+            {"recipient": "ITALY", "content": "Public?", "message_type": "PUBLIC_PROPOSAL"},  # Valid
+            {"recipient": 123, "content": "Invalid recipient type"},  # Recipient not a string
+            {"recipient": "", "content": "Empty recipient string"},  # Recipient is empty string
+            {"recipient": "RUSSIA", "content": "Recipient not in phase.powers"},  # Recipient not in mock_phase.powers
+            {"recipient": "ENGLAND"},  # Missing 'content'
+            {"recipient": "GERMANY", "content": None},  # Non-string 'content'
+            {"recipient": "ITALY", "content": "Invalid type", "message_type": "INVALID_TYPE"}, # Invalid 'message_type' (falls back to BROADCAST)
+            {"recipient": "ENGLAND", "content": "Case insensitive type", "message_type": "broadcast"}, # Valid (processed as BROADCAST)
+            {"recipient": "FRANCE", "content": "Message to self"},  # Recipient is self
+            {},  # Empty dictionary
+            "just a string",  # Item in list is not a dict
+            None,  # Item in list is None
+            {"recipient": "GERMANY", "content": ""}, # Empty content string (should be valid)
+            {"recipient": "ITALY", "content": "  "}, # Whitespace content string (should be valid)
+        ]
+
         expected_messages = [
-            Message(
-                "ENGLAND",
-                "Hello England",
-                message_type=constants.MESSAGE_TYPE_BROADCAST,
-            ),
-            Message("GERMANY", "Hi Germany", message_type="SECRET"),
-            Message(
-                "ITALY", "Ciao Italy", message_type=constants.MESSAGE_TYPE_BROADCAST
-            ),
+            Message("ENGLAND", "Hello England!", message_type=diplomacy_constants.MESSAGE_TYPE_BROADCAST),
+            Message("GERMANY", "Secret proposal", message_type=diplomacy_constants.MESSAGE_TYPE_SECRET_PROPOSAL),
+            Message("ITALY", "Public?", message_type=diplomacy_constants.MESSAGE_TYPE_PUBLIC_PROPOSAL),
+            # INVALID_TYPE falls back to BROADCAST because of .get(..., diplomacy_constants.MESSAGE_TYPE_BROADCAST)
+            Message("ITALY", "Invalid type", message_type=diplomacy_constants.MESSAGE_TYPE_BROADCAST),
+            Message("ENGLAND", "Case insensitive type", message_type=diplomacy_constants.MESSAGE_TYPE_BROADCAST),
+            Message("GERMANY", "", message_type=diplomacy_constants.MESSAGE_TYPE_BROADCAST),
+            Message("ITALY", "  ", message_type=diplomacy_constants.MESSAGE_TYPE_BROADCAST),
         ]
-        actual_messages = agent._extract_messages_from_response(
-            response, mock_phase_state
-        )
-        self.assertEqual(actual_messages, expected_messages)
-        response_invalid_type = {
-            "messages": [
-                {
-                    "recipient": "ENGLAND",
-                    "content": "Type test",
-                    "message_type": "INVALID_TYPE",
-                }
-            ]
-        }
-        expected_messages_invalid_type = [
-            Message(
-                "ENGLAND", "Type test", message_type=constants.MESSAGE_TYPE_BROADCAST
-            )
-        ]
-        actual_messages_invalid_type = agent._extract_messages_from_response(
-            response_invalid_type, mock_phase_state
-        )
-        self.assertEqual(actual_messages_invalid_type, expected_messages_invalid_type)
 
-    def test_extract_messages_edge_cases(self):
-        temp_agent_config = AgentConfig(
-            country="FRANCE",
-            type="llm",
-            model_id="dummy_model",
-            context_provider="inline",
-        )
-        agent = LLMAgent(
-            agent_id="dummy_agent_extract_msg_edge",
-            country="FRANCE",
-            config=temp_agent_config,
-            game_id="dummy_game_msg_edge",
-            llm_coordinator=MagicMock(),
-            context_provider_factory=MagicMock(),
-            prompt_loader=MagicMock(),
-            llm_caller_override=None,
-        )
-        mock_phase_state = MagicMock(spec=PhaseState)
-        mock_phase_state.powers = frozenset(
-            ["ENGLAND", "GERMANY", "ITALY", "RUSSIA", "AUSTRIA", "TURKEY", "FRANCE"]
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(None, mock_phase_state), []
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response({}, mock_phase_state), []
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response({"messages": None}, mock_phase_state),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response({"messages": []}, mock_phase_state),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": "not a list"}, mock_phase_state
-            ),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": [123]}, mock_phase_state
-            ),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response({"messages": [{}]}, mock_phase_state),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": [{"recipient": "ENGLAND"}]}, mock_phase_state
-            ),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": [{"content": "Hi"}]}, mock_phase_state
-            ),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": [{"recipient": 123, "content": "Hi"}]}, mock_phase_state
-            ),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": [{"recipient": "ENGLAND", "content": True}]},
-                mock_phase_state,
-            ),
-            [],
-        )
-        self.assertEqual(
-            agent._extract_messages_from_response(
-                {"messages": [{"recipient": "SPAIN", "content": "Hola"}]},
-                mock_phase_state,
-            ),
-            [],
-        )
-        response_non_string_type = {
-            "messages": [
-                {"recipient": "ENGLAND", "content": "Type test", "message_type": 123}
-            ]
-        }
-        expected_msg_non_string_type = [
-            Message(
-                "ENGLAND", "Type test", message_type=constants.MESSAGE_TYPE_BROADCAST
-            )
-        ]
-        actual_msg_non_string_type = agent._extract_messages_from_response(
-            response_non_string_type, mock_phase_state
-        )
-        self.assertEqual(actual_msg_non_string_type, expected_msg_non_string_type)
+        actual_messages = agent._extract_messages_from_response({diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES: messages_input}, mock_phase)
 
-    async def test_update_state(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None  # Test standard path
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.country = "FRANCE"
-        mock_phase_state.phase_name = "Spring1901Movement"
-        mock_phase_state.get_power_units.return_value = ["A PAR", "F BRE"]
-        mock_phase_state.get_power_centers.return_value = ["PAR", "BRE"]
-        mock_phase_state.is_game_over.return_value = False
-        mock_phase_state.powers = frozenset(["FRANCE", "GERMANY"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        # Setup for rule-based goal update: FRANCE has 2 centers
-        mock_phase_state.get_center_count.side_effect = (
-            lambda p: 2 if p == "FRANCE" else (3 if p == "GERMANY" else 0)
-        )
-        mock_events = [{"type": "build", "power": "FRANCE", "details": "A PAR built"}]
-        self.mock_llm_coordinator.call_json.return_value = {
-            "diary_entry": "Test diary entry"
-        }
-        original_goals = ["Initial Test Goal"]
-        self.mock_agent_state.goals = original_goals[:]
-        self.mock_agent_state.add_journal_entry.reset_mock()
-        self.mock_agent_state.add_diary_entry.reset_mock()
-        await self.agent.update_state(mock_phase_state, mock_events)
-        self.mock_agent_state.add_diary_entry.assert_called_once_with(
-            "Test diary entry", "Spring1901Movement"
-        )
-        self.mock_agent_state._update_relationships_from_events.assert_called_once_with(
-            "FRANCE", mock_events
-        )
-        expected_new_goals = ["Survive and avoid elimination"]
-        self.assertEqual(self.mock_agent_state.goals, expected_new_goals)
+        # Using assertCountEqual because order might not be guaranteed, though current implementation preserves it.
+        self.assertCountEqual(actual_messages, expected_messages)
+
+        # Verify specific cases for clarity
+        # Case: recipient is self (FRANCE) - should be filtered
+        self.assertNotIn(Message("FRANCE", "Message to self", diplomacy_constants.MESSAGE_TYPE_BROADCAST), actual_messages)
+
+        # Case: recipient not in phase.powers (RUSSIA) - should be filtered
+        self.assertFalse(any(msg.recipient == "RUSSIA" for msg in actual_messages))
+
+        # Case: Empty recipient string - should be filtered
+        self.assertFalse(any(msg.recipient == "" for msg in actual_messages))
+
+    async def test_update_state_diary_and_goals_success(self):
+        mock_phase = MagicMock(spec=PhaseState)
+        mock_phase.phase_name = "S1901M"
+        # Note: mock_phase.country is not standard. Power name is obtained via self.agent.power_name
+        mock_phase.get_power_units.return_value = ["A PAR", "M MAR"]
+        mock_phase.get_power_centers.return_value = ["PAR", "MAR"]
+        mock_phase.is_game_over = False
+        mock_phase.powers = ["FRANCE", "ENGLAND"]
+        mock_phase.is_power_eliminated.return_value = False # No one eliminated for this test
+        mock_phase.get_center_count.return_value = 2 # Matches get_power_centers
+
+        mock_events = [{"type": "event1"}, {"type": "event2"}]
+
+        # Reset mocks for decide_action to handle multiple calls with different args
+        self.mock_generic_agent_instance.decide_action.reset_mock()
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            {diplomacy_constants.LLM_RESPONSE_KEY_DIARY_ENTRY: "Test Diary Entry"},
+            {
+                diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS: ["New Goal 1"],
+                diplomacy_constants.LLM_RESPONSE_KEY_REASONING: "Because reasons"
+            }
+        ]
+        # Reset mock for update_internal_state
+        self.mock_generic_agent_instance.update_internal_state.reset_mock()
+
+        await self.agent.update_state(mock_phase, mock_events)
+
+        # 1. Verify arguments to update_internal_state
+        self.mock_generic_agent_instance.update_internal_state.assert_called_once()
+        update_internal_state_call_args = self.mock_generic_agent_instance.update_internal_state.call_args
+        self.assertEqual(update_internal_state_call_args[1]['state'], mock_phase)
+        self.assertEqual(update_internal_state_call_args[1]['events'], mock_events)
+
+        # 2. Verify relationship update call
+        self.mock_agent_state._update_relationships_from_events.assert_called_with(self.agent.power_name, mock_events)
+
+        # 3. Verify decide_action calls (diary and goals)
+        self.assertEqual(self.mock_generic_agent_instance.decide_action.call_count, 2)
+        diary_call_args = self.mock_generic_agent_instance.decide_action.call_args_list[0]
+        goal_call_args = self.mock_generic_agent_instance.decide_action.call_args_list[1]
+
+        # 4. For Diary Generation part:
+        self.assertEqual(diary_call_args[1]['action_type'], diplomacy_constants.LLM_ACTION_DIARY)
+        diary_state_arg = diary_call_args[1]['state']
+        diary_context_arg = diary_state_arg['diary_context']
+
+        self.assertEqual(diary_context_arg['country'], self.agent.power_name)
+        self.assertEqual(diary_context_arg['phase_name'], mock_phase.phase_name)
+        self.assertEqual(diary_context_arg['units'], mock_phase.get_power_units.return_value)
+        self.assertEqual(diary_context_arg['centers'], mock_phase.get_power_centers.return_value)
+        self.assertEqual(diary_context_arg['is_game_over'], mock_phase.is_game_over)
+        self.assertEqual(diary_context_arg['events'], mock_events)
+        self.assertEqual(diary_context_arg['goals'], self.mock_agent_state.goals)
+        self.assertEqual(diary_context_arg['relationships'], self.mock_agent_state.relationships)
+        # Check that the generic agent's config was updated for the diary call
+        self.assertEqual(self.agent.generic_agent.config.get("phase"), mock_phase.phase_name)
+
+
+        # Check diary entry was added
+        self.mock_agent_state.add_diary_entry.assert_called_with("Test Diary Entry", mock_phase.phase_name)
+
+        # (Goal Analysis part will be detailed further in the next steps)
+        # For now, just check it was called with the right action_type
+        self.assertEqual(goal_call_args[1]['action_type'], diplomacy_constants.LLM_ACTION_GOAL_ANALYSIS)
+        # And that agent state was updated with new goals
+        self.assertEqual(self.mock_agent_state.goals, ["New Goal 1"])
         self.mock_agent_state.add_journal_entry.assert_any_call(
-            f"Goals updated from {original_goals} to {expected_new_goals}"
-        )
-        self.mock_agent_state.add_journal_entry.assert_called()
-
-    async def test_generate_phase_diary_entry_successful(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.phase_name = "TestPhase"
-        mock_phase_state.get_power_units.return_value = ["U1"]
-        mock_phase_state.get_power_centers.return_value = ["C1"]
-        mock_phase_state.is_game_over.return_value = False
-        mock_events = [{"event": "e1"}]
-        self.mock_prompt_strategy.build_diary_generation_prompt.return_value = (
-            "Diary prompt"
-        )
-        self.mock_llm_coordinator.call_json.return_value = {
-            constants.LLM_RESPONSE_KEY_DIARY_ENTRY: "LLM diary entry"
-        }
-        return_value = await self.agent._generate_phase_diary_entry(
-            mock_phase_state, mock_events
-        )
-        self.assertIsNone(return_value)
-        self.mock_agent_state.add_diary_entry.assert_called_once_with(
-            "LLM diary entry", mock_phase_state.phase_name
-        )
-        self.mock_prompt_strategy.build_diary_generation_prompt.assert_called_once()
-        self.mock_llm_coordinator.call_json.assert_called_once_with(
-            prompt="Diary prompt",
-            model_id=self.agent_config.model_id,
-            agent_id=self.agent.agent_id,
-            game_id=self.agent.game_id,
-            phase=mock_phase_state.phase_name,
-            system_prompt=self.agent.system_prompt,
-            expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
+            f"Goals updated by LLM. Reasoning: Because reasons. New goals: {['New Goal 1']}"
         )
 
-    async def test_generate_phase_diary_entry_llm_error(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.phase_name = "TestPhaseError"
-        mock_phase_state.get_power_units.return_value = []
-        mock_phase_state.get_power_centers.return_value = []
-        mock_phase_state.is_game_over.return_value = False
-        self.mock_llm_coordinator.call_json.side_effect = Exception(
-            "LLM error for diary"
-        )
-        mock_events = [{"type": "some_event"}]
-        await self.agent._generate_phase_diary_entry(mock_phase_state, mock_events)
-        self.mock_agent_state.add_diary_entry.assert_called_once_with(
-            f"Phase {mock_phase_state.phase_name} completed (diary generation failed).",
-            mock_phase_state.phase_name,
-        )
+        # Further checks for goal analysis call state (as per plan item 3.Goal Analysis part)
+        goal_state_arg = goal_call_args[1]['state']
+        goal_context_arg = goal_state_arg['goal_analysis_context']
+        self.assertEqual(goal_context_arg['country'], self.agent.power_name)
+        self.assertEqual(goal_context_arg['phase_name'], mock_phase.phase_name)
+        self.assertEqual(goal_context_arg['units'], mock_phase.get_power_units.return_value)
+        self.assertEqual(goal_context_arg['centers'], mock_phase.get_power_centers.return_value)
+        self.assertEqual(goal_context_arg['is_game_over'], mock_phase.is_game_over)
+        self.assertEqual(goal_context_arg['events'], mock_events)
+        # For goal analysis, 'current_goals' is self.mock_agent_state.goals *before* the update
+        # In this test, decide_action for goals is the second call, so goals might have been updated by a hypothetical first call
+        # However, our mock_agent_state.goals is reset in setup. So, the 'Initial Goal' is correct here.
+        self.assertEqual(goal_context_arg['current_goals'], ["Initial Goal"]) # Assuming this was the state before this update_state call
+        self.assertEqual(goal_context_arg['relationships'], self.mock_agent_state.relationships)
+        self.assertEqual(goal_context_arg['private_diary'], self.mock_agent_state.format_private_diary_for_prompt.return_value)
+        # Check that the generic agent's config was updated for the goal call as well
+        self.assertEqual(self.agent.generic_agent.config.get("phase"), mock_phase.phase_name)
 
-    async def test_analyze_and_update_goals_change(self):
-        # Test rule-based change
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None  # Rule-based, no LLM call
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.country = "FRANCE"
-        mock_phase_state.powers = frozenset(["FRANCE", "GERMANY"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        # Setup for rule: 2 centers -> "Survive and avoid elimination"
-        mock_phase_state.get_center_count.side_effect = (
-            lambda p: 2 if p == "FRANCE" else 5
-        )
 
-        initial_goals = [
-            "Initial Goal To Be Changed Different From Rule"
-        ]  # Make sure it's different
-        self.mock_agent_state.goals = initial_goals[:]
-        self.mock_agent_state.add_journal_entry.reset_mock()
-        await self.agent._analyze_and_update_goals(mock_phase_state)
-        expected_new_goals = ["Survive and avoid elimination"]
-        self.assertEqual(self.mock_agent_state.goals, expected_new_goals)
-        self.mock_agent_state.add_journal_entry.assert_called_once_with(
-            f"Goals updated from {initial_goals} to {expected_new_goals}"
-        )
-        self.mock_llm_coordinator.call_json.assert_not_called()  # Verify no LLM call
+    async def test_update_state_diary_errors(self):
+        mock_phase = MagicMock(spec=PhaseState)
+        mock_phase.phase_name = "F1901M"
+        mock_phase.get_power_units.return_value = []
+        mock_phase.get_power_centers.return_value = []
+        mock_phase.is_game_over = False
+        mock_phase.powers = ["FRANCE"]
+        mock_phase.is_power_eliminated.return_value = False
+        mock_phase.get_center_count.return_value = 0
+        mock_events = [{"type": "event_diary_error"}]
 
-    async def test_analyze_and_update_goals_clear_leader(self):
-        # Test rule-based for many centers (but not 18 for specific win goal)
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.country = "FRANCE"
-        mock_phase_state.powers = frozenset(["FRANCE", "GERMANY"])
-        # 10 centers -> "Consolidate position and prepare for victory"
-        mock_phase_state.get_center_count.side_effect = (
-            lambda p: 10 if p == "FRANCE" else 1
-        )
-        mock_phase_state.is_power_eliminated.return_value = False
-        self.mock_agent_state.goals = ["Some old goal"]
-        self.mock_agent_state.add_journal_entry.reset_mock()
-        expected_goals = ["Consolidate position and prepare for victory"]
-        await self.agent._analyze_and_update_goals(mock_phase_state)
-        self.assertEqual(self.mock_agent_state.goals, expected_goals)
-        self.mock_agent_state.add_journal_entry.assert_called_once_with(
-            f"Goals updated from {['Some old goal']} to {expected_goals}"
-        )
-        self.mock_llm_coordinator.call_json.assert_not_called()
+        # Reset relevant mocks
+        self.mock_generic_agent_instance.decide_action.reset_mock()
+        self.mock_agent_state.add_diary_entry.reset_mock()
+        self.mock_agent_state.add_journal_entry.reset_mock() # For logging warnings
 
-    async def test_analyze_and_update_goals_no_redundant_addition(self):
-        # Test rule-based no change because goals already match rules
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.country = "FRANCE"
-        # 5 centers -> "Expand territory and gain supply centers"
-        mock_phase_state.get_center_count.side_effect = (
-            lambda p: 5 if p == "FRANCE" else 3
-        )
-        mock_phase_state.powers = frozenset(["FRANCE", "GERMANY"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        # Set current goals to what rules would produce
-        current_goals_matching_rules = ["Expand territory and gain supply centers"]
-        self.mock_agent_state.goals = current_goals_matching_rules[:]
-        self.mock_agent_state.add_journal_entry.reset_mock()
-        await self.agent._analyze_and_update_goals(mock_phase_state)
-        self.assertEqual(self.mock_agent_state.goals, current_goals_matching_rules)
-        # Rule based _analyze_and_update_goals only adds journal entry if goals *change*.
-        self.mock_agent_state.add_journal_entry.assert_not_called()
-        self.mock_llm_coordinator.call_json.assert_not_called()
+        # Scenario 1: decide_action returns an error for diary
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            {"error": "Diary explosion"}, # Error for diary
+            {diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS: ["Goal after diary error"], "reasoning": "Test"} # Successful goal update
+        ]
+        with self.assertLogs(level='WARNING') as log_capture:
+            await self.agent.update_state(mock_phase, mock_events)
+        self.mock_agent_state.add_diary_entry.assert_not_called()
+        self.assertIn("Error generating diary entry: Diary explosion", log_capture.output[0])
+        # Check that goal update still happened
+        self.assertEqual(self.mock_agent_state.goals, ["Goal after diary error"])
 
-    async def test_analyze_and_update_goals_no_change(self):
-        # Test rule-based no change
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.country = "FRANCE"
-        # 6 centers -> "Expand territory and gain supply centers"
-        mock_phase_state.get_center_count.side_effect = (
-            lambda p: 6 if p == "FRANCE" else 3
-        )
-        mock_phase_state.powers = frozenset(["FRANCE", "GERMANY"])
-        mock_phase_state.is_power_eliminated.return_value = False
-        current_goals = ["Expand territory and gain supply centers"]
-        self.mock_agent_state.goals = current_goals[:]
-        self.mock_agent_state.add_journal_entry.reset_mock()
-        await self.agent._analyze_and_update_goals(mock_phase_state)
-        self.assertEqual(self.mock_agent_state.goals, current_goals)
-        self.mock_agent_state.add_journal_entry.assert_not_called()  # No journal entry if goals don't change
-        self.mock_llm_coordinator.call_json.assert_not_called()
+
+        # Scenario 2: LLM_RESPONSE_KEY_DIARY_ENTRY is missing
+        self.mock_generic_agent_instance.decide_action.reset_mock()
+        self.mock_agent_state.add_diary_entry.reset_mock()
+        self.mock_agent_state.goals = ["Initial Goal"] # Reset goals
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            {"unexpected_key": "No diary here"}, # Missing diary key
+            {diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS: ["Goal after missing key"], "reasoning": "Test"}
+        ]
+        with self.assertLogs(level='WARNING') as log_capture:
+            await self.agent.update_state(mock_phase, mock_events)
+        self.mock_agent_state.add_diary_entry.assert_not_called()
+        self.assertIn(f"LLM response for diary generation missing '{diplomacy_constants.LLM_RESPONSE_KEY_DIARY_ENTRY}'", log_capture.output[0])
+        self.assertEqual(self.mock_agent_state.goals, ["Goal after missing key"])
+
+
+        # Scenario 3: LLM_RESPONSE_KEY_DIARY_ENTRY is not a string
+        self.mock_generic_agent_instance.decide_action.reset_mock()
+        self.mock_agent_state.add_diary_entry.reset_mock()
+        self.mock_agent_state.goals = ["Initial Goal"] # Reset goals
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            {diplomacy_constants.LLM_RESPONSE_KEY_DIARY_ENTRY: 12345}, # Diary entry is not a string
+            {diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS: ["Goal after non-string diary"], "reasoning": "Test"}
+        ]
+        with self.assertLogs(level='WARNING') as log_capture:
+            await self.agent.update_state(mock_phase, mock_events)
+        self.mock_agent_state.add_diary_entry.assert_not_called()
+        self.assertIn(f"Diary entry from LLM is not a string: 12345", log_capture.output[0])
+        self.assertEqual(self.mock_agent_state.goals, ["Goal after non-string diary"])
+
+
+    async def test_update_state_goal_analysis_errors_and_edge_cases(self):
+        mock_phase = MagicMock(spec=PhaseState)
+        mock_phase.phase_name = "S1902M_goal_errors"
+        mock_phase.get_power_units.return_value = ["A VIE"]
+        mock_phase.get_power_centers.return_value = ["VIE"]
+        mock_phase.is_game_over = False
+        mock_phase.powers = ["AUSTRIA"] # Assuming agent is AUSTRIA for this test
+        mock_phase.is_power_eliminated.return_value = False
+        mock_phase.get_center_count.return_value = 1
+        mock_events = [{"type": "event_goal_error"}]
+
+        initial_goals = ["Initial Goal for error testing"]
+        self.agent.power_name = "AUSTRIA" # Align agent power with mock_phase
+        self.mock_agent_state.country = "AUSTRIA"
+        self.mock_agent_state.goals = list(initial_goals) # Use a copy
+
+        # Common setup for decide_action: first call (diary) is successful, second (goals) is where we test errors
+        successful_diary_response = {diplomacy_constants.LLM_RESPONSE_KEY_DIARY_ENTRY: "Diary entry during goal error tests"}
+
+        # Reset mocks before each scenario
+        def reset_mocks_for_scenario():
+            self.mock_generic_agent_instance.decide_action.reset_mock()
+            self.mock_agent_state.add_diary_entry.reset_mock()
+            self.mock_agent_state.add_journal_entry.reset_mock()
+            self.mock_agent_state.goals = list(initial_goals) # Reset goals
+
+        # Scenario 1: decide_action returns an error for goals
+        reset_mocks_for_scenario()
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            successful_diary_response,
+            {"error": "Goal explosion"}
+        ]
+        with self.assertLogs(level='WARNING') as log_capture:
+            await self.agent.update_state(mock_phase, mock_events)
+        self.assertEqual(self.mock_agent_state.goals, initial_goals) # Goals unchanged
+        # Check that add_journal_entry was not called for goal updates (it might be called for other reasons like init)
+        self.assertFalse(any("Goals updated by LLM" in call.args[0] for call in self.mock_agent_state.add_journal_entry.call_args_list))
+        self.assertIn("Error analyzing goals: Goal explosion", log_capture.output[0])
+        self.mock_agent_state.add_diary_entry.assert_called_once() # Diary should still be processed
+
+        # Scenario 2: LLM_RESPONSE_KEY_UPDATED_GOALS is missing
+        reset_mocks_for_scenario()
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            successful_diary_response,
+            {diplomacy_constants.LLM_RESPONSE_KEY_REASONING: "No goals here"} # Missing UPDATED_GOALS
+        ]
+        with self.assertLogs(level='WARNING') as log_capture:
+            await self.agent.update_state(mock_phase, mock_events)
+        self.assertEqual(self.mock_agent_state.goals, initial_goals)
+        self.assertFalse(any("Goals updated by LLM" in call.args[0] for call in self.mock_agent_state.add_journal_entry.call_args_list))
+        self.assertIn(f"LLM response for goal analysis missing '{diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS}'", log_capture.output[0])
+
+        # Scenario 3: LLM_RESPONSE_KEY_UPDATED_GOALS is not a list
+        reset_mocks_for_scenario()
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            successful_diary_response,
+            {diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS: "Not a list", diplomacy_constants.LLM_RESPONSE_KEY_REASONING: "Test"}
+        ]
+        with self.assertLogs(level='WARNING') as log_capture:
+            await self.agent.update_state(mock_phase, mock_events)
+        self.assertEqual(self.mock_agent_state.goals, initial_goals)
+        self.assertFalse(any("Goals updated by LLM" in call.args[0] for call in self.mock_agent_state.add_journal_entry.call_args_list))
+        self.assertIn(f"Updated goals from LLM is not a list: Not a list", log_capture.output[0])
+
+        # Scenario 4: Goals haven't actually changed
+        reset_mocks_for_scenario()
+        self.mock_generic_agent_instance.decide_action.side_effect = [
+            successful_diary_response,
+            {diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS: list(initial_goals), diplomacy_constants.LLM_RESPONSE_KEY_REASONING: "Goals are fine"}
+        ]
+        await self.agent.update_state(mock_phase, mock_events)
+        self.assertEqual(self.mock_agent_state.goals, initial_goals)
+        # add_journal_entry should NOT be called for "Goals updated by LLM..."
+        # It might be called for other things like "Agent initialized..." or "Diary entry added..."
+        # So, we check specifically that the goal update message is absent.
+        found_goal_update_log = False
+        for call_args in self.mock_agent_state.add_journal_entry.call_args_list:
+            if "Goals updated by LLM" in call_args[0][0]:
+                found_goal_update_log = True
+                break
+        self.assertFalse(found_goal_update_log, "add_journal_entry should not be called for unchanged goals.")
+        # Ensure no warnings were logged for this specific scenario
+        # (Need to be careful if other parts of update_state log warnings)
+
+        # Restore original agent power_name if it was changed
+        self.agent.power_name = "FRANCE"
+        self.mock_agent_state.country = "FRANCE"
+
 
     async def test_get_agent_info(self):
-        await self.asyncSetUp()
-        self.agent.llm_caller_override = None
-        self.mock_agent_state.private_diary = ["Entry 1", "Entry 2"]
-        self.mock_agent_state.private_journal = ["Journal A"]
-        expected_info = {
-            "agent_id": self.agent.agent_id,
-            "country": self.agent.country,
-            "type": "LLMAgent",
-            "model_id": self.agent.model_id,
-            "context_provider_type": "inline",
-            "goals": self.mock_agent_state.goals,
-            "relationships": self.mock_agent_state.relationships,
-            "diary_entries": 2,
-            "journal_entries": 1,
-        }
-        # Need to re-initialize agent for this test if asyncSetUp always assigns override
-        # or ensure override is None for this path.
-        # The get_agent_info method itself doesn't use llm_caller_override, so it should be fine.
-        self.assertEqual(self.agent.get_agent_info(), expected_info)
-
-    async def test_llm_caller_override_usage(self):
-        await self.asyncSetUp()
-        # self.agent.llm_caller_override is already set to self.mock_llm_caller_override in asyncSetUp
-        mock_phase_state = MagicMock(spec=PhaseState, autospec=True)
-        mock_phase_state.get_power_units.return_value = ["A PAR"]
-        mock_phase_state.phase_name = "OverrideTestPhase"
-
-        self.mock_context_provider.provide_context = AsyncMock(
-            return_value={
-                "context_text": "Context for override",
-                "tools_available": False,
-                "provider_type": "inline",
-                "tools": [],
-            }
-        )
-        self.mock_prompt_strategy.build_order_prompt.return_value = (
-            "Order prompt for override"
-        )
-
-        # self.mock_llm_caller_override is configured in asyncSetUp to return '{"orders": ["A PAR H"]}'
-        orders = await self.agent.decide_orders(mock_phase_state)
-
-        self.mock_llm_caller_override.assert_called_once()
-        call_args_list = self.mock_llm_caller_override.call_args_list
-        self.assertEqual(len(call_args_list), 1)
-        args, kwargs = call_args_list[0]
-        self.assertEqual(kwargs.get("prompt"), "Order prompt for override")
-        self.assertEqual(kwargs.get("model_id"), self.agent_config.model_id)
-
-        self.assertEqual(len(orders), 1)
-        self.assertEqual(orders[0].order_text, "A PAR H")
-        self.mock_llm_coordinator.call_json.assert_not_called()  # Original coordinator should not be called if override is used
+        self.mock_generic_agent_instance.get_agent_info.return_value = {"gid": "gen_agent", "g_model": "gen_model"}
+        info = self.agent.get_agent_info()
+        self.assertEqual(info["diplomacy_agent_id"], self.agent.agent_id)
+        self.assertEqual(info["generic_agent_info"]["gid"], "gen_agent")
 
     async def test_agent_with_various_context_providers(self):
-        """Test that agents work correctly with different context providers (from test_stage2)."""
-        # This test is derived from test_agent_with_context_providers in the old test_stage2.py
-        # It's kept separate as it tests factory and multi-agent context provider resolution.
+        # This test is more of an integration test, ensure mocks are correctly passed or real objects used carefully.
+        # Using self.mock_context_provider_factory_instance which is already set up in asyncSetUp
+        factory = AgentFactory(llm_coordinator=self.mock_llm_coordinator, context_provider_factory=self.mock_context_provider_factory_instance)
+        inline_config = AgentConfig(country="FRANCE", type="llm", model_id="model1", context_provider="inline")
 
-        logger = logging.getLogger(__name__)  # Required if using logger
-        logger.info(
-            "Testing agents with context providers (ported from test_stage2)..."
-        )
+        # We need to mock what GenericLLMAgent's constructor is called with if we create a new agent
+        # Or, use self.agent and reconfigure it if possible.
+        # For simplicity, let's assume the factory correctly uses the mocked GenericLLMAgent from asyncSetUp for new agents too.
+        # This requires that the AgentFactory is patched or uses the same mocks.
+        # The current AgentFactory constructor will create a NEW LLMCoordinator if not provided.
+        # And LLMAgent will create a NEW GenericLLMAgent if not patched at the class level.
+        # This test might be better as an integration test or needs more complex patching.
 
-        # Create agents with different context provider configs
-        inline_config = AgentConfig(
-            country="FRANCE",
-            type="llm",
-            model_id="gpt-4o-mini",
-            context_provider="inline",
-        )
-        mcp_config = AgentConfig(
-            country="GERMANY", type="llm", model_id="gpt-4o", context_provider="mcp"
-        )
-        auto_config = AgentConfig(
-            country="ENGLAND",
-            type="llm",
-            model_id="claude-3-haiku",  # This is a non-tool model in default config
-            context_provider="auto",
-        )
+        # Let's re-patch GenericLLMAgent for agents created by the factory in this test
+        with patch("ai_diplomacy.agents.llm_agent.GenericLLMAgent", return_value=self.mock_generic_agent_instance) as PatchedGenericAgent:
+            inline_agent = factory.create_agent("inline-test", "FRANCE", inline_config, "game_ctx_test")
+            self.assertEqual(inline_agent.resolved_context_provider_type, "inline")
 
-        # Use a real factory, but we can mock what it uses if needed, or use real objects
-        # For this test, using real factory and its dependencies is closer to integration.
-        # However, LLMCoordinator is mocked in asyncSetUp, which factory might use.
-        # For simplicity, we'll use the factory as is.
-        factory = AgentFactory(
-            llm_coordinator=self.mock_llm_coordinator,
-            context_provider_factory=self.mock_context_provider_factory,
-        )
+            mock_phase_state = MagicMock(spec=PhaseState); mock_phase_state.get_power_units.return_value = ["A PAR"]
+            mock_phase_state.phase_name="S1901M_CTX"; mock_phase_state.get_all_possible_orders.return_value = {}
+            mock_phase_state.get_power_centers.return_value = []
 
-        # Create agents
-        # Provide a distinct game_id to avoid interference if tests run in parallel or state leaks
-        game_id_context_test = "test_game_context_providers"
-        inline_agent = factory.create_agent(
-            "inline-test-ctx", "FRANCE", inline_config, game_id_context_test
-        )
-        mcp_agent = factory.create_agent(
-            "mcp-test-ctx", "GERMANY", mcp_config, game_id_context_test
-        )
-        auto_agent = factory.create_agent(
-            "auto-test-ctx", "ENGLAND", auto_config, game_id_context_test
-        )
-
-        # Check that agents have correct context providers
-        self.assertIsInstance(inline_agent, LLMAgent)
-        # In LLMAgent, resolved_context_provider_type comes from the actual provider's get_provider_type()
-        # The factory sets up the agent with a provider. We check the type of that provider.
-        self.assertEqual(inline_agent.context_provider.get_provider_type(), "inline")
-
-        self.assertIsInstance(mcp_agent, LLMAgent)
-        # MCPContextProvider is not available (no client), so factory's get_provider("mcp")
-        # (called by resolve_context_provider via create_llm_agent) should fallback to InlineContextProvider.
-        self.assertEqual(mcp_agent.context_provider.get_provider_type(), "inline")
-
-        self.assertIsInstance(auto_agent, LLMAgent)
-        # claude-3-haiku is not tool-capable by default, so 'auto' should resolve to 'inline'.
-        self.assertEqual(auto_agent.context_provider.get_provider_type(), "inline")
-
-        # Create test phase state
-        phase_state = PhaseState(
-            phase_name="S1901M_CTX",  # Distinct phase name
-            year=1901,
-            season="SPRING",
-            phase_type="MOVEMENT",
-            powers=frozenset(["FRANCE", "GERMANY", "ENGLAND"]),
-            units={"FRANCE": ["A PAR"], "GERMANY": ["A BER"], "ENGLAND": ["F LON"]},
-            supply_centers={"FRANCE": ["PAR"], "GERMANY": ["BER"], "ENGLAND": ["LON"]},
-        )
-
-        # Test that agents can call decide_orders with context providers
-        # These mocks return dicts directly as per recent changes
-        mock_llm_orders_dict_france = {"orders": ["A PAR H"]}
-        expected_agent_orders_france = [Order("A PAR H")]
-
-        mock_llm_orders_dict_germany = {"orders": ["A BER H"]}
-        expected_agent_orders_germany = [Order("A BER H")]
-
-        mock_llm_orders_dict_england = {"orders": ["F LON H"]}
-        expected_agent_orders_england = [Order("F LON H")]
-
-        # Test inline_agent (FRANCE)
-        # Agent's llm_caller_override is used if set. It bypasses its internal llm_coordinator.
-        mock_llm_override_inline = AsyncMock(return_value=mock_llm_orders_dict_france)
-        inline_agent.llm_caller_override = mock_llm_override_inline
-        orders_inline = await inline_agent.decide_orders(phase_state)
-        self.assertEqual(orders_inline, expected_agent_orders_france)
-        mock_llm_override_inline.assert_called_once()
-        self.assertIsNotNone(mock_llm_override_inline.call_args)
-        called_args_kwargs_inline = mock_llm_override_inline.call_args[1]
-        prompt_text_inline = called_args_kwargs_inline.get("prompt")
-        self.assertIn("Game Context and Relevant Information:", prompt_text_inline)
-        # self.assertIn("=== YOUR POSSIBLE ORDERS ===", prompt_text_inline) # This is specific to InlineContextProvider's formatting
-
-        # Test mcp_agent (GERMANY)
-        mock_llm_override_mcp = AsyncMock(return_value=mock_llm_orders_dict_germany)
-        mcp_agent.llm_caller_override = mock_llm_override_mcp
-        orders_mcp = await mcp_agent.decide_orders(phase_state)
-        self.assertEqual(orders_mcp, expected_agent_orders_germany)
-        mock_llm_override_mcp.assert_called_once()
-        self.assertIsNotNone(mock_llm_override_mcp.call_args)
-        called_args_kwargs_mcp = mock_llm_override_mcp.call_args[1]
-        prompt_text_mcp = called_args_kwargs_mcp.get("prompt")
-        self.assertIn("Game Context and Relevant Information:", prompt_text_mcp)
-
-        # Test auto_agent (ENGLAND)
-        mock_llm_override_auto = AsyncMock(return_value=mock_llm_orders_dict_england)
-        auto_agent.llm_caller_override = mock_llm_override_auto
-        orders_auto = await auto_agent.decide_orders(phase_state)
-        self.assertEqual(orders_auto, expected_agent_orders_england)
-        mock_llm_override_auto.assert_called_once()
-        self.assertIsNotNone(mock_llm_override_auto.call_args)
-        called_args_kwargs_auto = mock_llm_override_auto.call_args[1]
-        prompt_text_auto = called_args_kwargs_auto.get("prompt")
-        self.assertIn("Game Context and Relevant Information:", prompt_text_auto)
-
-        logger.info("✓ Agents working correctly with context providers (ported)")
+            self.mock_generic_agent_instance.decide_action.return_value = {diplomacy_constants.LLM_RESPONSE_KEY_ORDERS: ["A PAR H"]}
+            await inline_agent.decide_orders(mock_phase_state)
+            PatchedGenericAgent.return_value.decide_action.assert_called()
 
 
 if __name__ == "__main__":

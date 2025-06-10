@@ -2,7 +2,7 @@ import pytest
 import llm
 
 # AgentLLMInterface was removed in refactor
-# from ai_diplomacy.services.llm_coordinator import LLMCoordinator # No longer needed directly if FakeLLMCoordinator is used
+# from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated commented import
 
 MODEL_ID = "gemma3:latest"  # Or your specific model
 

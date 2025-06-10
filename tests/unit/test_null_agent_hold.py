@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, MagicMock
 
 from ai_diplomacy.agents.neutral_agent import NeutralAgent
-from ai_diplomacy.agents.base import Order
+from ai_diplomacy.core.order import Order
 from ai_diplomacy.core.state import PhaseState
 
 pytestmark = pytest.mark.asyncio

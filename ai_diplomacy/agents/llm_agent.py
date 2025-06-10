@@ -3,22 +3,29 @@ LLM-based agent implementation.
 Extracts all LLM-specific logic from the original DiplomacyAgent while implementing the clean BaseAgent interface.
 """
 
+# Core components from this project
+from ..core.message import Message
+from ..core.order import Order
+from .base import BaseAgent, PhaseState # BaseAgent for inheritance, PhaseState for type hinting
+from ..services.config import AgentConfig, resolve_context_provider # resolve_context_provider moved here
+from ..services.context_provider import ContextProviderFactory, ContextData # ContextData remains here
+
 import logging
 from typing import List, Dict, Optional, Any, Callable, Awaitable
 
-from .base import BaseAgent, Order, Message, PhaseState
-from .agent_state import DiplomacyAgentState
-from .llm_prompt_strategy import LLMPromptStrategy
-from ..services.llm_coordinator import LLMCoordinator
-from ..services.config import AgentConfig, resolve_context_provider
-from ..services.context_provider import ContextProviderFactory, ContextData
-from ai_diplomacy import llm_utils  # Changed from relative to absolute package import
-from .. import constants  # Import constants
+# Remains for Diplomacy BaseAgent interface
+from .agent_state import DiplomacyAgentState # Remains for LLMAgent's internal state
+# Updated imports for generic framework
+from generic_llm_framework.agent import GenericLLMAgent
+from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy # Using the specific Diplomacy strategy
+from generic_llm_framework.llm_coordinator import LLMCoordinator
+from generic_llm_framework import llm_utils # Now using the generic llm_utils
+from .. import constants as diplomacy_constants # Alias for diplomacy-specific constants
+# from generic_llm_framework.constants import DEFAULT_GAME_ID, DEFAULT_PHASE_NAME # May not be needed if LLMAgent provides these
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["LLMAgent"]
-
 
 class LLMAgent(BaseAgent):
     """
@@ -34,15 +41,14 @@ class LLMAgent(BaseAgent):
         agent_id: str,
         country: str,
         config: AgentConfig,
-        game_id: str = constants.DEFAULT_GAME_ID,
+        game_id: str = diplomacy_constants.DEFAULT_GAME_ID, # Use aliased diplomacy constant
         llm_coordinator: Optional[LLMCoordinator] = None,
         context_provider_factory: Optional[ContextProviderFactory] = None,
         prompt_loader: Optional[Callable[[str], Optional[str]]] = None,
-        llm_caller_override: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
+        llm_caller_override: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None, # This might become part of GenericAgent's config
     ):
         """
         Initialize the LLM agent.
-
         Args:
             agent_id: Unique identifier for this agent instance
             country: The country/power this agent represents
@@ -51,72 +57,99 @@ class LLMAgent(BaseAgent):
             llm_coordinator: LLM coordinator instance (will create if None)
             context_provider_factory: Context provider factory (will create if None)
             prompt_loader: Optional function to load prompts by filename
-            llm_caller_override: Optional override for the LLM call logic.
+            llm_caller_override: Optional override for the LLM call logic. (Consider refactoring into GenericAgent config)
         """
         super().__init__(agent_id, country)
         self.config = config
-        self.power_name = country  # Added for direct access
-        self.model_id = config.model_id  # Added for direct access
-        self.game_id = game_id
-        self.llm_coordinator = llm_coordinator or LLMCoordinator()
+        self.power_name = country
+        self.model_id = config.model_id
+        self.game_id = game_id # Diplomacy game_id
+        self.llm_coordinator = llm_coordinator or LLMCoordinator() # This should be the generic one
 
-        # Context provider setup
+        # Context provider setup (remains Diplomacy-specific for now)
         self.context_factory = context_provider_factory or ContextProviderFactory()
         self.resolved_context_provider_type = resolve_context_provider(config)
         self.context_provider = self.context_factory.get_provider(
             self.resolved_context_provider_type
         )
-
-        # Update resolved type to reflect actual provider used (handles fallbacks)
         self.resolved_context_provider_type = self.context_provider.get_provider_type()
 
-        # Agent state using DiplomacyAgentState and LLMPromptStrategy
+        # Agent state (Diplomacy-specific state)
         self.agent_state = DiplomacyAgentState(country=country)
-        self.prompt_strategy = LLMPromptStrategy()
-        self.prompt_loader = prompt_loader
-        self.llm_caller_override = llm_caller_override  # Store the override
 
-        # Load system prompt
-        self.system_prompt = self._load_system_prompt()
+        # Prompt strategy (Diplomacy-specific, but now inherits from BasePromptStrategy)
+        # Pass base_prompts_dir if available from config or elsewhere
+        self.diplomacy_prompt_strategy = DiplomacyPromptStrategy(config=config.prompt_strategy_config if config.prompt_strategy_config else None)
+
+        self.prompt_loader = prompt_loader # Potentially used by _load_system_prompt
+        self.llm_caller_override = llm_caller_override
+
+        # System prompt loading (Diplomacy-specific part)
+        self.system_prompt = self._load_system_prompt() # This is the diplomacy system prompt.
+                                                        # GenericAgent's config will also get a system_prompt.
+
+        # Generic Agent instantiation
+        # We need to ensure the config passed to GenericLLMAgent is suitable.
+        # It expects attributes like 'model_id', 'system_prompt', 'game_id', 'phase', 'verbose_llm_debug'.
+        # We can construct a new dict or adapt AgentConfig.
+        generic_agent_config = {
+            "model_id": self.model_id,
+            "system_prompt": self.system_prompt, # Generic agent uses this as its default system prompt
+            "game_id": self.game_id, # Generic agent's game_id
+            "verbose_llm_debug": self.config.verbose_llm_debug,
+            # 'tools': if tools are used by generic agent
+            # 'expected_action_fields': if generic agent needs this
+        }
+        if self.llm_caller_override: # Pass override if present (though GenericAgent doesn't directly use this)
+             generic_agent_config["llm_caller_override"] = self.llm_caller_override
+
+
+        self.generic_agent = GenericLLMAgent(
+            agent_id=self.agent_id, # or self.power_name
+            config=generic_agent_config, # Pass the constructed config
+            llm_coordinator=self.llm_coordinator,
+            prompt_strategy=self.diplomacy_prompt_strategy # Pass the Diplomacy-specific strategy
+        )
 
         logger.info(
-            f"Initialized LLMAgent for {self.country} with model {self.config.model_id}, context provider: {self.resolved_context_provider_type}"
+            f"Initialized LLMAgent for {self.country} with model {self.config.model_id}, context provider: {self.resolved_context_provider_type}. GenericAgent also initialized."
         )
         self.agent_state.add_journal_entry(
             f"Agent initialized with model {self.config.model_id}, context provider: {self.resolved_context_provider_type}"
         )
 
     def _load_system_prompt(self) -> Optional[str]:
-        """Load power-specific or default system prompt."""
+        """Load power-specific or default system prompt for Diplomacy."""
         power_prompt_filename = f"{self.country.lower()}_system_prompt.txt"
-        default_prompt_filename = constants.DEFAULT_SYSTEM_PROMPT_FILENAME
-        system_prompt: Optional[str] = None
+        default_prompt_filename = diplomacy_constants.DEFAULT_SYSTEM_PROMPT_FILENAME # Use aliased constant
+        system_prompt_str: Optional[str] = None # Renamed to avoid conflict
 
         if self.prompt_loader:
-            system_prompt = self.prompt_loader(power_prompt_filename)
-            if not system_prompt:
+            system_prompt_str = self.prompt_loader(power_prompt_filename)
+            if not system_prompt_str:
                 logger.warning(
                     f"Power-specific prompt '{power_prompt_filename}' not found via prompt_loader. Loading default."
                 )
-                system_prompt = self.prompt_loader(default_prompt_filename)
+                system_prompt_str = self.prompt_loader(default_prompt_filename)
             else:
                 logger.info(
                     f"Loaded power-specific system prompt for {self.country} via prompt_loader."
                 )
         else:
-            system_prompt = llm_utils.load_prompt_file(power_prompt_filename)
-            if not system_prompt:
+            # Use generic llm_utils
+            system_prompt_str = llm_utils.load_prompt_file(power_prompt_filename)
+            if not system_prompt_str:
                 logger.warning(
                     f"Power-specific prompt '{power_prompt_filename}' not found. Loading default."
                 )
-                system_prompt = llm_utils.load_prompt_file(default_prompt_filename)
+                system_prompt_str = llm_utils.load_prompt_file(default_prompt_filename)
             else:
                 logger.info(f"Loaded power-specific system prompt for {self.country}.")
 
-        if not system_prompt:
+        if not system_prompt_str:
             logger.error(f"Could not load system prompt for {self.country}!")
 
-        return system_prompt
+        return system_prompt_str
 
     async def decide_orders(self, phase: PhaseState) -> List[Order]:
         """
@@ -134,107 +167,95 @@ class LLMAgent(BaseAgent):
 
         logger.info(f"[{self.country}] Deciding orders for phase {phase.phase_name}")
 
-        # Check if we have units to command
         my_units = phase.get_power_units(self.country)
         if not my_units:
             logger.info(f"[{self.country}] No units to command")
             return []
 
-        # Build context using context provider
         try:
-            # Prepare context data (simplified for now - in real implementation would include more details)
-            context_data = ContextData(
+            # Prepare context for DiplomacyPromptStrategy
+            context_data_obj = ContextData( # Renamed to avoid conflict with inner context_data
                 phase_state=phase,
-                possible_orders={"MOCK": ["Hold"]},  # TODO: Get real possible orders
-                game_history=None,
-                recent_messages=None,
-                strategic_analysis=None,
+                # TODO: Replace MOCK possible orders with actual data if available to context_provider
+                possible_orders={"MOCK": ["Hold"]},
+                game_history=None, # TODO: Pass actual game history if available
+                recent_messages=None, # TODO: Pass recent messages if available
+                strategic_analysis=None, # TODO: Pass analysis if available
             )
-
-            # Get context from provider
             context_result = await self.context_provider.provide_context(
                 agent_id=self.agent_id,
                 country=self.country,
-                context_data=context_data,
+                context_data=context_data_obj,
                 agent_config=self.config,
             )
 
-            # Build prompt using prompt strategy
-            prompt = self.prompt_strategy.build_order_prompt(
-                country=self.country,
-                goals=self.agent_state.goals,
-                relationships=self.agent_state.relationships,
-                formatted_diary=self.agent_state.format_private_diary_for_prompt(),
-                context_text=context_result.get("context_text")
-                or "",  # Ensure empty string if None
-                tools_available=context_result.get("tools_available", False),
-            )
+            # Construct diplomacy_specific_state_representation for GenericLLMAgent
+            diplomacy_specific_state_representation = {
+                "country": self.country,
+                "goals": self.agent_state.goals,
+                "relationships": self.agent_state.relationships,
+                "formatted_diary": self.agent_state.format_private_diary_for_prompt(),
+                "context_text": context_result.get("context_text", ""),
+                "tools_available": context_result.get("tools_available", False),
+                "phase_name": phase.phase_name,
+                "power_units": my_units, # Added for more complete state
+                "power_centers": phase.get_power_centers(self.country), # Added
+                # Add any other info DiplomacyPromptStrategy.build_order_prompt might need from context
+            }
 
-            # Call LLM
-            tools_definition = (
-                context_result.get("tools")
-                if context_result.get("tools_available")
-                else None
-            )
+            # Possible actions for LLM (can be raw possible orders or structured context)
+            # For now, using the context_result which might contain structured orders or context
+            possible_orders_for_llm = context_result.get("possible_orders_context", phase.get_all_possible_orders())
 
-            if self.llm_caller_override:
-                result = await self.llm_caller_override(
-                    prompt=prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id,
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt,
-                    expected_fields=[constants.LLM_RESPONSE_KEY_ORDERS],
-                    tools=tools_definition if tools_definition else None,
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                )
+
+            # Update GenericAgent's config for this specific call if needed (e.g., phase)
+            self.generic_agent.config["phase"] = phase.phase_name
+            if context_result.get("tools_available"):
+                 self.generic_agent.config["tools"] = context_result.get("tools")
             else:
-                result = await self.llm_coordinator.call_json(
-                    prompt=prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id,
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt,
-                    expected_fields=[constants.LLM_RESPONSE_KEY_ORDERS],
-                    tools=tools_definition if tools_definition else None,
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                )
+                 self.generic_agent.config.pop("tools", None)
 
-            orders_data = (
-                result.get(constants.LLM_RESPONSE_KEY_ORDERS) if result else None
+
+            # Call GenericLLMAgent's decide_action
+            # DiplomacyPromptStrategy will use action_type='decide_diplomacy_orders'
+            parsed_json_response = await self.generic_agent.decide_action(
+                state=diplomacy_specific_state_representation,
+                possible_actions=possible_orders_for_llm
             )
-            if orders_data:
+
+            if parsed_json_response.get("error"):
+                error_msg = f"[{self.country}] GenericAgent reported error deciding orders: {parsed_json_response['error']} - {parsed_json_response.get('details')}"
+                logger.error(error_msg)
+                # Decide on strictness: raise error or return empty list
+                raise ValueError(error_msg)
+
+
+            orders_data = parsed_json_response.get(diplomacy_constants.LLM_RESPONSE_KEY_ORDERS)
+            if orders_data is not None: # Check for None explicitly, as empty list can be valid
                 orders = self._extract_orders_from_response(orders_data, my_units)
                 logger.info(
-                    f"[{self.country}] Generated {len(orders)} orders using {context_result.get('provider_type', 'unknown')} context"
+                    f"[{self.country}] Generated {len(orders)} orders using {context_result.get('provider_type', 'unknown')} context via GenericAgent"
                 )
                 return orders
             else:
-                # Strict mode: If orders_data is not usable, raise an error instead of defaulting.
-                error_msg = f"[{self.country}] No valid '{constants.LLM_RESPONSE_KEY_ORDERS}' field in LLM response or response was None. Response: {result}"
+                error_msg = f"[{self.country}] No valid '{diplomacy_constants.LLM_RESPONSE_KEY_ORDERS}' field in LLM response via GenericAgent. Response: {parsed_json_response}"
                 logger.error(error_msg)
-                raise ValueError(error_msg)  # This will propagate up
+                raise ValueError(error_msg)
 
-        except ValueError as ve:  # Catch our specific ValueError to re-raise
+        except ValueError as ve:
             logger.error(f"[{self.country}] ValueError deciding orders: {ve}")
             raise
         except Exception as e:
-            # General errors still log and could potentially raise or return empty list depending on broader strategy
             error_msg = f"[{self.country}] Unexpected error deciding orders: {e}"
             logger.error(error_msg, exc_info=True)
-            raise RuntimeError(
-                error_msg
-            ) from e  # Propagate as a new error type to distinguish from direct LLM failure
+            raise RuntimeError(error_msg) from e
 
     def _extract_orders_from_response(
         self, response_orders_data: Any, my_units: List[str]
     ) -> List[Order]:
         """Extract and validate orders from LLM response. Raises ValueError on failure."""
+        # This method's internal logic remains the same.
         orders = []
-        # Argument renamed from 'response' to 'response_orders_data' to reflect it's the 'orders' part of the response
-
         if not isinstance(response_orders_data, list):
             error_msg = f"[{self.country}] Orders field from LLM is not a list. Got: {type(response_orders_data)}"
             logger.warning(error_msg)
@@ -260,18 +281,15 @@ class LLMAgent(BaseAgent):
             else:
                 logger.warning(f"[{self.country}] Invalid item in orders list: {item}")
 
-        if not orders and my_units:  # If we have units but extracted no valid orders
+        if not orders and my_units:
             error_msg = f"[{self.country}] No valid orders extracted from LLM response, though units exist. LLM provided: {response_orders_data}"
             logger.warning(error_msg)
             raise ValueError(error_msg)
-        elif not my_units and orders:  # If we have no units but LLM provided orders
+        elif not my_units and orders:
             logger.warning(
                 f"[{self.country}] LLM provided orders but no units to command. Orders: {orders}"
             )
-            # This case might be acceptable, return empty list as no orders can be actioned.
             return []
-
-        # Here, we only return if orders were successfully extracted for existing units, or if no units/no orders.
         return orders
 
     async def negotiate(self, phase: PhaseState) -> List[Message]:
@@ -288,163 +306,122 @@ class LLMAgent(BaseAgent):
             logger.info(f"[{self.country}] Skipping negotiation for neutral agent.")
             return []
 
-        logger.info(
-            f"[{self.country}] Generating messages for phase {phase.phase_name}"
-        )
+        logger.info(f"[{self.country}] Generating messages for phase {phase.phase_name}")
 
         try:
-            # Prepare context data for negotiations
-            context_data = ContextData(
+            context_data_obj = ContextData( # Renamed
                 phase_state=phase,
-                possible_orders={"MOCK": ["Hold"]},  # TODO: Get real possible orders
-                game_history=None,
-                recent_messages=None,
-                strategic_analysis=None,
+                possible_orders={"MOCK": ["Hold"]}, # Placeholder
+                game_history=None, # Placeholder
+                recent_messages=None, # Placeholder
+                strategic_analysis=None, # Placeholder
             )
-
-            # Get context from provider
             context_result = await self.context_provider.provide_context(
                 agent_id=self.agent_id,
                 country=self.country,
-                context_data=context_data,
+                context_data=context_data_obj,
                 agent_config=self.config,
             )
 
-            # Build prompt using prompt strategy
             active_powers_list = [
-                p
-                for p in phase.powers
-                if not phase.is_power_eliminated(p) and p != self.country
+                p for p in phase.powers if not phase.is_power_eliminated(p) and p != self.country
             ]
-            prompt = self.prompt_strategy.build_negotiation_prompt(
-                country=self.country,
-                active_powers=active_powers_list,
-                goals=self.agent_state.goals,
-                relationships=self.agent_state.relationships,
-                formatted_diary=self.agent_state.format_private_diary_for_prompt(),
-                context_text=context_result.get("context_text")
-                or "",  # Ensure empty string if None
-                tools_available=context_result.get("tools_available", False),
-            )
 
-            # Call LLM
-            tools_definition = (
-                context_result.get("tools")
-                if context_result.get("tools_available")
-                else None
-            )
+            diplomacy_specific_state_for_negotiation = {
+                "country": self.country,
+                "active_powers": active_powers_list,
+                "goals": self.agent_state.goals,
+                "relationships": self.agent_state.relationships,
+                "formatted_diary": self.agent_state.format_private_diary_for_prompt(),
+                "context_text": context_result.get("context_text", ""),
+                "tools_available": context_result.get("tools_available", False),
+                "phase_name": phase.phase_name,
+                 # Add any other info DiplomacyPromptStrategy.build_negotiation_prompt might need
+            }
 
-            if self.llm_caller_override:
-                result = await self.llm_caller_override(
-                    prompt=prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id,
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt,
-                    expected_fields=[constants.LLM_RESPONSE_KEY_MESSAGES],
-                    tools=tools_definition if tools_definition else None,
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                )
+            # Update GenericAgent's config for this specific call if needed
+            self.generic_agent.config["phase"] = phase.phase_name
+            if context_result.get("tools_available"):
+                 self.generic_agent.config["tools"] = context_result.get("tools")
             else:
-                result = await self.llm_coordinator.call_json(
-                    prompt=prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id,
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt,
-                    expected_fields=[constants.LLM_RESPONSE_KEY_MESSAGES],
-                    tools=tools_definition if tools_definition else None,
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                )
+                 self.generic_agent.config.pop("tools", None)
 
-            messages_data = (
-                result.get(constants.LLM_RESPONSE_KEY_MESSAGES) if result else None
+            # Call GenericLLMAgent's generate_communication
+            # DiplomacyPromptStrategy will use action_type='generate_diplomacy_messages'
+            parsed_json_response = await self.generic_agent.generate_communication(
+                state=diplomacy_specific_state_for_negotiation,
+                recipients=active_powers_list # Or a more structured recipient list if needed by generic agent
             )
-            if messages_data:
-                messages = self._extract_messages_from_response(messages_data, phase)
+
+            if parsed_json_response.get("error"):
+                error_msg = f"[{self.country}] GenericAgent reported error generating messages: {parsed_json_response['error']} - {parsed_json_response.get('details')}"
+                logger.error(error_msg)
+                return [] # Return empty on error, or raise
+
+            messages_data = parsed_json_response.get(diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES)
+            if messages_data is not None: # Check for None explicitly
+                messages = self._extract_messages_from_response(parsed_json_response, phase) # Pass the whole dict
                 logger.info(
-                    f"[{self.country}] Generated {len(messages)} messages using {context_result.get('provider_type', 'unknown')} context"
+                    f"[{self.country}] Generated {len(messages)} messages using {context_result.get('provider_type', 'unknown')} context via GenericAgent"
                 )
                 return messages
             else:
                 logger.warning(
-                    f"[{self.country}] No '{constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response or response is None"
+                    f"[{self.country}] No '{diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response via GenericAgent or response is None. Response: {parsed_json_response}"
                 )
                 return []
 
         except Exception as e:
-            logger.error(
-                f"[{self.country}] Error generating messages: {e}", exc_info=True
-            )
+            logger.error(f"[{self.country}] Error generating messages: {e}", exc_info=True)
             return []
 
     def _extract_messages_from_response(
-        self, response: Optional[Dict[str, Any]], phase: PhaseState
+        self, response: Optional[Dict[str, Any]], phase: PhaseState # response is the full JSON dict
     ) -> List[Message]:
         """Extract and validate messages from LLM response."""
+        # This method's internal logic remains largely the same.
         messages = []
-        if response is None or constants.LLM_RESPONSE_KEY_MESSAGES not in response:
+        if response is None or diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES not in response:
             logger.warning(
-                f"[{self.country}] No '{constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response or response is None"
+                f"[{self.country}] No '{diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response or response is None"
             )
             return messages
 
-        message_data = response[constants.LLM_RESPONSE_KEY_MESSAGES]
+        message_data = response[diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES]
         if not isinstance(message_data, list):
             logger.warning(f"[{self.country}] Messages field is not a list")
             return messages
 
-        valid_recipients = (
-            phase.powers
-        )  # Get all powers in the game as potential recipients
+        valid_recipients = phase.powers
 
         for msg_item in message_data:
             if not isinstance(msg_item, dict):
                 logger.warning(f"[{self.country}] Invalid message item: {msg_item}")
                 continue
 
-            recipient = msg_item.get(constants.LLM_MESSAGE_KEY_RECIPIENT)
-            content = msg_item.get(constants.LLM_MESSAGE_KEY_CONTENT)
-            message_type_str = msg_item.get(constants.LLM_MESSAGE_KEY_TYPE)
+            recipient = msg_item.get(diplomacy_constants.LLM_MESSAGE_KEY_RECIPIENT)
+            content = msg_item.get(diplomacy_constants.LLM_MESSAGE_KEY_CONTENT)
+            message_type_str = msg_item.get(diplomacy_constants.LLM_MESSAGE_KEY_TYPE)
 
             if not isinstance(recipient, str) or not recipient.strip():
-                logger.warning(
-                    f"[{self.country}] Invalid or missing recipient: {recipient}"
-                )
+                logger.warning(f"[{self.country}] Invalid or missing recipient: {recipient}")
                 continue
             if not isinstance(content, str) or not content.strip():
-                logger.warning(
-                    f"[{self.country}] Invalid or missing content for recipient {recipient}"
-                )
+                logger.warning(f"[{self.country}] Invalid or missing content for recipient {recipient}")
                 continue
 
             recipient_upper = recipient.upper()
             if recipient_upper not in valid_recipients:
-                logger.warning(
-                    f"[{self.country}] Recipient '{recipient_upper}' is not a valid power."
-                )
+                logger.warning(f"[{self.country}] Recipient '{recipient_upper}' is not a valid power.")
                 continue
 
-            # Validate message_type
-            final_message_type = constants.MESSAGE_TYPE_BROADCAST  # Default
-            if (
-                isinstance(message_type_str, str)
-                and message_type_str.upper() in constants.VALID_MESSAGE_TYPES
-            ):
+            final_message_type = diplomacy_constants.MESSAGE_TYPE_BROADCAST # Default
+            if isinstance(message_type_str, str) and message_type_str.upper() in diplomacy_constants.VALID_MESSAGE_TYPES:
                 final_message_type = message_type_str.upper()
-            elif message_type_str is not None:  # Log if a type was provided but invalid
-                logger.warning(
-                    f"[{self.country}] Invalid message type '{message_type_str}', defaulting to BROADCAST."
-                )
+            elif message_type_str is not None:
+                logger.warning(f"[{self.country}] Invalid message type '{message_type_str}', defaulting to BROADCAST.")
 
-            messages.append(
-                Message(
-                    recipient_upper, content.strip(), message_type=final_message_type
-                )
-            )
-
+            messages.append(Message(recipient_upper, content.strip(), message_type=final_message_type))
         return messages
 
     async def update_state(
@@ -452,137 +429,149 @@ class LLMAgent(BaseAgent):
     ) -> None:
         """
         Update internal agent state based on phase results and events.
-
-        Args:
-            phase: The phase that just completed
-            events: List of events that occurred
+        This will now also call the generic agent's update_internal_state.
+        Diary generation and goal analysis will be refactored to use generic_agent calls.
         """
         logger.info(f"[{self.country}] Updating state after phase {phase.phase_name}")
 
-        # Generate a diary entry about the phase results
-        await self._generate_phase_diary_entry(phase, events)
-
-        # Update relationships based on events
+        # Update Diplomacy-specific agent state (relationships, etc.)
         self.agent_state._update_relationships_from_events(self.country, events)
 
-        # Optionally update goals based on game state analysis
-        await self._analyze_and_update_goals(phase)
+        # Call Generic Agent's update_internal_state
+        # The generic agent's state update is more about its own internal representation
+        # which might be different from DiplomacyAgentState.
+        # For now, passing the raw phase and events.
+        # The generic agent's prompt_strategy (DiplomacyPromptStrategy) might define
+        # an 'update_state_reflection' action_type if LLM processing is needed here.
+        await self.generic_agent.update_internal_state(state=phase, events=events)
 
-    async def _generate_phase_diary_entry(
+        # --- Refactor Diary Generation ---
+        await self._generate_phase_diary_entry_with_generic_agent(phase, events)
+
+        # --- Refactor Goal Analysis ---
+        await self._analyze_and_update_goals_with_generic_agent(phase)
+
+
+    async def _generate_phase_diary_entry_with_generic_agent(
         self, phase: PhaseState, events: List[Dict[str, Any]]
     ):
-        """Generate a diary entry reflecting on the phase results."""
+        """Generate a diary entry using the GenericLLMAgent."""
         if self.config.type == "neutral":
-            logger.info(f"[{self.country}] Skipping diary entry generation for neutral agent.")
-            self.agent_state.add_diary_entry(
-                f"Phase {phase.phase_name} completed. (Neutral agent, no LLM diary generation)",
-                phase.phase_name,
-            )
+            logger.info(f"[{self.country}] Skipping diary entry for neutral agent.")
+            self.agent_state.add_diary_entry(f"Phase {phase.phase_name} completed (Neutral).", phase.phase_name)
             return
 
         try:
-            prompt = self.prompt_strategy.build_diary_generation_prompt(
-                country=self.country,
-                phase_name=phase.phase_name,
-                power_units=phase.get_power_units(self.country),
-                power_centers=phase.get_power_centers(self.country),
-                is_game_over=phase.is_game_over,
-                events=events,
-                goals=self.agent_state.goals,
-                relationships=self.agent_state.relationships,
+            diary_context = {
+                "country": self.country,
+                "phase_name": phase.phase_name,
+                "power_units": phase.get_power_units(self.country),
+                "power_centers": phase.get_power_centers(self.country),
+                "is_game_over": phase.is_game_over,
+                "events": events,
+                "goals": self.agent_state.goals,
+                "relationships": self.agent_state.relationships,
+            }
+
+            # Update GenericAgent's config for this specific call
+            self.generic_agent.config["phase"] = f"{phase.phase_name}_diary"
+
+            # Using call_json, expecting DiplomacyPromptStrategy to handle 'generate_diplomacy_diary'
+            # and return a JSON with "diary_entry" key.
+            # The generic_agent.decide_action is used here as a generic way to get a JSON response.
+            # Or, we could add a more specific method to GenericLLMAgent like `run_processing_task`.
+            # For now, let's adapt decide_action for this.
+            # A more fitting approach might be a new method in GenericLLMAgent like `process_data_for_update`.
+            # Let's assume `decide_action` can be used if the prompt strategy is set up for it.
+            # To make it cleaner, we could have a dedicated method in GenericLLMAgent or use call_json directly
+            # from llm_coordinator if GenericLLMAgent doesn't add much value for non-action/non-comm tasks.
+
+            # For this refactoring, we will assume GenericLLMAgent's `decide_action` can be used
+            # by relying on the prompt_strategy to format the correct prompt for diary generation.
+            # The `possible_actions` argument for decide_action can be None or an empty dict.
+            response_json = await self.generic_agent.decide_action(
+                state=diary_context,
+                possible_actions=None # No "possible actions" for diary generation
             )
 
-            if self.llm_caller_override:
-                result = await self.llm_caller_override(
-                    prompt=prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id,
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt,
-                    expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                )
-            else:
-                result = await self.llm_coordinator.call_json(
-                    prompt=prompt,
-                    model_id=self.model_id,
-                    agent_id=self.agent_id,
-                    game_id=self.game_id,
-                    phase=phase.phase_name,
-                    system_prompt=self.system_prompt,
-                    expected_fields=[constants.LLM_RESPONSE_KEY_DIARY_ENTRY],
-                    verbose_llm_debug=self.config.verbose_llm_debug,
-                )
+            if response_json.get("error"):
+                logger.error(f"[{self.country}] GenericAgent error generating diary: {response_json['error']}")
+                raise ValueError(response_json['error'])
 
-            diary_entry = (
-                result.get(constants.LLM_RESPONSE_KEY_DIARY_ENTRY) if result else None
-            )
-
+            diary_entry = response_json.get(diplomacy_constants.LLM_RESPONSE_KEY_DIARY_ENTRY)
             if diary_entry and isinstance(diary_entry, str):
                 self.agent_state.add_diary_entry(diary_entry, phase.phase_name)
-
-        except Exception as e:
-            logger.error(
-                f"[{self.country}] Error generating diary entry: {e}", exc_info=True
-            )
-            self.agent_state.add_diary_entry(
-                f"Phase {phase.phase_name} completed (diary generation failed).",
-                phase.phase_name,
-            )
-
-    async def _analyze_and_update_goals(self, phase: PhaseState):
-        """Analyze current situation and potentially update goals."""
-        # For now, this uses rule-based logic.
-        # If LLM-driven, would use:
-        # prompt = self.prompt_strategy.build_goal_analysis_prompt(...)
-        # result = await self.llm_coordinator.call_json(...)
-        # self.agent_state.goals = result.get("updated_goals", self.agent_state.goals)
-        # self.agent_state.add_journal_entry(result.get("reasoning", "Goals updated by LLM."))
-        try:
-            my_center_count = phase.get_center_count(self.country)
-            new_goals = []
-
-            if my_center_count < 3:
-                new_goals.append("Survive and avoid elimination")
-            elif my_center_count < 8:
-                new_goals.append("Expand territory and gain supply centers")
             else:
-                new_goals.append("Consolidate position and prepare for victory")
-
-            active_powers = [
-                p for p in phase.powers if not phase.is_power_eliminated(p)
-            ]
-            if active_powers:  # Ensure there are active powers to check
-                max_centers = max(phase.get_center_count(p) for p in active_powers)
-                if (
-                    max_centers > 10
-                    and phase.get_center_count(self.country) != max_centers
-                ):
-                    new_goals.append("Form coalition against the leader")
-
-            if new_goals != self.agent_state.goals:
-                old_goals = self.agent_state.goals.copy()
-                self.agent_state.goals = new_goals
-                self.agent_state.add_journal_entry(
-                    f"Goals updated from {old_goals} to {new_goals}"
-                )
+                logger.warning(f"[{self.country}] Could not extract diary entry from LLM response: {response_json}")
+                self.agent_state.add_diary_entry(f"Phase {phase.phase_name} completed (Diary generation failed to extract).", phase.phase_name)
 
         except Exception as e:
-            logger.error(f"[{self.country}] Error analyzing goals: {e}", exc_info=True)
+            logger.error(f"[{self.country}] Error generating diary entry via GenericAgent: {e}", exc_info=True)
+            self.agent_state.add_diary_entry(f"Phase {phase.phase_name} completed (Diary generation error).", phase.phase_name)
+
+
+    async def _analyze_and_update_goals_with_generic_agent(self, phase: PhaseState):
+        """Analyze current situation and potentially update goals using GenericLLMAgent."""
+        if self.config.type == "neutral": # or some other condition to skip goal analysis
+            return
+        try:
+            goal_analysis_context = {
+                "country": self.country,
+                "phase_name": phase.phase_name,
+                "power_units": phase.get_power_units(self.country),
+                "power_centers": phase.get_power_centers(self.country),
+                "all_power_centers": {p: phase.get_center_count(p) for p in phase.powers if not phase.is_power_eliminated(p)},
+                "is_game_over": phase.is_game_over,
+                "current_goals": self.agent_state.goals,
+                "relationships": self.agent_state.relationships,
+            }
+
+            self.generic_agent.config["phase"] = f"{phase.phase_name}_goal_analysis"
+
+            response_json = await self.generic_agent.decide_action(
+                state=goal_analysis_context,
+                possible_actions=None # No "possible actions" for goal analysis
+            )
+
+            if response_json.get("error"):
+                logger.error(f"[{self.country}] GenericAgent error analyzing goals: {response_json['error']}")
+                raise ValueError(response_json['error'])
+
+            updated_goals = response_json.get(diplomacy_constants.LLM_RESPONSE_KEY_UPDATED_GOALS)
+            reasoning = response_json.get(diplomacy_constants.LLM_RESPONSE_KEY_REASONING)
+
+            if updated_goals and isinstance(updated_goals, list):
+                if set(updated_goals) != set(self.agent_state.goals): # Check if goals actually changed
+                    old_goals_log = self.agent_state.goals.copy()
+                    self.agent_state.goals = updated_goals
+                    reasoning_log = reasoning or "Goals updated by LLM via GenericAgent."
+                    self.agent_state.add_journal_entry(f"Goals updated from {old_goals_log} to {updated_goals}. Reasoning: {reasoning_log}")
+            else:
+                 logger.warning(f"[{self.country}] Could not extract updated goals from LLM response: {response_json}")
+
+        except Exception as e:
+            logger.error(f"[{self.country}] Error analyzing/updating goals via GenericAgent: {e}", exc_info=True)
+
+    # Remove old _generate_phase_diary_entry and _analyze_and_update_goals
+    # async def _generate_phase_diary_entry(...)
+    # async def _analyze_and_update_goals(...)
 
     def get_agent_info(self) -> Dict[str, Any]:
-        """Return information about this agent."""
+        """Return information about this agent, including generic agent info."""
+        # Get info from generic_agent and merge or nest it
+        generic_info = self.generic_agent.get_agent_info()
+
         return {
-            "agent_id": self.agent_id,
+            "diplomacy_agent_id": self.agent_id,
             "country": self.country,
-            "type": "LLMAgent",
-            "model_id": self.config.model_id,
+            "diplomacy_agent_type": "LLMAgent",
+            "diplomacy_model_id": self.config.model_id, # Model used for Diplomacy specific system prompt if different
             "context_provider_type": self.resolved_context_provider_type,
-            "goals": self.agent_state.goals,
-            "relationships": self.agent_state.relationships,
-            "diary_entries": len(self.agent_state.private_diary),
-            "journal_entries": len(self.agent_state.private_journal),
+            "diplomacy_goals": self.agent_state.goals,
+            "diplomacy_relationships": self.agent_state.relationships,
+            "diplomacy_diary_entries": len(self.agent_state.private_diary),
+            "diplomacy_journal_entries": len(self.agent_state.private_journal),
+            "generic_agent_info": generic_info, # Nested info from the generic agent
         }
 
     async def consolidate_year_diary_entries(

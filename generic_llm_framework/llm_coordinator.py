@@ -29,7 +29,8 @@ from llm.models import (
 )  # Renamed to avoid conflict, used for type hinting
 from llm import Response as LLMResponse  # For type hinting
 
-from .. import constants  # Import constants
+from . import constants as generic_constants # Import constants
+from . import llm_utils # Import llm_utils
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +47,8 @@ __all__ = [
 
 # --- New Global Components based on the provided pattern ---
 
-DATABASE_PATH = constants.LLM_USAGE_DATABASE_PATH  # Updated to use constant
-_local_lock = asyncio.Lock()  # Removed comment: Global lock for local LLM engines
+DATABASE_PATH = generic_constants.LLM_USAGE_DATABASE_PATH
+_local_lock = asyncio.Lock()
 
 
 class ModelPool:
@@ -76,7 +77,7 @@ async def serial_if_local(model_id: str) -> AsyncIterator[None]:
     # These prefixes are taken from the original SERIAL_ACCESS_PREFIXES
     if any(
         model_id_lower.startswith(prefix)
-        for prefix in constants.LOCAL_LLM_SERIAL_ACCESS_PREFIXES
+        for prefix in generic_constants.LOCAL_LLM_SERIAL_ACCESS_PREFIXES
     ):
         logger.debug(f"Acquiring lock for local model: {model_id}")
         async with _local_lock:
@@ -295,7 +296,7 @@ class LLMCallResult:
         raw_response: str,
         parsed_json: Optional[Dict[str, Any]] = None,
         success: bool = True,
-        error_message: str = constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED,  # Default error message
+        error_message: str = generic_constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED,
     ):
         self.raw_response = raw_response
         self.parsed_json = parsed_json
@@ -329,8 +330,8 @@ class LLMCoordinator:
         *,
         model_id: str,
         agent_id: str,
-        game_id: str = constants.DEFAULT_GAME_ID,  # Updated to use constant
-        phase: str = constants.DEFAULT_PHASE_NAME,  # Updated to use constant
+        game_id: str = generic_constants.DEFAULT_GAME_ID,
+        phase: str = generic_constants.DEFAULT_PHASE_NAME,
         system_prompt: Optional[str] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> str:
@@ -374,8 +375,8 @@ class LLMCoordinator:
         *,
         model_id: str,
         agent_id: str,
-        game_id: str = constants.DEFAULT_GAME_ID,  # Updated to use constant
-        phase: str = constants.DEFAULT_PHASE_NAME,  # Updated to use constant
+        game_id: str = generic_constants.DEFAULT_GAME_ID,
+        phase: str = generic_constants.DEFAULT_PHASE_NAME,
         system_prompt: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         expected_fields: Optional[List[str]] = None,
@@ -434,25 +435,23 @@ class LLMCoordinator:
         agent_name: str,
         phase_str: str,
         system_prompt: Optional[str] = None,
-        request_identifier: str = constants.LLM_CALL_REQUEST_ID_DEFAULT,  # Default request ID
+        request_identifier: str = generic_constants.LLM_CALL_REQUEST_ID_DEFAULT,
         expected_json_fields: Optional[list] = None,
-        response_type: str = constants.LLM_CALL_LOG_RESPONSE_TYPE_DEFAULT,  # Default response type for logging
+        response_type: str = generic_constants.LLM_CALL_LOG_RESPONSE_TYPE_DEFAULT,
         log_to_file_path: Optional[str] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
-        verbose_llm_debug: bool = False,  # Added verbose_llm_debug
+        verbose_llm_debug: bool = False,
     ) -> LLMCallResult:
         """
         Internal method for LLM calls with JSON parsing.
         Used by call_json().
         """
-        from .. import llm_utils  # Import here to avoid circular imports
-        from ..general_utils import (
-            log_llm_response,
-        )  # Assuming this is still used for file logging
+        # llm_utils is already imported at the top of the file
+        # from .llm_utils import log_llm_response # log_llm_response is part of llm_utils
 
         result = LLMCallResult(
-            "", None, False, constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED
-        )  # Use constant
+            "", None, False, generic_constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED
+        )
 
         try:
             logger.info(
@@ -514,8 +513,8 @@ class LLMCoordinator:
             else:
                 result.success = False
                 result.error_message = (
-                    constants.LLM_CALL_ERROR_EMPTY_RESPONSE
-                )  # Use constant
+                        generic_constants.LLM_CALL_ERROR_EMPTY_RESPONSE
+                    )
 
         except Exception as e:
             logger.error(f"[{request_identifier}] LLM call failed: {e}", exc_info=True)
@@ -529,15 +528,18 @@ class LLMCoordinator:
             success_status = (
                 "TRUE" if result.success else f"FALSE: {result.error_message}"
             )
-            log_llm_response(
+            # Use the imported llm_utils.log_llm_response
+            llm_utils.log_llm_response(
                 log_file_path=log_to_file_path,
                 model_name=model_id,
-                power_name=agent_name,
+                agent_id=agent_name, # Changed from power_name to agent_id
                 phase=phase_str,
                 response_type=response_type,
-                raw_input_prompt=prompt,
+                # raw_input_prompt=prompt, # Not logged by the new function
                 raw_response=result.raw_response,
                 success=success_status,
+                request_identifier=request_identifier, # Pass request_identifier
+                # turn_number can be added if available here, e.g. from game_id or phase_str parsing
             )
 
         return result
@@ -551,7 +553,7 @@ class LLMCoordinator:
         game_id: str,
         agent_name: str,  # Was implicitly part of request_identifier before, now explicit
         phase_str: str,  # New explicit parameter
-        request_identifier: str = constants.LLM_CALL_REQUEST_ID_DEFAULT,  # For coordinator's logging
+        request_identifier: str = generic_constants.LLM_CALL_REQUEST_ID_DEFAULT,  # For coordinator's logging
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
     ) -> str:
         """

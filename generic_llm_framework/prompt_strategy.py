@@ -1,25 +1,174 @@
 """
 Defines strategies for constructing various prompts for LLM-based agents.
 
-This module provides the LLMPromptStrategy class, which contains methods
-for building specific prompts required by LLM agents during different
-phases of a Diplomacy game (e.g., order generation, negotiation, diary entry).
+This module provides:
+- BasePromptStrategy: An abstract base class for generic prompt strategies.
+- DiplomacyPromptStrategy: A concrete implementation for Diplomacy game agents
+  (this was the original content of this file after a previous refactoring step).
 """
 
-from typing import List, Dict, Any
+import logging
+from typing import Optional, Dict, List, Any
 
-__all__ = ["LLMPromptStrategy"]
+# Assuming llm_utils will be in the same generic framework package.
+# This import is for BasePromptStrategy's _load_generic_system_prompt
+from . import llm_utils # Ensure this is available
+from typing import Optional, Dict, List, Any # Ensure these are available at the top
+
+logger = logging.getLogger(__name__)
+
+__all__ = ["BasePromptStrategy", "DiplomacyPromptStrategy"]
 
 
-class LLMPromptStrategy:
-    # Class docstring already exists and is good.
+class BasePromptStrategy:
+    """
+    Base class for managing the construction of prompts for different LLM interaction types.
+    Subclasses should implement specific prompt building logic.
+    """
 
-    def __init__(self) -> None:
+    def __init__(self, config: Optional[Dict[str, Any]] = None, base_prompts_dir: Optional[str] = None):
         """
-        Initializes the prompt strategy.
-        (No specific initialization needed for now).
+        Initializes the BasePromptStrategy.
+
+        Args:
+            config: A generic configuration dictionary.
+            base_prompts_dir: Optional. Path to the base directory for prompts.
         """
-        pass
+        self.config = config or {}
+        self.base_prompts_dir = base_prompts_dir
+        self.system_prompt_template = self._load_generic_system_prompt()
+
+    def _load_generic_system_prompt(self) -> str:
+        """Loads a generic system prompt template from file or provides a default."""
+        filename = self.config.get("system_prompt_filename", "generic_system_prompt.txt")
+        prompt_content = llm_utils.load_prompt_file(
+            filename, base_prompts_dir=self.base_prompts_dir
+        )
+        if prompt_content is None:
+            logger.warning(
+                f"Failed to load generic system prompt '{filename}'. Using a default prompt."
+            )
+            return "You are a helpful AI assistant."
+        return prompt_content
+
+    def _get_formatted_system_prompt(self, **kwargs) -> str:
+        """Formats the system prompt with provided arguments."""
+        try:
+            return self.system_prompt_template.format(**kwargs)
+        except KeyError as e:
+            logger.error(
+                f"Missing key in system prompt formatting: {e}. Using raw template."
+            )
+            return self.system_prompt_template
+        except Exception as e:
+            logger.error(f"Error formatting system prompt: {e}. Using raw template.")
+            return self.system_prompt_template
+
+    def build_prompt(self, action_type: str, context: Dict[str, Any]) -> str:
+        """
+        Builds a prompt for a given action type and context.
+        This is the primary method for generic agents.
+
+        Args:
+            action_type: A string identifying the type of action (e.g., "decide_action", "generate_communication").
+            context: A dictionary containing all necessary information to build the prompt.
+
+        Returns:
+            The constructed prompt string.
+        """
+        raise NotImplementedError("Subclasses must implement build_prompt.")
+
+
+class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStrategy
+    """
+    Handles construction of prompts for various LLM interactions specific to the game of Diplomacy.
+    This class implements the generic build_prompt method by dispatching to its
+    Diplomacy-specific prompt construction methods.
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None, base_prompts_dir: Optional[str] = None) -> None:
+        """
+        Initializes the Diplomacy-specific prompt strategy.
+        Args:
+            config: A generic configuration dictionary, may contain diplomacy specific settings.
+            base_prompts_dir: Optional. Path to the base directory for prompts.
+        """
+        super().__init__(config, base_prompts_dir)
+        # DiplomacyPromptStrategy might have its own specific system prompt or use the generic one.
+        # If it needs a different system prompt than generic_system_prompt.txt,
+        # it can override _load_generic_system_prompt or load its own template here.
+        # For now, it will inherit the generic system prompt loading.
+        # Example: self.diplomacy_system_prompt = self._load_diplomacy_system_prompt()
+
+    def build_prompt(self, action_type: str, context: Dict[str, Any]) -> str:
+        """
+        Builds a Diplomacy-specific prompt based on the action_type and context.
+        This method routes to the appropriate specialized prompt building method.
+        """
+        if action_type == 'decide_diplomacy_orders':
+            # Ensure all necessary keys are in context, or handle missing keys
+            # Expected keys by build_order_prompt: country, goals, relationships, formatted_diary, context_text, tools_available
+            return self.build_order_prompt(
+                country=context.get("country"),
+                goals=context.get("goals", []),
+                relationships=context.get("relationships", {}),
+                formatted_diary=context.get("formatted_diary", ""),
+                context_text=context.get("context_text", ""),
+                tools_available=context.get("tools_available", False)
+            )
+        elif action_type == 'generate_diplomacy_messages':
+            # Expected keys: country, active_powers, goals, relationships, formatted_diary, context_text, tools_available
+            return self.build_negotiation_prompt(
+                country=context.get("country"),
+                active_powers=context.get("active_powers", []),
+                goals=context.get("goals", []),
+                relationships=context.get("relationships", {}),
+                formatted_diary=context.get("formatted_diary", ""),
+                context_text=context.get("context_text", ""),
+                tools_available=context.get("tools_available", False)
+            )
+        elif action_type == 'generate_diplomacy_diary':
+            # Expected keys: country, phase_name, power_units, power_centers, is_game_over, events, goals, relationships
+            return self.build_diary_generation_prompt(
+                country=context.get("country"),
+                phase_name=context.get("phase_name", "Unknown Phase"),
+                power_units=context.get("power_units", []),
+                power_centers=context.get("power_centers", []),
+                is_game_over=context.get("is_game_over", False),
+                events=context.get("events", []),
+                goals=context.get("goals", []),
+                relationships=context.get("relationships", {})
+            )
+        elif action_type == 'analyze_diplomacy_goals':
+            # Expected keys: country, phase_name, power_units, power_centers, all_power_centers, is_game_over, current_goals, relationships
+            return self.build_goal_analysis_prompt(
+                country=context.get("country"),
+                phase_name=context.get("phase_name", "Unknown Phase"),
+                power_units=context.get("power_units", []),
+                power_centers=context.get("power_centers", []),
+                all_power_centers=context.get("all_power_centers", {}),
+                is_game_over=context.get("is_game_over", False),
+                current_goals=context.get("current_goals", []),
+                relationships=context.get("relationships", {})
+            )
+        elif action_type == 'decide_bloc_orders': # For BlocLLMAgent
+            # This action_type implies the context contains a pre-rendered prompt
+            if "prompt_content" not in context:
+                logger.error("Context must contain 'prompt_content' for 'decide_bloc_orders'")
+                raise ValueError("Context must contain 'prompt_content' for 'decide_bloc_orders'")
+            # The system prompt for bloc agent might be different, handled by BlocLLMAgent itself
+            # or passed in context if generic_agent needs to set it.
+            # For now, assume prompt_content is the full user prompt.
+            return context["prompt_content"]
+        else: # This is the single, final else block
+            logger.warning(f"Unknown action_type '{action_type}' for DiplomacyPromptStrategy. Falling back to generic system prompt or error.")
+            # Fallback or error, or try to use a generic prompt if BasePromptStrategy has one
+            # For now, let's indicate an issue.
+            # return super().build_prompt(action_type, context) # If BasePromptStrategy had a default
+            raise ValueError(f"Unsupported action_type for DiplomacyPromptStrategy: {action_type}")
+
+    # The existing Diplomacy-specific methods (build_order_prompt, etc.) remain below.
+    # Their signatures are assumed to be correct as per the file's current state.
 
     def build_order_prompt(
         self,
@@ -31,7 +180,7 @@ class LLMPromptStrategy:
         tools_available: bool,
     ) -> str:
         """
-        Constructs the prompt for order generation.
+        Constructs the prompt for Diplomacy order generation.
         """
         goals_str = (
             "\n".join(f"- {goal}" for goal in goals)
@@ -97,7 +246,7 @@ Ensure your orders are valid and strategically sound.
         tools_available: bool,
     ) -> str:
         """
-        Constructs the prompt for generating diplomatic messages.
+        Constructs the prompt for generating Diplomacy diplomatic messages.
         """
         goals_str = (
             "\n".join(f"- {goal}" for goal in goals)
@@ -180,7 +329,7 @@ Ensure your messages are strategically sound and contribute to your goals.
         relationships: Dict[str, str],
     ) -> str:
         """
-        Constructs the prompt for generating a diary entry.
+        Constructs the prompt for generating a Diplomacy diary entry.
         """
         units_str = ", ".join(power_units) if power_units else "None"
         centers_str = ", ".join(power_centers) if power_centers else "None"
@@ -245,7 +394,7 @@ Do not add any commentary or explanation outside of the JSON structure.
         relationships: Dict[str, str],
     ) -> str:
         """
-        Constructs the prompt for goal analysis and potential updates.
+        Constructs the prompt for Diplomacy goal analysis and potential updates.
         """
         units_str = ", ".join(power_units) if power_units else "None"
         centers_str = ", ".join(power_centers) if power_centers else "None"
@@ -316,10 +465,20 @@ Do not add any commentary or explanation outside of the JSON structure.
 
 # Example Usage (can be removed or kept for testing)
 if __name__ == "__main__":
-    strategy = LLMPromptStrategy()
+    # Example for BasePromptStrategy (though it's abstract)
+    base_config = {"system_prompt_filename": "custom_system_prompt.txt"}
+    # base_strategy = BasePromptStrategy(config=base_config) # Won't work directly due to NotImplementedError
+    # print(f"Base strategy system prompt: {base_strategy.system_prompt_template}")
+    # try:
+    #     base_strategy.build_prompt("some_action", {})
+    # except NotImplementedError as e:
+    #     print(f"Caught expected error for BasePromptStrategy: {e}")
 
-    # Example for build_order_prompt
-    order_prompt = strategy.build_order_prompt(
+
+    # Example for DiplomacyPromptStrategy
+    diplomacy_strategy = DiplomacyPromptStrategy()
+
+    order_prompt = diplomacy_strategy.build_order_prompt(
         country="FRANCE",
         goals=["Capture Munich", "Secure Belgium"],
         relationships={"GERMANY": "Enemy", "ENGLAND": "Friendly"},
@@ -327,11 +486,10 @@ if __name__ == "__main__":
         context_text="Current Phase: Fall 1901 Movement. Germany has units in Ruhr and Munich. England has fleets in North Sea.",
         tools_available=True,
     )
-    print("--- ORDER PROMPT ---")
+    print("\n--- DIPLOMACY ORDER PROMPT ---")
     print(order_prompt)
 
-    # Example for build_negotiation_prompt
-    negotiation_prompt = strategy.build_negotiation_prompt(
+    negotiation_prompt = diplomacy_strategy.build_negotiation_prompt(
         country="ITALY",
         active_powers=["FRANCE", "GERMANY", "AUSTRIA", "TURKEY", "RUSSIA", "ENGLAND"],
         goals=["Form a defensive alliance against Austria", "Gain control of Tunis"],
@@ -340,49 +498,5 @@ if __name__ == "__main__":
         context_text="Messages from Spring 1901: France proposed a DMZ in Piedmont. Austria has not responded to requests.",
         tools_available=False,
     )
-    print("\n--- NEGOTIATION PROMPT ---")
+    print("\n--- DIPLOMACY NEGOTIATION PROMPT ---")
     print(negotiation_prompt)
-
-    # Example for build_diary_generation_prompt
-    diary_prompt = strategy.build_diary_generation_prompt(
-        country="RUSSIA",
-        phase_name="Fall 1902 Movement",
-        power_units=["A MOS", "A WAR", "F STP/SC", "F SEV"],
-        power_centers=["MOSCOW", "WARSAW", "STPETERSBURG", "SEVASTOPOL"],
-        is_game_over=False,
-        events=[
-            {"type": "MOVE", "unit": "A WAR", "destination": "GAL", "success": True},
-            {
-                "type": "ATTACK",
-                "attacker": "TURKEY",
-                "target_unit": "F SEV",
-                "success": False,
-            },
-        ],
-        goals=["Expand southwards", "Secure Warsaw"],
-        relationships={"TURKEY": "Enemy", "GERMANY": "Neutral"},
-    )
-    print("\n--- DIARY GENERATION PROMPT ---")
-    print(diary_prompt)
-
-    # Example for build_goal_analysis_prompt
-    goal_analysis_prompt = strategy.build_goal_analysis_prompt(
-        country="ENGLAND",
-        phase_name="Spring 1903 Build Phase",
-        power_units=["F LON", "F EDI", "A LVP"],
-        power_centers=["LONDON", "EDINBURGH", "LIVERPOOL"],
-        all_power_centers={
-            "ENGLAND": 3,
-            "FRANCE": 5,
-            "GERMANY": 6,
-            "RUSSIA": 4,
-            "AUSTRIA": 3,
-            "ITALY": 3,
-            "TURKEY": 2,
-        },
-        is_game_over=False,
-        current_goals=["Prevent French naval dominance", "Secure North Sea"],
-        relationships={"FRANCE": "Unfriendly", "GERMANY": "Neutral"},
-    )
-    print("\n--- GOAL ANALYSIS PROMPT ---")
-    print(goal_analysis_prompt)

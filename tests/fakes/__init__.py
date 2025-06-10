@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-from ai_diplomacy.services.llm_coordinator import LLMCoordinator  # Added import
-import logging  # Added for MockLLMInterface_PhaseSummary
-from typing import List, Any, Optional, Dict  # Added for MockGameHistory_PhaseSummary
-from datetime import datetime  # Added for MinimalGameConfig_LoggingSetup
+from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated import
+import logging
+from typing import List, Any, Optional, Dict
+from datetime import datetime
 import os  # Added for MinimalGameConfig_LoggingSetup
 
 
