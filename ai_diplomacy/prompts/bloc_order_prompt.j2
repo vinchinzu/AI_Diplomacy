@@ -4,6 +4,30 @@ You control the following powers: {{ controlled_powers_list|join(', ') }}.
 The current game year is {{ phase.year }}, season {{ phase.season }}. The phase is {{ phase.phase_name }}.
 
 Your objective is to achieve victory for your bloc by coordinating the actions of all your controlled powers.
+---
+YOUR MEMORY AND DIRECTIVES
+Your Private Diary (most recent entries):
+{{ diary }}
+
+Your Current Goals:
+{% if goals %}
+  {% for goal in goals %}
+- {{ goal }}
+  {% endfor %}
+{% else %}
+- No specific goals set. Your primary objective is to improve your bloc's position.
+{% endif %}
+
+Your Assessed Relationships:
+{% if relationships %}
+  {% for power, status in relationships.items() %}
+- {{ power }}: {{ status }}
+  {% endfor %}
+{% else %}
+- No specific relationship assessments available.
+{% endif %}
+---
+
 Review the current state of the game for each of your powers:
 
 {% for power_name in controlled_powers_list %}

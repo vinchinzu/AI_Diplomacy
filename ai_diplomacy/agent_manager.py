@@ -11,6 +11,7 @@ from .services.config import AgentConfig  # AgentConfig from services
 
 if TYPE_CHECKING:
     from .game_config import GameConfig  # GameConfig from root
+    from .agents.base import BaseAgent # noqa
 
 logger = logging.getLogger(__name__)
 
@@ -196,3 +197,22 @@ class AgentManager:
             The BaseAgent instance, or None if not found.
         """
         return self.agents.get(agent_identifier)
+
+    def get_agent_by_power(self, power_name: str) -> Optional[BaseAgent]:
+        """
+        Retrieves the agent responsible for a given power.
+
+        This method maps a power (e.g., "FRANCE") to its controlling agent
+        identifier (e.g., "ENTENTE_POWERS") and returns the corresponding agent instance.
+
+        Args:
+            power_name: The name of the power.
+
+        Returns:
+            The BaseAgent instance for that power, or None if not found.
+        """
+        agent_identifier = self.game_config.power_to_agent_id_map.get(power_name)
+        if agent_identifier:
+            return self.get_agent(agent_identifier)
+        logger.warning(f"Could not find agent identifier for power '{power_name}' in power_to_agent_id_map.")
+        return None

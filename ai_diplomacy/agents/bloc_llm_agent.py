@@ -148,6 +148,9 @@ class BlocLLMAgent(LLMAgent):
                 "bloc_name": self.bloc_name,
                 "controlled_powers_list": self.controlled_powers,
                 "phase": phase,
+                "diary": self.agent_state.format_private_diary_for_prompt(),
+                "goals": self.agent_state.goals,
+                "relationships": self.agent_state.relationships,
             }
 
             try:
