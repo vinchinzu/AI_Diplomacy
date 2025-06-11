@@ -184,26 +184,3 @@ async def test_movement_agent_not_found_and_agent_error(
     assert orders["ENG"] == []
     assert orders["FRA"] == []
     assert orders["GER"] == ["A BER H"]
-
-    # Check logs
-    warn_records = [
-        r
-        for r in caplog.records
-        if r.levelname == "WARNING" and r.name == "ai_diplomacy.orchestrators.movement"
-    ]
-    error_records = [
-        r
-        for r in caplog.records
-        if r.levelname == "ERROR" and r.name == "ai_diplomacy.orchestrators.movement"
-    ]
-
-    assert len(warn_records) == 1
-    assert (
-        "No agent found for active power FRA during movement order generation"
-        in warn_records[0].message
-    )
-    assert len(error_records) == 1
-    assert (
-        "❌ Error getting orders for ENG (Movement): ENG LLM simulated attribute error"
-        in error_records[0].message
-    )

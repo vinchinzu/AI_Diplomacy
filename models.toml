@@ -13,11 +13,11 @@ default_model = "gemma3:4b" # Example: a generally available local model
 # or .env file, and that the `llm` library has the required plugins installed.
 
 [powers]
-AUSTRIA = "gpt-4o"
+AUSTRIA = "gemma3:12b"
 ENGLAND = "llama3:latest" # Using available Ollama model
-FRANCE = "gpt-4o-mini"
+FRANCE = "gemma3:12b"
 GERMANY = "gemma3:4b" # Using available Ollama model
-ITALY = "gpt-3.5-turbo"
+ITALY = "gemma3:12b"
 RUSSIA = "gemma3:4b"    # Using available Ollama model
 TURKEY = "gemma3:4b" # Using available Ollama model
 

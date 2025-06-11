@@ -15,13 +15,11 @@ dependencies = [
     "json-repair>=0.46.0",
     "json5>=0.12.0",
     "llm>=0.25",
-    "llm-anthropic>=0.16",
     "llm-gemini>=0.20",
     "llm-gguf>=0.2",
     "llm-grok>=1.0",
     "llm-mistral>=0.13",
     "llm-ollama>=0.10.0",
-    "llm-openai>=0.7.1",
     "ollama>=0.4.8",
     "pandas>=2.2.3",
     "pylint>=3.3.7",
@@ -42,7 +40,6 @@ dependencies = [
     "pydantic>=2.11.5",
     "pyyaml>=6.0.2",
     "pytest-cov>=6.1.1",
-    "ruff>=0.11.11",
     "lark>=1.2.2",
     "python-dotenv>=1.1.0",
     "networkx>=3.5",
@@ -67,6 +64,9 @@ asyncio_mode = "auto"
 addopts = "-m \"not integration\" --strict-markers -q -ra --cov=ai_diplomacy --cov-report=term-missing:skip-covered --cov-report=html"
 testpaths = ["tests"]
 
+[tool.ruff]
+line-length = 110
+extend-ignore = ["E501"]   # E501 = line too long (pycodestyle)
 
 [tool.coverage.run]
 branch = true

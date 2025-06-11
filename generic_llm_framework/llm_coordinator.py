@@ -247,43 +247,54 @@ async def llm_call_internal(
     """
     Internal wrapper for LLM calls incorporating model pooling, serial locking, and usage recording.
     """
-    # If running under pytest, return a mock response to avoid actual LLM calls.
-    if "PYTEST_CURRENT_TEST" in os.environ:
+    # If running under pytest, return a mock response to avoid actual LLM calls,
+    # unless a specific environment variable is set to allow it for certain tests.
+    if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get(
+        "ALLOW_LLM_CALLS_IN_TEST"
+    ):
         logger.warning(
             f"PYTEST_CURRENT_TEST detected. Skipping actual LLM call for {model_id} and returning a mock response."
         )
-        # Return a plausible JSON string for tests that expect it
+        # This is a simplified mock response.
+        # In a real scenario, you might want more control over this mock from the test itself.
         return '{"analysis": "mock analysis", "orders": []}'
 
-    model_obj = ModelPool.get(model_id)
+    try:
+        model_obj = ModelPool.get(model_id)
 
-    prompt_options: Dict[str, Any] = {}
-    if system_prompt:
-        prompt_options["system"] = system_prompt
-    prompt_options.update(kwargs)  # Ensure kwargs are included
+        prompt_options: Dict[str, Any] = {}
+        if system_prompt:
+            prompt_options["system"] = system_prompt
+        prompt_options.update(kwargs)  # Ensure kwargs are included
 
-    # Added verbose logging for prompt
-    if verbose_llm_debug:
-        logger.info(
-            f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}"
-        )
-        logger.info(f"[LLM Call - {agent_name} @ {phase_str}] User Prompt: {prompt!r}")
-
-    async with serial_if_local(model_id):  # Use the new async context manager
-        response_obj: LLMResponse = await model_obj.prompt(
-            prompt,
-            **prompt_options,  # kwargs are now in prompt_options
-        )
-        response_text = await response_obj.text()
-        # Added verbose logging for raw response
+        # Added verbose logging for prompt
         if verbose_llm_debug:
             logger.info(
-                f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}"
+                f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}"
             )
-        asyncio.create_task(
-            record_usage(game_id, agent_name, phase_str, response_obj)
-        )  # Record usage as a background task
-    return response_text
+            logger.info(f"[LLM Call - {agent_name} @ {phase_str}] User Prompt: {prompt!r}")
+
+        async with serial_if_local(model_id):  # Use the new async context manager
+            response_obj: LLMResponse = await model_obj.prompt(
+                prompt,
+                **prompt_options,  # kwargs are now in prompt_options
+            )
+            response_text = await response_obj.text()
+            # Added verbose logging for raw response
+            if verbose_llm_debug:
+                logger.info(
+                    f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}"
+                )
+            asyncio.create_task(
+                record_usage(game_id, agent_name, phase_str, response_obj)
+            )  # Record usage as a background task
+        return response_text
+    except Exception as e:
+        logger.error(
+            f"Error in llm_call_internal for model {model_id} ({agent_name}, {phase_str}): {e}",
+            exc_info=True,
+        )
+        raise
 
 
 # --- End of New Global Components ---
@@ -341,6 +352,7 @@ class LLMCoordinator:
         phase: str = generic_constants.DEFAULT_PHASE_NAME,
         system_prompt: Optional[str] = None,
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
+        verbose_llm_debug: bool = False,
     ) -> str:
         """
         Simple text completion call.
@@ -353,6 +365,7 @@ class LLMCoordinator:
             phase: Game phase for tracking
             system_prompt: Optional system prompt
             llm_caller_override: Optional override for the LLM call logic.
+            verbose_llm_debug: Optional flag for verbose LLM call debugging.
 
         Returns:
             The raw text response
@@ -374,6 +387,7 @@ class LLMCoordinator:
                 model_id=model_id,
                 prompt=prompt,
                 system_prompt=system_prompt,
+                verbose_llm_debug=verbose_llm_debug,
             )
 
     async def call_json(
@@ -542,6 +556,7 @@ class LLMCoordinator:
                 response_type=response_type,
                 # raw_input_prompt=prompt, # Not logged by the new function
                 raw_response=result.raw_response,
+                parsed_response=result.parsed_json,
                 success=success_status,
                 request_identifier=request_identifier,  # Pass request_identifier
                 # turn_number can be added if available here, e.g. from game_id or phase_str parsing
@@ -560,6 +575,7 @@ class LLMCoordinator:
         phase_str: str,  # New explicit parameter
         request_identifier: str = generic_constants.LLM_CALL_REQUEST_ID_DEFAULT,  # For coordinator's logging
         llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,
+        verbose_llm_debug: bool = False,
     ) -> str:
         """
         Makes a request to the specified LLM using the new internal wrapper.
@@ -574,6 +590,7 @@ class LLMCoordinator:
             phase_str: Game phase for DB logging and context.
             request_identifier: An identifier for the coordinator's logging purposes.
             llm_caller_override: Optional override for the LLM call logic.
+            verbose_llm_debug: Optional flag for verbose LLM call debugging.
 
         Returns:
             The text response from the LLM.
@@ -609,6 +626,7 @@ class LLMCoordinator:
                     model_id=model_id,
                     prompt=prompt_text,
                     system_prompt=system_prompt_text,
+                    verbose_llm_debug=verbose_llm_debug,
                 )
 
             logger.info(
@@ -621,26 +639,25 @@ class LLMCoordinator:
 
         except Exception as e:
             logger.error(
-                f"[{request_identifier}] Error during LLM request via llm_call_internal to '{model_id}' (Game: {game_id}, Agent: {agent_name}): {type(e).__name__}: {e}",
+                f"[{request_identifier}] LLM call for {model_id} failed: {e}",
                 exc_info=True,
             )
             raise
 
-    async def get_model(
+    def get_model(
         self, model_id: str
     ) -> LLMModel:  # Renamed from get_model_for_power
-        """Retrieves an LLM model instance using the ModelPool."""
-        # power_name argument removed as ModelPool is global
-        logger.debug(f"Requesting model: {model_id} via ModelPool")
-        try:
-            model_obj = ModelPool.get(model_id)
-            logger.debug(f"Successfully retrieved model: {model_id} from ModelPool")
-            return model_obj
-        except Exception as e:
-            logger.error(
-                f"Failed to get model {model_id} via ModelPool: {e}", exc_info=True
-            )
-            raise
+        """
+        Retrieves a model instance from the pool.
+
+        Args:
+            model_id: The ID of the model to retrieve.
+
+        Returns:
+            An instance of the LLM model.
+        """
+        logger.debug(f"Getting model {model_id} via coordinator.")
+        return ModelPool.get(model_id)
 
     # execute_llm_call method removed as it was a simple wrapper for request
 

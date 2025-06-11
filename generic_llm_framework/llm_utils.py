@@ -335,6 +335,7 @@ def log_llm_response(
     # raw_input_prompt: str, # Decided not to log the full prompt to save space
     raw_response: str,
     success: str,  # Assuming success is a string like "TRUE" or "FALSE: reason"
+    parsed_response: Optional[Dict[str, Any]] = None,
     request_identifier: Optional[str] = None,  # Optional request identifier
     turn_number: Optional[int] = None,  # Optional turn number
 ) -> None:
@@ -349,6 +350,7 @@ def log_llm_response(
         response_type: Type of response (e.g., "order_generation", "negotiation_analysis").
         raw_response: The raw text string received from the LLM.
         success: String indicating success status (e.g., "TRUE", "FALSE: error message").
+        parsed_response: Optional dictionary of the parsed JSON response.
         request_identifier: Optional unique ID for the request.
         turn_number: Optional turn number if applicable.
     """
@@ -367,6 +369,7 @@ def log_llm_response(
             "phase",
             "response_type",
             "success",
+            "parsed_response",
             "raw_response_excerpt",  # Log an excerpt to keep file size manageable
         ]
 
@@ -382,6 +385,12 @@ def log_llm_response(
             if len(raw_response) > MAX_CONTENT_LOG_LENGTH
             else raw_response
         )
+        parsed_response_str = (
+            json.dumps(parsed_response)
+            if parsed_response is not None
+            else ""
+        )
+
 
         # Get current timestamp
         import datetime  # Moved import here
@@ -397,6 +406,7 @@ def log_llm_response(
             phase,
             response_type,
             success,
+            parsed_response_str,
             response_excerpt,
         ]
 

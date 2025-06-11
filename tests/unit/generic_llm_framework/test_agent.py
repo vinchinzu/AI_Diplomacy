@@ -1,6 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock
+import logging
 
 from generic_llm_framework.agent import GenericLLMAgent
 from generic_llm_framework.core import (
@@ -76,13 +77,15 @@ class TestGenericLLMAgent:
 
         actual_response = await agent.decide_action(mock_state, mock_possible_actions)
 
+        expected_prompt_context = {
+            "possible_actions": mock_possible_actions,
+            "internal_state": agent._internal_state,
+        }
+        expected_prompt_context.update(mock_state)
+
         mock_prompt_strategy.build_prompt.assert_called_once_with(
             action_type="decide_action",
-            context={
-                "state": mock_state,
-                "possible_actions": mock_possible_actions,
-                "internal_state": agent._internal_state,
-            },
+            context=expected_prompt_context,
         )
         mock_llm_coordinator.call_json.assert_called_once_with(
             prompt=expected_prompt,
@@ -104,7 +107,8 @@ class TestGenericLLMAgent:
         mock_state = {"current_turn": 1}
         mock_possible_actions = ["wait"]
 
-        response = await agent.decide_action(mock_state, mock_possible_actions)
+        with caplog.at_level(logging.ERROR):
+            response = await agent.decide_action(mock_state, mock_possible_actions)
 
         assert response == {"error": "Missing model_id in agent configuration"}
         assert f"Agent {agent.agent_id}: model_id not found in config." in caplog.text
@@ -152,14 +156,15 @@ class TestGenericLLMAgent:
         actual_response = await agent.generate_communication(
             mock_state, mock_recipients
         )
+        expected_prompt_context = {
+            "recipients": mock_recipients,
+            "internal_state": agent._internal_state,
+        }
+        expected_prompt_context.update(mock_state)
 
         mock_prompt_strategy.build_prompt.assert_called_once_with(
             action_type="generate_communication",
-            context={
-                "state": mock_state,
-                "recipients": mock_recipients,
-                "internal_state": agent._internal_state,
-            },
+            context=expected_prompt_context,
         )
         mock_llm_coordinator.call_json.assert_called_once_with(
             prompt=expected_prompt,
@@ -190,17 +195,21 @@ class TestGenericLLMAgent:
         assert response["error"] == "Network issue"
         assert response["details"] == "Failed to generate communication via LLM."
 
-    def test_update_internal_state(self, agent, caplog):
+    @pytest.mark.asyncio
+    async def test_update_internal_state(self, agent, caplog):
         """Test update_internal_state logs and updates the internal state dictionary."""
         mock_env_state = {"turn": 10, "score": 100}
         mock_events = [{"event_type": "new_message", "sender": "PlayerA"}]
 
         with caplog.at_level(logging.INFO):
-            asyncio.run(
-                agent.update_internal_state(mock_env_state, mock_events)
+            await agent.update_internal_state(
+                mock_env_state, mock_events
             )  # It's async
 
-        assert f"Agent {agent.agent_id}: Updating internal state." in caplog.text
+        assert (
+            f"Agent {agent.agent_id}: Updating internal state. Current env state: {mock_env_state}, Events: {mock_events}"
+            in caplog.text
+        )
         assert agent._internal_state["last_env_state"] == mock_env_state
         assert agent._internal_state["recent_events"] == mock_events
         assert (

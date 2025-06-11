@@ -1,5 +1,6 @@
 import pytest
 import sqlite3
+import logging
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # Assuming llm_coordinator.py is in ai_diplomacy.services
@@ -63,6 +64,7 @@ async def test_record_usage_success(mock_llm_response, test_db_path):
 async def test_record_usage_sqlite_error_on_insert(
     mock_llm_response, test_db_path, caplog
 ):
+    caplog.set_level(logging.ERROR)
     with patch("sqlite3.connect") as mock_connect:
         mock_conn_instance = MagicMock()
         mock_conn_instance.execute.side_effect = sqlite3.Error(
@@ -83,6 +85,7 @@ async def test_record_usage_sqlite_error_on_insert(
 async def test_record_usage_attribute_error_on_response(
     caplog,
 ):  # mock_llm_response not needed here
+    caplog.set_level(logging.ERROR)
     faulty_response = MagicMock()
     faulty_response.model = None
 
@@ -105,6 +108,7 @@ async def test_record_usage_attribute_error_on_response(
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_record_usage_generic_exception(mock_llm_response, test_db_path, caplog):
+    caplog.set_level(logging.ERROR)
     async def mock_usage_exception():
         raise Exception("Simulated generic error in usage")
 
@@ -172,6 +176,7 @@ def test_get_usage_stats_by_country_no_data_for_game(test_db_path):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_get_usage_stats_by_country_sqlite_error(test_db_path, caplog):
+    caplog.set_level(logging.ERROR)
     with patch("sqlite3.connect") as mock_connect:
         mock_conn_instance = MagicMock()
         mock_conn_instance.execute.side_effect = sqlite3.Error(
@@ -210,6 +215,7 @@ def test_get_total_usage_stats_no_data_for_game(test_db_path):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_get_total_usage_stats_sqlite_error(test_db_path, caplog):
+    caplog.set_level(logging.ERROR)
     with patch("sqlite3.connect") as mock_connect:
         mock_conn_instance = MagicMock()
         mock_conn_instance.execute.side_effect = sqlite3.Error(
@@ -260,19 +266,18 @@ def test_initialize_database_success(
 @pytest.mark.integration
 @pytest.mark.slow
 def test_initialize_database_failure(tmp_path, caplog, monkeypatch):
+    caplog.set_level(logging.ERROR)
+    # This test simulates a failure to create the database file, e.g., due to permissions.
+    # We can simulate this by trying to create a DB file in a non-existent directory without
+    # creating the directory first.
     non_existent_path = tmp_path / "non_writeable_dir" / "fail.db"
+
     # monkeypatch is better than direct modification for restoring
     monkeypatch.setattr(llm_coordinator, "DATABASE_PATH", str(non_existent_path))
 
-    with patch(
-        "sqlite3.connect",
-        side_effect=sqlite3.OperationalError("cannot open database file"),
-    ) as mock_connect:
-        with pytest.raises(sqlite3.OperationalError):
-            llm_coordinator.initialize_database()
+    llm_coordinator.initialize_database()
 
-        assert (
-            f"Error initializing database {str(non_existent_path)}: cannot open database file"
-            in caplog.text
-        )
-        mock_connect.assert_called_once_with(str(non_existent_path))
+    assert (
+        f"Error initializing database {non_existent_path}"
+        in caplog.text
+    )

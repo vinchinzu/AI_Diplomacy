@@ -11,7 +11,7 @@ DEFAULT_PHASE_NAME = "default_phase"
 LLM_CALL_REQUEST_ID_DEFAULT = "default_request_id"
 
 # Prefixes for LLM serial access (if applicable, e.g. for local models)
-LOCAL_LLM_SERIAL_ACCESS_PREFIXES = ("local/", "ollama/")  # Example prefixes
+LOCAL_LLM_SERIAL_ACCESS_PREFIXES = ("local/", "ollama/", "llamacpp/")  # Example prefixes
 
 # Error messages or codes for LLM call results
 LLM_CALL_RESULT_ERROR_NOT_INITIALIZED = "LLM_NOT_INITIALIZED"

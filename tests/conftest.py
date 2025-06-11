@@ -191,7 +191,7 @@ def minimal_game_config_logging_setup_info_verbose_false(tmp_path):
 
 
 @pytest.fixture
-def fake_game_factory(fakes_module_param):
+def fake_game_factory():
     def _create_fake_game(
         phase="S1901M",
         powers_names=None,
@@ -201,7 +201,10 @@ def fake_game_factory(fakes_module_param):
         if powers_names is None:
             powers_names = ["FRANCE", "GERMANY"]
         return fakes_module.FakeGame(
-            phase, powers_names, build_conditions, retreat_conditions
+            phase,
+            powers_names=powers_names,
+            build_conditions=build_conditions,
+            retreat_conditions=retreat_conditions
         )
 
     return _create_fake_game
@@ -209,14 +212,14 @@ def fake_game_factory(fakes_module_param):
 
 @pytest.fixture
 def mock_game_config_for_orchestrator():
-    return MagicMock(spec=GameConfig, spec_set=True, autospec=True)
+    return MagicMock(spec=GameConfig, autospec=True)
 
 
 @pytest.fixture
 def mock_agent_manager_for_orchestrator():
     from ai_diplomacy.agent_manager import AgentManager
 
-    manager = MagicMock(spec=AgentManager, spec_set=True, autospec=True)
+    manager = MagicMock(spec=AgentManager, autospec=True)
     manager.get_agent = MagicMock()
     return manager
 
