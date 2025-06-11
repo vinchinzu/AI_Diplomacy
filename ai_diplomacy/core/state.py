@@ -33,6 +33,11 @@ class PhaseState:
         default_factory=dict
     )  # power -> list of center names
 
+    # Possible orders
+    possible_orders: Dict[str, List[str]] = field(
+        default_factory=dict
+    )  # power -> list of order strings
+
     # Game progress
     is_game_over: bool = False
     winner: Optional[str] = None
@@ -69,6 +74,12 @@ class PhaseState:
             # Extract units and centers
             units_dict = {}
             centers_dict = {}
+            possible_orders_dict = {}
+
+            # Check if game object has get_all_possible_orders method
+            if hasattr(game, "get_all_possible_orders"):
+                # The structure is Dict[power_name, List[order_str]]
+                possible_orders_dict = game.get_all_possible_orders()
 
             for power_name, power_obj in game.powers.items():
                 units_dict[power_name] = [str(unit) for unit in power_obj.units]
@@ -98,6 +109,7 @@ class PhaseState:
                 eliminated_powers=eliminated,
                 units=units_dict,
                 supply_centers=centers_dict,
+                possible_orders=possible_orders_dict,
                 is_game_over=game_over,
                 winner=winner_power,
                 recent_messages=recent_messages or [],
@@ -114,6 +126,7 @@ class PhaseState:
                 eliminated_powers=frozenset(),
                 units={},
                 supply_centers={},
+                possible_orders={},
                 is_game_over=False,
                 winner=None,
                 recent_messages=recent_messages or [],
@@ -126,6 +139,10 @@ class PhaseState:
     def get_power_centers(self, power: str) -> List[str]:
         """Get supply centers for a specific power."""
         return self.supply_centers.get(power, [])
+
+    def get_all_possible_orders(self) -> Dict[str, List[str]]:
+        """Gets all possible orders for all powers."""
+        return self.possible_orders
 
     def is_power_eliminated(self, power: str) -> bool:
         """Check if a power is eliminated."""

@@ -9,7 +9,7 @@ _project_root_dir = os.path.dirname(os.path.abspath(__file__))
 if _project_root_dir not in sys.path:
     sys.path.insert(0, _project_root_dir)
 
-import time  
+import time
 import traceback  # For exception logging
 from typing import (
     Optional,
@@ -17,7 +17,7 @@ from typing import (
     Any,
     List,
     Dict,
-)  
+)
 
 import dotenv
 from diplomacy import Game
@@ -33,27 +33,29 @@ from ai_diplomacy.game_history import GameHistory
 
 from ai_diplomacy.general_utils import (
     get_valid_orders,
-)  
+)
 
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
+
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a Diplomacy game simulation with configurable parameters. Primarily uses a TOML config file."
     )
     parser.add_argument(
-        "--game_config_file", "--config",
+        "--game_config_file",
+        "--config",
         type=str,
         default=None,
-        help="Path to a TOML file containing game configuration. CLI arguments will override TOML settings."
+        help="Path to a TOML file containing game configuration. CLI arguments will override TOML settings.",
     )
 
     parser.add_argument(
         "--game_id_prefix",
         type=str,
-        default=None, # GameConfig will use its default if not in TOML or here
+        default=None,  # GameConfig will use its default if not in TOML or here
         help="Prefix for the game ID if not explicitly set via --game_id or in TOML. Default: 'diplomacy_game'.",
     )
     parser.add_argument(
@@ -65,14 +67,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--log_level",
         type=str,
-        default=None, # GameConfig will use its default if not in TOML or here
+        default=None,  # GameConfig will use its default if not in TOML or here
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging level. Overrides TOML. Default: INFO.",
     )
     parser.add_argument(
         "--log_to_file",
-        type=lambda x: (str(x).lower() == "true"), # Keep this for explicit override
-        default=None, # GameConfig will decide based on TOML/dev_mode
+        type=lambda x: (str(x).lower() == "true"),  # Keep this for explicit override
+        default=None,  # GameConfig will decide based on TOML/dev_mode
         help="Enable/disable file logging. Overrides TOML. Default: True (unless dev_mode).",
     )
     parser.add_argument(
@@ -87,10 +89,10 @@ def parse_arguments() -> argparse.Namespace:
     #     default=False, # This is a boolean flag, presence means true. GameConfig needs to handle None from CLI.
     #     help="Enable the planning phase. Overrides TOML. Default: False.",
     # ) # Can be in TOML. For boolean flags, presence means True. Absence means False (if no default in TOML)
-      # GameConfig needs to handle its boolean interpretation carefully if CLI arg is None.
-      # A common pattern for boolean flags in argparse if default is False: action='store_true'.
-      # If default is True: action='store_false'.
-      # If we want three states (CLI True, CLI False, NotSet/UseTOML), type=bool or type=str and convert.
+    # GameConfig needs to handle its boolean interpretation carefully if CLI arg is None.
+    # A common pattern for boolean flags in argparse if default is False: action='store_true'.
+    # If default is True: action='store_false'.
+    # If we want three states (CLI True, CLI False, NotSet/UseTOML), type=bool or type=str and convert.
 
     # parser.add_argument(
     #     "--num_negotiation_rounds",
@@ -130,9 +132,30 @@ def parse_arguments() -> argparse.Namespace:
     #     help="Maximum game year. Overrides TOML.",
     # )
     # Keep a few for direct overrides if needed, like max_years for a quick test.
-    parser.add_argument("--max_years", type=int, default=None, help="Override max_years from TOML for a quick test.")
-    parser.add_argument("--perform_planning_phase", type=lambda x: (str(x).lower() == "true"), default=None, help="Override perform_planning_phase from TOML.")
-    parser.add_argument("--num_negotiation_rounds", type=int, default=None, help="Override num_negotiation_rounds from TOML.")
+    parser.add_argument(
+        "--max_years",
+        type=int,
+        default=None,
+        help="Override max_years from TOML for a quick test.",
+    )
+    parser.add_argument(
+        "--max_phases",
+        type=int,
+        default=None,
+        help="Override max_phases from TOML for a quick test.",
+    )
+    parser.add_argument(
+        "--perform_planning_phase",
+        type=lambda x: (str(x).lower() == "true"),
+        default=None,
+        help="Override perform_planning_phase from TOML.",
+    )
+    parser.add_argument(
+        "--num_negotiation_rounds",
+        type=int,
+        default=None,
+        help="Override num_negotiation_rounds from TOML.",
+    )
 
     parser.add_argument(
         "--scenario",
@@ -146,7 +169,15 @@ def parse_arguments() -> argparse.Namespace:
 
 def get_game_from_factory(factory_path: str, player_names: List[str]) -> Game:
     """Dynamically imports and calls a game factory function."""
-    module_name, func_name = factory_path.split(":")
+    if ":" in factory_path:
+        module_name, func_name = factory_path.split(":")
+    elif "." in factory_path:
+        module_name, func_name = factory_path.rsplit(".", 1)
+    else:
+        raise ValueError(
+            f"factory_path '{factory_path}' must contain ':' or '.' to separate module and function."
+        )
+
     try:
         module = importlib.import_module(module_name)
         factory_func: Callable[..., Game] = getattr(module, func_name)
@@ -171,7 +202,9 @@ def get_game_from_factory(factory_path: str, player_names: List[str]) -> Game:
                     "Please check agent definitions in the TOML configuration."
                 )
                 # Potentially raise an error or sys.exit here if this is critical
-                raise ValueError(f"Incorrect number of players for wwi_two_player factory: expected 3, got {len(player_names)}")
+                raise ValueError(
+                    f"Incorrect number of players for wwi_two_player factory: expected 3, got {len(player_names)}"
+                )
         else:
             # Fallback for other factories
             logger.warning(
@@ -182,7 +215,9 @@ def get_game_from_factory(factory_path: str, player_names: List[str]) -> Game:
             try:
                 return factory_func(*player_names)
             except TypeError as e:
-                logger.error(f"Error calling generic factory {factory_path} with player_names {player_names}: {e}")
+                logger.error(
+                    f"Error calling generic factory {factory_path} with player_names {player_names}: {e}"
+                )
                 logger.error(
                     "This may indicate that the factory requires specific named arguments "
                     "or a different number of arguments than provided."
@@ -203,53 +238,71 @@ async def main():
         # should prioritize CLI args if they are not None.
         # We are explicitly setting it on `args` before GameConfig reads from it.
         args.game_factory_path = "scenarios:wwi_two_player"
-        logger.info(f"WWI two player scenario specified. Setting game_factory_path to '{args.game_factory_path}'.")
+        logger.info(
+            f"WWI two player scenario specified. Setting game_factory_path to '{args.game_factory_path}'."
+        )
 
-    if getattr(args, 'llm_models', None) and isinstance(args.llm_models, str):
+    if getattr(args, "llm_models", None) and isinstance(args.llm_models, str):
         args.llm_models_list = [m.strip() for m in args.llm_models.split(",")]
     else:
-        args.llm_models_list = getattr(args, 'llm_models_list', []) # Keep if preset set it
+        args.llm_models_list = getattr(
+            args, "llm_models_list", []
+        )  # Keep if preset set it
 
-    if getattr(args, 'fixed_models', None) and isinstance(args.fixed_models, str):
+    if getattr(args, "fixed_models", None) and isinstance(args.fixed_models, str):
         args.fixed_models_list = [m.strip() for m in args.fixed_models.split(",")]
-    elif not hasattr(args, 'fixed_models_list'): # if not set by preset or above
+    elif not hasattr(args, "fixed_models_list"):  # if not set by preset or above
         args.fixed_models_list = []
 
-    if getattr(args, 'players', None) and isinstance(args.players, str):
+    if getattr(args, "players", None) and isinstance(args.players, str):
         args.players_list = [p.strip() for p in args.players.split(",")]
     else:
-        args.players_list = getattr(args, 'players_list', []) # Keep if preset set it
+        args.players_list = getattr(args, "players_list", [])  # Keep if preset set it
 
-    if getattr(args, 'agent_types', None) and isinstance(args.agent_types, str):
+    if getattr(args, "agent_types", None) and isinstance(args.agent_types, str):
         args.agent_types_list = [t.strip().lower() for t in args.agent_types.split(",")]
     else:
-        args.agent_types_list = getattr(args, 'agent_types_list', []) # Keep if preset set it
+        args.agent_types_list = getattr(
+            args, "agent_types_list", []
+        )  # Keep if preset set it
 
-    if getattr(args, 'bloc_definitions', None) and isinstance(args.bloc_definitions, str):
+    if getattr(args, "bloc_definitions", None) and isinstance(
+        args.bloc_definitions, str
+    ):
         args.bloc_definitions_list = [
             d.strip() for d in args.bloc_definitions.split(",")
         ]
     else:
-        args.bloc_definitions_list = getattr(args, 'bloc_definitions_list', []) # Keep if preset set it
+        args.bloc_definitions_list = getattr(
+            args, "bloc_definitions_list", []
+        )  # Keep if preset set it
 
-    if getattr(args, 'exclude_powers', None) and isinstance(args.exclude_powers, str):
+    if getattr(args, "exclude_powers", None) and isinstance(args.exclude_powers, str):
         args.exclude_powers_list = [
             p.strip().upper() for p in args.exclude_powers.split(",")
         ]
     else:
-        args.exclude_powers_list = getattr(args, 'exclude_powers_list', []) # Keep if preset set it
+        args.exclude_powers_list = getattr(
+            args, "exclude_powers_list", []
+        )  # Keep if preset set it
 
     # Pass the modified args to GameConfig
-    config = GameConfig(args)  # GameConfig will pick up *_list attributes from args or load from its TOML
+    config = GameConfig(
+        args
+    )  # GameConfig will pick up *_list attributes from args or load from its TOML
     setup_logging(config)
 
     logger.info(f"Starting Diplomacy game: {config.game_id}")
     # Log the lists from the config object where they are stored
     # These are now primarily from TOML or direct CLI overrides for these specific args if they were kept in parse_arguments
-    if config.players_list: # Only log if populated (e.g. from TOML or specific CLI for these)
+    if (
+        config.players_list
+    ):  # Only log if populated (e.g. from TOML or specific CLI for these)
         logger.info(f"Players List (from config): {config.players_list}")
         logger.info(f"Agent Types List (from config): {config.agent_types_list}")
-        logger.info(f"Bloc Definitions List (from config): {config.bloc_definitions_list}")
+        logger.info(
+            f"Bloc Definitions List (from config): {config.bloc_definitions_list}"
+        )
         logger.info(f"LLM Models List (from config): {config.llm_models_list}")
     # logger.info(f"Fixed Models List (from config): {config.fixed_models}") # config.fixed_models is the one to use
 
@@ -268,11 +321,19 @@ async def main():
         actual_player_names_for_game: List[str] = []
 
         if config.players_list and config.agent_types_list:
-            if len(config.players_list) != len(config.agent_types_list) or \
-               (config.llm_models_list and len(config.players_list) != len(config.llm_models_list) and any(at in ["llm", "bloc_llm"] for at in config.agent_types_list)):
+            if len(config.players_list) != len(config.agent_types_list) or (
+                config.llm_models_list
+                and len(config.players_list) != len(config.llm_models_list)
+                and any(at in ["llm", "bloc_llm"] for at in config.agent_types_list)
+            ):
                 # Basic check, more nuanced model count check if llm_models_list is shorter but sufficient for actual LLM types
-                llm_agent_count = sum(1 for at in config.agent_types_list if at in ["llm", "bloc_llm"])
-                if config.llm_models_list and len(config.llm_models_list) < llm_agent_count:
+                llm_agent_count = sum(
+                    1 for at in config.agent_types_list if at in ["llm", "bloc_llm"]
+                )
+                if (
+                    config.llm_models_list
+                    and len(config.llm_models_list) < llm_agent_count
+                ):
                     logger.error(
                         "Mismatch in number of elements for --players, --agent-types, or insufficient --llm-models. "
                         f"Players: {len(config.players_list)}, Types: {len(config.agent_types_list)}, Models: {len(config.llm_models_list)} (needed for {llm_agent_count} LLM agents)."
@@ -280,11 +341,15 @@ async def main():
                     sys.exit(1)
 
             actual_player_names_for_game = config.players_list
-            llm_models_to_use = config.llm_models_list or config.fixed_models or [] # fixed_models is a fallback from config
+            llm_models_to_use = (
+                config.llm_models_list or config.fixed_models or []
+            )  # fixed_models is a fallback from config
             llm_model_idx = 0
 
             parsed_bloc_defs: Dict[str, List[str]] = {}
-            if config.bloc_definitions_list: # Already parsed by GameConfig if from TOML, or set from CLI
+            if (
+                config.bloc_definitions_list
+            ):  # Already parsed by GameConfig if from TOML, or set from CLI
                 for bloc_def_str in config.bloc_definitions_list:
                     parts = bloc_def_str.split(":", 1)
                     if len(parts) == 2:
@@ -326,7 +391,9 @@ async def main():
                         # This fallback might be problematic if player_identifier is not a valid country name.
                         # For "null" agent for Italy, player_identifier is "ITALY_NULL_AGENT", country is "ITALY".
                         # The TOML should always provide `country` for these types.
-                        current_agent_setup["country"] = player_identifier # Potentially problematic fallback
+                        current_agent_setup["country"] = (
+                            player_identifier  # Potentially problematic fallback
+                        )
                 elif agent_type == "bloc_llm":
                     current_agent_setup["bloc_name"] = player_identifier
                     if player_identifier in parsed_bloc_defs:
@@ -363,12 +430,17 @@ async def main():
             sys.exit(1)
 
         # Create Game Instance
-        game_factory_to_use = config.game_factory_path # This has already incorporated CLI/TOML precedence via GameConfig
+        game_factory_to_use = (
+            config.game_factory_path
+        )  # This has already incorporated CLI/TOML precedence via GameConfig
 
         if game_factory_to_use:
             # actual_player_names_for_game is config.players_list, containing agent IDs from TOML/CLI
             # These IDs might be power names, bloc names, etc., depending on the factory's expectations.
-            if not actual_player_names_for_game and "wwi_two_player" not in game_factory_to_use:
+            if (
+                not actual_player_names_for_game
+                and "wwi_two_player" not in game_factory_to_use
+            ):
                 # wwi_two_player is a special case that might have its own defaults if no players are passed,
                 # but generally, if a factory is specified, agent IDs (players_list) should also be configured.
                 logger.error(
@@ -376,9 +448,9 @@ async def main():
                     f"(expected in TOML 'agents' list or via CLI)."
                 )
                 sys.exit(1)
-            
+
             game = get_game_from_factory(
-                game_factory_to_use, actual_player_names_for_game 
+                game_factory_to_use, actual_player_names_for_game
             )
             logger.info(
                 f"Game created using factory: {game_factory_to_use}. Agent Identifiers involved: {actual_player_names_for_game}"
@@ -387,14 +459,20 @@ async def main():
             # No game factory specified in TOML or CLI. Create a standard game.
             # Agent configurations (derived from config.players_list from TOML/CLI) MUST be defined for this standard game.
             game = Game()
-            logger.info("Standard game created (no game factory specified in configuration)."
-                        " All game powers must be mapped by the agent configurations provided.")
+            logger.info(
+                "Standard game created (no game factory specified in configuration)."
+                " All game powers must be mapped by the agent configurations provided."
+            )
             # The subsequent call to config.build_and_validate_agent_maps(game, ...) will ensure
             # that agent_configurations correctly map all powers in this standard game instance.
 
-        config.game_instance = game # Assign game instance to config for validation step
+        config.game_instance = (
+            game  # Assign game instance to config for validation step
+        )
 
-        logger.info(f"Final agent configurations to be initialized: {agent_configurations}")
+        logger.info(
+            f"Final agent configurations to be initialized: {agent_configurations}"
+        )
         agent_manager.initialize_agents(agent_configurations)
 
         if not agent_manager.agents:
@@ -406,7 +484,7 @@ async def main():
             config.build_and_validate_agent_maps(
                 game_instance=game,
                 agent_configurations=agent_configurations,
-                initialized_agents=agent_manager.agents
+                initialized_agents=agent_manager.agents,
             )
         except ValueError as e:
             logger.error(f"Game setup validation failed: {e}")
@@ -423,7 +501,9 @@ async def main():
                     # Ensure the power is part of the current game (already validated by build_and_validate_agent_maps)
                     powers_and_models_map[power_name] = model_id
         config.powers_and_models = powers_and_models_map
-        logger.info(f"Reconstructed config.powers_and_models for orchestrator: {config.powers_and_models}")
+        logger.info(
+            f"Reconstructed config.powers_and_models for orchestrator: {config.powers_and_models}"
+        )
 
         orchestrator = PhaseOrchestrator(
             game_config=config,

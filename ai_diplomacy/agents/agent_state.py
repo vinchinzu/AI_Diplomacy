@@ -41,6 +41,28 @@ class DiplomacyAgentState:
         self.private_journal: List[str] = []
         self.private_diary: List[str] = []
 
+    def initialize_bloc_relationships(
+        self, allied_powers: List[str], all_powers_in_game: List[str]
+    ) -> None:
+        """
+        Initializes relationships based on a bloc structure.
+        Sets relationships to 'Ally' for bloc members and 'Enemy' for all others.
+
+        Args:
+            allied_powers (List[str]): A list of powers in the same bloc
+                                       (including the agent's own country).
+            all_powers_in_game (List[str]): A list of all powers in the game.
+        """
+        allied_powers_set = set(allied_powers)
+        for power in all_powers_in_game:
+            if power == self.country:
+                continue
+
+            if power in allied_powers_set:
+                self.relationships[power] = "Ally"
+            else:
+                self.relationships[power] = "Enemy"
+
     def add_journal_entry(self, entry: str) -> None:
         """
         Adds an entry to the private journal.

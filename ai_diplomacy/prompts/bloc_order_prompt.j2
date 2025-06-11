@@ -1,86 +1,38 @@
-{# Prompt for a BlocLLMAgent to decide orders for all its controlled powers. #}
-You are the leader of the {{ bloc_name }}.
-You control the following powers: {{ controlled_powers_list|join(', ') }}.
-The current game year is {{ phase.year }}, season {{ phase.season }}. The phase is {{ phase.phase_name }}.
+You are the strategic commander for the {{ bloc_name }}, which includes: {{ controlled_powers_list | join(', ') }}.
+It is {{ phase.season }} {{ phase.year }}, {{ phase.phase_name }} phase.
 
-Your objective is to achieve victory for your bloc by coordinating the actions of all your controlled powers.
----
-YOUR MEMORY AND DIRECTIVES
-Your Private Diary (most recent entries):
-{{ diary }}
+Your current state is:
+- Goals: {{ goals }}
+- Relationships: {{ relationships }}
+- Diary: {{ diary }}
 
-Your Current Goals:
-{% if goals %}
-  {% for goal in goals %}
-- {{ goal }}
-  {% endfor %}
-{% else %}
-- No specific goals set. Your primary objective is to improve your bloc's position.
-{% endif %}
+Game state:
+{{ phase }}
 
-Your Assessed Relationships:
-{% if relationships %}
-  {% for power, status in relationships.items() %}
-- {{ power }}: {{ status }}
-  {% endfor %}
-{% else %}
-- No specific relationship assessments available.
-{% endif %}
----
-
-Review the current state of the game for each of your powers:
-
-{% for power_name in controlled_powers_list %}
-State for {{ power_name }}:
-  Units:
-    {% set p_units = phase.units.get(power_name, []) %}
-    {% if p_units %}
-      {% for unit in p_units %}
-    - {{ unit }}
-      {% endfor %}
-    {% else %}
-    None
-    {% endif %}
-  Centers:
-    {% set p_centers = phase.supply_centers.get(power_name, []) %}
-    {% if p_centers %}
-      {% for center in p_centers %}
-    - {{ center }}
-      {% endfor %}
-    {% else %}
-    None
-    {% endif %}
+Here are the only possible orders you can issue for your powers this turn:
+{% for power, orders in possible_orders.items() %}
+- {{ power }}: {{ orders | join(', ') }}
 {% endfor %}
 
-Full list of supply centers and owners:
-{% for sc_owner_power, sc_list in phase.supply_centers.items() %}
-  {% for sc_name in sc_list %}
-- {{ sc_name }}: {{ sc_owner_power }}
-  {% endfor %}
-{% else %}
-No supply center data available.
-{% endfor %}
+Based on this, provide orders for all powers in your bloc. Only choose orders from the list above. Respond in JSON format, with each key being a power name and the value being a list of orders.
+Use "A" for Army and "F" for Fleet. Move orders use a hyphen (e.g., "A PAR - BUR"). Hold orders use "H" (e.g., "A MAR H").
 
-{% if phase.recent_messages %}
-Recent Messages:
-  {% for msg in phase.recent_messages %}
-    {{ msg }} {# Assuming msg is a string or has a string representation #}
-  {% endfor %}
-{% else %}
-No recent messages available in this phase object.
-{% endif %}
-
-Based on this information, provide a coordinated set of orders for ALL units belonging to ALL powers you control ({{ controlled_powers_list|join(', ') }}).
-
-IMPORTANT: Return your response ONLY as a single JSON object.
-The JSON object should map each power you control to a list of order strings for that power's units.
-Orders should be in standard diplomacy notation (e.g., "A PAR HLD", "F MAR S A PAR - MAR").
-
-Example JSON format:
+For example:
 {
-  "{{ controlled_powers_list[0] }}": ["ORDER_1_FOR_POWER_1", "ORDER_2_FOR_POWER_1"],
-  {% if controlled_powers_list|length > 1 %}"{{ controlled_powers_list[1] }}": ["ORDER_1_FOR_POWER_2"]{% else %}"OTHER_POWER_EXAMPLE": ["ORDER_EXAMPLE"]{% endif %}
-}
-
-Ensure all units for all your controlled powers are issued an order.
-Do not include any explanations or text outside the JSON object.
+  "ENGLAND": [
+    "F LON - NTH",
+    "F EDI - NWG",
+    "A LVP - YOR"
+  ],
+  "FRANCE": [
+    "A PAR - BUR",
+    "A MAR - SPA",
+    "F BRE - MAO"
+  ],
+  "RUSSIA": [
+    "A WAR - GAL",
+    "A MOS - UKR",
+    "F SEV - RUM",
+    "F STP/SC - BOT"
+  ]
+} 

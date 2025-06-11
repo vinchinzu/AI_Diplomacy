@@ -1,0 +1,30 @@
+# Game Configuration for WWI Two-Player Integration Test
+
+[scenario]
+name = "wwi_two_player_test"
+game_factory = "scenarios.wwi_two_player" # Points to the function
+
+[game_settings]
+game_id_prefix = "wwi_integration_test"
+perform_planning_phase = false
+num_negotiation_rounds = 0
+negotiation_style = "simultaneous"
+max_phases = 1
+max_diary_tokens = 6000
+perform_diary_generation = false
+perform_goal_analysis = false
+
+[logging]
+log_level = "DEBUG"
+log_to_file = true
+
+[dev_settings]
+dev_mode = false
+verbose_llm_debug = true
+
+# Agent definitions for the WWI scenario
+agents = [
+    { id = "ENTENTE_POWERS", type = "bloc_llm", model = "gemma3:12b", powers = ["ENGLAND", "FRANCE", "RUSSIA"] },
+    { id = "CENTRAL_POWERS", type = "bloc_llm", model = "gemma3:12b", powers = ["AUSTRIA", "GERMANY", "TURKEY"] },
+    { id = "ITALY_NULL_AGENT", type = "null", country = "ITALY" }
+] 

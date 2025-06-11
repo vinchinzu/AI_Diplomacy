@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
+from pathlib import Path
 from ai_diplomacy.services.config import AgentConfig
-from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated import
+from generic_llm_framework.llm_coordinator import LLMCoordinator  # Updated import
 from ai_diplomacy.services.context_provider import (
     ContextProviderFactory,
     ContextProvider,
@@ -19,13 +20,38 @@ import tests.fakes as fakes_module
 
 
 @pytest.fixture
-def agent_config():
-    return AgentConfig(
-        country="ENGLAND",
-        type="llm",
-        model_id="test_model",
-        context_provider="inline",
-    )
+def cfg_file() -> Path:
+    """Returns the path to the dummy config file."""
+    # This path is relative to conftest.py
+    return Path(__file__).parent / "fixtures" / "dummy_config.toml"
+
+
+@pytest.fixture
+def agent_cfg_builder():
+    """
+    Returns a builder function for AgentConfig.
+    The builder injects a default 'context_provider'.
+    """
+    from ai_diplomacy.services.config import AgentConfig
+
+    def _builder(**kwargs) -> AgentConfig:
+        data = {}
+        # Set default, but allow override
+        if "context_provider" not in kwargs:
+            data["context_provider"] = "inline"
+
+        data.update(kwargs)
+
+        # 'name' and 'type' are mandatory, tests must provide them.
+        return AgentConfig(**data)
+
+    return _builder
+
+
+@pytest.fixture
+def agent_config(agent_cfg_builder):
+    """Provides a default, valid AgentConfig instance."""
+    return agent_cfg_builder(name="ENGLAND", type="llm", model_id="test_model")
 
 
 @pytest.fixture

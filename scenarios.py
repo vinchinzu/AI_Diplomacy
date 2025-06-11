@@ -4,11 +4,14 @@ from typing import Callable
 
 SCENARIO_REGISTRY: dict[str, Callable[..., Game]] = {}
 
+
 def register_scenario(name: str):
     def decorator(func: Callable[..., Game]):
         SCENARIO_REGISTRY[name] = func
         return func
+
     return decorator
+
 
 @register_scenario("wwi_two_player")
 def wwi_two_player(

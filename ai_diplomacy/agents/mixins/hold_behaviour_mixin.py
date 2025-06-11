@@ -1,12 +1,15 @@
 """
 Mixin class providing a simple hold order generation behaviour.
 """
+
 from typing import List
+
 # Adjusted import path assuming core is one level up from agents directory
 from ...core.state import PhaseState
 from ...core.order import Order
 
 __all__ = ["HoldBehaviourMixin"]
+
 
 class HoldBehaviourMixin:
     """
@@ -17,47 +20,38 @@ class HoldBehaviourMixin:
     def get_hold_orders(self, phase: PhaseState) -> List[Order]:
         """
         Generates hold orders for all units belonging to the agent.
+        The lookup order is:
+        1. `PhaseState.get_power_units` (preferred – new API)
+        2. `PhaseState.get_power_state(...).units` (legacy API – remove once deprecated)
+        3. `phase.game.get_units` (when a raw diplomacy.Game is hanging off the state)
         """
-        units = []
-        # Ensure self.country exists and is a string before calling upper()
-        country_upper = ""
-        if hasattr(self, 'country') and isinstance(self.country, str):
-            country_upper = self.country.upper()
-        else:
-            # Handle cases where self.country might not be set or not a string
-            # This could involve logging a warning or raising an error
-            # For now, if country is not valid, units will likely remain empty
-            print(f"Warning: HoldBehaviourMixin used in a class without a valid 'country' string attribute. Agent ID: {getattr(self, 'agent_id', 'Unknown')}")
+        units: List[str] = []
+
+        # Ensure we have a valid country attribute
+        if not isinstance(getattr(self, "country", None), str):
+            print(
+                "Warning: HoldBehaviourMixin used without a valid `country` attribute."
+            )
             return []
 
+        country_upper: str = self.country.upper()
 
-        try:
-            # Attempt to get units using get_power_state if available
-            if hasattr(phase, 'get_power_state'):
+        # --- Preferred path -------------------------------------------------
+        if hasattr(phase, "get_power_units"):
+            units = phase.get_power_units(country_upper)
+
+        # --- Legacy fallback ----------------------------------------------
+        elif hasattr(phase, "get_power_state"):
+            try:
                 power_state = phase.get_power_state(country_upper)
-                if power_state and hasattr(power_state, 'units'):
-                    units = power_state.units
-                # Fallback if power_state doesn't have units directly, but phase.game might
-                elif hasattr(phase, 'game') and hasattr(phase.game, 'get_units'):
-                    units = phase.game.get_units(country_upper)
-            # Fallback if get_power_state is not available on phase, try phase.game directly
-            elif hasattr(phase, 'game') and hasattr(phase.game, 'get_units'):
-                units = phase.game.get_units(country_upper)
-            else:
-                # Log if no known method to get units is found on PhaseState
-                print(f"Warning: Could not determine how to get units for {country_upper} from PhaseState object: {type(phase)}")
+                units = getattr(power_state, "units", [])  # type: ignore[arg-type]
+            except Exception:
+                units = []
 
-        except AttributeError as e:
-            # This catch might be too broad or could signify unexpected PhaseState structures
-            print(f"AttributeError while trying to get units for {country_upper} from phase: {e}")
-            # As a last resort, if phase.game exists, try using it.
-            if hasattr(phase, 'game') and hasattr(phase.game, 'get_units'):
-                units = phase.game.get_units(country_upper)
+        # --- Raw game fallback --------------------------------------------
+        if not units and hasattr(phase, "game") and hasattr(phase.game, "get_units"):
+            units = phase.game.get_units(country_upper)  # type: ignore[assignment]
 
-
-        orders = []
-        if units: # Ensure units is not None and is iterable
-            for unit_name_obj in units:
-                unit_name_str = str(unit_name_obj) # Ensure conversion to string
-                orders.append(Order(f"{unit_name_str} HLD"))
+        # -------------------------------------------------------------------
+        orders: List[Order] = [Order(f"{str(u)} HLD") for u in units]
         return orders

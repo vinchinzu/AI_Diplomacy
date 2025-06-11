@@ -12,11 +12,14 @@ from .llm_agent import LLMAgent
 from .scripted_agent import ScriptedAgent
 from .neutral_agent import NeutralAgent
 from .bloc_llm_agent import BlocLLMAgent
+
 # from .human_agent import HumanAgent # Removed due to missing file
 from .null_agent import NullAgent
 from .factory import AgentFactory
 from .agent_state import DiplomacyAgentState
-from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy as LLMPromptStrategy # Import and alias
+from generic_llm_framework.prompt_strategy import (
+    DiplomacyPromptStrategy as LLMPromptStrategy,
+)  # Import and alias
 
 __all__ = [
     "BaseAgent",

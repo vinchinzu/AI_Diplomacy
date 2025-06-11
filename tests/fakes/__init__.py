@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated import
+from generic_llm_framework.llm_coordinator import LLMCoordinator  # Updated import
 import logging
 from typing import List, Any, Optional, Dict
 from datetime import datetime

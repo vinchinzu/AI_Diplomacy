@@ -4,8 +4,6 @@ from ai_diplomacy.model_utils import assign_models_to_powers
 from ai_diplomacy.constants import DEFAULT_AGENT_MANAGER_FALLBACK_MODEL, ALL_POWERS
 from tests._shared_fixtures import create_game_config
 
-# No longer a class, tests will be functions
-
 
 def test_default_behavior_all_powers_llm():
     """All powers get fallback model if no other config and num_players = 7."""
@@ -226,50 +224,3 @@ def test_complex_scenario(tmp_path):
     assert assignments["GERMANY"] == "model_germany"
     assert assignments["FRANCE"] == "fx1"
 
-
-# Removed if __name__ == '__main__': block as pytest handles test discovery
-# Unittest import can be removed if no other files in this dir use it and ALL_POWERS is handled.
-# For now, keeping unittest import if ALL_POWERS might be used by other potential unittest-style tests not yet converted.
-# However, typically it's better to have constants like ALL_POWERS in a shared location if used by multiple test styles.
-# ALL_POWERS is already imported from ai_diplomacy.constants, so unittest import is not strictly needed for it.
-# Removing unittest import as it's not used.
-# import unittest
-# No, argparse is not used anymore after removing _create_mock_args
-# import argparse
-
-# Final check, argparse is not used.
-# unittest is not used.
-# pytest is used for tmp_path
-# toml is used
-# List, Optional, Dict, Any from typing are not directly used in this file anymore.
-# Can remove: unittest, argparse, List, Optional, Dict, Any from typing.
-# Keeping: pytest, toml.
-# GameConfig is also not directly used.
-# DEFAULT_AGENT_MANAGER_FALLBACK_MODEL, ALL_POWERS are used.
-# assign_models_to_powers is used.
-# create_game_config is used.
-# So, final imports should be:
-# import pytest
-# import toml
-# from ai_diplomacy.model_utils import assign_models_to_powers
-# from ai_diplomacy.constants import DEFAULT_AGENT_MANAGER_FALLBACK_MODEL, ALL_POWERS
-# from tests._shared_fixtures import create_game_config
-# Let's adjust the top of the file to reflect this.
-# The overwrite tool will handle the full file content.
-# The above reasoning is for my thought process. The actual file will be fully replaced.
-
-# Corrected imports at the top of the file will be handled by the full overwrite.
-# The actual overwrite will be:
-# import pytest
-# import toml
-# from ai_diplomacy.model_utils import assign_models_to_powers
-# from ai_diplomacy.constants import DEFAULT_AGENT_MANAGER_FALLBACK_MODEL, ALL_POWERS
-# from tests._shared_fixtures import create_game_config
-# ... rest of the file with test functions ...
-# (The overwrite_file_with_block tool doesn't allow changing just a few lines easily, so I provide the whole file)
-# The tool input below will have the corrected imports.
-# The `import unittest` and `import argparse` are removed.
-# `from typing import ...` is removed.
-# `from ai_diplomacy.game_config import GameConfig` is removed.
-# Only necessary imports are kept.
-# Added pytest to imports.

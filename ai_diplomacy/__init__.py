@@ -16,7 +16,7 @@ from ai_diplomacy.agents.llm_agent import (
 from ai_diplomacy.agents.factory import AgentFactory
 from ai_diplomacy.agents.base import BaseAgent
 from ai_diplomacy.core.state import PhaseState
-from generic_llm_framework.llm_coordinator import LLMCoordinator # Updated import
+from generic_llm_framework.llm_coordinator import LLMCoordinator  # Updated import
 from ai_diplomacy.services.config import AgentConfig, DiplomacyConfig
 
 

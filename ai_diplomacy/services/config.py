@@ -3,7 +3,7 @@ Configuration management using Pydantic for validation and type safety.
 Supports both game-level and agent-level configuration.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 import yaml
 import logging
@@ -35,7 +35,9 @@ class GameConfig(BaseModel):
 class AgentConfig(BaseModel):
     """Configuration for a single agent."""
 
-    country: str = Field(..., description="Country/power name (e.g., FRANCE)")
+    name: str = Field(
+        ..., description="Country or bloc name (e.g., FRANCE, ENTENTE_BLOC)"
+    )
     type: str = Field(..., description="Agent type: 'llm', 'scripted', etc.")
     model_id: Optional[str] = Field(None, description="LLM model identifier")
     context_provider: str = Field(
@@ -57,10 +59,13 @@ class AgentConfig(BaseModel):
     max_tokens: Optional[int] = Field(
         default=2000, description="Maximum tokens for LLM response"
     )
+    prompt_strategy_config: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Configuration for the prompt strategy"
+    )
 
-    @field_validator("country")
+    @field_validator("name")
     @classmethod
-    def country_uppercase(cls, v):
+    def name_uppercase(cls, v):
         return v.upper()
 
     @field_validator("type")
@@ -102,8 +107,8 @@ class DiplomacyConfig(BaseModel):
     @field_validator("agents")
     @classmethod
     def validate_unique_countries(cls, v):
-        countries = [agent.country for agent in v]
-        if len(countries) != len(set(countries)):
+        names = [agent.name for agent in v]
+        if len(names) != len(set(names)):
             raise ValueError("Each country can only be assigned to one agent")
         return v
 
@@ -141,7 +146,7 @@ class DiplomacyConfig(BaseModel):
         if hasattr(args, "power_name") and args.power_name:
             agents.append(
                 AgentConfig(
-                    country=args.power_name,
+                    name=args.power_name,
                     type="llm",
                     model_id=getattr(args, "model_id", None),
                     context_provider=constants.CONTEXT_PROVIDER_AUTO,
@@ -163,7 +168,7 @@ class DiplomacyConfig(BaseModel):
                     if i < len(countries):
                         agents.append(
                             AgentConfig(
-                                country=countries[i],
+                                name=countries[i],
                                 type="llm",
                                 model_id=model_id,
                                 context_provider=constants.CONTEXT_PROVIDER_AUTO,
@@ -172,11 +177,11 @@ class DiplomacyConfig(BaseModel):
 
         return cls(game=game_config, agents=agents)
 
-    def get_agent_config(self, country: str) -> Optional[AgentConfig]:
+    def get_agent_config(self, name: str) -> Optional[AgentConfig]:
         """Get configuration for a specific country."""
-        country_upper = country.upper()
+        name_upper = name.upper()
         for agent in self.agents:
-            if agent.country == country_upper:
+            if agent.name == name_upper:
                 return agent
         return None
 

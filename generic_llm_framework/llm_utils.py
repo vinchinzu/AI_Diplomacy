@@ -10,8 +10,8 @@ import os
 import logging
 import re
 import json
-from typing import Optional, Dict, Any, List # Added List
-import csv # Added csv
+from typing import Optional, Dict, Any  # Added List
+import csv  # Added csv
 
 import json_repair
 import json5
@@ -24,7 +24,7 @@ __all__ = [
     "extract_json_from_text",
     "extract_relationships",
     "extract_goals",
-    "log_llm_response", # Added log_llm_response
+    "log_llm_response",  # Added log_llm_response
 ]
 
 # Constants for relationship extraction
@@ -335,8 +335,8 @@ def log_llm_response(
     # raw_input_prompt: str, # Decided not to log the full prompt to save space
     raw_response: str,
     success: str,  # Assuming success is a string like "TRUE" or "FALSE: reason"
-    request_identifier: Optional[str] = None, # Optional request identifier
-    turn_number: Optional[int] = None, # Optional turn number
+    request_identifier: Optional[str] = None,  # Optional request identifier
+    turn_number: Optional[int] = None,  # Optional turn number
 ) -> None:
     """
     Log minimal LLM response metadata to a CSV file.
@@ -367,7 +367,7 @@ def log_llm_response(
             "phase",
             "response_type",
             "success",
-            "raw_response_excerpt", # Log an excerpt to keep file size manageable
+            "raw_response_excerpt",  # Log an excerpt to keep file size manageable
         ]
 
         # Prepare excerpt
@@ -376,7 +376,7 @@ def log_llm_response(
         # For now, let's use a local sensible default or assume it's passed if critical.
         # Decided to use a hardcoded MAX_CONTENT_LOG_LENGTH for now to avoid import cycle.
         # Better would be to pass it from coordinator or have it in a base constants file.
-        MAX_CONTENT_LOG_LENGTH = 500 # Matching the one in constants.py for now
+        MAX_CONTENT_LOG_LENGTH = 500  # Matching the one in constants.py for now
         response_excerpt = (
             raw_response[:MAX_CONTENT_LOG_LENGTH] + "..."
             if len(raw_response) > MAX_CONTENT_LOG_LENGTH
@@ -384,9 +384,9 @@ def log_llm_response(
         )
 
         # Get current timestamp
-        import datetime # Moved import here
-        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        import datetime  # Moved import here
 
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         log_row = [
             timestamp,
@@ -408,4 +408,6 @@ def log_llm_response(
             writer.writerow(log_row)
     except Exception as e:
         # Use a logger specific to this module (llm_utils)
-        logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True
+        )

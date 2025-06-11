@@ -39,7 +39,7 @@ class MovementPhaseStrategy:
             game,
             game_history,
             orchestrator.agent_manager,
-            orchestrator.active_powers, # active_powers are individual game power names
+            orchestrator.active_powers,  # active_powers are individual game power names
             orchestrator.config,
         )
 
@@ -48,15 +48,24 @@ class MovementPhaseStrategy:
         current_phase_state = PhaseState.from_game(game)
 
         active_game_powers = orchestrator.active_powers
-        if not hasattr(orchestrator.config, 'power_to_agent_id_map') or not orchestrator.config.power_to_agent_id_map:
-            logger.error("CRITICAL: power_to_agent_id_map is not set in GameConfig. Cannot determine agents for powers.")
-            # This is a critical configuration error. Depending on desired behavior, 
+        if (
+            not hasattr(orchestrator.config, "power_to_agent_id_map")
+            or not orchestrator.config.power_to_agent_id_map
+        ):
+            logger.error(
+                "CRITICAL: power_to_agent_id_map is not set in GameConfig. Cannot determine agents for powers."
+            )
+            # This is a critical configuration error. Depending on desired behavior,
             # either raise an exception or return empty orders for all.
             # Forcing a break as per user request.
             raise ValueError("power_to_agent_id_map not configured in GameConfig.")
 
-        for power_name in active_game_powers: # Iterating through individual game powers (e.g., "FRANCE")
-            agent_id_for_power = orchestrator.config.power_to_agent_id_map.get(power_name)
+        for power_name in (
+            active_game_powers
+        ):  # Iterating through individual game powers (e.g., "FRANCE")
+            agent_id_for_power = orchestrator.config.power_to_agent_id_map.get(
+                power_name
+            )
 
             if not agent_id_for_power:
                 logger.error(
@@ -73,7 +82,9 @@ class MovementPhaseStrategy:
                     f"CRITICAL: Agent instance not found for agent ID {agent_id_for_power} (mapped from power {power_name}). Orders cannot be generated."
                 )
                 # This means the map had an ID, but AgentManager doesn't have this agent.
-                raise ValueError(f"Agent instance not found for ID: {agent_id_for_power}")
+                raise ValueError(
+                    f"Agent instance not found for ID: {agent_id_for_power}"
+                )
 
             # At this point, 'agent' is guaranteed to be non-None.
             if isinstance(agent, BlocLLMAgent):
@@ -84,8 +95,12 @@ class MovementPhaseStrategy:
                     # Order for this power_name should have been added when the bloc was first processed.
                     # If not, it implies an issue or that the power isn't in this bloc as expected.
                     if power_name not in orders_by_power:
-                         logger.warning(f"Power {power_name} was expected to have orders from bloc {agent.agent_id} but does not. Check bloc processing logic.")
-                         orders_by_power[power_name] = [] # Default to empty if missed, though this state is unusual.
+                        logger.warning(
+                            f"Power {power_name} was expected to have orders from bloc {agent.agent_id} but does not. Check bloc processing logic."
+                        )
+                        orders_by_power[
+                            power_name
+                        ] = []  # Default to empty if missed, though this state is unusual.
                     continue
                 else:
                     logger.debug(
@@ -94,21 +109,31 @@ class MovementPhaseStrategy:
                     try:
                         # Decide orders for the entire bloc. This populates the agent's internal cache.
                         await agent.decide_orders(current_phase_state)
-                        
-                        # Construct the phase key to retrieve all bloc orders. 
+
+                        # Construct the phase key to retrieve all bloc orders.
                         # This key must match the one used in BlocLLMAgent.decide_orders caching.
                         # Reconstruct the key carefully as done in BlocLLMAgent.
                         phase_repr_parts = []
-                        if current_phase_state.units: # Check if there are any units on the board
+                        if (
+                            current_phase_state.units
+                        ):  # Check if there are any units on the board
                             for p_n in sorted(agent.controlled_powers):
-                                power_units_locs_list = current_phase_state.units.get(p_n, [])
-                                phase_repr_parts.append(f"{p_n}_units:{tuple(sorted(power_units_locs_list))}")
-                        
-                        if current_phase_state.supply_centers: # Check if there is supply center data
-                            sorted_scs_items = sorted([
-                                (p, tuple(sorted(cs)))
-                                for p, cs in current_phase_state.supply_centers.items()
-                            ])
+                                power_units_locs_list = current_phase_state.units.get(
+                                    p_n, []
+                                )
+                                phase_repr_parts.append(
+                                    f"{p_n}_units:{tuple(sorted(power_units_locs_list))}"
+                                )
+
+                        if (
+                            current_phase_state.supply_centers
+                        ):  # Check if there is supply center data
+                            sorted_scs_items = sorted(
+                                [
+                                    (p, tuple(sorted(cs)))
+                                    for p, cs in current_phase_state.supply_centers.items()
+                                ]
+                            )
                             phase_repr_parts.append(f"scs:{tuple(sorted_scs_items)}")
 
                         current_phase_key_for_bloc = (
@@ -122,35 +147,50 @@ class MovementPhaseStrategy:
                             current_phase_key_for_bloc
                         )
                         if not all_bloc_orders_obj and agent.controlled_powers:
-                            logger.warning(f"BlocLLMAgent {agent.agent_id} returned no orders from get_all_bloc_orders_for_phase despite having controlled powers. LLM might have failed or returned empty.")
+                            logger.warning(
+                                f"BlocLLMAgent {agent.agent_id} returned no orders from get_all_bloc_orders_for_phase despite having controlled powers. LLM might have failed or returned empty."
+                            )
 
                         for (
                             bloc_member_power_name,
                             order_obj_list,
                         ) in all_bloc_orders_obj.items():
                             if bloc_member_power_name not in agent.controlled_powers:
-                                logger.warning(f"Bloc agent {agent.agent_id} returned orders for {bloc_member_power_name} which it does not control. Ignoring these orders.")
+                                logger.warning(
+                                    f"Bloc agent {agent.agent_id} returned orders for {bloc_member_power_name} which it does not control. Ignoring these orders."
+                                )
                                 continue
                             if bloc_member_power_name not in active_game_powers:
-                                logger.warning(f"Bloc agent {agent.agent_id} returned orders for {bloc_member_power_name} which is not an active power in this phase. Ignoring.")
+                                logger.warning(
+                                    f"Bloc agent {agent.agent_id} returned orders for {bloc_member_power_name} which is not an active power in this phase. Ignoring."
+                                )
                                 continue
 
                             orders_str_list = [str(o) for o in order_obj_list]
                             orders_by_power[bloc_member_power_name] = orders_str_list
                             game_history.add_orders(
-                                current_phase_name, bloc_member_power_name, orders_str_list
+                                current_phase_name,
+                                bloc_member_power_name,
+                                orders_str_list,
                             )
                             logger.info(
                                 f"AGENT_ORDERS: {bloc_member_power_name} (from Bloc {agent.agent_id}): {orders_str_list}"
                             )
                         processed_bloc_agent_ids.add(agent.agent_id)
-                        
+
                         # Ensure all controlled powers by this bloc that are active in the game have an entry in orders_by_power
                         for controlled_p in agent.controlled_powers:
-                            if controlled_p in active_game_powers and controlled_p not in orders_by_power:
-                                logger.warning(f"Controlled power {controlled_p} of bloc {agent.agent_id} did not receive orders. Defaulting to empty list.")
+                            if (
+                                controlled_p in active_game_powers
+                                and controlled_p not in orders_by_power
+                            ):
+                                logger.warning(
+                                    f"Controlled power {controlled_p} of bloc {agent.agent_id} did not receive orders. Defaulting to empty list."
+                                )
                                 orders_by_power[controlled_p] = []
-                                game_history.add_orders(current_phase_name, controlled_p, []) # Log empty orders
+                                game_history.add_orders(
+                                    current_phase_name, controlled_p, []
+                                )  # Log empty orders
 
                     except Exception as e:
                         logger.error(
@@ -161,16 +201,26 @@ class MovementPhaseStrategy:
                         for bloc_member_power in agent.controlled_powers:
                             if bloc_member_power in active_game_powers:
                                 orders_by_power[bloc_member_power] = []
-                                game_history.add_orders(current_phase_name, bloc_member_power, [])
-                                logger.info(f"AGENT_ORDERS: {bloc_member_power} (from failed Bloc {agent.agent_id}): []")
-                        processed_bloc_agent_ids.add(agent.agent_id) # Mark as processed to avoid re-attempt
-            
+                                game_history.add_orders(
+                                    current_phase_name, bloc_member_power, []
+                                )
+                                logger.info(
+                                    f"AGENT_ORDERS: {bloc_member_power} (from failed Bloc {agent.agent_id}): []"
+                                )
+                        processed_bloc_agent_ids.add(
+                            agent.agent_id
+                        )  # Mark as processed to avoid re-attempt
+
             else:  # Standard (non-bloc) LLM agent or other types
-                logger.debug(f"Processing agent {agent_id_for_power} for power {power_name} (Movement)..."
+                logger.debug(
+                    f"Processing agent {agent_id_for_power} for power {power_name} (Movement)..."
                 )
                 try:
                     orders = await orchestrator._get_orders_for_power(
-                        game, power_name, agent, game_history # power_name here is the actual power
+                        game,
+                        power_name,
+                        agent,
+                        game_history,  # power_name here is the actual power
                     )
                     orders_by_power[power_name] = orders
                     # game_history.add_orders is called by _get_orders_for_power
@@ -181,22 +231,30 @@ class MovementPhaseStrategy:
                         exc_info=True,
                     )
                     orders_by_power[power_name] = []
-                    game_history.add_orders(current_phase_name, power_name, []) # Ensure history reflects empty orders
+                    game_history.add_orders(
+                        current_phase_name, power_name, []
+                    )  # Ensure history reflects empty orders
                     logger.info(f"AGENT_ORDERS: {power_name} (failed): []")
 
-        # The specific Neutral Italy handling might need to be revised or integrated 
+        # The specific Neutral Italy handling might need to be revised or integrated
         # if Italy is now part of a bloc managed by NEUTRAL_ITALY_BLOC agent.
         # If NEUTRAL_ITALY_BLOC is a proper agent in power_to_agent_id_map, it should be handled above.
         # The code below is a fallback if ITALY is in game.powers but not in active_game_powers
         # (e.g. if active_powers list is filtered somehow).
 
-        italy_power_name = "ITALY" 
+        italy_power_name = "ITALY"
         if italy_power_name in game.powers and italy_power_name not in orders_by_power:
             # This implies ITALY was not in active_game_powers or its agent failed to provide orders.
             # If it has an agent, it should have been processed. If no agent, it means it's truly neutral.
-            agent_id_for_italy = orchestrator.config.power_to_agent_id_map.get(italy_power_name)
-            if not agent_id_for_italy or not orchestrator.agent_manager.get_agent(agent_id_for_italy):
-                logger.info(f"Power {italy_power_name} has no assigned agent and was not processed. Assuming neutral hold orders.")
+            agent_id_for_italy = orchestrator.config.power_to_agent_id_map.get(
+                italy_power_name
+            )
+            if not agent_id_for_italy or not orchestrator.agent_manager.get_agent(
+                agent_id_for_italy
+            ):
+                logger.info(
+                    f"Power {italy_power_name} has no assigned agent and was not processed. Assuming neutral hold orders."
+                )
                 italy_units = game.get_units(italy_power_name)
                 if italy_units:
                     hold_orders = [f"{unit_name} H" for unit_name in italy_units]
@@ -208,11 +266,15 @@ class MovementPhaseStrategy:
                         current_phase_name, italy_power_name, hold_orders
                     )
                 else:
-                    orders_by_power[italy_power_name] = [] 
+                    orders_by_power[italy_power_name] = []
                     game_history.add_orders(current_phase_name, italy_power_name, [])
-            elif italy_power_name not in orders_by_power: # Has agent, but no orders yet (e.g. bloc failed to return for it)
-                 logger.warning(f"Power {italy_power_name} has an agent ({agent_id_for_italy}) but no orders were recorded. Defaulting to empty list.")
-                 orders_by_power[italy_power_name] = []
-                 game_history.add_orders(current_phase_name, italy_power_name, [])
+            elif (
+                italy_power_name not in orders_by_power
+            ):  # Has agent, but no orders yet (e.g. bloc failed to return for it)
+                logger.warning(
+                    f"Power {italy_power_name} has an agent ({agent_id_for_italy}) but no orders were recorded. Defaulting to empty list."
+                )
+                orders_by_power[italy_power_name] = []
+                game_history.add_orders(current_phase_name, italy_power_name, [])
 
         return orders_by_power

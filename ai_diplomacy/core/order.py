@@ -4,6 +4,7 @@ Defines the Order class for representing a single diplomatic order.
 
 __all__ = ["Order"]
 
+
 class Order:
     """Represents a single diplomatic order."""
 

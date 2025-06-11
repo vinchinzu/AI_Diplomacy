@@ -2,9 +2,9 @@ import unittest
 from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy
 
 
-class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
+class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
     def setUp(self):
-        self.strategy = DiplomacyPromptStrategy() # Use new class name
+        self.strategy = DiplomacyPromptStrategy()  # Use new class name
         self.country = "FRANCE"
         self.goals = ["Expand East", "Secure borders"]
         self.relationships = {"ENGLAND": "Ally", "GERMANY": "Enemy", "ITALY": "Neutral"}
@@ -235,7 +235,9 @@ class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
         with unittest.mock.patch.object(
             self.strategy, "build_order_prompt", return_value=expected_mock_return
         ) as mock_build_order_prompt:
-            returned_prompt = self.strategy.build_prompt(action_type, context_for_orders)
+            returned_prompt = self.strategy.build_prompt(
+                action_type, context_for_orders
+            )
 
             mock_build_order_prompt.assert_called_once_with(
                 country=self.country,
@@ -263,7 +265,9 @@ class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
         with unittest.mock.patch.object(
             self.strategy, "build_negotiation_prompt", return_value=expected_mock_return
         ) as mock_build_negotiation_prompt:
-            returned_prompt = self.strategy.build_prompt(action_type, context_for_messages)
+            returned_prompt = self.strategy.build_prompt(
+                action_type, context_for_messages
+            )
 
             mock_build_negotiation_prompt.assert_called_once_with(
                 country=self.country,
@@ -291,7 +295,9 @@ class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
         expected_mock_return = "mocked_diary_prompt_value"
 
         with unittest.mock.patch.object(
-            self.strategy, "build_diary_generation_prompt", return_value=expected_mock_return
+            self.strategy,
+            "build_diary_generation_prompt",
+            return_value=expected_mock_return,
         ) as mock_build_diary_prompt:
             returned_prompt = self.strategy.build_prompt(action_type, context_for_diary)
 
@@ -316,13 +322,15 @@ class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
             "power_centers": self.power_centers,
             "all_power_centers": self.all_power_centers,
             "is_game_over": self.is_game_over,
-            "current_goals": self.goals, # Note: key is 'current_goals' in context
+            "current_goals": self.goals,  # Note: key is 'current_goals' in context
             "relationships": self.relationships,
         }
         expected_mock_return = "mocked_goal_analysis_prompt_value"
 
         with unittest.mock.patch.object(
-            self.strategy, "build_goal_analysis_prompt", return_value=expected_mock_return
+            self.strategy,
+            "build_goal_analysis_prompt",
+            return_value=expected_mock_return,
         ) as mock_build_goal_prompt:
             returned_prompt = self.strategy.build_prompt(action_type, context_for_goals)
 
@@ -349,12 +357,16 @@ class TestDiplomacyPromptStrategy(unittest.TestCase): # Renamed class
     def test_build_prompt_decide_bloc_orders_missing_content(self):
         action_type = "decide_bloc_orders"
         context_for_bloc_empty = {}
-        with self.assertRaisesRegex(ValueError, "Context for decide_bloc_orders must contain 'prompt_content'"):
+        with self.assertRaisesRegex(
+            ValueError, "Context for decide_bloc_orders must contain 'prompt_content'"
+        ):
             self.strategy.build_prompt(action_type, context_for_bloc_empty)
 
     def test_build_prompt_invalid_action_type(self):
         action_type = "some_invalid_action_type"
-        with self.assertRaisesRegex(ValueError, f"Unknown action type for prompt building: {action_type}"):
+        with self.assertRaisesRegex(
+            ValueError, f"Unknown action type for prompt building: {action_type}"
+        ):
             self.strategy.build_prompt(action_type, {})
 
 

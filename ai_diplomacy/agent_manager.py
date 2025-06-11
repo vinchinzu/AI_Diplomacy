@@ -11,7 +11,7 @@ from .services.config import AgentConfig  # AgentConfig from services
 
 if TYPE_CHECKING:
     from .game_config import GameConfig  # GameConfig from root
-    from .agents.base import BaseAgent # noqa
+    from .agents.base import BaseAgent  # noqa
 
 logger = logging.getLogger(__name__)
 
@@ -79,30 +79,22 @@ class AgentManager:
             agent_type = config_details.get("type")
             model_id = config_details.get("model_id")  # Can be None for neutral
 
-            # Construct AgentConfig for the factory
-            # The factory's create_agent expects an AgentConfig object.
-            # We need to map our config_details to this.
-            # AgentConfig fields: country, type, model_id, etc.
-            # For bloc agents, 'country' in AgentConfig might be the bloc_name or a primary power.
-            # Let's use agent_identifier for 'country' field in AgentConfig for now.
-
             # verbose_llm_debug should come from game_config
             verbose_llm_debug = getattr(
                 self.game_config.args, "verbose_llm_debug", False
             )
 
-            # Create the specific AgentConfig instance for the agent/bloc
-            # The 'country' field in AgentConfig is a bit ambiguous for blocs.
-            # The factory's create_agent uses it for single agents.
-            # For bloc agents, bloc_name and controlled_powers are passed separately.
-            # Let's set AgentConfig.country to be the primary identifier from the loop.
-            current_agent_config = AgentConfig(
-                country=agent_identifier,  # "FRANCE" or "ENTENTE_BLOC"
-                type=agent_type,
-                model_id=model_id,
-                # Other fields like temperature, context_provider can be added from game_config.args if needed
-                verbose_llm_debug=verbose_llm_debug,
-            )
+            # Adapt the incoming config_details dict to match AgentConfig model
+            if "country" in config_details:
+                config_details["name"] = config_details.pop("country")
+
+            # Ensure essential fields are present before unpacking
+            config_details.setdefault("name", agent_identifier)
+            config_details.setdefault("type", agent_type)
+            config_details.setdefault("model_id", model_id)
+            config_details.setdefault("verbose_llm_debug", verbose_llm_debug)
+
+            current_agent_config = AgentConfig(**config_details)
 
             agent_id_str = f"{agent_identifier.lower().replace(' ', '_')}_{self.game_config.game_id}"
 
@@ -112,34 +104,32 @@ class AgentManager:
 
             try:
                 agent: Optional[BaseAgent] = None
-                if agent_type == "llm":
+                # Refactored agent creation to be more streamlined
+                country_for_agent = (
+                    agent_identifier  # The country/power name for single agents
+                )
+
+                if agent_type in ("llm", "neutral", "scripted"):
                     agent = self.agent_factory.create_agent(
                         agent_id=agent_id_str,
-                        country=config_details.get(
-                            "country", agent_identifier
-                        ),  # Actual game power name
+                        country=country_for_agent,
                         config=current_agent_config,
-                        game_id=self.game_config.game_id,
-                    )
-                elif agent_type == "neutral":
-                    agent = self.agent_factory.create_agent(
-                        agent_id=agent_id_str,
-                        country=config_details.get(
-                            "country", agent_identifier
-                        ),  # Actual game power name
-                        config=current_agent_config,  # type="neutral"
+                        game_config=self.game_config,
                         game_id=self.game_config.game_id,
                     )
                 elif agent_type == "null":
-                    power_name_for_null = config_details.get("country", agent_identifier)
                     # NullAgent is not created via factory, but directly
-                    from .agents.null_agent import NullAgent # Ensure NullAgent is imported
+                    from .agents.null_agent import (
+                        NullAgent,
+                    )  # Ensure NullAgent is imported
+
                     agent = NullAgent(
-                        agent_id=agent_id_str, # agent_identifier could be "ITALY_NULL" or similar
-                        game_config=self.game_config,
-                        power_name=power_name_for_null # The actual power like "ITALY"
+                        agent_id=agent_id_str,  # agent_identifier could be "ITALY_NULL" or similar
+                        power_name=country_for_agent,  # The actual power like "ITALY"
                     )
-                    logger.info(f"Directly instantiating NullAgent for power: {power_name_for_null}")
+                    logger.info(
+                        f"Directly instantiating NullAgent for power: {country_for_agent}"
+                    )
                 elif agent_type == "bloc_llm":
                     bloc_name = config_details.get("bloc_name", agent_identifier)
                     controlled_powers = config_details.get("controlled_powers")
@@ -151,8 +141,9 @@ class AgentManager:
 
                     agent = self.agent_factory.create_agent(
                         agent_id=agent_id_str,
-                        country=agent_identifier,  # Not strictly used by BlocLLMAgent constructor signature's 'country'
+                        country=country_for_agent,  # Not strictly used by BlocLLMAgent constructor signature's 'country'
                         config=current_agent_config,  # type="bloc_llm", model_id for bloc
+                        game_config=self.game_config,
                         game_id=self.game_config.game_id,
                         bloc_name=bloc_name,
                         controlled_powers=controlled_powers,
@@ -214,5 +205,7 @@ class AgentManager:
         agent_identifier = self.game_config.power_to_agent_id_map.get(power_name)
         if agent_identifier:
             return self.get_agent(agent_identifier)
-        logger.warning(f"Could not find agent identifier for power '{power_name}' in power_to_agent_id_map.")
+        logger.warning(
+            f"Could not find agent identifier for power '{power_name}' in power_to_agent_id_map."
+        )
         return None

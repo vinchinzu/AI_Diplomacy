@@ -3,11 +3,13 @@ from unittest.mock import MagicMock
 
 from ai_diplomacy.agents.neutral_agent import NeutralAgent
 from ai_diplomacy.core.order import Order
-from ai_diplomacy.core.state import PhaseState # Removed PowerState
+from ai_diplomacy.core.state import PhaseState  # Removed PowerState
+
 
 @pytest.fixture
 def neutral_agent_france():
     return NeutralAgent(agent_id="neutral_france_test", country="FRANCE")
+
 
 @pytest.fixture
 def phase_state_with_units():
@@ -21,11 +23,15 @@ def phase_state_with_units():
     mock_game.get_units = MagicMock(return_value=["A PAR", "F MAR"])
     mock_phase.game = mock_game
 
+    # Ensure get_power_units returns an empty list to trigger the fallback to game.get_units
+    mock_phase.get_power_units.return_value = []
+
     # Remove mocking of get_power_state as it's not on PhaseState
     # mock_power_state_france = MagicMock(spec=PowerState) # PowerState not defined
     # mock_power_state_france.units = ["A PAR", "F MAR"]
     # mock_phase.get_power_state = MagicMock(return_value=mock_power_state_france)
     return mock_phase
+
 
 def test_neutral_agent_initialization(neutral_agent_france):
     assert neutral_agent_france.country == "FRANCE"
@@ -43,12 +49,8 @@ async def test_neutral_agent_decide_orders_empty(neutral_agent_france):
     mock_game_no_units.get_units = MagicMock(return_value=[])
     mock_phase_no_units.game = mock_game_no_units
 
-    # Remove mocking of get_power_state
-    # mock_power_state_no_units = MagicMock(spec=PowerState)
-    # mock_power_state_no_units.units = []
-    # mock_phase_no_units.get_power_state = MagicMock(
-    #     return_value=mock_power_state_no_units
-    # )
+    # Make get_power_units return an empty list to allow fallback (which also returns [])
+    mock_phase_no_units.get_power_units.return_value = []
 
     orders = await neutral_agent_france.decide_orders(mock_phase_no_units)
     assert orders == []

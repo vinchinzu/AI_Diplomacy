@@ -1,9 +1,11 @@
 """
 Defines the Message class for representing diplomatic messages.
 """
+
 from typing import Dict
 
 __all__ = ["Message"]
+
 
 class Message:
     """Represents a diplomatic message between powers."""

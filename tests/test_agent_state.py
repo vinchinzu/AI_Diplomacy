@@ -325,11 +325,6 @@ class TestDiplomacyAgentState(unittest.TestCase):
         self.state._update_relationships_from_events(
             own_country="FRANCE", events=events
         )
-        # Since the event is about FRANCE, and self.state is for ENGLAND,
-        # ENGLAND's relationship with GERMANY should change if GERMANY attacks FRANCE.
-        # This seems to be how the logic is written: if target == own_country (passed to method).
-        # This might be an area for clarification in the original class if this behavior is not intended.
-        # Based on current implementation:
         self.assertEqual(self.state.relationships["GERMANY"], "Unfriendly")
 
         # ITALY supports FRANCE. ENGLAND's relationship with ITALY should improve.

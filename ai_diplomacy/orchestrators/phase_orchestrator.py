@@ -13,12 +13,9 @@ from typing import (
 from diplomacy import Game
 
 # Relative imports will need to be adjusted based on the new location
-from ..general_utils import gather_possible_orders  # Adjusted import
-from ..agents.llm_agent import LLMAgent  # Adjusted import
 from ..core.state import PhaseState  # Adjusted import
-from ..agents.base import BaseAgent # Corrected: Order and Message removed
-from ..core.order import Order # Added: Correct import for Order
-from ..core.message import Message # Added: Correct import for Message
+from ..agents.base import BaseAgent  # Corrected: Order and Message removed
+from ..core.order import Order  # Added: Correct import for Order
 from ..services.config import GameConfig  # Adjusted import
 from ..utils.phase_parsing import (
     get_phase_type_from_game,
@@ -36,7 +33,9 @@ try:
     from diplomacy.utils.game_phase_data import GamePhaseData
 except ImportError:
     GamePhaseData = None  # type: ignore
-    logging.getLogger(__name__).info("Could not import GamePhaseData from diplomacy.utils.game_phase_data. Will rely on hasattr checks.")
+    logging.getLogger(__name__).info(
+        "Could not import GamePhaseData from diplomacy.utils.game_phase_data. Will rely on hasattr checks."
+    )
 
 
 # Protocol for PhaseStrategy
@@ -53,7 +52,8 @@ if TYPE_CHECKING:
     from diplomacy import Game
     from ..agent_manager import AgentManager  # Adjusted import
     from ..game_history import GameHistory  # Adjusted import
-    from ..agents.base import BaseAgent # Corrected: Order and Message removed
+    from ..agents.base import BaseAgent  # Corrected: Order and Message removed
+
     # Order and Message already imported above, no need to re-import here if this block is separate
     from ..services.config import GameConfig  # Adjusted import
 """
@@ -106,6 +106,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         self.get_valid_orders_func = get_valid_orders_func
         self.active_powers: List[str] = []
         self.result_parser = GameResultParser()
+        self.phase_counter = 0
 
         if self.config.powers_and_models:
             self.active_powers = list(self.config.powers_and_models.keys())
@@ -128,6 +129,15 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
 
         try:
             while True:
+                if (
+                    self.config.max_phases
+                    and self.phase_counter >= self.config.max_phases
+                ):
+                    logger.info(
+                        f"Reached max_phases {self.config.max_phases}. Ending game."
+                    )
+                    break
+
                 current_phase_val = getattr(game, "phase", constants.DEFAULT_PHASE_NAME)
                 current_year = getattr(game, "year", None)
                 if current_year is None:
@@ -199,15 +209,22 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                     # ---- MODIFICATION START: Set orders and process ----
                     logger.info("Submitting all collected orders to the game engine.")
                     for power_name, orders in all_orders_for_phase.items():
-                        if power_name in game.powers and not game.powers[power_name].is_eliminated():
+                        if (
+                            power_name in game.powers
+                            and not game.powers[power_name].is_eliminated()
+                        ):
                             game.set_orders(power_name, orders)
                             logger.debug(f"Orders set for {power_name}: {orders}")
                         else:
-                            logger.warning(f"Power {power_name} from order list not in active game powers. Orders not set.")
+                            logger.warning(
+                                f"Power {power_name} from order list not in active game powers. Orders not set."
+                            )
 
                     logger.info("Processing game state with submitted orders...")
                     game.process()
-                    logger.info(f"Game processed. New phase: {game.get_current_phase()}")
+                    logger.info(
+                        f"Game processed. New phase: {game.get_current_phase()}"
+                    )
                     # ---- MODIFICATION END: Set orders and process ----
 
                 elif phase_type_val_str == constants.PHASE_TYPE_PROCESS_ONLY:
@@ -227,6 +244,8 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 await self._process_phase_results_and_updates(
                     game, game_history, all_orders_for_phase, current_phase_val
                 )
+
+                self.phase_counter += 1
 
                 current_year = getattr(game, "year", None)
                 if current_year is None:
@@ -265,7 +284,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         except AttributeError as e:
             logger.error(
                 f"AttributeError in game loop: {e}. This might indicate an issue with the game object's structure.",
-                exc_info=True
+                exc_info=True,
             )
         except Exception as e:
             logger.error(
@@ -285,7 +304,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
     ) -> List[str]:
         current_phase_state = PhaseState.from_game(game)
         try:
-            logger.debug(f"Calling agent.decide_orders() for {power_name} (type: {type(agent).__name__})")
+            logger.debug(
+                f"Calling agent.decide_orders() for {power_name} (type: {type(agent).__name__})"
+            )
             order_objects: List[Order] = await asyncio.wait_for(
                 agent.decide_orders(current_phase_state),
                 timeout=constants.ORDER_DECISION_TIMEOUT_SECONDS,
@@ -296,7 +317,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
             logger.error(f"❌ Timeout getting orders for {power_name}.")
             raise RuntimeError(f"Timeout getting orders for {power_name}")
         except Exception as e:
-            logger.error(f"❌ Error getting orders for {power_name}: {e}", exc_info=True)
+            logger.error(
+                f"❌ Error getting orders for {power_name}: {e}", exc_info=True
+            )
             raise RuntimeError(f"Error getting orders for {power_name}: {e}") from e
 
     async def _process_phase_results_and_updates(
@@ -309,7 +332,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         logger.info(f"Processing results for phase: {processed_phase_name}")
         try:
             power_names_with_orders = list(all_orders_for_phase.keys())
-            adjudicated_results = self.result_parser.extract_adjudicated_orders(game, power_names_with_orders)
+            adjudicated_results = self.result_parser.extract_adjudicated_orders(
+                game, power_names_with_orders
+            )
 
             for power_name, results in adjudicated_results.items():
                 if results:
@@ -354,7 +379,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 try:
                     current_phase_state = PhaseState.from_game(game)
                     power_orders = adjudicated_results.get(power_name, [])
-                    await agent.update_state(current_phase_state, power_orders)
+                    await agent.update_state(
+                        current_phase_state, power_orders, power_name=power_name
+                    )
                 except AttributeError as ae:
                     logger.error(
                         f"❌ AttributeError during state update for {power_name} (likely an issue with game/agent state access): {ae}",

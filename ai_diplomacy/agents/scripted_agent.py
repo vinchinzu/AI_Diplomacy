@@ -5,9 +5,9 @@ Useful for testing and as a baseline for LLM agent performance.
 
 import random
 from typing import List, Dict, Any, Optional
-from .base import BaseAgent, PhaseState # Corrected
-from ..core.order import Order # Corrected
-from ..core.message import Message # Corrected
+from .base import BaseAgent, PhaseState  # Corrected
+from ..core.order import Order  # Corrected
+from ..core.message import Message  # Corrected
 
 __all__ = ["ScriptedAgent"]
 
@@ -46,7 +46,7 @@ class ScriptedAgent(BaseAgent):
             "AUSTRIA",
             "TURKEY",
         ]
-        for country_name in all_countries: # Renamed variable to avoid conflict
+        for country_name in all_countries:  # Renamed variable to avoid conflict
             if country_name != self.country:
                 self.relationships[country_name] = 0.0  # Neutral
 
@@ -92,13 +92,19 @@ class ScriptedAgent(BaseAgent):
                 # Simple movement strategy
                 if self.personality == "aggressive":
                     # Try to move toward enemy supply centers
-                    order_str = self._aggressive_move(unit_type, location, phase) # Renamed variable
+                    order_str = self._aggressive_move(
+                        unit_type, location, phase
+                    )  # Renamed variable
                 elif self.personality == "defensive":
                     # Try to defend own supply centers
-                    order_str = self._defensive_move(unit_type, location, phase) # Renamed variable
+                    order_str = self._defensive_move(
+                        unit_type, location, phase
+                    )  # Renamed variable
                 else:
                     # Neutral: balanced expansion and defense
-                    order_str = self._neutral_move(unit_type, location, phase) # Renamed variable
+                    order_str = self._neutral_move(
+                        unit_type, location, phase
+                    )  # Renamed variable
 
                 if order_str:
                     orders.append(Order(order_str))
@@ -183,13 +189,15 @@ class ScriptedAgent(BaseAgent):
             builds_needed = center_count - unit_count
             # Simple build strategy: build armies in home centers
             # This would need map knowledge in real implementation
-            for _i in range(builds_needed): # Use _i if i is not used
+            for _i in range(builds_needed):  # Use _i if i is not used
                 orders.append(Order(f"A {self.country[:3]} B"))  # Build army in capital
         elif unit_count > center_count:
             # Must remove units
             removes_needed = unit_count - center_count
             # Remove the "least important" units (simplified)
-            for i_unit in range(min(removes_needed, len(my_units))): # Renamed loop variable
+            for i_unit in range(
+                min(removes_needed, len(my_units))
+            ):  # Renamed loop variable
                 unit_to_remove = my_units[i_unit]
                 orders.append(Order(f"{unit_to_remove} D"))  # Disband
 
@@ -258,7 +266,7 @@ class ScriptedAgent(BaseAgent):
         }
 
         personality_templates = templates.get(self.personality, templates["neutral"])
-        if not personality_templates: # Should not be reached
+        if not personality_templates:  # Should not be reached
             return "Holding my cards close for now."
         return random.choice(personality_templates)
 
@@ -266,7 +274,7 @@ class ScriptedAgent(BaseAgent):
         """Identify a common threat for alliance building."""
         # Find the power with the most supply centers (excluding self and target)
         max_centers = 0
-        common_threat = None # Renamed variable
+        common_threat = None  # Renamed variable
 
         for power_name in phase.powers:
             if (

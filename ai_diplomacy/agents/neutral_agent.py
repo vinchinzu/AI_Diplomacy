@@ -1,9 +1,10 @@
 from typing import List, Dict, Any
 from .mixins.hold_behaviour_mixin import HoldBehaviourMixin
 from ..core.order import Order
-from ..core.message import Message # Import Message
+from ..core.message import Message  # Import Message
 from .base import BaseAgent
 from ..core.state import PhaseState
+
 
 class NeutralAgent(BaseAgent, HoldBehaviourMixin):
     """

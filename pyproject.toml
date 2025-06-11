@@ -5,7 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "anthropic>=0.52.0",
     "asyncio>=3.4.3",
     "bcrypt>=4.3.0",
     "coloredlogs>=15.0.1",
@@ -22,8 +21,8 @@ dependencies = [
     "llm-grok>=1.0",
     "llm-mistral>=0.13",
     "llm-ollama>=0.10.0",
+    "llm-openai>=0.7.1",
     "ollama>=0.4.8",
-    "openai>=1.82.0",
     "pandas>=2.2.3",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
@@ -45,6 +44,8 @@ dependencies = [
     "pytest-cov>=6.1.1",
     "ruff>=0.11.11",
     "lark>=1.2.2",
+    "python-dotenv>=1.1.0",
+    "networkx>=3.5",
 ]
 
 [project.optional-dependencies]

@@ -3,7 +3,7 @@ import sqlite3
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # Assuming llm_coordinator.py is in ai_diplomacy.services
-from generic_llm_framework import llm_coordinator # Updated import
+from generic_llm_framework import llm_coordinator  # Updated import
 # LLMCoordinator, ModelPool, LLMCallResult are not directly used by these DB tests,
 # but LLMResponse is used by mock_llm_response.
 # from generic_llm_framework.llm_coordinator import LLMCoordinator, ModelPool, LLMCallResult # Updated commented import

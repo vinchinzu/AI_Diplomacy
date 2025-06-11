@@ -18,16 +18,16 @@ import os
 import logging
 import argparse
 from datetime import datetime
-from typing import Optional, List, Dict, TYPE_CHECKING, Any, Callable # Added Callable
+from typing import Optional, List, Dict, TYPE_CHECKING, Any, Callable  # Added Callable
 import toml
-import importlib # Added importlib
+import importlib  # Added importlib
 
 logger = logging.getLogger(__name__)
 
 # Import GameHistory and DiplomacyAgent only for type hinting if they are complex
 # to avoid circular dependencies at runtime.
 if TYPE_CHECKING:
-    from diplomacy import Game # Game is already here for type hint
+    from diplomacy import Game  # Game is already here for type hint
     from .game_history import GameHistory
     from .agents.base import BaseAgent
 
@@ -35,12 +35,16 @@ if TYPE_CHECKING:
 try:
     from ..scenarios import SCENARIO_REGISTRY
 except ImportError:
-    logger.warning("Could not import SCENARIO_REGISTRY via 'from ..scenarios'. Trying 'from scenarios'.")
+    logger.warning(
+        "Could not import SCENARIO_REGISTRY via 'from ..scenarios'. Trying 'from scenarios'."
+    )
     try:
         from scenarios import SCENARIO_REGISTRY
     except ImportError:
-        logger.error("Failed to import SCENARIO_REGISTRY. Registry-based scenario loading will fail.")
-        SCENARIO_REGISTRY = {} # Define as empty to prevent NameError during runtime
+        logger.error(
+            "Failed to import SCENARIO_REGISTRY. Registry-based scenario loading will fail."
+        )
+        SCENARIO_REGISTRY = {}  # Define as empty to prevent NameError during runtime
 
 # Default values that might be used if not in TOML
 DEFAULT_LOG_LEVEL = "INFO"
@@ -62,45 +66,92 @@ class GameConfig:
         self._raw_toml_config: Dict[str, Any] = {}
 
         # --- Load Game Configuration TOML ---
-        self.game_config_file_path: Optional[str] = getattr(args, "game_config_file", None)
+        self.game_config_file_path: Optional[str] = getattr(
+            args, "game_config_file", None
+        )
         if self.game_config_file_path and os.path.exists(self.game_config_file_path):
             try:
                 self._raw_toml_config = toml.load(self.game_config_file_path)
-                logger.info(f"Loaded game configuration from TOML file: {self.game_config_file_path}")
+                logger.info(
+                    f"Loaded game configuration from TOML file: {self.game_config_file_path}"
+                )
             except toml.TomlDecodeError as e:
-                logger.error(f"Error decoding TOML from game config file '{self.game_config_file_path}': {e}", exc_info=True)
+                logger.error(
+                    f"Error decoding TOML from game config file '{self.game_config_file_path}': {e}",
+                    exc_info=True,
+                )
                 # Consider if this should be a fatal error, perhaps raise it
                 raise
             except Exception as e:
-                logger.error(f"Unexpected error loading game config file '{self.game_config_file_path}': {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error loading game config file '{self.game_config_file_path}': {e}",
+                    exc_info=True,
+                )
                 raise
         elif self.game_config_file_path:
-            logger.error(f"Game configuration TOML file not found at '{self.game_config_file_path}'. This is required.")
-            raise FileNotFoundError(f"Game configuration TOML file not found: {self.game_config_file_path}")
+            logger.error(
+                f"Game configuration TOML file not found at '{self.game_config_file_path}'. This is required."
+            )
+            raise FileNotFoundError(
+                f"Game configuration TOML file not found: {self.game_config_file_path}"
+            )
         else:
-            logger.error("No game configuration TOML file provided via --game-config-file argument.")
+            logger.error(
+                "No game configuration TOML file provided via --game-config-file argument."
+            )
             raise ValueError("Game configuration TOML file path is required.")
 
         # --- Determine configuration values: CLI (for overrides) > TOML > Default ---
 
         # Core settings from TOML, with potential CLI overrides for a few specific ones
         cli_log_level_override = getattr(args, "log_level", None)
-        self.log_level: str = (cli_log_level_override or self.get_toml_value("logging.log_level", DEFAULT_LOG_LEVEL)).upper()
+        self.log_level: str = (
+            cli_log_level_override
+            or self.get_toml_value("logging.log_level", DEFAULT_LOG_LEVEL)
+        ).upper()
 
-        self.power_name: Optional[str] = self.get_toml_value("scenario.power_name", None) # For single power scenarios
-        self.model_id: Optional[str] = self.get_toml_value("scenario.model_id", None) # For single power scenarios
+        self.power_name: Optional[str] = self.get_toml_value(
+            "scenario.power_name", None
+        )  # For single power scenarios
+        self.model_id: Optional[str] = self.get_toml_value(
+            "scenario.model_id", None
+        )  # For single power scenarios
 
-        self.num_players: int = self.get_toml_value("game_settings.num_players", DEFAULT_NUM_PLAYERS)
-        self.game_id_prefix: str = self.get_toml_value("game_settings.game_id_prefix", DEFAULT_GAME_ID_PREFIX)
-        self.perform_planning_phase: bool = self.get_toml_value("game_settings.perform_planning_phase", False)
-        self.num_negotiation_rounds: int = self.get_toml_value("game_settings.num_negotiation_rounds", DEFAULT_NUM_NEGOTIATION_ROUNDS)
-        self.negotiation_style: str = self.get_toml_value("game_settings.negotiation_style", DEFAULT_NEGOTIATION_STYLE)
-        self.max_years: Optional[int] = self.get_toml_value("game_settings.max_years", None)
-        self.max_diary_tokens: int = self.get_toml_value("game_settings.max_diary_tokens", DEFAULT_MAX_DIARY_TOKENS)
+        self.num_players: int = self.get_toml_value(
+            "game_settings.num_players", DEFAULT_NUM_PLAYERS
+        )
+        self.game_id_prefix: str = self.get_toml_value(
+            "game_settings.game_id_prefix", DEFAULT_GAME_ID_PREFIX
+        )
+        self.perform_planning_phase: bool = self.get_toml_value(
+            "game_settings.perform_planning_phase", False
+        )
+        self.num_negotiation_rounds: int = self.get_toml_value(
+            "game_settings.num_negotiation_rounds", DEFAULT_NUM_NEGOTIATION_ROUNDS
+        )
+        self.negotiation_style: str = self.get_toml_value(
+            "game_settings.negotiation_style", DEFAULT_NEGOTIATION_STYLE
+        )
+        self.max_years: Optional[int] = self.get_toml_value(
+            "game_settings.max_years", None
+        )
+        self.max_phases: Optional[int] = self.get_toml_value(
+            "game_settings.max_phases", None
+        )
+        self.max_diary_tokens: int = self.get_toml_value(
+            "game_settings.max_diary_tokens", DEFAULT_MAX_DIARY_TOKENS
+        )
+        self.perform_diary_generation: bool = self.get_toml_value(
+            "game_settings.perform_diary_generation", True
+        )
+        self.perform_goal_analysis: bool = self.get_toml_value(
+            "game_settings.perform_goal_analysis", True
+        )
 
         self.dev_mode: bool = self.get_toml_value("dev_settings.dev_mode", False)
-        self.verbose_llm_debug: bool = self.get_toml_value("dev_settings.verbose_llm_debug", False)
-
+        self.verbose_llm_debug: bool = self.get_toml_value(
+            "dev_settings.verbose_llm_debug", False
+        )
 
         # Log to file logic: ENV > TOML > dev_mode consideration > Default
         log_to_file_env = os.getenv("LOG_TO_FILE")
@@ -110,18 +161,21 @@ class GameConfig:
             self.log_to_file: bool = True
         elif log_to_file_toml is not None:
             self.log_to_file: bool = bool(log_to_file_toml)
-        elif self.dev_mode: # If dev_mode is true (from TOML) and no other setting, log to file is off
+        elif (
+            self.dev_mode
+        ):  # If dev_mode is true (from TOML) and no other setting, log to file is off
             self.log_to_file: bool = False
-        else: # Default if not dev_mode and no other specifier
+        else:  # Default if not dev_mode and no other specifier
             self.log_to_file: bool = True
-
 
         # --- Agent and Player Configuration (from TOML only) ---
         self.players_list: List[str] = []
         self.agent_types_list: List[str] = []
         self.bloc_definitions_list: List[str] = []
         self.llm_models_list: List[str] = []
-        self.agent_countries_list: List[Optional[str]] = [] # For llm, neutral, null agents
+        self.agent_countries_list: List[
+            Optional[str]
+        ] = []  # For llm, neutral, null agents
 
         agent_entries_from_toml: Optional[List[Dict[str, Any]]] = None
         toml_config_source_for_agents: Optional[str] = None
@@ -132,15 +186,22 @@ class GameConfig:
             toml_config_source_for_agents = "dev_settings.agents"
         else:
             potential_top_level_agents = self.get_toml_value("agents")
-            if isinstance(potential_top_level_agents, list) and potential_top_level_agents:
+            if (
+                isinstance(potential_top_level_agents, list)
+                and potential_top_level_agents
+            ):
                 agent_entries_from_toml = potential_top_level_agents
                 toml_config_source_for_agents = "agents"
 
         if agent_entries_from_toml and toml_config_source_for_agents:
-            logger.info(f"Using agent configurations from TOML file (source: '{toml_config_source_for_agents}').")
+            logger.info(
+                f"Using agent configurations from TOML file (source: '{toml_config_source_for_agents}')."
+            )
             self._parse_agent_data_from_toml(agent_entries_from_toml)
         else:
-            logger.warning("No agent configurations found in TOML (checked 'dev_settings.agents' and 'agents'). Game might not function correctly without agent definitions.")
+            logger.warning(
+                "No agent configurations found in TOML (checked 'dev_settings.agents' and 'agents'). Game might not function correctly without agent definitions."
+            )
             # Depending on game logic, this might be a fatal error.
             # For now, lists will remain empty.
 
@@ -148,22 +209,33 @@ class GameConfig:
         cli_game_factory_path_override = getattr(args, "game_factory_path", None)
         if cli_game_factory_path_override:
             self.game_factory_path: Optional[str] = cli_game_factory_path_override
-            logger.info(f"Using game_factory_path from CLI override: {self.game_factory_path}")
+            logger.info(
+                f"Using game_factory_path from CLI override: {self.game_factory_path}"
+            )
         else:
-            self.game_factory_path: Optional[str] = self.get_toml_value("scenario.game_factory", None)
+            self.game_factory_path: Optional[str] = self.get_toml_value(
+                "scenario.game_factory", None
+            )
             if self.game_factory_path:
-                logger.info(f"Using game_factory_path from TOML: {self.game_factory_path}")
+                logger.info(
+                    f"Using game_factory_path from TOML: {self.game_factory_path}"
+                )
             else:
                 logger.info("No game_factory_path specified in CLI or TOML.")
 
-
-        self.scenario_name_from_toml: Optional[str] = self.get_toml_value("scenario.name", None)
-        self.game_factory: Optional[Callable[..., "Game"]] = None # Initialized attribute
+        self.scenario_name_from_toml: Optional[str] = self.get_toml_value(
+            "scenario.name", None
+        )
+        self.game_factory: Optional[Callable[..., "Game"]] = (
+            None  # Initialized attribute
+        )
 
         if self.game_factory_path:
             if self.game_factory_path in SCENARIO_REGISTRY:
                 self.game_factory = SCENARIO_REGISTRY[self.game_factory_path]
-                logger.info(f"Loaded scenario factory '{self.game_factory_path}' from SCENARIO_REGISTRY.")
+                logger.info(
+                    f"Loaded scenario factory '{self.game_factory_path}' from SCENARIO_REGISTRY."
+                )
             else:
                 logger.warning(
                     f"Scenario factory '{self.game_factory_path}' not found in SCENARIO_REGISTRY. "
@@ -171,24 +243,34 @@ class GameConfig:
                 )
                 try:
                     # Try splitting by '.' first, then by ':' if needed
-                    if '.' in self.game_factory_path:
-                        parts = self.game_factory_path.rsplit('.', 1)
+                    if "." in self.game_factory_path:
+                        parts = self.game_factory_path.rsplit(".", 1)
                         if len(parts) == 2:
                             module_str, func_str = parts
-                        else: # Fallback or handle error if '.' is present but not as a separator
-                            logger.warning(f"Path '{self.game_factory_path}' contains '.' but not in a module.function format. Trying ':' next.")
-                            if ':' in self.game_factory_path:
-                                module_str, func_str = self.game_factory_path.rsplit(':', 1)
+                        else:  # Fallback or handle error if '.' is present but not as a separator
+                            logger.warning(
+                                f"Path '{self.game_factory_path}' contains '.' but not in a module.function format. Trying ':' next."
+                            )
+                            if ":" in self.game_factory_path:
+                                module_str, func_str = self.game_factory_path.rsplit(
+                                    ":", 1
+                                )
                             else:
-                                raise ValueError("Path does not contain a valid separator ('.' or ':')")
-                    elif ':' in self.game_factory_path:
-                        module_str, func_str = self.game_factory_path.rsplit(':', 1)
+                                raise ValueError(
+                                    "Path does not contain a valid separator ('.' or ':')"
+                                )
+                    elif ":" in self.game_factory_path:
+                        module_str, func_str = self.game_factory_path.rsplit(":", 1)
                     else:
-                        raise ValueError(f"Scenario factory path '{self.game_factory_path}' does not contain '.' or ':' to separate module and function.")
-                    
+                        raise ValueError(
+                            f"Scenario factory path '{self.game_factory_path}' does not contain '.' or ':' to separate module and function."
+                        )
+
                     module = importlib.import_module(module_str)
                     self.game_factory = getattr(module, func_str)
-                    logger.info(f"Successfully dynamically imported scenario factory: {self.game_factory_path}")
+                    logger.info(
+                        f"Successfully dynamically imported scenario factory: {self.game_factory_path}"
+                    )
                 except (ImportError, AttributeError, ValueError) as e:
                     logger.error(
                         f"Failed to dynamically import scenario factory '{self.game_factory_path}'. "
@@ -200,9 +282,14 @@ class GameConfig:
                         f"and could not be dynamically imported. "
                         f"Available registered scenarios: {available_scenarios}. Import error: {e}"
                     ) from e
-        elif self.scenario_name_from_toml and self.scenario_name_from_toml in SCENARIO_REGISTRY:
+        elif (
+            self.scenario_name_from_toml
+            and self.scenario_name_from_toml in SCENARIO_REGISTRY
+        ):
             # Fallback to scenario.name if game_factory_path is not provided but name is, and it's in registry
-            self.game_factory_path = self.scenario_name_from_toml # Update path for consistency
+            self.game_factory_path = (
+                self.scenario_name_from_toml
+            )  # Update path for consistency
             self.game_factory = SCENARIO_REGISTRY[self.scenario_name_from_toml]
             logger.info(
                 f"Used 'scenario.name' ('{self.scenario_name_from_toml}') to load factory "
@@ -210,7 +297,9 @@ class GameConfig:
             )
         else:
             # Error if no factory could be resolved based on the inputs
-            if self.game_factory_path or self.scenario_name_from_toml: # If either was specified but resolution failed
+            if (
+                self.game_factory_path or self.scenario_name_from_toml
+            ):  # If either was specified but resolution failed
                 available_scenarios = list(SCENARIO_REGISTRY.keys())
                 err_msg = (
                     f"A scenario was specified ('{self.game_factory_path or self.scenario_name_from_toml}') "
@@ -219,7 +308,7 @@ class GameConfig:
                 )
                 logger.error(err_msg)
                 raise ValueError(err_msg)
-            else: # Neither game_factory_path nor scenario_name_from_toml was specified
+            else:  # Neither game_factory_path nor scenario_name_from_toml was specified
                 logger.error(
                     "No 'scenario.game_factory' or 'scenario.name' (pointing to a registered scenario) "
                     "provided in the TOML configuration. Cannot determine game factory."
@@ -244,7 +333,6 @@ class GameConfig:
         else:
             self.game_id: str = f"{self.game_id_prefix}_{self.current_datetime_str}"
 
-
         # Configure paths
         # base_log_dir: CLI override > TOML > Default
         cli_log_dir_override = getattr(args, "log_dir", None)
@@ -253,14 +341,17 @@ class GameConfig:
         if cli_log_dir_override:
             self.base_log_dir = cli_log_dir_override
             # If cli_log_dir_override already contains the game_id, adjust base_log_dir
-            if self.game_id in cli_log_dir_override and os.path.basename(cli_log_dir_override) == self.game_id:
-                 self.base_log_dir = os.path.dirname(cli_log_dir_override)
+            if (
+                self.game_id in cli_log_dir_override
+                and os.path.basename(cli_log_dir_override) == self.game_id
+            ):
+                self.base_log_dir = os.path.dirname(cli_log_dir_override)
         elif toml_base_log_dir:
             self.base_log_dir = toml_base_log_dir
         else:
             self.base_log_dir = DEFAULT_BASE_LOG_DIR
-        
-        from .logging_setup import get_log_paths # Local import
+
+        from .logging_setup import get_log_paths  # Local import
 
         log_paths = get_log_paths(self.game_id, self.base_log_dir)
         self.game_id_specific_log_dir: str = log_paths["game_id_specific_log_dir"]
@@ -275,6 +366,7 @@ class GameConfig:
             os.makedirs(self.manifestos_dir, exist_ok=True)
 
         from .game_history import GameHistory
+
         self.game_history: "GameHistory" = GameHistory()
         self.game_instance: Optional["Game"] = None
         # Removed self.powers_and_models - model info is now tied to agents via llm_models_list
@@ -291,17 +383,21 @@ class GameConfig:
         logger.info(f"  Game ID: {self.game_id}")
         logger.info(f"  Log Level: {self.log_level}")
         # num_players is now what's set in TOML, or default. Actual player count from agent defs.
-        logger.info(f"  Configured Number of Players (game_settings.num_players): {self.num_players}")
+        logger.info(
+            f"  Configured Number of Players (game_settings.num_players): {self.num_players}"
+        )
         logger.info(f"  Log to File: {self.log_to_file}")
         if self.log_to_file:
             logger.info(f"  Base Log Directory: {self.base_log_dir}")
-            logger.info(f"  Game-Specific Log Directory: {self.game_id_specific_log_dir}")
+            logger.info(
+                f"  Game-Specific Log Directory: {self.game_id_specific_log_dir}"
+            )
             logger.info(f"  LLM Interaction Log: {self.llm_log_path}")
             logger.info(f"  General Log File: {self.general_log_path}")
             logger.info(f"  Results Directory: {self.results_dir}")
             logger.info(f"  Manifestos Directory: {self.manifestos_dir}")
 
-        if self.power_name and self.model_id: # For single agent test scenarios
+        if self.power_name and self.model_id:  # For single agent test scenarios
             logger.info(
                 f"  Single Power Mode Target: {self.power_name} with model {self.model_id}"
             )
@@ -312,6 +408,8 @@ class GameConfig:
         # Removed fixed_models, randomize_fixed_models, exclude_powers logging
         if self.max_years:
             logger.info(f"  Maximum Game Years: {self.max_years}")
+        if self.max_phases:
+            logger.info(f"  Maximum Game Phases: {self.max_phases}")
         logger.info(f"  Development Mode: {self.dev_mode}")
         logger.info(f"  Verbose LLM Debug Logging: {self.verbose_llm_debug}")
         logger.info(f"  Max Diary Tokens: {self.max_diary_tokens}")
@@ -328,55 +426,81 @@ class GameConfig:
             logger.info(f"  TOML Parsed Bloc Definitions: {self.bloc_definitions_list}")
 
         # Logging for scenario/factory information
-        original_factory_path_from_toml = self.get_toml_value('scenario.game_factory', None)
-        original_scenario_name_from_toml = self.get_toml_value('scenario.name', None)
+        original_factory_path_from_toml = self.get_toml_value(
+            "scenario.game_factory", None
+        )
+        original_scenario_name_from_toml = self.get_toml_value("scenario.name", None)
 
         if original_factory_path_from_toml:
-            logger.info(f"  Game Factory Path (from TOML 'scenario.game_factory'): {original_factory_path_from_toml}")
+            logger.info(
+                f"  Game Factory Path (from TOML 'scenario.game_factory'): {original_factory_path_from_toml}"
+            )
         if original_scenario_name_from_toml:
-            logger.info(f"  Scenario Name (from TOML 'scenario.name'): {original_scenario_name_from_toml}")
+            logger.info(
+                f"  Scenario Name (from TOML 'scenario.name'): {original_scenario_name_from_toml}"
+            )
 
         if self.game_factory:
-            factory_module = getattr(self.game_factory, '__module__', 'N/A')
-            factory_name = getattr(self.game_factory, '__name__', 'N/A')
-            
+            factory_module = getattr(self.game_factory, "__module__", "N/A")
+            factory_name = getattr(self.game_factory, "__name__", "N/A")
+
             source_info = "unknown source"
-            if self.game_factory_path: # self.game_factory_path is now the key/path that successfully resolved
-                if self.game_factory_path in SCENARIO_REGISTRY and SCENARIO_REGISTRY[self.game_factory_path] == self.game_factory:
-                     source_info = "from SCENARIO_REGISTRY"
-                     if original_factory_path_from_toml != self.game_factory_path and original_scenario_name_from_toml == self.game_factory_path:
-                         source_info += " (using 'scenario.name')"
-                else: # Must have been dynamically imported
+            if (
+                self.game_factory_path
+            ):  # self.game_factory_path is now the key/path that successfully resolved
+                if (
+                    self.game_factory_path in SCENARIO_REGISTRY
+                    and SCENARIO_REGISTRY[self.game_factory_path] == self.game_factory
+                ):
+                    source_info = "from SCENARIO_REGISTRY"
+                    if (
+                        original_factory_path_from_toml != self.game_factory_path
+                        and original_scenario_name_from_toml == self.game_factory_path
+                    ):
+                        source_info += " (using 'scenario.name')"
+                else:  # Must have been dynamically imported
                     source_info = "dynamically imported"
-            logger.info(f"  Resolved Game Factory: {factory_module}.{factory_name} ({source_info})")
+            logger.info(
+                f"  Resolved Game Factory: {factory_module}.{factory_name} ({source_info})"
+            )
         else:
             # This case should ideally be prevented by the error checks in __init__
-            logger.error("  Game Factory: NOT RESOLVED (This indicates an issue with initialization logic if reached)")
+            logger.error(
+                "  Game Factory: NOT RESOLVED (This indicates an issue with initialization logic if reached)"
+            )
 
     def _parse_agent_data_from_toml(self, agent_entries: List[Dict[str, Any]]) -> None:
         """Parses the 'agents' list from pre-fetched TOML configuration data."""
         if not isinstance(agent_entries, list):
-            logger.warning("'agents' data provided to _parse_agent_data_from_toml is not a list. Skipping agent parsing.")
+            logger.warning(
+                "'agents' data provided to _parse_agent_data_from_toml is not a list. Skipping agent parsing."
+            )
             return
 
         temp_players_list: List[str] = []
         temp_agent_types_list: List[str] = []
         temp_llm_models_list: List[str] = []
-        temp_agent_countries_list: List[Optional[str]] = [] # To store country for llm, neutral, null agents
+        temp_agent_countries_list: List[
+            Optional[str]
+        ] = []  # To store country for llm, neutral, null agents
         temp_bloc_definitions_map: Dict[str, List[str]] = {}
 
         for agent_entry in agent_entries:
             if not isinstance(agent_entry, dict):
-                logger.warning(f"Invalid agent entry in TOML (not a dict): {agent_entry}")
+                logger.warning(
+                    f"Invalid agent entry in TOML (not a dict): {agent_entry}"
+                )
                 continue
 
             agent_id = agent_entry.get("id")
             agent_type = agent_entry.get("type")
             model = agent_entry.get("model")
-            country = agent_entry.get("country") # Get country field
+            country = agent_entry.get("country")  # Get country field
 
             if not agent_id or not agent_type:
-                logger.warning(f"Agent entry in TOML missing 'id' or 'type': {agent_entry}")
+                logger.warning(
+                    f"Agent entry in TOML missing 'id' or 'type': {agent_entry}"
+                )
                 continue
 
             temp_players_list.append(agent_id)
@@ -391,15 +515,19 @@ class GameConfig:
             if agent_type_lower in ["llm", "neutral", "null"]:
                 temp_agent_countries_list.append(country if country else None)
             else:
-                temp_agent_countries_list.append(None) # No specific country for bloc_llm itself
+                temp_agent_countries_list.append(
+                    None
+                )  # No specific country for bloc_llm itself
 
             if agent_type_lower == "bloc_llm":
                 powers = agent_entry.get("powers")
                 if isinstance(powers, list) and all(isinstance(p, str) for p in powers):
                     temp_bloc_definitions_map[agent_id] = powers
                 else:
-                    logger.warning(f"Bloc agent '{agent_id}' in TOML missing valid 'powers' list. This bloc might not be correctly configured.")
-        
+                    logger.warning(
+                        f"Bloc agent '{agent_id}' in TOML missing valid 'powers' list. This bloc might not be correctly configured."
+                    )
+
         # Convert bloc definitions map to the string list format if needed by other parts of the code
         # Or adjust AgentManager to directly use the map.
         # For now, reconstruct bloc_definitions_list if it was sourced from TOML.
@@ -411,19 +539,23 @@ class GameConfig:
         self.players_list = temp_players_list
         self.agent_types_list = temp_agent_types_list
         self.llm_models_list = temp_llm_models_list
-        self.agent_countries_list = temp_agent_countries_list # Store the parsed countries
+        self.agent_countries_list = (
+            temp_agent_countries_list  # Store the parsed countries
+        )
         self.bloc_definitions_list = temp_bloc_definitions_list
-        
+
         # Log what was parsed
         logger.info(f"Parsed from TOML - Players: {self.players_list}")
         logger.info(f"Parsed from TOML - Agent Types: {self.agent_types_list}")
         logger.info(f"Parsed from TOML - LLM Models: {self.llm_models_list}")
         logger.info(f"Parsed from TOML - Agent Countries: {self.agent_countries_list}")
-        logger.info(f"Parsed from TOML - Bloc Definitions: {self.bloc_definitions_list}")
+        logger.info(
+            f"Parsed from TOML - Bloc Definitions: {self.bloc_definitions_list}"
+        )
 
     def get_toml_value(self, key_path: str, default: Optional[Any] = None) -> Any:
         """Safely retrieve a value from the loaded TOML data using a dot-separated path."""
-        keys = key_path.split('.')
+        keys = key_path.split(".")
         value = self._raw_toml_config
         try:
             for key in keys:
@@ -436,7 +568,7 @@ class GameConfig:
         self,
         game_instance: "Game",
         agent_configurations: Dict[str, Dict[str, Any]],
-        initialized_agents: Dict[str, "BaseAgent"], # type: ignore # BaseAgent might not be defined if imports are minimal
+        initialized_agents: Dict[str, "BaseAgent"],  # type: ignore # BaseAgent might not be defined if imports are minimal
     ) -> None:
         """
         Builds and validates agent-power mappings based on agent_configurations
@@ -472,23 +604,37 @@ class GameConfig:
 
             if agent_type == "bloc_llm":
                 # 'powers' for bloc_llm, 'controlled_powers' might be post-parsing name
-                controlled_powers_from_config = config_details.get("powers", config_details.get("controlled_powers", []))
+                controlled_powers_from_config = config_details.get(
+                    "powers", config_details.get("controlled_powers", [])
+                )
             elif agent_type in ["llm", "neutral", "human", "null"]:
-                power = config_details.get("country") # 'country' is typical for single-power agents
+                power = config_details.get(
+                    "country"
+                )  # 'country' is typical for single-power agents
                 if power and isinstance(power, str):
                     controlled_powers_from_config = [power]
             else:
-                logger.warning(f"Unknown or unhandled agent type '{agent_type}' for agent_id '{agent_id}' during map building. Skipping.")
+                logger.warning(
+                    f"Unknown or unhandled agent type '{agent_type}' for agent_id '{agent_id}' during map building. Skipping."
+                )
                 continue
 
             if not controlled_powers_from_config:
-                if agent_type not in ["human", "neutral"]: # Humans/Neutrals might legitimately have no powers assigned initially by some configs
-                    logger.warning(f"Agent '{agent_id}' of type '{agent_type}' has no controlled powers defined in configuration. Skipping power mapping for this agent.")
+                if (
+                    agent_type not in ["human", "neutral"]
+                ):  # Humans/Neutrals might legitimately have no powers assigned initially by some configs
+                    logger.warning(
+                        f"Agent '{agent_id}' of type '{agent_type}' has no controlled powers defined in configuration. Skipping power mapping for this agent."
+                    )
                 elif agent_type == "human" and not config_details.get("country"):
-                    logger.info(f"Human agent '{agent_id}' has no country/power assigned in configuration.")
+                    logger.info(
+                        f"Human agent '{agent_id}' has no country/power assigned in configuration."
+                    )
                 # Allow agents (especially human/neutral) to exist without powers, but log it.
                 # They won't be in power_to_agent_id_map if they don't control powers.
-                self.agent_to_powers_map[agent_id] = [] # Still record the agent as existing
+                self.agent_to_powers_map[
+                    agent_id
+                ] = []  # Still record the agent as existing
                 continue
 
             current_agent_controlled_powers: List[str] = []
@@ -510,14 +656,18 @@ class GameConfig:
                     )
                     logger.error(err_msg)
                     raise ValueError(err_msg)
-                
+
                 self.power_to_agent_id_map[power_name_upper] = agent_id
                 current_agent_controlled_powers.append(power_name_upper)
-            
-            if current_agent_controlled_powers: # Only add to agent_to_powers_map if they actually control powers
-                 self.agent_to_powers_map[agent_id] = current_agent_controlled_powers
-            elif agent_id not in self.agent_to_powers_map: # Ensure agent is listed even if it ended up with no valid powers
-                 self.agent_to_powers_map[agent_id] = []
+
+            if (
+                current_agent_controlled_powers
+            ):  # Only add to agent_to_powers_map if they actually control powers
+                self.agent_to_powers_map[agent_id] = current_agent_controlled_powers
+            elif (
+                agent_id not in self.agent_to_powers_map
+            ):  # Ensure agent is listed even if it ended up with no valid powers
+                self.agent_to_powers_map[agent_id] = []
 
         # Validation 1: Every power in Game.powers has an entry in power_to_agent_id_map
         mapped_powers = set(self.power_to_agent_id_map.keys())
@@ -526,8 +676,10 @@ class GameConfig:
             # This might be acceptable if some powers are meant to be passive/uncontrolled initially.
             # However, for a fully specified game, this would be an error.
             # Depending on strictness, this could be a warning or an error.
-            logger.warning(f"Validation Warning: The following game powers are not mapped to any agent: {unmapped_powers}. This may be intentional for uncontrolled powers.")
-            # If it must be an error: 
+            logger.warning(
+                f"Validation Warning: The following game powers are not mapped to any agent: {unmapped_powers}. This may be intentional for uncontrolled powers."
+            )
+            # If it must be an error:
             # err_msg = f"Validation failed: The following game powers are not mapped to any agent: {unmapped_powers}"
             # logger.error(err_msg)
             # raise ValueError(err_msg)
@@ -537,16 +689,18 @@ class GameConfig:
         for agent_id_in_map, controlled_pws in self.agent_to_powers_map.items():
             # Agent might be in agent_to_powers_map but control no powers (e.g. human observer)
             if not controlled_pws:
-                continue # No powers to validate against initialized agents for this one
-            
+                continue  # No powers to validate against initialized agents for this one
+
             agent_config = agent_configurations.get(agent_id_in_map, {})
             agent_type = agent_config.get("type", "").lower()
 
             if agent_type == "human":
                 # Human agents are often configured but not present in `initialized_agents` (which holds AI/bot instances).
-                logger.debug(f"Agent '{agent_id_in_map}' is human, skipping check against initialized AI agents.")
+                logger.debug(
+                    f"Agent '{agent_id_in_map}' is human, skipping check against initialized AI agents."
+                )
                 continue
-            
+
             # NullAgents are also not AI agents in the typical sense, but they are initialized and present.
             # The existing check for agent_id_in_map in initialized_agents is sufficient.
             # if agent_type == "null":
@@ -565,6 +719,7 @@ class GameConfig:
         logger.info("Agent-power mappings built and validated.")
         logger.info(f"  power_to_agent_id_map: {self.power_to_agent_id_map}")
         logger.info(f"  agent_to_powers_map: {self.agent_to_powers_map}")
+
 
 # Example of how parse_arguments might look (to be kept in lm_game.py or similar entry point)
 # def parse_arguments_example() -> argparse.Namespace:
@@ -610,7 +765,8 @@ agents = [
 """
     # Define the dummy factory function within the scope of the __main__ block or globally if needed
     # This is needed for the game_factory line above to resolve dynamically
-    from diplomacy import Game # Ensure Game is imported for the dummy factory
+    from diplomacy import Game  # Ensure Game is imported for the dummy factory
+
     def dummy_factory_for_test():
         logger.info("Dummy factory for test called!")
         return Game()
@@ -621,11 +777,14 @@ agents = [
     # Instead, this __main__ block itself acts as a test script.
     # The dynamic import will look for GameConfig.dummy_factory_for_test if SCENARIO_REGISTRY is empty or key not found.
     # Let's ensure SCENARIO_REGISTRY has this key for the test to pass cleanly via registry.
-    if 'SCENARIO_REGISTRY' in globals():
-        SCENARIO_REGISTRY["ai_diplomacy.game_config.dummy_factory_for_test"] = dummy_factory_for_test
-    else: # If SCENARIO_REGISTRY wasn't imported (e.g. file run directly)
-        SCENARIO_REGISTRY = {"ai_diplomacy.game_config.dummy_factory_for_test": dummy_factory_for_test}
-
+    if "SCENARIO_REGISTRY" in globals():
+        SCENARIO_REGISTRY["ai_diplomacy.game_config.dummy_factory_for_test"] = (
+            dummy_factory_for_test
+        )
+    else:  # If SCENARIO_REGISTRY wasn't imported (e.g. file run directly)
+        SCENARIO_REGISTRY = {
+            "ai_diplomacy.game_config.dummy_factory_for_test": dummy_factory_for_test
+        }
 
     dummy_toml_path_main = "temp_main_test_config.toml"
     with open(dummy_toml_path_main, "w") as f:
@@ -649,9 +808,13 @@ agents = [
         config = GameConfig(test_args_main)
         logger.info(f"GameConfig instantiated successfully. Game ID: {config.game_id}")
         assert config.game_factory is not None, "Game factory should be loaded"
-        if config.game_factory is not None: # mypy guard
-           assert config.game_factory.__name__ == "dummy_factory_for_test", "Incorrect factory loaded"
-           logger.info(f"Successfully loaded game factory: {config.game_factory.__name__}")
+        if config.game_factory is not None:  # mypy guard
+            assert config.game_factory.__name__ == "dummy_factory_for_test", (
+                "Incorrect factory loaded"
+            )
+            logger.info(
+                f"Successfully loaded game factory: {config.game_factory.__name__}"
+            )
 
         # Test a case where factory is expected to fail
         error_toml_content = """
@@ -660,17 +823,24 @@ game_factory = "this.does.not.exist"
 agents = []
         """
         error_toml_path = "temp_error_test_config.toml"
-        with open(error_toml_path, "w") as f: f.write(error_toml_content)
-        error_args = argparse.Namespace(game_config_file=error_toml_path, log_level=None, log_dir=None, game_id=None)
-        logger.info("--- Testing GameConfig with non-existent factory (expect ValueError) ---")
+        with open(error_toml_path, "w") as f:
+            f.write(error_toml_content)
+        error_args = argparse.Namespace(
+            game_config_file=error_toml_path, log_level=None, log_dir=None, game_id=None
+        )
+        logger.info(
+            "--- Testing GameConfig with non-existent factory (expect ValueError) ---"
+        )
         try:
             GameConfig(error_args)
-            logger.error("Error test FAILED: ValueError not raised for non-existent factory.")
+            logger.error(
+                "Error test FAILED: ValueError not raised for non-existent factory."
+            )
         except ValueError:
             logger.info("Error test PASSED: ValueError raised as expected.")
         finally:
-            if os.path.exists(error_toml_path): os.remove(error_toml_path)
-
+            if os.path.exists(error_toml_path):
+                os.remove(error_toml_path)
 
     except Exception as e:
         logger.error(f"Error during GameConfig __main__ test: {e}", exc_info=True)
@@ -680,6 +850,5 @@ agents = []
         # Clean up the dummy factory from SCENARIO_REGISTRY if it was added for the test
         if "ai_diplomacy.game_config.dummy_factory_for_test" in SCENARIO_REGISTRY:
             del SCENARIO_REGISTRY["ai_diplomacy.game_config.dummy_factory_for_test"]
-
 
     logger.info("--- GameConfig __main__ Test Complete ---")

@@ -16,6 +16,8 @@ __all__ = [
     "LLM_RESPONSE_KEY_ORDERS",
     "LLM_RESPONSE_KEY_MESSAGES",
     "LLM_RESPONSE_KEY_DIARY_ENTRY",
+    "LLM_RESPONSE_KEY_UPDATED_GOALS",
+    "LLM_RESPONSE_KEY_REASONING",
     "LLM_MESSAGE_KEY_RECIPIENT",
     "LLM_MESSAGE_KEY_CONTENT",
     "LLM_MESSAGE_KEY_TYPE",
@@ -84,6 +86,8 @@ DEFAULT_SYSTEM_PROMPT_FILENAME = "system_prompt.txt"  # Used in LLMAgent
 LLM_RESPONSE_KEY_ORDERS = "orders"  # Used in LLMAgent
 LLM_RESPONSE_KEY_MESSAGES = "messages"  # Used in LLMAgent
 LLM_RESPONSE_KEY_DIARY_ENTRY = "diary_entry"  # Used in LLMAgent
+LLM_RESPONSE_KEY_UPDATED_GOALS = "updated_goals"  # Used in LLMAgent
+LLM_RESPONSE_KEY_REASONING = "reasoning"  # Used in LLMAgent
 LLM_MESSAGE_KEY_RECIPIENT = "recipient"  # Used in LLMAgent
 LLM_MESSAGE_KEY_CONTENT = "content"  # Used in LLMAgent
 LLM_MESSAGE_KEY_TYPE = "message_type"  # Used in LLMAgent

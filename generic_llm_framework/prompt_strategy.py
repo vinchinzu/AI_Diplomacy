@@ -12,8 +12,7 @@ from typing import Optional, Dict, List, Any
 
 # Assuming llm_utils will be in the same generic framework package.
 # This import is for BasePromptStrategy's _load_generic_system_prompt
-from . import llm_utils # Ensure this is available
-from typing import Optional, Dict, List, Any # Ensure these are available at the top
+from . import llm_utils  # Ensure this is available
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,11 @@ class BasePromptStrategy:
     Subclasses should implement specific prompt building logic.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, base_prompts_dir: Optional[str] = None):
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        base_prompts_dir: Optional[str] = None,
+    ):
         """
         Initializes the BasePromptStrategy.
 
@@ -40,7 +43,9 @@ class BasePromptStrategy:
 
     def _load_generic_system_prompt(self) -> str:
         """Loads a generic system prompt template from file or provides a default."""
-        filename = self.config.get("system_prompt_filename", "generic_system_prompt.txt")
+        filename = self.config.get(
+            "system_prompt_filename", "generic_system_prompt.txt"
+        )
         prompt_content = llm_utils.load_prompt_file(
             filename, base_prompts_dir=self.base_prompts_dir
         )
@@ -79,14 +84,18 @@ class BasePromptStrategy:
         raise NotImplementedError("Subclasses must implement build_prompt.")
 
 
-class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStrategy
+class DiplomacyPromptStrategy(BasePromptStrategy):  # Inherit from BasePromptStrategy
     """
     Handles construction of prompts for various LLM interactions specific to the game of Diplomacy.
     This class implements the generic build_prompt method by dispatching to its
     Diplomacy-specific prompt construction methods.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, base_prompts_dir: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        base_prompts_dir: Optional[str] = None,
+    ) -> None:
         """
         Initializes the Diplomacy-specific prompt strategy.
         Args:
@@ -105,7 +114,7 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
         Builds a Diplomacy-specific prompt based on the action_type and context.
         This method routes to the appropriate specialized prompt building method.
         """
-        if action_type == 'decide_diplomacy_orders':
+        if action_type == "decide_diplomacy_orders":
             # Ensure all necessary keys are in context, or handle missing keys
             # Expected keys by build_order_prompt: country, goals, relationships, formatted_diary, context_text, tools_available
             return self.build_order_prompt(
@@ -114,9 +123,9 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
                 relationships=context.get("relationships", {}),
                 formatted_diary=context.get("formatted_diary", ""),
                 context_text=context.get("context_text", ""),
-                tools_available=context.get("tools_available", False)
+                tools_available=context.get("tools_available", False),
             )
-        elif action_type == 'generate_diplomacy_messages':
+        elif action_type == "generate_diplomacy_messages":
             # Expected keys: country, active_powers, goals, relationships, formatted_diary, context_text, tools_available
             return self.build_negotiation_prompt(
                 country=context.get("country"),
@@ -125,9 +134,9 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
                 relationships=context.get("relationships", {}),
                 formatted_diary=context.get("formatted_diary", ""),
                 context_text=context.get("context_text", ""),
-                tools_available=context.get("tools_available", False)
+                tools_available=context.get("tools_available", False),
             )
-        elif action_type == 'generate_diplomacy_diary':
+        elif action_type == "generate_diplomacy_diary":
             # Expected keys: country, phase_name, power_units, power_centers, is_game_over, events, goals, relationships
             return self.build_diary_generation_prompt(
                 country=context.get("country"),
@@ -137,9 +146,9 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
                 is_game_over=context.get("is_game_over", False),
                 events=context.get("events", []),
                 goals=context.get("goals", []),
-                relationships=context.get("relationships", {})
+                relationships=context.get("relationships", {}),
             )
-        elif action_type == 'analyze_diplomacy_goals':
+        elif action_type == "analyze_diplomacy_goals":
             # Expected keys: country, phase_name, power_units, power_centers, all_power_centers, is_game_over, current_goals, relationships
             return self.build_goal_analysis_prompt(
                 country=context.get("country"),
@@ -149,23 +158,31 @@ class DiplomacyPromptStrategy(BasePromptStrategy): # Inherit from BasePromptStra
                 all_power_centers=context.get("all_power_centers", {}),
                 is_game_over=context.get("is_game_over", False),
                 current_goals=context.get("current_goals", []),
-                relationships=context.get("relationships", {})
+                relationships=context.get("relationships", {}),
             )
-        elif action_type == 'decide_bloc_orders': # For BlocLLMAgent
+        elif action_type == "decide_bloc_orders":  # For BlocLLMAgent
             # This action_type implies the context contains a pre-rendered prompt
             if "prompt_content" not in context:
-                logger.error("Context must contain 'prompt_content' for 'decide_bloc_orders'")
-                raise ValueError("Context must contain 'prompt_content' for 'decide_bloc_orders'")
+                logger.error(
+                    "Context must contain 'prompt_content' for 'decide_bloc_orders'"
+                )
+                raise ValueError(
+                    "Context must contain 'prompt_content' for 'decide_bloc_orders'"
+                )
             # The system prompt for bloc agent might be different, handled by BlocLLMAgent itself
             # or passed in context if generic_agent needs to set it.
             # For now, assume prompt_content is the full user prompt.
             return context["prompt_content"]
-        else: # This is the single, final else block
-            logger.warning(f"Unknown action_type '{action_type}' for DiplomacyPromptStrategy. Falling back to generic system prompt or error.")
+        else:  # This is the single, final else block
+            logger.warning(
+                f"Unknown action_type '{action_type}' for DiplomacyPromptStrategy. Falling back to generic system prompt or error."
+            )
             # Fallback or error, or try to use a generic prompt if BasePromptStrategy has one
             # For now, let's indicate an issue.
             # return super().build_prompt(action_type, context) # If BasePromptStrategy had a default
-            raise ValueError(f"Unsupported action_type for DiplomacyPromptStrategy: {action_type}")
+            raise ValueError(
+                f"Unsupported action_type for DiplomacyPromptStrategy: {action_type}"
+            )
 
     # The existing Diplomacy-specific methods (build_order_prompt, etc.) remain below.
     # Their signatures are assumed to be correct as per the file's current state.
@@ -473,7 +490,6 @@ if __name__ == "__main__":
     #     base_strategy.build_prompt("some_action", {})
     # except NotImplementedError as e:
     #     print(f"Caught expected error for BasePromptStrategy: {e}")
-
 
     # Example for DiplomacyPromptStrategy
     diplomacy_strategy = DiplomacyPromptStrategy()

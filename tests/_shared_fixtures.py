@@ -3,6 +3,7 @@ from typing import Any
 from datetime import datetime
 import os
 import pytest
+from pathlib import Path
 
 # Assuming GameConfig is imported from the correct path
 # Adjust the import path if GameConfig is located elsewhere.
@@ -17,6 +18,7 @@ from ai_diplomacy.game_config import (
 
 # Default values for args that GameConfig expects
 DEFAULT_ARGS_VALUES = {
+    "game_config_file": None,
     "power_name": None,
     "model_id": None,
     "num_players": DEFAULT_NUM_PLAYERS,
@@ -89,7 +91,7 @@ def create_game_config(**kwargs: Any) -> GameConfig:
 
 
 @pytest.fixture(name="game_config")
-def game_config_fixture(**kwargs: Any) -> GameConfig:
+def game_config_fixture(cfg_file: Path, **kwargs: Any) -> GameConfig:
     """
     Pytest fixture that provides a GameConfig instance with sensible defaults.
     Allows overrides via kwargs passed during fixture parametrization or direct use.
@@ -97,5 +99,6 @@ def game_config_fixture(**kwargs: Any) -> GameConfig:
     """
     # This internal function call allows monkeypatching create_game_config in tests if needed,
     # though typically, overriding kwargs or monkeypatching the GameConfig object itself is preferred.
+    if "game_config_file" not in kwargs:
+        kwargs["game_config_file"] = str(cfg_file)
     return create_game_config(**kwargs)
-

@@ -13,11 +13,18 @@ from .bloc_llm_agent import BlocLLMAgent  # Import BlocLLMAgent
 from ..services.config import (
     AgentConfig,
     DiplomacyConfig,
-)  # DiplomacyConfig might not be used here directly anymore
+)
+from ..game_config import GameConfig as DiplomacyGameConfig
+
 # Removed incorrect import: from ..services.llm_coordinator import LLMCoordinator
-from generic_llm_framework.llm_coordinator import LLMCoordinator as GenericLLMCoordinator_type # For type hinting and instantiation
+from generic_llm_framework.llm_coordinator import (
+    LLMCoordinator as GenericLLMCoordinator_type,
+)  # For type hinting and instantiation
 from ..services.context_provider import ContextProviderFactory
-from generic_llm_framework.llm_utils import load_prompt_file # Updated import
+from generic_llm_framework.llm_utils import load_prompt_file  # Updated import
+from ..utils.prompt_loader import (
+    load_diplomacy_prompt,
+)  # Import diplomacy-specific prompt loader
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +40,9 @@ class AgentFactory:
 
     def __init__(
         self,
-        llm_coordinator: Optional[GenericLLMCoordinator_type] = None, # Use type hint for generic coordinator
+        llm_coordinator: Optional[
+            GenericLLMCoordinator_type
+        ] = None,  # Use type hint for generic coordinator
         context_provider_factory: Optional[ContextProviderFactory] = None,
     ):
         """
@@ -43,7 +52,9 @@ class AgentFactory:
             llm_coordinator: Shared LLM coordinator instance (will create if None)
             context_provider_factory: Shared context provider factory (will create if None)
         """
-        self.llm_coordinator = llm_coordinator or GenericLLMCoordinator_type() # Instantiate generic coordinator
+        self.llm_coordinator = (
+            llm_coordinator or GenericLLMCoordinator_type()
+        )  # Instantiate generic coordinator
         self.context_provider_factory = (
             context_provider_factory or ContextProviderFactory()
         )
@@ -54,6 +65,7 @@ class AgentFactory:
         agent_id: str,
         country: str,  # For NeutralAgent and LLMAgent (single country)
         config: AgentConfig,
+        game_config: DiplomacyGameConfig,
         game_id: str = "unknown_game",
         # New optional parameters for BlocLLMAgent
         bloc_name: Optional[str] = None,
@@ -66,6 +78,7 @@ class AgentFactory:
             agent_id: Unique identifier for the agent
             country: Country/power the agent represents (for single-power agents)
             config: Agent configuration (contains agent_type, model_id, etc.)
+            game_config: Game configuration for the game
             game_id: Game identifier for tracking
             bloc_name: Name of the bloc, if creating a BlocLLMAgent (e.g., "ENTENTE_BLOC")
             controlled_powers: List of powers controlled by the bloc, if creating a BlocLLMAgent
@@ -81,12 +94,16 @@ class AgentFactory:
         )
 
         if config.type == "llm":
-            return self._create_llm_agent(agent_id, country, config, game_id)
+            return self._create_llm_agent(
+                agent_id, country, config, game_config, game_id
+            )
         elif config.type == "scripted":
             return self._create_scripted_agent(agent_id, country, config)
         elif config.type == "neutral":  # New condition for NeutralAgent
             return self._create_neutral_agent(agent_id, country, config)
-        elif config.type == "null": # "null" type will use NeutralAgent's creation logic
+        elif (
+            config.type == "null"
+        ):  # "null" type will use NeutralAgent's creation logic
             return self._create_neutral_agent(agent_id, country, config)
         elif config.type == "bloc_llm":  # New condition for BlocLLMAgent
             if not bloc_name or not controlled_powers:
@@ -96,13 +113,18 @@ class AgentFactory:
             # The 'country' argument to create_agent is not directly used by BlocLLMAgent's constructor,
             # as it takes controlled_powers. We pass it along for consistency but it's overshadowed.
             return self._create_bloc_llm_agent(
-                agent_id, bloc_name, controlled_powers, config, game_id
+                agent_id, bloc_name, controlled_powers, config, game_config, game_id
             )
         else:
             raise ValueError(f"Unsupported agent type: {config.type}")
 
     def _create_llm_agent(
-        self, agent_id: str, country: str, config: AgentConfig, game_id: str
+        self,
+        agent_id: str,
+        country: str,
+        config: AgentConfig,
+        game_config: DiplomacyGameConfig,
+        game_id: str,
     ) -> LLMAgent:
         """Create an LLM-based agent."""
         if not config.model_id:
@@ -112,6 +134,7 @@ class AgentFactory:
             agent_id=agent_id,
             country=country,
             config=config,
+            game_config=game_config,
             game_id=game_id,
             llm_coordinator=self.llm_coordinator,
             context_provider_factory=self.context_provider_factory,
@@ -153,6 +176,7 @@ class AgentFactory:
         bloc_name: str,
         controlled_powers: List[str],
         config: AgentConfig,  # Config for the LLM model of the bloc
+        game_config: DiplomacyGameConfig,
         game_id: str,
     ) -> BlocLLMAgent:
         """Create a BlocLLMAgent."""
@@ -173,10 +197,11 @@ class AgentFactory:
             bloc_name=bloc_name,
             controlled_powers=controlled_powers,
             config=config,  # Contains model_id, temperature, etc.
+            game_config=game_config,
             game_id=game_id,
             llm_coordinator=self.llm_coordinator,
             context_provider_factory=self.context_provider_factory,
-            prompt_loader=load_prompt_file,  # Assuming default prompt loader
+            prompt_loader=load_diplomacy_prompt,  # Use diplomacy-specific loader
         )
 
     # create_agents_from_config might need adjustment if DiplomacyConfig structure changes
@@ -207,9 +232,7 @@ class AgentFactory:
                 # The mapping of this config to a bloc_name and controlled_powers
                 # would need to be handled by the caller or be part of AgentConfig extension.
 
-                agent_id_country_part = (
-                    agent_config.country
-                )  # Fallback for single powers
+                agent_id_country_part = agent_config.name  # Fallback for single powers
 
                 # This is a placeholder: how do we get bloc_name and controlled_powers from agent_config?
                 # This method is likely superseded by AgentManager's direct calls to create_agent.
@@ -217,27 +240,28 @@ class AgentFactory:
                 # For now, assume this method is primarily for non-bloc agents if called directly.
                 if agent_config.type == "bloc_llm":
                     logger.error(
-                        f"create_agents_from_config cannot create bloc_llm for {agent_config.country} without bloc_name and controlled_powers. Skipping."
+                        f"create_agents_from_config cannot create bloc_llm for {agent_config.name} without bloc_name and controlled_powers. Skipping."
                     )
                     continue
 
                 agent = self.create_agent(
                     agent_id=f"{agent_id_country_part.lower()}_{game_id}",
-                    country=agent_config.country,  # Used for single agents
+                    country=agent_config.name,  # Used for single agents
                     config=agent_config,
+                    game_config=game_config,
                     game_id=game_id,
                     # bloc_name and controlled_powers would be None here, problematic for bloc_llm
                 )
-                agents[agent_config.country] = (
+                agents[agent_config.name] = (
                     agent  # Keying by country might be an issue for blocs
                 )
                 logger.info(
-                    f"Created agent for {agent_config.country} via create_agents_from_config"
+                    f"Created agent for {agent_config.name} via create_agents_from_config"
                 )
 
             except Exception as e:
                 logger.error(
-                    f"Failed to create agent for {agent_config.country} via create_agents_from_config: {e}",
+                    f"Failed to create agent for {agent_config.name} via create_agents_from_config: {e}",
                     exc_info=True,
                 )
 
@@ -256,10 +280,10 @@ class AgentFactory:
         """
         try:
             if (
-                not config.country and config.type != "bloc_llm"
+                not config.name and config.type != "bloc_llm"
             ):  # country is not primary for bloc, bloc_name is
                 logger.error(
-                    "Agent config missing required field: country (for non-bloc types)"
+                    "Agent config missing required field: name (for non-bloc types)"
                 )
                 return False
             if not config.type:
@@ -271,13 +295,13 @@ class AgentFactory:
                 "scripted",
                 "neutral",
                 "bloc_llm",
-                "null", # Added "null" as a valid type
+                "null",  # Added "null" as a valid type
             ]:  # Added new types
                 logger.error(f"Invalid agent type: {config.type}")
                 return False
 
             if config.type == "llm" and not config.model_id:
-                logger.error(f"LLM agent for {config.country} missing model_id")
+                logger.error(f"LLM agent for {config.name} missing model_id")
                 return False
 
             if config.type == "bloc_llm" and not config.model_id:
@@ -285,10 +309,10 @@ class AgentFactory:
                 logger.error("BlocLLMAgent missing model_id in config")
                 return False
 
-            # Country validation might not apply if config.country is a bloc name
+            # Country validation might not apply if config.name is a bloc name
             # For single agents, country should be one of the standard powers.
             if config.type in ["llm", "scripted", "neutral"]:
-                if config.country not in [
+                if config.name not in [
                     "AUSTRIA",
                     "ENGLAND",
                     "FRANCE",
@@ -302,7 +326,7 @@ class AgentFactory:
                 ]:
                     # Temporarily relax this for wwi_two_player scenario where country might be "ENTENTE_BLOC"
                     # This part of validation might need rethinking based on how AgentConfig is used for blocs.
-                    # logger.warning(f"Country '{config.country}' not a standard power. Ensure this is intended (e.g., a bloc name).")
+                    # logger.warning(f"Country '{config.name}' not a standard power. Ensure this is intended (e.g., a bloc name).")
                     pass
 
             return True

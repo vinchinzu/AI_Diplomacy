@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Abstract base agent interface.
 Defines the contract all agents must implement without coupling to specific LLM providers.
@@ -25,15 +26,19 @@ class BaseAgent(ABC):
 
     def __init__(self, agent_id: str, country: str):
         self.agent_id = agent_id
-        self.country = country.upper() # Ensure country is uppercase
+        self.country = country.upper()  # Ensure country is uppercase
         self.model_id: Optional[str] = None
 
     @abstractmethod
-    async def decide_orders(self, phase: PhaseState) -> List["Order"]: # Use quotes for forward ref
+    async def decide_orders(
+        self, phase: PhaseState
+    ) -> List["Order"]:  # Use quotes for forward ref
         pass
 
     @abstractmethod
-    async def negotiate(self, phase: PhaseState) -> List["Message"]: # Use quotes for forward ref
+    async def negotiate(
+        self, phase: PhaseState
+    ) -> List["Message"]:  # Use quotes for forward ref
         pass
 
     @abstractmethod

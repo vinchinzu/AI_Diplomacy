@@ -11,18 +11,10 @@ def run_wwi_2p_test():
     # For simplicity, we assume models are available or will be handled by lm_game.py if it includes such checks.
 
     command = [
-        sys.executable,  # Path to current python interpreter
+        "/home/v/01_projects/11_games/AI_Diplomacy/.venv/bin/python",
         "lm_game.py",
-        "--preset",
-        "wwi_2p",
-        "--players",
-        "llm,llm",  # Two LLM agents controlling the blocs
-        "--llm-models",
-        "gemma3:4b,gemma3:4b",  # Both blocs use gemma3:4b
-        "--log_level",
-        "INFO",  # Example: Set a log level
-        # You might want to add other arguments like --game_id_prefix for test runs
-        # e.g., "--game_id_prefix", "test_wwi_2p_"
+        "--game_config_file",
+        "wwi_test.toml",
     ]
 
     print(f"Running command: {' '.join(command)}")

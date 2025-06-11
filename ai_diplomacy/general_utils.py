@@ -18,7 +18,7 @@ import re
 import ast
 import json
 from .prompt_constructor import construct_order_generation_prompt
-from generic_llm_framework.llm_coordinator import LLMCoordinator # Corrected import
+from generic_llm_framework.llm_coordinator import LLMCoordinator  # Corrected import
 
 if TYPE_CHECKING:
     from .game_config import GameConfig
