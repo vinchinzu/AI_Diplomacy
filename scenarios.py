@@ -47,46 +47,4 @@ def wwi_two_player(entente_player: str, central_player: str, italy_controller: s
     """
     game = Game(variant="standard", start_year=1914)  # Standard game has all 7 powers
     return game
-
-
-def standard_game_template():  # Helper if common logic arises
-    """Returns a standard game instance."""
-    return Game()  # Variant "standard" is default
-
-
-@register_scenario("five_player_scenario")
-def five_player_scenario():
-    """
-    Game setup for 5 active players.
-
-    This function primarily serves as a named factory for a standard game.
-    The actual designation of neutral powers (typically 2 for a 5-player game)
-    is handled by agent type assignments (e.g., 'neutral' or 'null_agent')
-    based on presets or command-line arguments processed by the AgentManager
-    or game setup coordinator.
-    Returns a standard game instance.
-    """
-    game = standard_game_template()
-    game.set_metadata(
-        "description",
-        "Standard game, intended for 5 active players. Neutral powers (2) to be configured by agent assignments.",
-    )
-    return game
-
-
-@register_scenario("six_player_scenario")
-def six_player_scenario():
-    """
-    Game setup for 6 active players.
-
-    Similar to five_player_scenario, this function acts as a named factory.
-    The actual designation of the neutral power (typically 1 for a 6-player game)
-    is handled externally by agent type assignments.
-    Returns a standard game instance.
-    """
-    game = standard_game_template()
-    game.set_metadata(
-        "description",
-        "Standard game, intended for 6 active players. Neutral power (1) to be configured by agent assignments.",
-    )
-    return game
+# Removed standard_game_template, five_player_scenario, and six_player_scenario
