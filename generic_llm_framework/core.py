@@ -32,9 +32,7 @@ class GenericLLMAgentInterface:
         """
         raise NotImplementedError
 
-    async def update_internal_state(
-        self, state: Any, events: List[Dict[str, Any]]
-    ) -> None:
+    async def update_internal_state(self, state: Any, events: List[Dict[str, Any]]) -> None:
         """
         Updates the agent's internal state based on recent events.
 

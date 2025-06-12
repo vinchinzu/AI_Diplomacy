@@ -19,9 +19,7 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
 
     dummy_orchestrator = default_dummy_orchestrator
     dummy_orchestrator.active_powers = powers
-    dummy_orchestrator.config.num_negotiation_rounds = (
-        1  # For perform_negotiation_rounds
-    )
+    dummy_orchestrator.config.num_negotiation_rounds = 1  # For perform_negotiation_rounds
 
     # Simplistic agent mock, can be customized if needed per power
     mock_agent = MagicMock(name="GenericAgent")
@@ -44,9 +42,7 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
         # unless we were testing the non-LLM path of _get_orders_for_power itself.
         # mocker.patch("ai_diplomacy.utils.gather_possible_orders", return_value={"A LON": ["A LON H"]})
 
-        orders = await strat.get_orders(
-            fake_game, dummy_orchestrator, mock_game_history
-        )
+        orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
         # Assertions
         mocked_perform_negotiation.assert_awaited_once_with(
@@ -69,9 +65,7 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
                 if args[1] == power_name:  # game, power_name, agent, game_history
                     power_found_in_calls = True
                     break
-            assert power_found_in_calls, (
-                f"_get_orders_for_power not called for {power_name}"
-            )
+            assert power_found_in_calls, f"_get_orders_for_power not called for {power_name}"
 
         # Check that game_history.add_orders was called for each power
         assert mock_game_history.add_orders.call_count == len(powers)
@@ -84,17 +78,13 @@ async def test_movement_generates_orders(fake_game_factory, default_dummy_orches
         # This is more robust than assert_any_call in a loop if call order might vary or for exactness.
         actual_calls = mock_game_history.add_orders.call_args_list
         for expected_call in expected_calls:
-            assert expected_call in actual_calls, (
-                f"{expected_call} not found in {actual_calls}"
-            )
+            assert expected_call in actual_calls, f"{expected_call} not found in {actual_calls}"
 
         # Validate the structure of returned orders
         assert isinstance(orders, dict)
         assert set(orders.keys()) == set(powers)
         for power_name in powers:
-            assert orders[power_name] == [
-                "WAIVE"
-            ]  # Based on DummyOrchestrator's _get_orders_for_power mock
+            assert orders[power_name] == ["WAIVE"]  # Based on DummyOrchestrator's _get_orders_for_power mock
 
 
 @pytest.mark.unit
@@ -124,27 +114,21 @@ async def test_movement_agent_not_found_and_agent_error(
 
     dummy_orchestrator.agent_manager.get_agent.side_effect = get_agent_side_effect
 
-    async def get_orders_side_effect_orchestrator(
-        game_obj, power_name_call, agent_obj, history_obj
-    ):
+    async def get_orders_side_effect_orchestrator(game_obj, power_name_call, agent_obj, history_obj):
         if power_name_call == "ENG":
             raise AttributeError("ENG LLM simulated attribute error")
         elif power_name_call == "GER":
             return ["A BER H"]
         return ["WAIVE"]
 
-    dummy_orchestrator._get_orders_for_power = AsyncMock(
-        side_effect=get_orders_side_effect_orchestrator
-    )
+    dummy_orchestrator._get_orders_for_power = AsyncMock(side_effect=get_orders_side_effect_orchestrator)
 
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
     mock_game_history.add_phase = (
         MagicMock()
     )  # Still needed by perform_negotiation_rounds even if not awaited
-    mock_game_history.add_message = (
-        MagicMock()
-    )  # Still needed by perform_negotiation_rounds
+    mock_game_history.add_message = MagicMock()  # Still needed by perform_negotiation_rounds
 
     with patch(
         "ai_diplomacy.orchestrators.movement.perform_negotiation_rounds",
@@ -154,9 +138,7 @@ async def test_movement_agent_not_found_and_agent_error(
         caplog.set_level(
             logging.WARNING, logger="ai_diplomacy.orchestrators.movement"
         )  # Set to capture WARNING and above
-        orders = await strat.get_orders(
-            fake_game, dummy_orchestrator, mock_game_history
-        )
+        orders = await strat.get_orders(fake_game, dummy_orchestrator, mock_game_history)
 
     mocked_perform_negotiation.assert_awaited_once()
 
@@ -175,9 +157,7 @@ async def test_movement_agent_not_found_and_agent_error(
         call(fake_game.get_current_phase(), "FRA", []),  # FRA no agent
         call(fake_game.get_current_phase(), "GER", ["A BER H"]),  # GER succeeded
     ]
-    mock_game_history.add_orders.assert_has_calls(
-        expected_history_calls, any_order=True
-    )
+    mock_game_history.add_orders.assert_has_calls(expected_history_calls, any_order=True)
     assert mock_game_history.add_orders.call_count == 3
 
     assert isinstance(orders, dict)

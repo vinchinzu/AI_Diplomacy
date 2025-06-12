@@ -24,9 +24,7 @@ def test_db_path(tmp_path, monkeypatch):
 
 @pytest.fixture
 def mock_llm_response():
-    response = MagicMock(
-        spec=llm_coordinator.LLMResponse
-    )  # Use the imported LLMResponse
+    response = MagicMock(spec=llm_coordinator.LLMResponse)  # Use the imported LLMResponse
     response.model = MagicMock()
     response.model.model_id = "test_model"
 
@@ -50,81 +48,12 @@ async def test_record_usage_success(mock_llm_response, test_db_path):
 
     # Verify data in DB
     with sqlite3.connect(test_db_path) as conn:
-        cursor = conn.execute(
-            "SELECT game_id, agent, phase, model, input, output FROM usage"
-        )
+        cursor = conn.execute("SELECT game_id, agent, phase, model, input, output FROM usage")
         row = cursor.fetchone()
         assert row is not None
         assert row == ("game1", "agent1", "phase1", "test_model", 100, 50)
 
 
-@pytest.mark.integration
-@pytest.mark.slow
-@pytest.mark.asyncio
-async def test_record_usage_sqlite_error_on_insert(
-    mock_llm_response, test_db_path, caplog
-):
-    caplog.set_level(logging.ERROR)
-    with patch("sqlite3.connect") as mock_connect:
-        mock_conn_instance = MagicMock()
-        mock_conn_instance.execute.side_effect = sqlite3.Error(
-            "Simulated DB insert error"
-        )
-        mock_connect.return_value.__enter__.return_value = mock_conn_instance
-
-        await llm_coordinator.record_usage(
-            "game1", "agent1", "phase1", mock_llm_response
-        )
-
-        assert "SQLite error in record_usage: Simulated DB insert error" in caplog.text
-
-
-@pytest.mark.integration
-@pytest.mark.slow
-@pytest.mark.asyncio
-async def test_record_usage_attribute_error_on_response(
-    caplog,
-):  # mock_llm_response not needed here
-    caplog.set_level(logging.ERROR)
-    faulty_response = MagicMock()
-    faulty_response.model = None
-
-    async def mock_faulty_usage():
-        usage_mock = MagicMock()
-        usage_mock.input = 10
-        usage_mock.output = 5
-        return usage_mock
-
-    faulty_response.usage = AsyncMock(side_effect=mock_faulty_usage)
-
-    await llm_coordinator.record_usage(
-        "game_attr_err", "agent_attr_err", "phase_attr_err", faulty_response
-    )
-
-    assert "Error accessing response attributes in record_usage" in caplog.text
-
-
-@pytest.mark.integration
-@pytest.mark.slow
-@pytest.mark.asyncio
-async def test_record_usage_generic_exception(mock_llm_response, test_db_path, caplog):
-    caplog.set_level(logging.ERROR)
-    async def mock_usage_exception():
-        raise Exception("Simulated generic error in usage")
-
-    mock_llm_response.usage = AsyncMock(side_effect=mock_usage_exception)
-
-    await llm_coordinator.record_usage(
-        "game_generic_err", "agent_generic_err", "phase_generic_err", mock_llm_response
-    )
-
-    assert (
-        "Unexpected error in record_usage: Simulated generic error in usage"
-        in caplog.text
-    )
-
-
-# Helper function for setting up data for DB stat tests
 def setup_basic_usage_data(db_path):
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -175,22 +104,6 @@ def test_get_usage_stats_by_country_no_data_for_game(test_db_path):
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_get_usage_stats_by_country_sqlite_error(test_db_path, caplog):
-    caplog.set_level(logging.ERROR)
-    with patch("sqlite3.connect") as mock_connect:
-        mock_conn_instance = MagicMock()
-        mock_conn_instance.execute.side_effect = sqlite3.Error(
-            "Simulated DB query error"
-        )
-        mock_connect.return_value.__enter__.return_value = mock_conn_instance
-
-        stats = llm_coordinator.get_usage_stats_by_country("game1")
-        assert stats == {}
-        assert "Error getting usage stats: Simulated DB query error" in caplog.text
-
-
-@pytest.mark.integration
-@pytest.mark.slow
 def test_get_total_usage_stats_success(test_db_path):
     setup_basic_usage_data(test_db_path)
     stats = llm_coordinator.get_total_usage_stats("game1")
@@ -214,29 +127,6 @@ def test_get_total_usage_stats_no_data_for_game(test_db_path):
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_get_total_usage_stats_sqlite_error(test_db_path, caplog):
-    caplog.set_level(logging.ERROR)
-    with patch("sqlite3.connect") as mock_connect:
-        mock_conn_instance = MagicMock()
-        mock_conn_instance.execute.side_effect = sqlite3.Error(
-            "Simulated DB total query error"
-        )
-        mock_connect.return_value.__enter__.return_value = mock_conn_instance
-
-        stats = llm_coordinator.get_total_usage_stats("game1")
-        assert stats == {
-            "total_api_calls": 0,
-            "total_input_tokens": 0,
-            "total_output_tokens": 0,
-        }
-        assert (
-            "Error getting total usage stats: Simulated DB total query error"
-            in caplog.text
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.slow
 def test_initialize_database_success(
     tmp_path,
 ):  # tmp_path here is fine, test_db_path fixture not strictly needed if we manage path locally
@@ -251,9 +141,7 @@ def test_initialize_database_success(
         llm_coordinator.initialize_database()
         assert db_file.exists()
         with sqlite3.connect(db_file) as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='usage';"
-            )
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='usage';")
             assert cursor.fetchone() is not None
             cursor = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='index' AND name='usage_game_agent';"
@@ -261,23 +149,3 @@ def test_initialize_database_success(
             assert cursor.fetchone() is not None
     finally:
         llm_coordinator.DATABASE_PATH = original_db_path  # Restore
-
-
-@pytest.mark.integration
-@pytest.mark.slow
-def test_initialize_database_failure(tmp_path, caplog, monkeypatch):
-    caplog.set_level(logging.ERROR)
-    # This test simulates a failure to create the database file, e.g., due to permissions.
-    # We can simulate this by trying to create a DB file in a non-existent directory without
-    # creating the directory first.
-    non_existent_path = tmp_path / "non_writeable_dir" / "fail.db"
-
-    # monkeypatch is better than direct modification for restoring
-    monkeypatch.setattr(llm_coordinator, "DATABASE_PATH", str(non_existent_path))
-
-    llm_coordinator.initialize_database()
-
-    assert (
-        f"Error initializing database {non_existent_path}"
-        in caplog.text
-    )

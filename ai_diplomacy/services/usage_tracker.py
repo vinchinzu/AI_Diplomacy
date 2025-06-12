@@ -53,9 +53,7 @@ class GameSummary:
 class UsageTracker:
     """Service for analyzing LLM usage patterns and costs."""
 
-    def __init__(
-        self, db_path: str = constants.LLM_USAGE_DATABASE_PATH
-    ):  # Use constant for default
+    def __init__(self, db_path: str = constants.LLM_USAGE_DATABASE_PATH):  # Use constant for default
         self.db_path = db_path
 
     def get_agent_stats(self, game_id: str, agent: str) -> Optional[UsageStats]:
@@ -139,9 +137,7 @@ class UsageTracker:
         """Get list of all game IDs in the database."""
         try:
             with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute(
-                    "SELECT DISTINCT game_id FROM usage ORDER BY game_id"
-                )
+                cursor = conn.execute("SELECT DISTINCT game_id FROM usage ORDER BY game_id")
                 return [row[0] for row in cursor.fetchall()]
         except sqlite3.Error as e:
             logger.error(f"Error getting game list: {e}")

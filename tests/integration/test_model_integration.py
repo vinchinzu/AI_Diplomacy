@@ -21,9 +21,7 @@ def test_get_model_and_prompt():
     try:
         model = llm.get_model(MODEL_ID)
     except llm.UnknownModelError as e:
-        _fail(
-            f"Failed to get model '{MODEL_ID}'. Is it installed and configured correctly? Error: {e}"
-        )
+        _fail(f"Failed to get model '{MODEL_ID}'. Is it installed and configured correctly? Error: {e}")
     except Exception as e:
         _fail(f"An unexpected error occurred while getting the model: {e}")
 
@@ -36,9 +34,7 @@ def test_get_model_and_prompt():
         assert response.text().strip().lower() == "test", (
             f"Model did not respond as expected. Response: '{response.text()}'"
         )
-        print(
-            f"Synchronous prompt successful with {MODEL_ID}. Response: {response.text()}"
-        )
+        print(f"Synchronous prompt successful with {MODEL_ID}. Response: {response.text()}")
     except AttributeError as e:
         if "async_prompt" in str(e) or "prompt" not in dir(model):
             _fail(

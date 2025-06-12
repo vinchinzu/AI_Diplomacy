@@ -13,9 +13,7 @@ class GameResultParser:
     be stored in different attributes depending on the game library version.
     """
 
-    def extract_adjudicated_orders(
-        self, game: Game, power_names: List[str]
-    ) -> Dict[str, List[List[str]]]:
+    def extract_adjudicated_orders(self, game: Game, power_names: List[str]) -> Dict[str, List[List[str]]]:
         """
         Finds and returns the adjudicated orders for the given powers.
 
@@ -69,9 +67,7 @@ class GameResultParser:
                 # It wraps each order string in its own list.
                 all_results[power_name] = [[order] for order in raw_orders[power_name]]
             else:
-                logger.warning(
-                    f"Could not find orders for '{power_name}' in extracted orders source."
-                )
+                logger.warning(f"Could not find orders for '{power_name}' in extracted orders source.")
                 all_results[power_name] = []
 
         return all_results

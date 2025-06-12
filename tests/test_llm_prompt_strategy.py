@@ -1,5 +1,5 @@
 import unittest
-from generic_llm_framework.prompt_strategy import DiplomacyPromptStrategy
+from ai_diplomacy.prompt_strategy import DiplomacyPromptStrategy
 
 
 class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
@@ -8,7 +8,9 @@ class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
         self.country = "FRANCE"
         self.goals = ["Expand East", "Secure borders"]
         self.relationships = {"ENGLAND": "Ally", "GERMANY": "Enemy", "ITALY": "Neutral"}
-        self.formatted_diary = "[Spring1901] Made a deal with England.\n[Autumn1901] Germany attacked Belgium."
+        self.formatted_diary = (
+            "[Spring1901] Made a deal with England.\n[Autumn1901] Germany attacked Belgium."
+        )
         self.context_text = "Strategic overview: Germany is aggressive."
         self.active_powers = [
             "ENGLAND",
@@ -154,9 +156,7 @@ class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
         self.assertIn("- Your Supply Centers:", prompt)
         self.assertIn("- Your Current Goals:", prompt)
         self.assertIn("- Your Relationships:", prompt)
-        self.assertIn(
-            f"Events that occurred during the '{self.phase_name}' phase:", prompt
-        )
+        self.assertIn(f"Events that occurred during the '{self.phase_name}' phase:", prompt)
 
     def test_build_diary_generation_prompt_game_over(self):
         prompt = self.strategy.build_diary_generation_prompt(
@@ -185,9 +185,7 @@ class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
         self.assertIn(f"You are an AI agent playing as {self.country}", prompt)
         self.assertIn(f"The phase '{self.phase_name}' has just concluded.", prompt)
         self.assertIn(", ".join(self.power_units), prompt)
-        self.assertIn(
-            f"({len(self.power_centers)}): {', '.join(self.power_centers)}", prompt
-        )
+        self.assertIn(f"({len(self.power_centers)}): {', '.join(self.power_centers)}", prompt)
         for power, count in self.all_power_centers.items():
             self.assertIn(f"- {power}: {count} centers", prompt)
         self.assertIn("The game is ongoing.", prompt)
@@ -235,9 +233,7 @@ class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
         with unittest.mock.patch.object(
             self.strategy, "build_order_prompt", return_value=expected_mock_return
         ) as mock_build_order_prompt:
-            returned_prompt = self.strategy.build_prompt(
-                action_type, context_for_orders
-            )
+            returned_prompt = self.strategy.build_prompt(action_type, context_for_orders)
 
             mock_build_order_prompt.assert_called_once_with(
                 country=self.country,
@@ -265,9 +261,7 @@ class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
         with unittest.mock.patch.object(
             self.strategy, "build_negotiation_prompt", return_value=expected_mock_return
         ) as mock_build_negotiation_prompt:
-            returned_prompt = self.strategy.build_prompt(
-                action_type, context_for_messages
-            )
+            returned_prompt = self.strategy.build_prompt(action_type, context_for_messages)
 
             mock_build_negotiation_prompt.assert_called_once_with(
                 country=self.country,
@@ -358,14 +352,15 @@ class TestDiplomacyPromptStrategy(unittest.TestCase):  # Renamed class
         action_type = "decide_bloc_orders"
         context_for_bloc_empty = {}
         with self.assertRaisesRegex(
-            ValueError, "Context for decide_bloc_orders must contain 'prompt_content'"
+            ValueError, "Context must contain 'prompt_content' for 'decide_bloc_orders'"
         ):
             self.strategy.build_prompt(action_type, context_for_bloc_empty)
 
     def test_build_prompt_invalid_action_type(self):
         action_type = "some_invalid_action_type"
         with self.assertRaisesRegex(
-            ValueError, f"Unknown action type for prompt building: {action_type}"
+            ValueError,
+            f"Unsupported action_type for DiplomacyPromptStrategy: {action_type}",
         ):
             self.strategy.build_prompt(action_type, {})
 

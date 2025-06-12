@@ -27,9 +27,7 @@ class DiplomacyAgentState:
             country (str): The country this state belongs to.
         """
         if country not in constants.ALL_POWERS:  # Use constant for validation
-            raise ValueError(
-                f"Invalid country '{country}'. Must be one of {constants.ALL_POWERS}"
-            )
+            raise ValueError(f"Invalid country '{country}'. Must be one of {constants.ALL_POWERS}")
 
         self.country: str = country
         self.goals: List[str] = []
@@ -41,9 +39,7 @@ class DiplomacyAgentState:
         self.private_journal: List[str] = []
         self.private_diary: List[str] = []
 
-    def initialize_bloc_relationships(
-        self, allied_powers: List[str], all_powers_in_game: List[str]
-    ) -> None:
+    def initialize_bloc_relationships(self, allied_powers: List[str], all_powers_in_game: List[str]) -> None:
         """
         Initializes relationships based on a bloc structure.
         Sets relationships to 'Ally' for bloc members and 'Enemy' for all others.
@@ -107,9 +103,7 @@ class DiplomacyAgentState:
         recent_entries = self.private_diary[-max_entries:]
         return "\n".join(recent_entries)
 
-    def _update_relationships_from_events(
-        self, own_country: str, events: List[Dict[str, Any]]
-    ) -> None:
+    def _update_relationships_from_events(self, own_country: str, events: List[Dict[str, Any]]) -> None:
         """
         Updates relationships based on game events.
         This is intended for internal use by the agent.
@@ -139,23 +133,17 @@ class DiplomacyAgentState:
                     current_relationship = self.relationships[attacker]
                     current_index = relationship_levels.index(current_relationship)
                     if current_index > 0:  # Not "Enemy"
-                        self.relationships[attacker] = relationship_levels[
-                            current_index - 1
-                        ]
+                        self.relationships[attacker] = relationship_levels[current_index - 1]
                         # Logging: logging.info(f"Relationship with {attacker} worsened to {self.relationships[attacker]} due to attack.")
 
             elif event_type == "support":
                 supporter = event.get("supporter")
-                supported_player = event.get(
-                    "supported"
-                )  # Assuming 'supported' holds the country name
+                supported_player = event.get("supported")  # Assuming 'supported' holds the country name
                 if supported_player == own_country and supporter in self.relationships:
                     current_relationship = self.relationships[supporter]
                     current_index = relationship_levels.index(current_relationship)
                     if current_index < len(relationship_levels) - 1:  # Not "Ally"
-                        self.relationships[supporter] = relationship_levels[
-                            current_index + 1
-                        ]
+                        self.relationships[supporter] = relationship_levels[current_index + 1]
                         # Logging: logging.info(f"Relationship with {supporter} improved to {self.relationships[supporter]} due to support.")
             # Add handling for other event types like "betrayal" if they become relevant.
 
@@ -169,12 +157,8 @@ if __name__ == "__main__":
     print(f"  Relationships: {french_state.relationships}")
 
     # Add some diary and journal entries
-    french_state.add_diary_entry(
-        "Planning to move to Burgundy.", "Spring 1901 Movement"
-    )
-    french_state.add_journal_entry(
-        "Germany seems suspicious. They moved an army to Ruhr."
-    )
+    french_state.add_diary_entry("Planning to move to Burgundy.", "Spring 1901 Movement")
+    french_state.add_journal_entry("Germany seems suspicious. They moved an army to Ruhr.")
     french_state.add_diary_entry(
         "Successfully moved to Burgundy.", "Spring 1901 Retreats"
     )  # Assuming phase name
@@ -228,9 +212,7 @@ if __name__ == "__main__":
     ]
 
     print(f"Relationships before events: {french_state.relationships}")
-    french_state._update_relationships_from_events(
-        own_country="FRANCE", events=events_affecting_france
-    )
+    french_state._update_relationships_from_events(own_country="FRANCE", events=events_affecting_france)
     print(f"Relationships after events: {french_state.relationships}")
 
     # Test edge cases for relationships
@@ -251,9 +233,7 @@ if __name__ == "__main__":
             "supported": "FRANCE",
         },  # Italy is already Ally
     ]
-    french_state._update_relationships_from_events(
-        own_country="FRANCE", events=boundary_test_events
-    )
+    french_state._update_relationships_from_events(own_country="FRANCE", events=boundary_test_events)
     print(f"Relationships after boundary tests: {french_state.relationships}")
 
     # Test initialization with an invalid country
@@ -264,6 +244,4 @@ if __name__ == "__main__":
 
     # Test formatting empty diary
     empty_diary_state = DiplomacyAgentState("AUSTRIA")
-    print(
-        f"\nFormatted empty diary: {empty_diary_state.format_private_diary_for_prompt()}"
-    )
+    print(f"\nFormatted empty diary: {empty_diary_state.format_private_diary_for_prompt()}")

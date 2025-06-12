@@ -109,14 +109,10 @@ class InlineContextProvider(ContextProvider):
             phase_info = self._format_phase_state(context_data.phase_state, country)
 
             # Format possible orders
-            orders_info = self._format_possible_orders(
-                context_data.possible_orders, country
-            )
+            orders_info = self._format_possible_orders(context_data.possible_orders, country)
 
             # Format strategic analysis if available
-            strategic_info = self._format_strategic_analysis(
-                context_data.strategic_analysis
-            )
+            strategic_info = self._format_strategic_analysis(context_data.strategic_analysis)
 
             # Format recent messages
             messages_info = self._format_recent_messages(context_data.recent_messages)
@@ -145,9 +141,7 @@ class InlineContextProvider(ContextProvider):
             }
 
         except Exception as e:
-            logger.error(
-                f"Error providing inline context for {country}: {e}", exc_info=True
-            )
+            logger.error(f"Error providing inline context for {country}: {e}", exc_info=True)
             # Return minimal fallback context
             return {
                 "provider_type": constants.CONTEXT_PROVIDER_INLINE,
@@ -194,9 +188,7 @@ class InlineContextProvider(ContextProvider):
 
         return "\n".join(lines)
 
-    def _format_possible_orders(
-        self, possible_orders: Dict[str, List[str]], country: str
-    ) -> str:
+    def _format_possible_orders(self, possible_orders: Dict[str, List[str]], country: str) -> str:
         """Format possible orders as text."""
         if not possible_orders:
             return "No orders available for this phase."
@@ -266,9 +258,7 @@ class MCPContextProvider(ContextProvider):
         logger.debug(f"Providing MCP context for {country}")
 
         if not self.is_available():
-            logger.warning(
-                f"MCP provider not available for {country}, falling back to basic context"
-            )
+            logger.warning(f"MCP provider not available for {country}, falling back to basic context")
             return {
                 "provider_type": constants.CONTEXT_PROVIDER_MCP,
                 "context_text": "MCP tools not available - using basic context",
@@ -299,9 +289,7 @@ Use these tools to gather the information you need to make decisions.
             }
 
         except Exception as e:
-            logger.error(
-                f"Error providing MCP context for {country}: {e}", exc_info=True
-            )
+            logger.error(f"Error providing MCP context for {country}: {e}", exc_info=True)
             return {
                 "provider_type": constants.CONTEXT_PROVIDER_MCP,
                 "context_text": f"MCP context failed: {e}",
@@ -421,17 +409,11 @@ class ContextProviderFactory:
         provider = self._providers[provider_type]
 
         if not provider.is_available():
-            logger.warning(
-                f"Requested provider '{provider_type}' is not available, falling back to inline"
-            )
+            logger.warning(f"Requested provider '{provider_type}' is not available, falling back to inline")
             return self._providers[constants.CONTEXT_PROVIDER_INLINE]
 
         return provider
 
     def get_available_providers(self) -> List[str]:
         """Get list of available provider types."""
-        return [
-            ptype
-            for ptype, provider in self._providers.items()
-            if provider.is_available()
-        ]
+        return [ptype for ptype, provider in self._providers.items() if provider.is_available()]

@@ -115,9 +115,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 "GameConfig.powers_and_models not set when PhaseOrchestrator is initialized. Active powers list will be empty initially."
             )
 
-        self._phase_map: Dict[
-            PhaseType, PhaseStrategy
-        ] = {  # Ensure correct type hint for _phase_map
+        self._phase_map: Dict[PhaseType, PhaseStrategy] = {  # Ensure correct type hint for _phase_map
             PhaseType.MVT: MovementPhaseStrategy(),
             PhaseType.RET: RetreatPhaseStrategy(),
             PhaseType.BLD: BuildPhaseStrategy(),
@@ -129,13 +127,8 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
 
         try:
             while True:
-                if (
-                    self.config.max_phases
-                    and self.phase_counter >= self.config.max_phases
-                ):
-                    logger.info(
-                        f"Reached max_phases {self.config.max_phases}. Ending game."
-                    )
+                if self.config.max_phases and self.phase_counter >= self.config.max_phases:
+                    logger.info(f"Reached max_phases {self.config.max_phases}. Ending game.")
                     break
 
                 current_phase_val = getattr(game, "phase", constants.DEFAULT_PHASE_NAME)
@@ -148,16 +141,12 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                     and current_year is not None
                     and current_year >= self.config.max_years
                 ):
-                    logger.info(
-                        f"Reached max_year {self.config.max_years}. Ending game."
-                    )
+                    logger.info(f"Reached max_year {self.config.max_years}. Ending game.")
                     try:
                         game.draw()
                         logger.info("Game marked as completed via draw.")
                     except Exception as e:
-                        logger.warning(
-                            f"Could not call game.draw(): {e}. Setting status manually."
-                        )
+                        logger.warning(f"Could not call game.draw(): {e}. Setting status manually.")
                         if hasattr(game, "set_status"):
                             game.set_status(constants.GAME_STATUS_COMPLETED)
                         if hasattr(game, "phase"):
@@ -174,17 +163,12 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 self.active_powers = [
                     p
                     for p in game.powers
-                    if p in self.config.powers_and_models
-                    and not game.powers[p].is_eliminated()
+                    if p in self.config.powers_and_models and not game.powers[p].is_eliminated()
                 ]
                 if not self.active_powers:
-                    logger.info(
-                        "No active LLM-controlled powers remaining. Ending game."
-                    )
+                    logger.info("No active LLM-controlled powers remaining. Ending game.")
                     break
-                logger.info(
-                    f"Active LLM-controlled powers for this phase: {self.active_powers}"
-                )
+                logger.info(f"Active LLM-controlled powers for this phase: {self.active_powers}")
 
                 all_orders_for_phase: Dict[str, List[str]] = {}
                 phase_type_val_str = get_phase_type_from_game(game)
@@ -203,16 +187,11 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                         continue
 
                 if strategy:
-                    all_orders_for_phase = await strategy.get_orders(
-                        game, self, game_history
-                    )
+                    all_orders_for_phase = await strategy.get_orders(game, self, game_history)
                     # ---- MODIFICATION START: Set orders and process ----
                     logger.info("Submitting all collected orders to the game engine.")
                     for power_name, orders in all_orders_for_phase.items():
-                        if (
-                            power_name in game.powers
-                            and not game.powers[power_name].is_eliminated()
-                        ):
+                        if power_name in game.powers and not game.powers[power_name].is_eliminated():
                             game.set_orders(power_name, orders)
                             logger.debug(f"Orders set for {power_name}: {orders}")
                         else:
@@ -222,16 +201,12 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
 
                     logger.info("Processing game state with submitted orders...")
                     game.process()
-                    logger.info(
-                        f"Game processed. New phase: {game.get_current_phase()}"
-                    )
+                    logger.info(f"Game processed. New phase: {game.get_current_phase()}")
                     # ---- MODIFICATION END: Set orders and process ----
 
                 elif phase_type_val_str == constants.PHASE_TYPE_PROCESS_ONLY:
                     current_phase_str = game.get_current_phase()
-                    logger.info(
-                        f"Phase is '{current_phase_str}', processing to next phase."
-                    )
+                    logger.info(f"Phase is '{current_phase_str}', processing to next phase.")
                     game.process()
                     continue
                 else:
@@ -259,10 +234,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                     if (
                         current_phase_type_val == PhaseType.BLD.value
                         and constants.PHASE_STRING_WINTER in current_phase_val.upper()
-                    ) or (
-                        constants.PHASE_STRING_WINTER in current_phase_val.upper()
-                        and game.is_game_done
-                    ):
+                    ) or (constants.PHASE_STRING_WINTER in current_phase_val.upper() and game.is_game_done):
                         logger.info(
                             f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_val}."
                         )
@@ -270,30 +242,22 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                             game.draw()
                             logger.info("Game marked as completed via draw.")
                         except Exception as e:
-                            logger.warning(
-                                f"Could not call game.draw(): {e}. Setting status manually."
-                            )
+                            logger.warning(f"Could not call game.draw(): {e}. Setting status manually.")
                             if hasattr(game, "set_status"):
                                 game.set_status(constants.GAME_STATUS_COMPLETED)
                             if hasattr(game, "phase"):
                                 game.phase = constants.GAME_STATUS_COMPLETED
                         break
-            logger.info(
-                f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}"
-            )
+            logger.info(f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}")
         except AttributeError as e:
             logger.error(
                 f"AttributeError in game loop: {e}. This might indicate an issue with the game object's structure.",
                 exc_info=True,
             )
         except Exception as e:
-            logger.error(
-                f"An unexpected error occurred during the game loop: {e}", exc_info=True
-            )
+            logger.error(f"An unexpected error occurred during the game loop: {e}", exc_info=True)
         finally:
-            logger.info(
-                "Game loop finished or interrupted. Processing final results..."
-            )
+            logger.info("Game loop finished or interrupted. Processing final results...")
 
     async def _get_orders_for_power(
         self,
@@ -304,9 +268,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
     ) -> List[str]:
         current_phase_state = PhaseState.from_game(game)
         try:
-            logger.debug(
-                f"Calling agent.decide_orders() for {power_name} (type: {type(agent).__name__})"
-            )
+            logger.debug(f"Calling agent.decide_orders() for {power_name} (type: {type(agent).__name__})")
             order_objects: List[Order] = await asyncio.wait_for(
                 agent.decide_orders(current_phase_state),
                 timeout=constants.ORDER_DECISION_TIMEOUT_SECONDS,
@@ -317,9 +279,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
             logger.error(f"❌ Timeout getting orders for {power_name}.")
             raise RuntimeError(f"Timeout getting orders for {power_name}")
         except Exception as e:
-            logger.error(
-                f"❌ Error getting orders for {power_name}: {e}", exc_info=True
-            )
+            logger.error(f"❌ Error getting orders for {power_name}: {e}", exc_info=True)
             raise RuntimeError(f"Error getting orders for {power_name}: {e}") from e
 
     async def _process_phase_results_and_updates(
@@ -332,9 +292,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         logger.info(f"Processing results for phase: {processed_phase_name}")
         try:
             power_names_with_orders = list(all_orders_for_phase.keys())
-            adjudicated_results = self.result_parser.extract_adjudicated_orders(
-                game, power_names_with_orders
-            )
+            adjudicated_results = self.result_parser.extract_adjudicated_orders(game, power_names_with_orders)
 
             for power_name, results in adjudicated_results.items():
                 if results:
@@ -352,15 +310,11 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         current_year = extract_year_from_phase(current_phase)
         if current_year is not None and current_year > 1902:
             year_to_consolidate = str(current_year - 2)
-            logger.info(
-                f"Checking for diary consolidation for year {year_to_consolidate}."
-            )
+            logger.info(f"Checking for diary consolidation for year {year_to_consolidate}.")
             for power_name in self.active_powers:
                 agent = self.agent_manager.get_agent_by_power(power_name)
                 if agent:
-                    logger.debug(
-                        f"Consolidating diary for {power_name} (year {year_to_consolidate})..."
-                    )
+                    logger.debug(f"Consolidating diary for {power_name} (year {year_to_consolidate})...")
                     try:
                         await agent.consolidate_year_diary_entries(
                             year_to_consolidate, game, self.config.llm_log_path
@@ -379,9 +333,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 try:
                     current_phase_state = PhaseState.from_game(game)
                     power_orders = adjudicated_results.get(power_name, [])
-                    await agent.update_state(
-                        current_phase_state, power_orders, power_name=power_name
-                    )
+                    await agent.update_state(current_phase_state, power_orders, power_name=power_name)
                 except AttributeError as ae:
                     logger.error(
                         f"❌ AttributeError during state update for {power_name} (likely an issue with game/agent state access): {ae}",

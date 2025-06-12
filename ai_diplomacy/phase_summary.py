@@ -45,13 +45,9 @@ class PhaseSummaryGenerator:
         self.game_config = game_config
         self.power_name = power_name
         # Load the prompt template
-        self.prompt_template = llm_utils.load_prompt_file(
-            "phase_result_diary_prompt.txt"
-        )
+        self.prompt_template = llm_utils.load_prompt_file("phase_result_diary_prompt.txt")
 
-    def _get_all_orders_for_phase(
-        self, game_history: "GameHistory", phase_name: str
-    ) -> Dict[str, List[str]]:
+    def _get_all_orders_for_phase(self, game_history: "GameHistory", phase_name: str) -> Dict[str, List[str]]:
         """
         Helper to retrieve all orders for a given phase from game history.
         """
@@ -75,9 +71,7 @@ class PhaseSummaryGenerator:
         # Summary text of what happened in the phase (e.g. from game engine or observer)
         # This was 'phase_summary_text' in original lm_game.py, passed to phase_result_diary
         phase_events_summary_text: str,
-        all_orders_for_phase: Dict[
-            str, List[str]
-        ],  # Orders for the phase being summarized
+        all_orders_for_phase: Dict[str, List[str]],  # Orders for the phase being summarized
     ) -> str:
         """
         Generates a phase result diary entry (which serves as a phase summary from the agent's perspective),
@@ -122,38 +116,24 @@ class PhaseSummaryGenerator:
 
         your_negotiations_text = ""
         if messages_this_phase:
-            for (
-                msg_obj
-            ) in messages_this_phase:  # Assuming msg_obj has sender, recipient, content
+            for msg_obj in messages_this_phase:  # Assuming msg_obj has sender, recipient, content
                 if msg_obj.sender == self.power_name:
-                    your_negotiations_text += (
-                        f"To {msg_obj.recipient}: {msg_obj.content}\n"
-                    )
+                    your_negotiations_text += f"To {msg_obj.recipient}: {msg_obj.content}\n"
                 elif msg_obj.recipient == self.power_name:
-                    your_negotiations_text += (
-                        f"From {msg_obj.sender}: {msg_obj.content}\n"
-                    )
+                    your_negotiations_text += f"From {msg_obj.sender}: {msg_obj.content}\n"
         if not your_negotiations_text:
-            your_negotiations_text = (
-                "No negotiations involving your power recorded for this phase."
-            )
+            your_negotiations_text = "No negotiations involving your power recorded for this phase."
 
         agent_goals_str = "Goals not available to PhaseSummaryGenerator directly."
-        agent_relationships_str = (
-            "Relationships not available to PhaseSummaryGenerator directly."
-        )
+        agent_relationships_str = "Relationships not available to PhaseSummaryGenerator directly."
 
         # If game_config.agents exists and contains the current agent:
         if self.game_config.agents and self.power_name in self.game_config.agents:
             current_agent = self.game_config.agents[self.power_name]
             agent_goals_str = (
-                "\n".join([f"- {g}" for g in current_agent.goals])
-                if current_agent.goals
-                else "None"
+                "\n".join([f"- {g}" for g in current_agent.goals]) if current_agent.goals else "None"
             )
-            agent_relationships_str = "\n".join(
-                [f"{p}: {r}" for p, r in current_agent.relationships.items()]
-            )
+            agent_relationships_str = "\n".join([f"{p}: {r}" for p, r in current_agent.relationships.items()])
         else:
             logger.warning(
                 f"Agent {self.power_name} not found in game_config.agents. Using placeholder goals/relationships for summary generation."
@@ -172,9 +152,7 @@ class PhaseSummaryGenerator:
 
         prompt = self.prompt_template.format(**prompt_template_vars)
 
-        generated_summary = (
-            "(Error: LLM call not made due to refactoring)"  # Default error
-        )
+        generated_summary = "(Error: LLM call not made due to refactoring)"  # Default error
         try:
             # Make the LLM call via the coordinator
             model_id_for_summary = (
@@ -183,9 +161,7 @@ class PhaseSummaryGenerator:
                 else "default_summary_model"
             )
             game_id_for_summary = (
-                self.game_config.game_id
-                if hasattr(self.game_config, "game_id")
-                else "unknown_game"
+                self.game_config.game_id if hasattr(self.game_config, "game_id") else "unknown_game"
             )
 
             generated_summary = await self.llm_coordinator.request(
@@ -197,9 +173,7 @@ class PhaseSummaryGenerator:
                 phase_str=phase_to_summarize_name,
                 request_identifier=f"{self.power_name}-{phase_to_summarize_name}-summary_gen",
             )
-            logger.info(
-                f"[{self.power_name}] LLM response for phase summary: {generated_summary[:100]}..."
-            )
+            logger.info(f"[{self.power_name}] LLM response for phase summary: {generated_summary[:100]}...")
 
         except Exception as e:
             logger.error(
@@ -209,9 +183,7 @@ class PhaseSummaryGenerator:
             generated_summary = f"(Error: LLM call failed - {e})"
 
         if generated_summary and not generated_summary.startswith("(Error:"):
-            game_history.add_phase_summary(
-                phase_to_summarize_name, self.power_name, generated_summary
-            )
+            game_history.add_phase_summary(phase_to_summarize_name, self.power_name, generated_summary)
             logger.info(
                 f"[{self.power_name}] Generated and recorded phase summary/diary for {phase_to_summarize_name}."
             )
@@ -221,7 +193,5 @@ class PhaseSummaryGenerator:
                 f"[{self.power_name}] Failed to generate phase summary/diary for {phase_to_summarize_name}. LLM response: {generated_summary}"
             )
             error_message = f"(Error: Failed to generate phase summary for {self.power_name} for {phase_to_summarize_name})"
-            game_history.add_phase_summary(
-                phase_to_summarize_name, self.power_name, error_message
-            )
+            game_history.add_phase_summary(phase_to_summarize_name, self.power_name, error_message)
             return error_message

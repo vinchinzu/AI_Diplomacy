@@ -8,9 +8,7 @@ from tests._shared_fixtures import create_game_config
 def test_default_behavior_all_powers_llm():
     """All powers get fallback model if no other config and num_players = 7."""
     gc = create_game_config(num_players=7, models_config_file=None)
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
     assert len(assignments) == 7
     for power in ALL_POWERS:
         assert assignments[power] == DEFAULT_AGENT_MANAGER_FALLBACK_MODEL
@@ -24,9 +22,7 @@ def test_power_model_assignments_from_toml(tmp_path):
         toml.dump(toml_data, f)
 
     gc = create_game_config(models_config_file=str(models_toml_path), num_players=7)
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
 
     assert assignments["AUSTRIA"] == "model_austria"
     assert assignments["FRANCE"] == "model_france"
@@ -44,9 +40,7 @@ def test_default_model_from_config_used(tmp_path):
         toml.dump(toml_data, f)
 
     gc = create_game_config(models_config_file=str(models_toml_path), num_players=7)
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
 
     assert len(assignments) == 7
     for power in ALL_POWERS:
@@ -56,12 +50,8 @@ def test_default_model_from_config_used(tmp_path):
 def test_exclude_powers():
     """Excluded powers should not appear in the results."""
     excluded = ["ITALY", "GERMANY"]
-    gc = create_game_config(
-        exclude_powers=excluded, num_players=5, models_config_file=None
-    )
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    gc = create_game_config(exclude_powers=excluded, num_players=5, models_config_file=None)
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
 
     assert len(assignments) == 5
     for power in excluded:
@@ -85,9 +75,7 @@ def test_primary_agent_cli_override(tmp_path):
         model_id="cli_france_model",
         num_players=7,
     )
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
 
     assert assignments["FRANCE"] == "cli_france_model"
 
@@ -105,9 +93,7 @@ def test_num_players_limit_less_than_available(tmp_path):
         model_id="model_england",
         num_players=1,
     )
-    assignments_np1 = assign_models_to_powers(
-        game_config=gc_np1, all_game_powers=list(ALL_POWERS)
-    )
+    assignments_np1 = assign_models_to_powers(game_config=gc_np1, all_game_powers=list(ALL_POWERS))
     assert len(assignments_np1) == 1
     assert assignments_np1["ENGLAND"] == "model_england"
 
@@ -117,9 +103,7 @@ def test_num_players_limit_less_than_available(tmp_path):
         model_id="model_england",
         num_players=2,
     )
-    assignments_np2 = assign_models_to_powers(
-        game_config=gc_np2, all_game_powers=list(ALL_POWERS)
-    )
+    assignments_np2 = assign_models_to_powers(game_config=gc_np2, all_game_powers=list(ALL_POWERS))
     assert len(assignments_np2) == 2
     assert assignments_np2["ENGLAND"] == "model_england"
     assert assignments_np2["AUSTRIA"] == "model_austria"
@@ -130,9 +114,7 @@ def test_num_players_limit_less_than_available(tmp_path):
         model_id="model_england",
         num_players=3,
     )
-    assignments_np3 = assign_models_to_powers(
-        game_config=gc_np3, all_game_powers=list(ALL_POWERS)
-    )
+    assignments_np3 = assign_models_to_powers(game_config=gc_np3, all_game_powers=list(ALL_POWERS))
     assert len(assignments_np3) == 3
     assert "ENGLAND" in assignments_np3
     assert "AUSTRIA" in assignments_np3
@@ -141,12 +123,8 @@ def test_num_players_limit_less_than_available(tmp_path):
 
 def test_num_players_limit_more_than_powers():
     """If num_players > available non-excluded, all non-excluded get models."""
-    gc = create_game_config(
-        exclude_powers=["ITALY"], num_players=7, models_config_file=None
-    )
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    gc = create_game_config(exclude_powers=["ITALY"], num_players=7, models_config_file=None)
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
     assert len(assignments) == 6
     assert "ITALY" not in assignments
 
@@ -166,17 +144,13 @@ def test_fixed_models_cli_fill_slots(tmp_path):
         num_players=4,
         randomize_fixed_models=False,
     )
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
 
     assert len(assignments) == 4
     assert assignments["ENGLAND"] == "model_england"
     assert assignments["AUSTRIA"] == "model_austria"
 
-    remaining_powers = sorted(
-        [p for p in ALL_POWERS if p not in ["ENGLAND", "AUSTRIA"]]
-    )
+    remaining_powers = sorted([p for p in ALL_POWERS if p not in ["ENGLAND", "AUSTRIA"]])
     assert assignments[remaining_powers[0]] == "fixed1"
     assert assignments[remaining_powers[1]] == "fixed2"
 
@@ -189,9 +163,7 @@ def test_fixed_models_cycling():
         randomize_fixed_models=False,
         models_config_file=None,
     )
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
     assert len(assignments) == 3
     assigned_models_list = list(assignments.values())
     assert all(m == "fx1" for m in assigned_models_list)
@@ -213,9 +185,7 @@ def test_complex_scenario(tmp_path):
         fixed_models=["fx1", "fx2"],
         randomize_fixed_models=False,
     )
-    assignments = assign_models_to_powers(
-        game_config=gc, all_game_powers=list(ALL_POWERS)
-    )
+    assignments = assign_models_to_powers(game_config=gc, all_game_powers=list(ALL_POWERS))
 
     assert len(assignments) == 4
     assert "ITALY" not in assignments
@@ -223,4 +193,3 @@ def test_complex_scenario(tmp_path):
     assert assignments["AUSTRIA"] == "model_austria"
     assert assignments["GERMANY"] == "model_germany"
     assert assignments["FRANCE"] == "fx1"
-

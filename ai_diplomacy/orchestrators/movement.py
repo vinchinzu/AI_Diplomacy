@@ -96,20 +96,12 @@ class MovementPhaseStrategy:
                         # This key must match the one used in BlocLLMAgent.decide_orders caching.
                         # Reconstruct the key carefully as done in BlocLLMAgent.
                         phase_repr_parts = []
-                        if (
-                            current_phase_state.units
-                        ):  # Check if there are any units on the board
+                        if current_phase_state.units:  # Check if there are any units on the board
                             for p_n in sorted(agent.controlled_powers):
-                                power_units_locs_list = current_phase_state.units.get(
-                                    p_n, []
-                                )
-                                phase_repr_parts.append(
-                                    f"{p_n}_units:{tuple(sorted(power_units_locs_list))}"
-                                )
+                                power_units_locs_list = current_phase_state.units.get(p_n, [])
+                                phase_repr_parts.append(f"{p_n}_units:{tuple(sorted(power_units_locs_list))}")
 
-                        if (
-                            current_phase_state.supply_centers
-                        ):  # Check if there is supply center data
+                        if current_phase_state.supply_centers:  # Check if there is supply center data
                             sorted_scs_items = sorted(
                                 [
                                     (p, tuple(sorted(cs)))
@@ -125,9 +117,7 @@ class MovementPhaseStrategy:
                             tuple(phase_repr_parts),
                         )
 
-                        all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(
-                            current_phase_key_for_bloc
-                        )
+                        all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(current_phase_key_for_bloc)
                         if not all_bloc_orders_obj and agent.controlled_powers:
                             logger.warning(
                                 f"BlocLLMAgent {agent.agent_id} returned no orders from get_all_bloc_orders_for_phase despite having controlled powers. LLM might have failed or returned empty."
@@ -162,10 +152,7 @@ class MovementPhaseStrategy:
 
                         # Ensure all controlled powers by this bloc that are active in the game have an entry in orders_by_power
                         for controlled_p in agent.controlled_powers:
-                            if (
-                                controlled_p in active_game_powers
-                                and controlled_p not in orders_by_power
-                            ):
+                            if controlled_p in active_game_powers and controlled_p not in orders_by_power:
                                 logger.warning(
                                     f"Controlled power {controlled_p} of bloc {agent.agent_id} did not receive orders. Defaulting to empty list."
                                 )
@@ -183,20 +170,14 @@ class MovementPhaseStrategy:
                         for bloc_member_power in agent.controlled_powers:
                             if bloc_member_power in active_game_powers:
                                 orders_by_power[bloc_member_power] = []
-                                game_history.add_orders(
-                                    current_phase_name, bloc_member_power, []
-                                )
+                                game_history.add_orders(current_phase_name, bloc_member_power, [])
                                 logger.info(
                                     f"AGENT_ORDERS: {bloc_member_power} (from failed Bloc {agent.agent_id}): []"
                                 )
-                        processed_bloc_agent_ids.add(
-                            agent.agent_id
-                        )  # Mark as processed to avoid re-attempt
+                        processed_bloc_agent_ids.add(agent.agent_id)  # Mark as processed to avoid re-attempt
 
             else:  # Standard (non-bloc) LLM agent or other types
-                logger.debug(
-                    f"Processing agent {agent_lookup_key} for power {power_name} (Movement)..."
-                )
+                logger.debug(f"Processing agent {agent_lookup_key} for power {power_name} (Movement)...")
                 try:
                     orders = await orchestrator._get_orders_for_power(
                         game,
@@ -228,12 +209,8 @@ class MovementPhaseStrategy:
         if italy_power_name in game.powers and italy_power_name not in orders_by_power:
             # This implies ITALY was not in active_game_powers or its agent failed to provide orders.
             # If it has an agent, it should have been processed. If no agent, it means it's truly neutral.
-            agent_id_for_italy = orchestrator.config.power_to_agent_id_map.get(
-                italy_power_name
-            )
-            if not agent_id_for_italy or not orchestrator.agent_manager.get_agent(
-                agent_id_for_italy
-            ):
+            agent_id_for_italy = orchestrator.config.power_to_agent_id_map.get(italy_power_name)
+            if not agent_id_for_italy or not orchestrator.agent_manager.get_agent(agent_id_for_italy):
                 logger.info(
                     f"Power {italy_power_name} has no assigned agent and was not processed. Assuming neutral hold orders."
                 )
@@ -244,9 +221,7 @@ class MovementPhaseStrategy:
                     logger.info(
                         f"Generated Hold orders for unmanaged neutral {italy_power_name}: {hold_orders}"
                     )
-                    game_history.add_orders(
-                        current_phase_name, italy_power_name, hold_orders
-                    )
+                    game_history.add_orders(current_phase_name, italy_power_name, hold_orders)
                 else:
                     orders_by_power[italy_power_name] = []
                     game_history.add_orders(current_phase_name, italy_power_name, [])

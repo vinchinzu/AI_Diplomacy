@@ -13,9 +13,7 @@ class NullAgent(BaseAgent, HoldBehaviourMixin):
     It always issues hold orders and does not participate in negotiations.
     """
 
-    def __init__(
-        self, agent_id: str, power_name: str, game_config: Optional[Any] = None
-    ):
+    def __init__(self, agent_id: str, power_name: str, game_config: Optional[Any] = None):
         super().__init__(agent_id, power_name)
         # self.power_name is already set by super().__init__ as self.country
         # self.game_config = game_config # Store if needed for other logic, not used currently by NullAgent
@@ -29,9 +27,7 @@ class NullAgent(BaseAgent, HoldBehaviourMixin):
         """NullAgent does not send messages."""
         return []
 
-    async def update_state(
-        self, phase: PhaseState, events: List[Dict[str, Any]]
-    ) -> None:
+    async def update_state(self, phase: PhaseState, events: List[Dict[str, Any]]) -> None:
         """NullAgent does not maintain complex internal state from game events."""
         pass  # No state to update
 

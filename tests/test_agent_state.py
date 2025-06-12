@@ -19,9 +19,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
 
         # Test relationships
         expected_relationships = {
-            power: "Neutral"
-            for power in self.all_powers_set
-            if power != self.test_country
+            power: "Neutral" for power in self.all_powers_set if power != self.test_country
         }
         self.assertEqual(self.state.relationships, expected_relationships)
         self.assertNotIn(self.test_country, self.state.relationships)
@@ -39,9 +37,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
         self.assertEqual(self.state.private_journal, ["First entry.", "Second entry."])
 
         self.state.add_journal_entry(123)  # Non-string entry
-        self.assertEqual(
-            self.state.private_journal, ["First entry.", "Second entry.", "123"]
-        )
+        self.assertEqual(self.state.private_journal, ["First entry.", "Second entry.", "123"])
 
     def test_add_diary_entry(self):
         phase1 = "Spring 1901 Movement"
@@ -59,9 +55,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
 
     def test_format_private_diary_for_prompt(self):
         # Test empty diary
-        self.assertEqual(
-            self.state.format_private_diary_for_prompt(), "(No diary entries yet)"
-        )
+        self.assertEqual(self.state.format_private_diary_for_prompt(), "(No diary entries yet)")
 
         # Test with fewer entries than max_entries
         self.state.add_diary_entry("Entry 1", "Phase 1")
@@ -78,9 +72,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
         self.state.add_diary_entry("Entry 5", "Phase 5")
 
         # max_entries = 3
-        expected_output_3_entries = (
-            "[Phase 3] Entry 3\n[Phase 4] Entry 4\n[Phase 5] Entry 5"
-        )
+        expected_output_3_entries = "[Phase 3] Entry 3\n[Phase 4] Entry 4\n[Phase 5] Entry 5"
         self.assertEqual(
             self.state.format_private_diary_for_prompt(max_entries=3),
             expected_output_3_entries,
@@ -105,9 +97,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
 
         # Attacker: GERMANY, Target: ENGLAND (own_country), already Unfriendly
         self.state.relationships["GERMANY"] = "Unfriendly"
-        events = [
-            {"type": "attack", "attacker": "GERMANY", "target": self.test_country}
-        ]
+        events = [{"type": "attack", "attacker": "GERMANY", "target": self.test_country}]
         self.state._update_relationships_from_events(self.test_country, events)
         self.assertEqual(self.state.relationships["GERMANY"], "Enemy")
 
@@ -137,9 +127,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
         initial_russian_relationship = self.state.relationships["RUSSIA"]
         events = [{"type": "attack", "attacker": self.test_country, "target": "RUSSIA"}]
         self.state._update_relationships_from_events(self.test_country, events)
-        self.assertEqual(
-            self.state.relationships["RUSSIA"], initial_russian_relationship
-        )
+        self.assertEqual(self.state.relationships["RUSSIA"], initial_russian_relationship)
 
         # Attack by a country not in relationships (e.g. a new power "SPAIN")
         initial_relationships = self.state.relationships.copy()
@@ -151,37 +139,27 @@ class TestDiplomacyAgentState(unittest.TestCase):
 
     def test_update_relationships_from_events_support(self):
         # Supporter: FRANCE, Supported: ENGLAND (own_country)
-        events = [
-            {"type": "support", "supporter": "FRANCE", "supported": self.test_country}
-        ]
+        events = [{"type": "support", "supporter": "FRANCE", "supported": self.test_country}]
         self.state._update_relationships_from_events(self.test_country, events)
         self.assertEqual(self.state.relationships["FRANCE"], "Friendly")
 
         # Supporter: GERMANY, Supported: ENGLAND (own_country), GERMANY is Friendly
         self.state.relationships["GERMANY"] = "Friendly"
-        events = [
-            {"type": "support", "supporter": "GERMANY", "supported": self.test_country}
-        ]
+        events = [{"type": "support", "supporter": "GERMANY", "supported": self.test_country}]
         self.state._update_relationships_from_events(self.test_country, events)
         self.assertEqual(self.state.relationships["GERMANY"], "Ally")
 
         # Supporter: ITALY, Supported: ENGLAND (own_country), ITALY is Ally
         self.state.relationships["ITALY"] = "Ally"
-        events = [
-            {"type": "support", "supporter": "ITALY", "supported": self.test_country}
-        ]
+        events = [{"type": "support", "supporter": "ITALY", "supported": self.test_country}]
         self.state._update_relationships_from_events(self.test_country, events)
         self.assertEqual(self.state.relationships["ITALY"], "Ally")  # Stays Ally
 
         # Supporter: RUSSIA, Supported: ENGLAND (own_country), RUSSIA is Enemy
         self.state.relationships["RUSSIA"] = "Enemy"
-        events = [
-            {"type": "support", "supporter": "RUSSIA", "supported": self.test_country}
-        ]
+        events = [{"type": "support", "supporter": "RUSSIA", "supported": self.test_country}]
         self.state._update_relationships_from_events(self.test_country, events)
-        self.assertEqual(
-            self.state.relationships["RUSSIA"], "Unfriendly"
-        )  # Enemy -> Unfriendly
+        self.assertEqual(self.state.relationships["RUSSIA"], "Unfriendly")  # Enemy -> Unfriendly
 
         # Support for another country (FRANCE supports GERMANY)
         initial_french_german_relationship_for_england = (
@@ -201,19 +179,13 @@ class TestDiplomacyAgentState(unittest.TestCase):
 
         # Support by own_country (ENGLAND supports RUSSIA) - should not change relationship with RUSSIA via this method
         initial_russian_relationship = self.state.relationships["RUSSIA"]
-        events = [
-            {"type": "support", "supporter": self.test_country, "supported": "RUSSIA"}
-        ]
+        events = [{"type": "support", "supporter": self.test_country, "supported": "RUSSIA"}]
         self.state._update_relationships_from_events(self.test_country, events)
-        self.assertEqual(
-            self.state.relationships["RUSSIA"], initial_russian_relationship
-        )
+        self.assertEqual(self.state.relationships["RUSSIA"], initial_russian_relationship)
 
         # Support by a country not in relationships (e.g. a new power "SPAIN")
         initial_relationships = self.state.relationships.copy()
-        events = [
-            {"type": "support", "supporter": "SPAIN", "supported": self.test_country}
-        ]
+        events = [{"type": "support", "supporter": "SPAIN", "supported": self.test_country}]
         self.state._update_relationships_from_events(self.test_country, events)
         self.assertEqual(
             self.state.relationships, initial_relationships
@@ -246,28 +218,18 @@ class TestDiplomacyAgentState(unittest.TestCase):
     def test_update_relationships_from_events_boundaries(self):
         # Test Enemy attacking -> remains Enemy
         self.state.relationships["FRANCE"] = "Enemy"
-        events_attack_enemy = [
-            {"type": "attack", "attacker": "FRANCE", "target": self.test_country}
-        ]
-        self.state._update_relationships_from_events(
-            self.test_country, events_attack_enemy
-        )
+        events_attack_enemy = [{"type": "attack", "attacker": "FRANCE", "target": self.test_country}]
+        self.state._update_relationships_from_events(self.test_country, events_attack_enemy)
         self.assertEqual(self.state.relationships["FRANCE"], "Enemy")
 
         # Test Ally supporting -> remains Ally
         self.state.relationships["GERMANY"] = "Ally"
-        events_support_ally = [
-            {"type": "support", "supporter": "GERMANY", "supported": self.test_country}
-        ]
-        self.state._update_relationships_from_events(
-            self.test_country, events_support_ally
-        )
+        events_support_ally = [{"type": "support", "supporter": "GERMANY", "supported": self.test_country}]
+        self.state._update_relationships_from_events(self.test_country, events_support_ally)
         self.assertEqual(self.state.relationships["GERMANY"], "Ally")
 
         # Test multiple attacks to reach Enemy
-        self.state.relationships["ITALY"] = (
-            "Friendly"  # Friendly -> Neutral -> Unfriendly -> Enemy
-        )
+        self.state.relationships["ITALY"] = "Friendly"  # Friendly -> Neutral -> Unfriendly -> Enemy
         events = [
             {
                 "type": "attack",
@@ -289,9 +251,7 @@ class TestDiplomacyAgentState(unittest.TestCase):
         self.assertEqual(self.state.relationships["ITALY"], "Enemy")
 
         # Test multiple supports to reach Ally
-        self.state.relationships["RUSSIA"] = (
-            "Unfriendly"  # Unfriendly -> Neutral -> Friendly -> Ally
-        )
+        self.state.relationships["RUSSIA"] = "Unfriendly"  # Unfriendly -> Neutral -> Friendly -> Ally
         events = [
             {
                 "type": "support",
@@ -322,17 +282,13 @@ class TestDiplomacyAgentState(unittest.TestCase):
         # GERMANY attacks FRANCE. ENGLAND's relationship with GERMANY should worsen.
         self.state.relationships["GERMANY"] = "Neutral"
         events = [{"type": "attack", "attacker": "GERMANY", "target": "FRANCE"}]
-        self.state._update_relationships_from_events(
-            own_country="FRANCE", events=events
-        )
+        self.state._update_relationships_from_events(own_country="FRANCE", events=events)
         self.assertEqual(self.state.relationships["GERMANY"], "Unfriendly")
 
         # ITALY supports FRANCE. ENGLAND's relationship with ITALY should improve.
         self.state.relationships["ITALY"] = "Neutral"
         events = [{"type": "support", "supporter": "ITALY", "supported": "FRANCE"}]
-        self.state._update_relationships_from_events(
-            own_country="FRANCE", events=events
-        )
+        self.state._update_relationships_from_events(own_country="FRANCE", events=events)
         self.assertEqual(self.state.relationships["ITALY"], "Friendly")
 
 

@@ -17,7 +17,7 @@ from .bloc_llm_agent import BlocLLMAgent
 from .null_agent import NullAgent
 from .factory import AgentFactory
 from .agent_state import DiplomacyAgentState
-from generic_llm_framework.prompt_strategy import (
+from ..prompt_strategy import (
     DiplomacyPromptStrategy as LLMPromptStrategy,
 )  # Import and alias
 

@@ -31,9 +31,7 @@ class AgentManager:
             game_config: The game configuration object.
         """
         self.game_config = game_config
-        self.agents: Dict[
-            str, BaseAgent
-        ] = {}  # Keyed by agent identifier (power name or bloc name)
+        self.agents: Dict[str, BaseAgent] = {}  # Keyed by agent identifier (power name or bloc name)
         self.agent_factory = AgentFactory(
             # Pass coordinator and factory if they are part of game_config or globally managed
             # For now, assume AgentFactory default constructor is sufficient or it gets them from elsewhere.
@@ -50,9 +48,7 @@ class AgentManager:
         Initializes extended state for an agent (e.g., loading from files, specific heuristics).
         This method is a placeholder for more complex setup that might be needed in the future.
         """
-        logger.debug(
-            f"Performing extended state initialization for {agent.agent_id} (currently minimal)."
-        )
+        logger.debug(f"Performing extended state initialization for {agent.agent_id} (currently minimal).")
         # This function can be expanded if there's a need to load specific initial states
         # from files or apply more complex power-specific heuristics here.
         pass
@@ -70,9 +66,7 @@ class AgentManager:
                 containing agent setup details like type, model_id, country (for single),
                 bloc_name, controlled_powers (for blocs).
         """
-        logger.info(
-            f"Initializing agents based on configurations: {list(agent_configurations.keys())}"
-        )
+        logger.info(f"Initializing agents based on configurations: {list(agent_configurations.keys())}")
         self.agents = {}  # Clear any previous agents
 
         for agent_identifier, config_details in agent_configurations.items():
@@ -80,9 +74,7 @@ class AgentManager:
             model_id = config_details.get("model_id")  # Can be None for neutral
 
             # verbose_llm_debug should come from game_config
-            verbose_llm_debug = getattr(
-                self.game_config.args, "verbose_llm_debug", False
-            )
+            verbose_llm_debug = getattr(self.game_config.args, "verbose_llm_debug", False)
 
             # Adapt the incoming config_details dict to match AgentConfig model
             if "country" in config_details:
@@ -105,9 +97,7 @@ class AgentManager:
             try:
                 agent: Optional[BaseAgent] = None
                 # Refactored agent creation to be more streamlined
-                country_for_agent = (
-                    agent_identifier  # The country/power name for single agents
-                )
+                country_for_agent = agent_identifier  # The country/power name for single agents
 
                 if agent_type in ("llm", "neutral", "scripted"):
                     agent = self.agent_factory.create_agent(
@@ -127,9 +117,7 @@ class AgentManager:
                         agent_id=agent_id_str,  # agent_identifier could be "ITALY_NULL" or similar
                         power_name=country_for_agent,  # The actual power like "ITALY"
                     )
-                    logger.info(
-                        f"Directly instantiating NullAgent for power: {country_for_agent}"
-                    )
+                    logger.info(f"Directly instantiating NullAgent for power: {country_for_agent}")
                 elif agent_type == "bloc_llm":
                     bloc_name = config_details.get("bloc_name", agent_identifier)
                     controlled_powers = config_details.get("controlled_powers")
@@ -156,9 +144,7 @@ class AgentManager:
 
                 if agent:
                     self._initialize_agent_state_ext(agent)
-                    self.agents[agent_identifier] = (
-                        agent  # Store by "FRANCE" or "ENTENTE_BLOC"
-                    )
+                    self.agents[agent_identifier] = agent  # Store by "FRANCE" or "ENTENTE_BLOC"
                     logger.info(
                         f"Agent for '{agent_identifier}' created and initialized: {agent.__class__.__name__}."
                     )
@@ -170,12 +156,8 @@ class AgentManager:
                 )
                 # Continue with other agents
 
-        self.game_config.agents = (
-            self.agents
-        )  # Store the dict of created agents in GameConfig
-        logger.info(
-            f"All {len(self.agents)} agent entities initialized: {list(self.agents.keys())}"
-        )
+        self.game_config.agents = self.agents  # Store the dict of created agents in GameConfig
+        logger.info(f"All {len(self.agents)} agent entities initialized: {list(self.agents.keys())}")
 
     def get_agent(self, agent_identifier: str) -> Optional[BaseAgent]:
         """
@@ -205,7 +187,5 @@ class AgentManager:
         agent_identifier = self.game_config.power_to_agent_id_map.get(power_name)
         if agent_identifier:
             return self.get_agent(agent_identifier)
-        logger.warning(
-            f"Could not find agent identifier for power '{power_name}' in power_to_agent_id_map."
-        )
+        logger.warning(f"Could not find agent identifier for power '{power_name}' in power_to_agent_id_map.")
         return None

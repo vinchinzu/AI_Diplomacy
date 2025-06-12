@@ -184,9 +184,7 @@ async def main():
     if getattr(args, "llm_models", None) and isinstance(args.llm_models, str):
         args.llm_models_list = [m.strip() for m in args.llm_models.split(",")]
     else:
-        args.llm_models_list = getattr(
-            args, "llm_models_list", []
-        )
+        args.llm_models_list = getattr(args, "llm_models_list", [])
 
     if getattr(args, "fixed_models", None) and isinstance(args.fixed_models, str):
         args.fixed_models_list = [m.strip() for m in args.fixed_models.split(",")]
@@ -201,44 +199,26 @@ async def main():
     if getattr(args, "agent_types", None) and isinstance(args.agent_types, str):
         args.agent_types_list = [t.strip().lower() for t in args.agent_types.split(",")]
     else:
-        args.agent_types_list = getattr(
-            args, "agent_types_list", []
-        )
+        args.agent_types_list = getattr(args, "agent_types_list", [])
 
-    if getattr(args, "bloc_definitions", None) and isinstance(
-        args.bloc_definitions, str
-    ):
-        args.bloc_definitions_list = [
-            d.strip() for d in args.bloc_definitions.split(",")
-        ]
+    if getattr(args, "bloc_definitions", None) and isinstance(args.bloc_definitions, str):
+        args.bloc_definitions_list = [d.strip() for d in args.bloc_definitions.split(",")]
     else:
-        args.bloc_definitions_list = getattr(
-            args, "bloc_definitions_list", []
-        )
+        args.bloc_definitions_list = getattr(args, "bloc_definitions_list", [])
 
     if getattr(args, "exclude_powers", None) and isinstance(args.exclude_powers, str):
-        args.exclude_powers_list = [
-            p.strip().upper() for p in args.exclude_powers.split(",")
-        ]
+        args.exclude_powers_list = [p.strip().upper() for p in args.exclude_powers.split(",")]
     else:
-        args.exclude_powers_list = getattr(
-            args, "exclude_powers_list", []
-        )
+        args.exclude_powers_list = getattr(args, "exclude_powers_list", [])
 
-    config = GameConfig(
-        args
-    )
+    config = GameConfig(args)
     setup_logging(config)
 
     logger.info(f"Starting Diplomacy game: {config.game_id}")
-    if (
-        config.players_list
-    ):
+    if config.players_list:
         logger.info(f"Players List (from config): {config.players_list}")
         logger.info(f"Agent Types List (from config): {config.agent_types_list}")
-        logger.info(
-            f"Bloc Definitions List (from config): {config.bloc_definitions_list}"
-        )
+        logger.info(f"Bloc Definitions List (from config): {config.bloc_definitions_list}")
         logger.info(f"LLM Models List (from config): {config.llm_models_list}")
 
     start_time = time.time()
@@ -260,13 +240,8 @@ async def main():
                 and len(config.players_list) != len(config.llm_models_list)
                 and any(at in ["llm", "bloc_llm"] for at in config.agent_types_list)
             ):
-                llm_agent_count = sum(
-                    1 for at in config.agent_types_list if at in ["llm", "bloc_llm"]
-                )
-                if (
-                    config.llm_models_list
-                    and len(config.llm_models_list) < llm_agent_count
-                ):
+                llm_agent_count = sum(1 for at in config.agent_types_list if at in ["llm", "bloc_llm"])
+                if config.llm_models_list and len(config.llm_models_list) < llm_agent_count:
                     logger.error(
                         "Mismatch in number of elements for --players, --agent-types, or insufficient --llm-models. "
                         f"Players: {len(config.players_list)}, Types: {len(config.agent_types_list)}, Models: {len(config.llm_models_list)} (needed for {llm_agent_count} LLM agents)."
@@ -274,15 +249,11 @@ async def main():
                     sys.exit(1)
 
             actual_player_names_for_game = config.players_list
-            llm_models_to_use = (
-                config.llm_models_list or config.fixed_models or []
-            )
+            llm_models_to_use = config.llm_models_list or config.fixed_models or []
             llm_model_idx = 0
 
             parsed_bloc_defs: Dict[str, List[str]] = {}
-            if (
-                config.bloc_definitions_list
-            ):
+            if config.bloc_definitions_list:
                 for bloc_def_str in config.bloc_definitions_list:
                     parts = bloc_def_str.split(":", 1)
                     if len(parts) == 2:
@@ -291,9 +262,7 @@ async def main():
                             p.strip().upper() for p in powers_str.split(";")
                         ]
                     else:
-                        logger.warning(
-                            f"Invalid bloc definition format: {bloc_def_str}. Skipping."
-                        )
+                        logger.warning(f"Invalid bloc definition format: {bloc_def_str}. Skipping.")
 
             for i, player_identifier in enumerate(config.players_list):
                 agent_type = config.agent_types_list[i]
@@ -319,15 +288,11 @@ async def main():
                             f"expects a 'country' in TOML, but it's missing or empty. "
                             f"AgentManager might fail if it's required. Player identifier '{player_identifier}' will be used as fallback."
                         )
-                        current_agent_setup["country"] = (
-                            player_identifier
-                        )
+                        current_agent_setup["country"] = player_identifier
                 elif agent_type == "bloc_llm":
                     current_agent_setup["bloc_name"] = player_identifier
                     if player_identifier in parsed_bloc_defs:
-                        current_agent_setup["controlled_powers"] = parsed_bloc_defs[
-                            player_identifier
-                        ]
+                        current_agent_setup["controlled_powers"] = parsed_bloc_defs[player_identifier]
                     else:
                         logger.error(
                             f"No definition found for bloc: {player_identifier}. Ensure it is defined in TOML or CLI. Skipping."
@@ -354,24 +319,17 @@ async def main():
             )
             sys.exit(1)
 
-        game_factory_to_use = (
-            config.game_factory_path
-        )
+        game_factory_to_use = config.game_factory_path
 
         if game_factory_to_use:
-            if (
-                not actual_player_names_for_game
-                and "wwi_two_player" not in game_factory_to_use
-            ):
+            if not actual_player_names_for_game and "wwi_two_player" not in game_factory_to_use:
                 logger.error(
                     f"Game factory '{game_factory_to_use}' specified, but no player/agent identifiers found in configuration "
                     f"(expected in TOML 'agents' list or via CLI)."
                 )
                 sys.exit(1)
 
-            game = get_game_from_factory(
-                game_factory_to_use, actual_player_names_for_game
-            )
+            game = get_game_from_factory(game_factory_to_use, actual_player_names_for_game)
             logger.info(
                 f"Game created using factory: {game_factory_to_use}. Agent Identifiers involved: {actual_player_names_for_game}"
             )
@@ -382,13 +340,9 @@ async def main():
                 " All game powers must be mapped by the agent configurations provided."
             )
 
-        config.game_instance = (
-            game
-        )
+        config.game_instance = game
 
-        logger.info(
-            f"Final agent configurations to be initialized: {agent_configurations}"
-        )
+        logger.info(f"Final agent configurations to be initialized: {agent_configurations}")
         agent_manager.initialize_agents(agent_configurations)
 
         if not agent_manager.agents:
@@ -412,9 +366,7 @@ async def main():
                 for power_name in config.agent_to_powers_map[agent_id]:
                     powers_and_models_map[power_name] = model_id
         config.powers_and_models = powers_and_models_map
-        logger.info(
-            f"Reconstructed config.powers_and_models for orchestrator: {config.powers_and_models}"
-        )
+        logger.info(f"Reconstructed config.powers_and_models for orchestrator: {config.powers_and_models}")
 
         orchestrator = PhaseOrchestrator(
             game_config=config,
@@ -425,38 +377,26 @@ async def main():
         await orchestrator.run_game_loop(game, game_history)
 
     except KeyboardInterrupt:
-        logger.info(
-            "Game interrupted by user (KeyboardInterrupt). Saving partial results..."
-        )
+        logger.info("Game interrupted by user (KeyboardInterrupt). Saving partial results...")
     except Exception as e:
-        logger.error(
-            f"An unexpected error occurred during the game: {e}", exc_info=True
-        )
+        logger.error(f"An unexpected error occurred during the game: {e}", exc_info=True)
         detailed_error = traceback.format_exc()
         logger.error(f"Detailed traceback:\n{detailed_error}")
     finally:
         if game and game_history and agent_manager:
-            logger.info(
-                "Game loop finished or interrupted. Processing final results..."
-            )
+            logger.info("Game loop finished or interrupted. Processing final results...")
             results_processor = GameResultsProcessor(config)
             results_processor.log_final_results(game)
             if config.log_to_file:
                 results_processor.save_game_state(game, game_history)
                 if agent_manager.agents:
-                    results_processor.save_agent_manifestos(
-                        agent_manager.agents
-                    )
+                    results_processor.save_agent_manifestos(agent_manager.agents)
                 else:
-                    logger.warning(
-                        "AgentManager agents not initialized, skipping manifesto saving."
-                    )
+                    logger.warning("AgentManager agents not initialized, skipping manifesto saving.")
             logger.info(
                 f"Results processing complete. Total game time: {time.time() - start_time:.2f} seconds."
             )
-            logger.info(
-                f"Output files are located in: {config.game_id_specific_log_dir}"
-            )
+            logger.info(f"Output files are located in: {config.game_id_specific_log_dir}")
         else:
             logger.error(
                 "Game object, game history, or agent manager was not initialized. No results to save."
@@ -469,9 +409,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except Exception as e:
         initial_logger = logging.getLogger(__name__)
-        initial_logger.error(
-            f"Critical error in asyncio.run(main()): {e}", exc_info=True
-        )
+        initial_logger.error(f"Critical error in asyncio.run(main()): {e}", exc_info=True)
         detailed_traceback = traceback.format_exc()
         initial_logger.error(f"Detailed traceback:\n{detailed_traceback}")
         sys.exit(1)

@@ -43,9 +43,7 @@ class BuildPhaseStrategy:
 
         # Renamed for clarity based on plan, but logic is same as original powers_with_builds_or_disbands
         powers_with_builds = [
-            p
-            for p in orchestrator.active_powers
-            if p in build_info and build_info[p].get("count", 0) != 0
+            p for p in orchestrator.active_powers if p in build_info and build_info[p].get("count", 0) != 0
         ]
 
         if not powers_with_builds:
@@ -61,13 +59,9 @@ class BuildPhaseStrategy:
         for power_name in powers_with_builds:
             agent = orchestrator.agent_manager.get_agent(power_name)
             if not agent:
-                logger.warning(
-                    f"No agent found for power {power_name} requiring build/disband orders."
-                )
+                logger.warning(f"No agent found for power {power_name} requiring build/disband orders.")
                 orders_by_power[power_name] = []
-                game_history.add_orders(
-                    current_phase_name, power_name, []
-                )  # Record empty orders
+                game_history.add_orders(current_phase_name, power_name, [])  # Record empty orders
                 continue
 
             if isinstance(agent, BlocLLMAgent):
@@ -90,9 +84,7 @@ class BuildPhaseStrategy:
                             current_phase_state.season,
                             current_phase_state.name,
                         )
-                        all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(
-                            current_phase_key_for_bloc
-                        )
+                        all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(current_phase_key_for_bloc)
 
                         for (
                             bloc_power_name,
@@ -103,9 +95,7 @@ class BuildPhaseStrategy:
                             ):  # Only add if this power actually has builds
                                 orders_str_list = [str(o) for o in order_obj_list]
                                 orders_by_power[bloc_power_name] = orders_str_list
-                                game_history.add_orders(
-                                    current_phase_name, bloc_power_name, orders_str_list
-                                )
+                                game_history.add_orders(current_phase_name, bloc_power_name, orders_str_list)
                                 logger.debug(
                                     f"✅ {bloc_power_name} (Bloc): Generated {len(orders_str_list)} build/disband orders"
                                 )
@@ -126,20 +116,14 @@ class BuildPhaseStrategy:
                                     current_phase_name, bloc_member_power, []
                                 )  # Record empty due to error
             else:  # Not a BlocLLMAgent
-                logger.debug(
-                    f"Queueing build/disband order generation for {power_name}..."
-                )
+                logger.debug(f"Queueing build/disband order generation for {power_name}...")
                 non_bloc_order_tasks.append(
-                    orchestrator._get_orders_for_power(
-                        game, power_name, agent, game_history
-                    )
+                    orchestrator._get_orders_for_power(game, power_name, agent, game_history)
                 )
                 non_bloc_power_names_for_tasks.append(power_name)
 
         if non_bloc_order_tasks:
-            results = await asyncio.gather(
-                *non_bloc_order_tasks, return_exceptions=True
-            )
+            results = await asyncio.gather(*non_bloc_order_tasks, return_exceptions=True)
             for i, power_name_for_task in enumerate(non_bloc_power_names_for_tasks):
                 if isinstance(results[i], Exception):
                     logger.error(

@@ -36,9 +36,7 @@ class GenericLLMAgent(GenericLLMAgentInterface):
         self.llm_coordinator = llm_coordinator
         self.prompt_strategy = prompt_strategy
         self._internal_state: Dict[str, Any] = {}  # Basic internal state
-        logger.info(
-            f"Agent {self.agent_id} initialized with model {self.config.get('model_id')}."
-        )
+        logger.info(f"Agent {self.agent_id} initialized with model {self.config.get('model_id')}.")
 
     async def decide_action(
         self, state: Any, possible_actions: Any, action_type: str = "decide_action"
@@ -60,9 +58,7 @@ class GenericLLMAgent(GenericLLMAgentInterface):
             else:
                 prompt_context["state"] = state
 
-            prompt = self.prompt_strategy.build_prompt(
-                action_type=action_type, context=prompt_context
-            )
+            prompt = self.prompt_strategy.build_prompt(action_type=action_type, context=prompt_context)
 
             # Extract necessary params from config, with defaults
             model_id = self.config.get("model_id")
@@ -79,9 +75,7 @@ class GenericLLMAgent(GenericLLMAgentInterface):
             )  # Or use a more specific phase from state if available
             verbose_llm_debug = self.config.get("verbose_llm_debug", False)
 
-            logger.debug(
-                f"Agent {self.agent_id}: Calling LLM for action decision. Model: {model_id}"
-            )
+            logger.debug(f"Agent {self.agent_id}: Calling LLM for action decision. Model: {model_id}")
             response_json = await self.llm_coordinator.call_json(
                 prompt=prompt,
                 model_id=model_id,
@@ -93,14 +87,10 @@ class GenericLLMAgent(GenericLLMAgentInterface):
                 # tools=self.config.get('tools'), # If tools are part of config
                 # expected_fields=self.config.get('expected_action_fields') # If specific fields are expected
             )
-            logger.info(
-                f"Agent {self.agent_id}: Action decision received: {response_json}"
-            )
+            logger.info(f"Agent {self.agent_id}: Action decision received: {response_json}")
             return response_json
         except Exception as e:
-            logger.error(
-                f"Agent {self.agent_id}: Error during decide_action: {e}", exc_info=True
-            )
+            logger.error(f"Agent {self.agent_id}: Error during decide_action: {e}", exc_info=True)
             return {"error": str(e), "details": "Failed to decide action via LLM."}
 
     async def generate_communication(
@@ -123,18 +113,14 @@ class GenericLLMAgent(GenericLLMAgentInterface):
             else:
                 prompt_context["state"] = state
 
-            prompt = self.prompt_strategy.build_prompt(
-                action_type=action_type, context=prompt_context
-            )
+            prompt = self.prompt_strategy.build_prompt(action_type=action_type, context=prompt_context)
 
             model_id = self.config.get("model_id")
             if not model_id:
                 logger.error(f"Agent {self.agent_id}: model_id not found in config.")
                 return {"error": "Missing model_id in agent configuration"}
 
-            system_prompt = self.config.get(
-                "system_prompt", self.prompt_strategy.system_prompt_template
-            )
+            system_prompt = self.config.get("system_prompt", self.prompt_strategy.system_prompt_template)
             game_id = self.config.get("game_id", generic_constants.DEFAULT_GAME_ID)
             phase = self.config.get(
                 "phase", "generate_communication"
@@ -153,9 +139,7 @@ class GenericLLMAgent(GenericLLMAgentInterface):
                 system_prompt=system_prompt,
                 verbose_llm_debug=verbose_llm_debug,
             )
-            logger.info(
-                f"Agent {self.agent_id}: Communication content generated: {response_json}"
-            )
+            logger.info(f"Agent {self.agent_id}: Communication content generated: {response_json}")
             return response_json
         except Exception as e:
             logger.error(
@@ -167,9 +151,7 @@ class GenericLLMAgent(GenericLLMAgentInterface):
                 "details": "Failed to generate communication via LLM.",
             }
 
-    async def update_internal_state(
-        self, state: Any, events: List[Dict[str, Any]]
-    ) -> None:
+    async def update_internal_state(self, state: Any, events: List[Dict[str, Any]]) -> None:
         """
         Updates the agent's internal state based on recent events and current environment state.
         This is a placeholder and should be expanded based on specific agent needs.

@@ -73,19 +73,11 @@ def create_game_config(**kwargs: Any) -> GameConfig:
     # or mock its loading path if it's not essential for the test.
     # For simplicity, we'll assume tests can manage this (e.g., by providing a dummy file or overriding models_config_path to None).
     # If models_config_file is None, GameConfig should handle it gracefully.
-    if (
-        "models_config_file" in args_dict
-        and args_dict["models_config_file"] is not None
-    ):
-        if (
-            not os.path.exists(args.models_config_file)
-            and args.models_config_file == "models.toml"
-        ):
+    if "models_config_file" in args_dict and args_dict["models_config_file"] is not None:
+        if not os.path.exists(args.models_config_file) and args.models_config_file == "models.toml":
             # If the default "models.toml" is specified and doesn't exist, skip the test.
             # Tests requiring it should create a dummy file or ensure it exists.
-            pytest.skip(
-                f"Default models_config_file '{args.models_config_file}' not found."
-            )
+            pytest.skip(f"Default models_config_file '{args.models_config_file}' not found.")
 
     return GameConfig(args)
 

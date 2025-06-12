@@ -14,9 +14,7 @@ def register_scenario(name: str):
 
 
 @register_scenario("wwi_two_player")
-def wwi_two_player(
-    entente_player: str, central_player: str, italy_controller: str | None = None
-):
+def wwi_two_player(entente_player: str, central_player: str, italy_controller: str | None = None):
     """
     Returns a Game object in the 1914 two-player variant.
 

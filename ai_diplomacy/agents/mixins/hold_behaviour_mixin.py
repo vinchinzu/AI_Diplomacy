@@ -29,9 +29,7 @@ class HoldBehaviourMixin:
 
         # Ensure we have a valid country attribute
         if not isinstance(getattr(self, "country", None), str):
-            print(
-                "Warning: HoldBehaviourMixin used without a valid `country` attribute."
-            )
+            print("Warning: HoldBehaviourMixin used without a valid `country` attribute.")
             return []
 
         country_upper: str = self.country.upper()

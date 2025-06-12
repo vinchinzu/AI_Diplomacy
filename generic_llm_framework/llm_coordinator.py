@@ -75,8 +75,7 @@ async def serial_if_local(model_id: str) -> AsyncIterator[None]:
     # Case-insensitive check will be applied to these prefixes
     # These prefixes are taken from the original SERIAL_ACCESS_PREFIXES
     if any(
-        model_id_lower.startswith(prefix)
-        for prefix in generic_constants.LOCAL_LLM_SERIAL_ACCESS_PREFIXES
+        model_id_lower.startswith(prefix) for prefix in generic_constants.LOCAL_LLM_SERIAL_ACCESS_PREFIXES
     ):
         logger.debug(f"Acquiring lock for local model: {model_id}")
         async with _local_lock:
@@ -106,9 +105,7 @@ def initialize_database():
             );
             """
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS usage_game_agent ON usage (game_id, agent);"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS usage_game_agent ON usage (game_id, agent);")
             conn.commit()
         logger.info(f"Database initialized successfully at {DATABASE_PATH}")
     except sqlite3.Error as e:
@@ -122,9 +119,7 @@ initialize_database()  # Removed comment: Initialize DB on module load
 async def record_usage(game_id: str, agent: str, phase: str, response: LLMResponse):
     """Records LLM token usage in the database."""
     try:
-        usage_stats = (
-            await response.usage()
-        )  # Usage(input=..., output=..., details=...)
+        usage_stats = await response.usage()  # Usage(input=..., output=..., details=...)
         with sqlite3.connect(DATABASE_PATH) as conn:
             conn.execute(
                 "INSERT INTO usage (game_id, agent, phase, model, input, output) VALUES (?, ?, ?, ?, ?, ?)",
@@ -249,9 +244,7 @@ async def llm_call_internal(
     """
     # If running under pytest, return a mock response to avoid actual LLM calls,
     # unless a specific environment variable is set to allow it for certain tests.
-    if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get(
-        "ALLOW_LLM_CALLS_IN_TEST"
-    ):
+    if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("ALLOW_LLM_CALLS_IN_TEST"):
         logger.warning(
             f"PYTEST_CURRENT_TEST detected. Skipping actual LLM call for {model_id} and returning a mock response."
         )
@@ -269,9 +262,7 @@ async def llm_call_internal(
 
         # Added verbose logging for prompt
         if verbose_llm_debug:
-            logger.info(
-                f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}"
-            )
+            logger.info(f"[LLM Call - {agent_name} @ {phase_str}] System Prompt: {system_prompt!r}")
             logger.info(f"[LLM Call - {agent_name} @ {phase_str}] User Prompt: {prompt!r}")
 
         async with serial_if_local(model_id):  # Use the new async context manager
@@ -282,9 +273,7 @@ async def llm_call_internal(
             response_text = await response_obj.text()
             # Added verbose logging for raw response
             if verbose_llm_debug:
-                logger.info(
-                    f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}"
-                )
+                logger.info(f"[LLM Resp - {agent_name} @ {phase_str}] Raw Response: {response_text!r}")
             asyncio.create_task(
                 record_usage(game_id, agent_name, phase_str, response_obj)
             )  # Record usage as a background task
@@ -427,9 +416,7 @@ class LLMCoordinator:
         """
         # TODO: Implement tool calling logic for MCP in Stage 3
         if tools:
-            logger.debug(
-                f"Tools provided but MCP not yet implemented: {len(tools)} tools"
-            )
+            logger.debug(f"Tools provided but MCP not yet implemented: {len(tools)} tools")
 
         result = await self.call_llm_with_json_parsing(
             model_id=model_id,
@@ -470,9 +457,7 @@ class LLMCoordinator:
         # llm_utils is already imported at the top of the file
         # from .llm_utils import log_llm_response # log_llm_response is part of llm_utils
 
-        result = LLMCallResult(
-            "", None, False, generic_constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED
-        )
+        result = LLMCallResult("", None, False, generic_constants.LLM_CALL_RESULT_ERROR_NOT_INITIALIZED)
 
         try:
             logger.info(
@@ -513,16 +498,10 @@ class LLMCoordinator:
 
                     # Validate expected fields if provided
                     if expected_json_fields and isinstance(parsed_data, dict):
-                        missing_fields = [
-                            field
-                            for field in expected_json_fields
-                            if field not in parsed_data
-                        ]
+                        missing_fields = [field for field in expected_json_fields if field not in parsed_data]
                         if missing_fields:
                             result.success = False
-                            result.error_message = (
-                                f"Missing expected fields: {missing_fields}"
-                            )
+                            result.error_message = f"Missing expected fields: {missing_fields}"
 
                 except Exception as e:
                     logger.error(
@@ -544,9 +523,7 @@ class LLMCoordinator:
 
         # Log the full prompt/response to file if path provided
         if log_to_file_path and agent_name and phase_str:
-            success_status = (
-                "TRUE" if result.success else f"FALSE: {result.error_message}"
-            )
+            success_status = "TRUE" if result.success else f"FALSE: {result.error_message}"
             # Use the imported llm_utils.log_llm_response
             llm_utils.log_llm_response(
                 log_file_path=log_to_file_path,
@@ -604,9 +581,7 @@ class LLMCoordinator:
         logger.debug(
             f"[LLMCoordinator] Using model_id: {model_id}, system_prompt: {'Yes' if system_prompt_text else 'No'}"
         )
-        logger.debug(
-            f"[LLMCoordinator] Prompt (first 200 chars): {prompt_text[:200]}..."
-        )
+        logger.debug(f"[LLMCoordinator] Prompt (first 200 chars): {prompt_text[:200]}...")
 
         try:
             if llm_caller_override:
@@ -644,9 +619,7 @@ class LLMCoordinator:
             )
             raise
 
-    def get_model(
-        self, model_id: str
-    ) -> LLMModel:  # Renamed from get_model_for_power
+    def get_model(self, model_id: str) -> LLMModel:  # Renamed from get_model_for_power
         """
         Retrieves a model instance from the pool.
 

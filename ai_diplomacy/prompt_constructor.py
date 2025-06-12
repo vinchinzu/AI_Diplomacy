@@ -58,9 +58,7 @@ def build_context_prompt(
     if agent_relationships:
         logger.debug(f"Using relationships for {power_name}: {agent_relationships}")
     if agent_private_diary:
-        logger.debug(
-            f"Using private diary for {power_name}: {agent_private_diary[:200]}..."
-        )
+        logger.debug(f"Using private diary for {power_name}: {agent_private_diary[:200]}...")
     # ================================
 
     # Get our units and centers (not directly used in template, but good for context understanding)
@@ -70,9 +68,7 @@ def build_context_prompt(
     # Get the current phase
     year_phase = board_state["name"]  # e.g. 'S1901M'
 
-    possible_orders_context_str = generate_rich_order_context(
-        game, power_name, possible_orders
-    )
+    possible_orders_context_str = generate_rich_order_context(game, power_name, possible_orders)
 
     messages_this_round_text = game_history.get_messages_this_round(
         power_name=power_name, current_phase_name=year_phase
@@ -109,19 +105,13 @@ def build_context_prompt(
         all_supply_centers=centers_repr,
         messages_this_round=messages_this_round_text,
         possible_orders=possible_orders_context_str,
-        agent_goals=(
-            "\n".join(f"- {g}" for g in agent_goals)
-            if agent_goals
-            else "None specified"
-        ),
+        agent_goals=("\n".join(f"- {g}" for g in agent_goals) if agent_goals else "None specified"),
         agent_relationships=(
             "\n".join(f"- {p}: {s}" for p, s in agent_relationships.items())
             if agent_relationships
             else "None specified"
         ),
-        agent_private_diary=(
-            agent_private_diary if agent_private_diary else "(No diary entries yet)"
-        ),
+        agent_private_diary=(agent_private_diary if agent_private_diary else "(No diary entries yet)"),
     )
 
     return context
@@ -155,9 +145,7 @@ def construct_order_generation_prompt(
         A string containing the complete prompt for the LLM.
     """
     # Load prompts
-    _ = load_prompt(
-        constants.PROMPT_TEMPLATE_FEW_SHOT
-    )  # Loaded but not used, as per original logic
+    _ = load_prompt(constants.PROMPT_TEMPLATE_FEW_SHOT)  # Loaded but not used, as per original logic
     instructions = load_prompt(constants.PROMPT_TEMPLATE_ORDER_INSTRUCTIONS)
 
     # Build the context prompt
@@ -179,16 +167,12 @@ def construct_order_generation_prompt(
 
     # Format the valid orders list for injection into the instructions
     if all_valid_orders:
-        valid_orders_formatted = "\n".join(
-            f"- {order}" for order in sorted(all_valid_orders)
-        )
+        valid_orders_formatted = "\n".join(f"- {order}" for order in sorted(all_valid_orders))
     else:
         valid_orders_formatted = "- No valid orders available"
 
     # Inject the valid orders list into the instructions
-    instructions_with_orders = instructions.format(
-        valid_orders_list=valid_orders_formatted
-    )
+    instructions_with_orders = instructions.format(valid_orders_list=valid_orders_formatted)
 
     final_prompt = system_prompt + "\n\n" + context + "\n\n" + instructions_with_orders
     return final_prompt

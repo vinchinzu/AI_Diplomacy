@@ -96,9 +96,7 @@ async def perform_negotiation_rounds(
                         all_proposed_messages[power_name] = []
 
                 except asyncio.TimeoutError:
-                    logger.error(
-                        f"❌ Timeout generating messages for {power_name} (round {round_num})"
-                    )
+                    logger.error(f"❌ Timeout generating messages for {power_name} (round {round_num})")
                     all_proposed_messages[power_name] = []
                 except Exception as e:
                     logger.error(
@@ -107,9 +105,7 @@ async def perform_negotiation_rounds(
                     )
                     all_proposed_messages[power_name] = []
             else:
-                logger.warning(
-                    f"No agent found for active power {power_name} during message generation."
-                )
+                logger.warning(f"No agent found for active power {power_name} during message generation.")
                 all_proposed_messages[power_name] = []
 
         for sender_power, messages_to_send_dicts in all_proposed_messages.items():
@@ -120,21 +116,14 @@ async def perform_negotiation_rounds(
                 ).upper()
                 content = msg_dict.get(constants.LLM_MESSAGE_KEY_CONTENT, "")
 
-                if (
-                    recipient != constants.MESSAGE_RECIPIENT_GLOBAL
-                    and recipient not in active_powers
-                ):
+                if recipient != constants.MESSAGE_RECIPIENT_GLOBAL and recipient not in active_powers:
                     logger.warning(
                         f"[{sender_power}] Tried to send message to invalid/inactive recipient '{recipient}'. Skipping."
                     )
                     continue
 
-                game_history.add_message(
-                    current_phase_name, sender_power, recipient, content
-                )
-                logger.debug(
-                    f"Message from {sender_power} to {recipient}: {content[:75]}..."
-                )
+                game_history.add_message(current_phase_name, sender_power, recipient, content)
+                logger.debug(f"Message from {sender_power} to {recipient}: {content[:75]}...")
 
         if round_num < num_rounds:
             logger.info(f"End of Negotiation Round {round_num}. Next round starting...")

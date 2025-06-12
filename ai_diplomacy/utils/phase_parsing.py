@@ -61,9 +61,7 @@ def get_phase_type_from_game(game: "Game") -> str:
     parts = phase_str_upper.split()
     year_val = extract_year_from_phase(phase_str_orig)
 
-    first_part_is_valid_season_or_compact_season_year = (
-        True  # Default true for single-word/compact forms
-    )
+    first_part_is_valid_season_or_compact_season_year = True  # Default true for single-word/compact forms
     if len(parts) > 1 and year_val is not None:
         # Check if the first part is a full season keyword e.g. "SPRING"
         if _is_valid_season_keyword(parts[0]):
@@ -105,11 +103,7 @@ def get_phase_type_from_game(game: "Game") -> str:
             and year_val is not None
             and first_part_is_valid_season_or_compact_season_year
         )
-        or (
-            "MVT" in parts
-            and year_val is not None
-            and first_part_is_valid_season_or_compact_season_year
-        )
+        or ("MVT" in parts and year_val is not None and first_part_is_valid_season_or_compact_season_year)
     ):
         return PhaseType.MVT.value
 
@@ -131,11 +125,7 @@ def get_phase_type_from_game(game: "Game") -> str:
             and year_val is not None
             and first_part_is_valid_season_or_compact_season_year
         )
-        or (
-            "RET" in parts
-            and year_val is not None
-            and first_part_is_valid_season_or_compact_season_year
-        )
+        or ("RET" in parts and year_val is not None and first_part_is_valid_season_or_compact_season_year)
     ):
         return PhaseType.RET.value
 
@@ -163,21 +153,13 @@ def get_phase_type_from_game(game: "Game") -> str:
             and year_val is not None
             and first_part_is_valid_season_or_compact_season_year
         )
-        or (
-            "BLD" in parts
-            and year_val is not None
-            and first_part_is_valid_season_or_compact_season_year
-        )
+        or ("BLD" in parts and year_val is not None and first_part_is_valid_season_or_compact_season_year)
     ):
         return PhaseType.BLD.value
 
     # If phase type cannot be determined after all checks
-    logger.error(
-        f"Could not determine phase type for '{phase_str_orig}'. This is an unhandled phase format."
-    )
-    raise RuntimeError(
-        f"Unknown or unhandled phase format: '{phase_str_orig}'. Cannot determine phase type."
-    )
+    logger.error(f"Could not determine phase type for '{phase_str_orig}'. This is an unhandled phase format.")
+    raise RuntimeError(f"Unknown or unhandled phase format: '{phase_str_orig}'. Cannot determine phase type.")
 
 
 def _is_valid_season_keyword(season_part: str) -> bool:
@@ -200,9 +182,7 @@ def _is_valid_compact_form(phase_str: str, suffix: str) -> bool:
 
     # Special handling for 'B' suffix (Build phase, typically Autumn)
     if suffix_upper == "B":
-        if (
-            season_initial != "A"
-        ):  # For 'B' suffix, season initial MUST be 'A' (e.g., A1901B)
+        if season_initial != "A":  # For 'B' suffix, season initial MUST be 'A' (e.g., A1901B)
             return False
     # For other standard suffixes (M, R, A), season initial must be in VALID_SEASON_INITIALS
     elif season_initial not in VALID_SEASON_INITIALS:
@@ -229,9 +209,7 @@ def extract_year_from_phase(
 
     # Fallback for compact forms like S1901M if regex didn't catch it (e.g. no word boundaries)
     # and the phase_name is long enough and contains digits at expected place
-    if (
-        len(phase_name) >= 5 and phase_name[1:5].isdigit()
-    ):  # Check if first char is a letter (season)
+    if len(phase_name) >= 5 and phase_name[1:5].isdigit():  # Check if first char is a letter (season)
         if phase_name[0].isalpha():
             return int(phase_name[1:5])
 

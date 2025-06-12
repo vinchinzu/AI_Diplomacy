@@ -26,17 +26,11 @@ class PhaseState:
     eliminated_powers: FrozenSet[str] = field(default_factory=frozenset)
 
     # Board state
-    units: Dict[str, List[str]] = field(
-        default_factory=dict
-    )  # power -> list of unit strings
-    supply_centers: Dict[str, List[str]] = field(
-        default_factory=dict
-    )  # power -> list of center names
+    units: Dict[str, List[str]] = field(default_factory=dict)  # power -> list of unit strings
+    supply_centers: Dict[str, List[str]] = field(default_factory=dict)  # power -> list of center names
 
     # Possible orders
-    possible_orders: Dict[str, List[str]] = field(
-        default_factory=dict
-    )  # power -> list of order strings
+    possible_orders: Dict[str, List[str]] = field(default_factory=dict)  # power -> list of order strings
 
     # Game progress
     is_game_over: bool = False
@@ -46,9 +40,7 @@ class PhaseState:
     recent_messages: List[Any] = field(default_factory=list)
 
     @classmethod
-    def from_game(
-        cls, game, recent_messages: Optional[List[Any]] = None
-    ) -> "PhaseState":
+    def from_game(cls, game, recent_messages: Optional[List[Any]] = None) -> "PhaseState":
         """Create a PhaseState from a diplomacy.Game object."""
         try:
             # Parse phase information
@@ -67,9 +59,7 @@ class PhaseState:
 
             # Extract power information
             all_powers = frozenset(game.powers.keys())
-            eliminated = frozenset(
-                p.name for p in game.powers.values() if p.is_eliminated()
-            )
+            eliminated = frozenset(p.name for p in game.powers.values() if p.is_eliminated())
 
             # Extract units and centers
             units_dict = {}
@@ -90,11 +80,7 @@ class PhaseState:
             winner_power = None
             if game_over:
                 # Find winner (power with most supply centers)
-                max_centers = (
-                    max(len(centers) for centers in centers_dict.values())
-                    if centers_dict
-                    else 0
-                )
+                max_centers = max(len(centers) for centers in centers_dict.values()) if centers_dict else 0
                 for power, centers in centers_dict.items():
                     if len(centers) == max_centers:
                         winner_power = power

@@ -32,9 +32,7 @@ REL_KEYS = ("updated_relationships", "relationships", "relationship_updates")
 
 
 # Renamed from _load_prompt_file and moved from agent.py
-def load_prompt_file(
-    filename: str, base_prompts_dir: Optional[str] = None
-) -> Optional[str]:
+def load_prompt_file(filename: str, base_prompts_dir: Optional[str] = None) -> Optional[str]:
     """
     Loads a prompt template from the specified prompts directory.
 
@@ -89,9 +87,7 @@ def clean_json_text(text: str) -> str:
 
 
 # Moved from DiplomacyAgent class in agent.py and adapted
-def extract_json_from_text(
-    text: str, logger_param: logging.Logger, identifier_for_log: str = ""
-) -> Any:
+def extract_json_from_text(text: str, logger_param: logging.Logger, identifier_for_log: str = "") -> Any:
     """
     Extract and parse JSON from text, handling common LLM response formats.
     Returns the parsed JSON object (usually a dict or list), or the original text if parsing fails.
@@ -105,9 +101,7 @@ def extract_json_from_text(
         A dictionary parsed from the JSON, or an empty dictionary if parsing fails.
     """
     if not text or not text.strip():
-        logger_param.warning(
-            f"{identifier_for_log} Empty text provided to JSON extractor"
-        )
+        logger_param.warning(f"{identifier_for_log} Empty text provided to JSON extractor")
         return {}
 
     original_text = text
@@ -123,9 +117,7 @@ def extract_json_from_text(
         "relationships",
         "intent",
     ]
-    for (
-        pattern_key
-    ) in problematic_patterns:  # Renamed pattern to pattern_key to avoid conflict
+    for pattern_key in problematic_patterns:  # Renamed pattern to pattern_key to avoid conflict
         text = re.sub(rf'\n\s*"{pattern_key}"', f'"{pattern_key}"', text)
 
     patterns = [
@@ -171,9 +163,7 @@ def extract_json_from_text(
                 )
                 return result
             except json.JSONDecodeError as e_initial:
-                logger_param.debug(
-                    f"{identifier_for_log} Standard JSON parse failed: {e_initial}"
-                )
+                logger_param.debug(f"{identifier_for_log} Standard JSON parse failed: {e_initial}")
 
                 try:
                     cleaned_match_candidate = content_to_parse
@@ -187,19 +177,13 @@ def extract_json_from_text(
                         "",
                         cleaned_match_candidate,
                     )
-                    cleaned_match_candidate = re.sub(
-                        r'\n\s+"(\w+)"\s*:', r'"\1":', cleaned_match_candidate
-                    )
-                    cleaned_match_candidate = re.sub(
-                        r",\s*}", "}", cleaned_match_candidate
-                    )
+                    cleaned_match_candidate = re.sub(r'\n\s+"(\w+)"\s*:', r'"\1":', cleaned_match_candidate)
+                    cleaned_match_candidate = re.sub(r",\s*}", "}", cleaned_match_candidate)
                     for pp_key in problematic_patterns:  # Renamed pattern to pp_key
                         cleaned_match_candidate = cleaned_match_candidate.replace(
                             f'\n  "{pp_key}"', f'"{pp_key}"'
                         )
-                    cleaned_match_candidate = re.sub(
-                        r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate
-                    )
+                    cleaned_match_candidate = re.sub(r"'(\w+)'\s*:", r'"\1":', cleaned_match_candidate)
 
                     if cleaned_match_candidate != content_to_parse:
                         logger_param.debug(
@@ -207,24 +191,18 @@ def extract_json_from_text(
                         )
                         return json.loads(cleaned_match_candidate)
                 except json.JSONDecodeError as e_surgical:
-                    logger_param.debug(
-                        f"{identifier_for_log} Surgical cleaning didn't work: {e_surgical}"
-                    )
+                    logger_param.debug(f"{identifier_for_log} Surgical cleaning didn't work: {e_surgical}")
 
             try:
                 result = json5.loads(content_to_parse)
-                logger_param.debug(
-                    f"{identifier_for_log} Successfully parsed with json5"
-                )
+                logger_param.debug(f"{identifier_for_log} Successfully parsed with json5")
                 return result
             except Exception as e:
                 logger_param.debug(f"{identifier_for_log} json5 parse failed: {e}")
 
             try:
                 result = json_repair.loads(content_to_parse)
-                logger_param.debug(
-                    f"{identifier_for_log} Successfully parsed with json-repair"
-                )
+                logger_param.debug(f"{identifier_for_log} Successfully parsed with json-repair")
                 return result
             except Exception as e:
                 logger_param.debug(f"{identifier_for_log} json-repair failed: {e}")
@@ -240,20 +218,12 @@ def extract_json_from_text(
                 ("json_repair", json_repair.loads),
             ]:
                 try:
-                    cleaned = (
-                        clean_json_text(potential_json)
-                        if parser_name == "json"
-                        else potential_json
-                    )
+                    cleaned = clean_json_text(potential_json) if parser_name == "json" else potential_json
                     result = parser_func(cleaned)
-                    logger_param.debug(
-                        f"{identifier_for_log} Fallback parse succeeded with {parser_name}"
-                    )
+                    logger_param.debug(f"{identifier_for_log} Fallback parse succeeded with {parser_name}")
                     return result
                 except Exception as e:
-                    logger_param.debug(
-                        f"{identifier_for_log} Fallback {parser_name} failed: {e}"
-                    )
+                    logger_param.debug(f"{identifier_for_log} Fallback {parser_name} failed: {e}")
 
             try:
                 cleaned_text = re.sub(r'[^{}[\]"\',:.\d\w\s_-]', "", potential_json)
@@ -385,12 +355,7 @@ def log_llm_response(
             if len(raw_response) > MAX_CONTENT_LOG_LENGTH
             else raw_response
         )
-        parsed_response_str = (
-            json.dumps(parsed_response)
-            if parsed_response is not None
-            else ""
-        )
-
+        parsed_response_str = json.dumps(parsed_response) if parsed_response is not None else ""
 
         # Get current timestamp
         import datetime  # Moved import here
@@ -418,6 +383,4 @@ def log_llm_response(
             writer.writerow(log_row)
     except Exception as e:
         # Use a logger specific to this module (llm_utils)
-        logger.error(
-            f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True
-        )
+        logger.error(f"Failed to log LLM response to {log_file_path}: {e}", exc_info=True)

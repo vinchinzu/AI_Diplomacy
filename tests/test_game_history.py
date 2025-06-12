@@ -39,25 +39,14 @@ def test_game_history_to_dict_serialization():
     assert message_1_dict["sender"] == "ENGLAND"
     assert message_1_dict["recipient"] == "FRANCE"
     assert message_1_dict["content"] == "Hello from England in S1901M!"
-    assert "orders_by_power" in phase_1_dict and isinstance(
-        phase_1_dict["orders_by_power"], dict
-    )
+    assert "orders_by_power" in phase_1_dict and isinstance(phase_1_dict["orders_by_power"], dict)
     assert phase_1_dict["orders_by_power"]["ITALY"] == ["F ROM - NAP"]
-    assert "results_by_power" in phase_1_dict and isinstance(
-        phase_1_dict["results_by_power"], dict
-    )
+    assert "results_by_power" in phase_1_dict and isinstance(phase_1_dict["results_by_power"], dict)
     assert phase_1_dict["results_by_power"]["ITALY"] == [["SUCCESSFUL"]]
-    assert "phase_summaries" in phase_1_dict and isinstance(
-        phase_1_dict["phase_summaries"], dict
-    )
+    assert "phase_summaries" in phase_1_dict and isinstance(phase_1_dict["phase_summaries"], dict)
     assert phase_1_dict["phase_summaries"]["GERMANY"] == "Germany did well in S1901M."
-    assert "experience_updates" in phase_1_dict and isinstance(
-        phase_1_dict["experience_updates"], dict
-    )
-    assert (
-        phase_1_dict["experience_updates"]["RUSSIA"]
-        == "Learned about betrayal in S1901M."
-    )
+    assert "experience_updates" in phase_1_dict and isinstance(phase_1_dict["experience_updates"], dict)
+    assert phase_1_dict["experience_updates"]["RUSSIA"] == "Learned about betrayal in S1901M."
     phase_2_dict = history_dict["phases"][1]
     assert phase_2_dict["name"] == "F1901M"
     assert phase_2_dict["plans"]["AUSTRIA"] == "Plan for Austria in F1901M"
@@ -98,9 +87,7 @@ def test_phase_add_orders_internal_consistency():
     phase_dict = {
         "name": phase.name,
         "plans": dict(phase.plans),
-        "messages": [
-            vars(msg) for msg in phase.messages
-        ],  # vars() works for simple dataclasses
+        "messages": [vars(msg) for msg in phase.messages],  # vars() works for simple dataclasses
         "orders_by_power": {p: list(o) for p, o in phase.orders_by_power.items()},
         "results_by_power": {p: list(r) for p, r in phase.results_by_power.items()},
         "phase_summaries": dict(phase.phase_summaries),

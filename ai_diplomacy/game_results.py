@@ -59,9 +59,7 @@ class GameResultsProcessor:
             game_history: The GameHistory object containing records of all phases.
         """
         if not self.config.log_to_file:
-            logger.info(
-                "File logging disabled, skipping saving game state and history."
-            )
+            logger.info("File logging disabled, skipping saving game state and history.")
             return
 
         # 1. Save the final game state (e.g., .json, .svg)
@@ -80,20 +78,14 @@ class GameResultsProcessor:
                 game_state_json_str = to_saved_game_format(game_instance)
                 # Ensure it's a string - to_saved_game_format might return a dict
                 if isinstance(game_state_json_str, dict):
-                    game_state_json_str = json.dumps(
-                        game_state_json_str, indent=2, default=str
-                    )
+                    game_state_json_str = json.dumps(game_state_json_str, indent=2, default=str)
                 with open(final_state_path_json, "w", encoding="utf-8") as f:
                     f.write(game_state_json_str)
-                logger.info(
-                    f"Final game state (JSON) saved to: {final_state_path_json}"
-                )
+                logger.info(f"Final game state (JSON) saved to: {final_state_path_json}")
 
                 # Optionally, save an SVG of the final board if possible and desired
                 # This depends on the capabilities of the 'diplomacy' library version
-                if hasattr(
-                    game_instance, "render_negotiation_messages_html"
-                ):  # A guess for a render method
+                if hasattr(game_instance, "render_negotiation_messages_html"):  # A guess for a render method
                     # final_state_path_svg = os.path.join(self.config.results_dir, f"{self.config.game_id}_final_board.svg") # Unused variable as SVG saving is commented
                     try:
                         # Example: game_instance.render().save_svg(final_state_path_svg)
@@ -124,9 +116,7 @@ class GameResultsProcessor:
 
             # If GameHistory has a to_dict method:
             if hasattr(game_history, "to_dict"):
-                history_dict = (
-                    game_history.to_dict()
-                )  # Requires implementing to_dict in GameHistory
+                history_dict = game_history.to_dict()  # Requires implementing to_dict in GameHistory
             else:
                 # Basic serialization using dataclasses.asdict if GameHistory and Phase are dataclasses
                 # This is a fallback and might need refinement for complex objects like Message.
@@ -138,18 +128,14 @@ class GameResultsProcessor:
                     "GameHistory does not have a 'to_dict' method. Saving history might be incomplete or fail."
                 )
                 # Attempting a shallow conversion for demonstration. This will likely miss nested custom objects.
-                history_dict = {
-                    "phases": [vars(phase) for phase in game_history.phases]
-                }
+                history_dict = {"phases": [vars(phase) for phase in game_history.phases]}
                 # A more robust way for dataclasses:
                 # from dataclasses import asdict
                 # history_dict = {"phases": [asdict(phase) for phase in game_history.phases]}
                 # This still needs Message to be serializable.
 
             with open(history_path_json, "w", encoding="utf-8") as f:
-                json.dump(
-                    history_dict, f, indent=2, default=str
-                )  # default=str for non-serializable
+                json.dump(history_dict, f, indent=2, default=str)  # default=str for non-serializable
             logger.info(f"Game history saved to: {history_path_json}")
         except Exception as e:
             logger.error(f"Error saving game history: {e}", exc_info=True)
@@ -169,9 +155,7 @@ class GameResultsProcessor:
             logger.warning("No agents provided to save_agent_manifestos.")
             return
 
-        logger.info(
-            f"Saving agent manifestos to directory: {self.config.manifestos_dir}"
-        )
+        logger.info(f"Saving agent manifestos to directory: {self.config.manifestos_dir}")
         os.makedirs(self.config.manifestos_dir, exist_ok=True)  # Ensure it exists
 
         for power_name, agent in agents.items():
@@ -182,21 +166,13 @@ class GameResultsProcessor:
             try:
                 with open(manifesto_path, "w", encoding="utf-8") as f:
                     # Get agent info - works with both old and new agent types
-                    agent_info = (
-                        agent.get_agent_info()
-                        if hasattr(agent, "get_agent_info")
-                        else {}
-                    )
-                    model_id = getattr(
-                        agent, "model_id", agent_info.get("model_id", "unknown")
-                    )
+                    agent_info = agent.get_agent_info() if hasattr(agent, "get_agent_info") else {}
+                    model_id = getattr(agent, "model_id", agent_info.get("model_id", "unknown"))
 
                     f.write(f"Manifesto for {power_name} (Model: {model_id})\n")
                     f.write(f"Game ID: {self.config.game_id}\n")
                     f.write(f"Timestamp: {self.config.current_datetime_str}\n")
-                    f.write(
-                        f"Agent Type: {agent_info.get('type', type(agent).__name__)}\n"
-                    )
+                    f.write(f"Agent Type: {agent_info.get('type', type(agent).__name__)}\n")
 
                     # Handle goals - may not exist in new agent types
                     f.write("\n--- Final Goals ---\n")
@@ -204,9 +180,7 @@ class GameResultsProcessor:
                         for goal in agent.goals:
                             f.write(f"- {goal}\n")
                     else:
-                        f.write(
-                            "(No specific goals listed or not supported by this agent type)\n"
-                        )
+                        f.write("(No specific goals listed or not supported by this agent type)\n")
 
                     # Handle relationships - may not exist in new agent types
                     f.write("\n--- Final Relationships ---\n")
@@ -214,21 +188,15 @@ class GameResultsProcessor:
                         for p, status in agent.relationships.items():
                             f.write(f"- {p}: {status}\n")
                     else:
-                        f.write(
-                            "(No specific relationships listed or not supported by this agent type)\n"
-                        )
+                        f.write("(No specific relationships listed or not supported by this agent type)\n")
 
                     # Handle private journal - may not exist in new agent types
                     f.write("\n--- Private Journal (Last 20 entries) ---\n")
                     if hasattr(agent, "private_journal") and agent.private_journal:
-                        for entry in agent.private_journal[
-                            -20:
-                        ]:  # Show last few entries
+                        for entry in agent.private_journal[-20:]:  # Show last few entries
                             f.write(f"{entry}\n")
                     else:
-                        f.write(
-                            "(Journal is empty or not supported by this agent type)\n"
-                        )
+                        f.write("(Journal is empty or not supported by this agent type)\n")
 
                     # Handle private diary - may not exist in new agent types
                     f.write("\n--- Private Diary (Last 50 entries) ---\n")
@@ -236,15 +204,11 @@ class GameResultsProcessor:
                         for entry in agent.private_diary[-50:]:  # Show last few entries
                             f.write(f"{entry}\n")
                     else:
-                        f.write(
-                            "(Diary is empty or not supported by this agent type)\n"
-                        )
+                        f.write("(Diary is empty or not supported by this agent type)\n")
 
                 logger.info(f"Manifesto for {power_name} saved to: {manifesto_path}")
             except Exception as e:
-                logger.error(
-                    f"Error saving manifesto for {power_name}: {e}", exc_info=True
-                )
+                logger.error(f"Error saving manifesto for {power_name}: {e}", exc_info=True)
 
     def log_final_results(self, game_instance: "Game"):
         """
@@ -287,24 +251,16 @@ class GameResultsProcessor:
             # Determine winner(s)
             if power_centers:
                 max_centers = power_centers[0][1]
-                winners = [
-                    power for power, count, _ in power_centers if count == max_centers
-                ]
+                winners = [power for power, count, _ in power_centers if count == max_centers]
                 if len(winners) == 1:
-                    logger.info(
-                        f"Winner: {winners[0]} with {max_centers} supply centers"
-                    )
+                    logger.info(f"Winner: {winners[0]} with {max_centers} supply centers")
                 else:
-                    logger.info(
-                        f"Draw between: {', '.join(winners)} with {max_centers} supply centers each"
-                    )
+                    logger.info(f"Draw between: {', '.join(winners)} with {max_centers} supply centers each")
         else:
             logger.warning("No power information available for final results.")
 
         # Try to get winner information from game object
-        if hasattr(game_instance, "get_winners") and callable(
-            getattr(game_instance, "get_winners")
-        ):
+        if hasattr(game_instance, "get_winners") and callable(getattr(game_instance, "get_winners")):
             try:
                 winners = game_instance.get_winners()
                 if winners:
@@ -358,12 +314,8 @@ class GameResultsProcessor:
             # GPT-4o-mini: $0.15/1M input, $0.60/1M output
             # GPT-3.5-turbo: $0.50/1M input, $1.50/1M output
             estimated_cost_gpt4o = (total_input * 5 + total_output * 15) / 1_000_000
-            estimated_cost_gpt4o_mini = (
-                total_input * 0.15 + total_output * 0.60
-            ) / 1_000_000
-            estimated_cost_gpt35 = (
-                total_input * 0.50 + total_output * 1.50
-            ) / 1_000_000
+            estimated_cost_gpt4o_mini = (total_input * 0.15 + total_output * 0.60) / 1_000_000
+            estimated_cost_gpt35 = (total_input * 0.50 + total_output * 1.50) / 1_000_000
 
             logger.info("")
             logger.info("Estimated Costs (if all tokens were from):")

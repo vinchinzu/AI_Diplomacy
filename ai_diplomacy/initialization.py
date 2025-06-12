@@ -51,9 +51,7 @@ async def initialize_agent_state_concurrently(
 
     Returns a failure status to indicate the function is deprecated.
     """
-    logger.warning(
-        f"initialize_agent_state_concurrently() is deprecated for {power_name}."
-    )
+    logger.warning(f"initialize_agent_state_concurrently() is deprecated for {power_name}.")
     return power_name, False, "Deprecated", {}
 
 

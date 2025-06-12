@@ -36,9 +36,7 @@ class BlocLLMAgent(LLMAgent):
         prompt_loader: Optional[callable] = None,  # Remains for bloc_order_prompt.j2
     ):
         if not controlled_powers:
-            raise ValueError(
-                "BlocLLMAgent must be initialized with at least one controlled power."
-            )
+            raise ValueError("BlocLLMAgent must be initialized with at least one controlled power.")
 
         representative_country = controlled_powers[0]
 
@@ -53,9 +51,10 @@ class BlocLLMAgent(LLMAgent):
             game_id=game_id,  # Passed to LLMAgent -> GenericLLMAgent config
             llm_coordinator=llm_coordinator,  # Passed to LLMAgent -> GenericLLMAgent
             context_provider_factory=context_provider_factory,  # Used by LLMAgent
-            prompt_loader=effective_prompt_loader,  # Used by LLMAgent for its system prompt
-            # llm_caller_override is not explicitly handled here, LLMAgent's default is None
+            prompt_loader=lambda x: "",  # Defer prompt loading to bloc-specific logic
         )
+        # Now, set the real prompt loader for the bloc agent's own use.
+        self.prompt_loader = effective_prompt_loader
         self.bloc_name = bloc_name
         self.controlled_powers = [p.upper() for p in controlled_powers]
 
@@ -109,16 +108,12 @@ class BlocLLMAgent(LLMAgent):
         if units_by_power:
             for p_name in sorted(self.controlled_powers):
                 power_units_locs_list = units_by_power.get(p_name, [])
-                phase_repr_parts.append(
-                    f"{p_name}_units:{tuple(sorted(power_units_locs_list))}"
-                )
+                phase_repr_parts.append(f"{p_name}_units:{tuple(sorted(power_units_locs_list))}")
 
         # --- Handle supply center information safely ---
         scs_data = getattr(phase, "supply_centers", getattr(phase, "scs", None))
         if scs_data:
-            sorted_scs_items = sorted(
-                [(p, tuple(sorted(cs))) for p, cs in scs_data.items()]
-            )
+            sorted_scs_items = sorted([(p, tuple(sorted(cs))) for p, cs in scs_data.items()])
             phase_repr_parts.append(f"scs:{tuple(sorted(sorted_scs_items))}")
 
         current_phase_key = (
@@ -140,13 +135,9 @@ class BlocLLMAgent(LLMAgent):
 
             try:
                 # self.prompt_loader is set in super().__init__
-                order_prompt_template_content = self.prompt_loader(
-                    "bloc_order_prompt.j2"
-                )
+                order_prompt_template_content = self.prompt_loader("bloc_order_prompt.j2")
             except FileNotFoundError:
-                logger.error(
-                    f"{self.agent_id}: bloc_order_prompt.j2 not found. Cannot generate bloc orders."
-                )
+                logger.error(f"{self.agent_id}: bloc_order_prompt.j2 not found. Cannot generate bloc orders.")
                 self._cached_bloc_orders_phase_key = current_phase_key
                 return []
             except Exception as e:
@@ -181,9 +172,7 @@ class BlocLLMAgent(LLMAgent):
                 template = jinja2.Template(order_prompt_template_content)
                 rendered_bloc_prompt = template.render(prompt_context)
             except jinja2.TemplateSyntaxError as e:
-                logger.error(
-                    f"{self.agent_id}: Jinja2 template syntax error: {e}", exc_info=True
-                )
+                logger.error(f"{self.agent_id}: Jinja2 template syntax error: {e}", exc_info=True)
                 self._cached_bloc_orders_phase_key = current_phase_key
                 return []
             except Exception as e:
@@ -249,9 +238,7 @@ class BlocLLMAgent(LLMAgent):
                         if isinstance(orders_str_list, list) and all(
                             isinstance(o, str) for o in orders_str_list
                         ):
-                            valid_parsed_orders[power.upper()] = [
-                                Order(o) for o in orders_str_list
-                            ]
+                            valid_parsed_orders[power.upper()] = [Order(o) for o in orders_str_list]
                         else:
                             logger.warning(
                                 f"{self.agent_id}: Invalid order list format for power {power} in LLM response. Skipping. Data: {orders_str_list}"
@@ -259,9 +246,7 @@ class BlocLLMAgent(LLMAgent):
                     # Do not log warning for non-controlled powers if they are not expected in response,
                     # unless the prompt specifically asks for orders ONLY for controlled powers.
                     # If the LLM might return orders for other powers, this check is useful.
-                    elif (
-                        power != "error" and power != "details"
-                    ):  # Skip our own error keys
+                    elif power != "error" and power != "details":  # Skip our own error keys
                         logger.warning(
                             f"{self.agent_id}: LLM response included orders for non-controlled or unexpected key '{power}'. Ignoring."
                         )
@@ -283,9 +268,7 @@ class BlocLLMAgent(LLMAgent):
 
         # Return orders for the representative country (first in list)
         representative_power_name = self.controlled_powers[0]
-        orders_for_representative = self._cached_bloc_orders_this_phase.get(
-            representative_power_name, []
-        )
+        orders_for_representative = self._cached_bloc_orders_this_phase.get(representative_power_name, [])
 
         if not orders_for_representative and self._cached_bloc_orders_this_phase:
             logger.warning(

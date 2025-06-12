@@ -25,29 +25,6 @@ This document contains critical information about working with this codebase. Fo
    - New features require tests
    - Bug fixes require regression tests
 
-- For commits fixing bugs or adding features based on user reports add:
-  ```bash
-  git commit --trailer "Reported-by:<name>"
-  ```
-  Where `<name>` is the name of the user.
-
-- For commits related to a Github issue, add
-  ```bash
-  git commit --trailer "Github-Issue:#<number>"
-  ```
-- NEVER ever mention a `co-authored-by` or similar aspects. In particular, never
-  mention the tool used to create the commit message or PR.
-
-## Pull Requests
-
-- Create a detailed message of what changed. Focus on the high level description of
-  the problem it tries to solve, and how it is solved. Don't go into the specifics of the
-  code unless it adds clarity.
-
-- Always add `jerome3o-anthropic` and `jspahrsummers` as reviewer.
-
-- NEVER ever mention a `co-authored-by` or similar aspects. In particular, never
-  mention the tool used to create the commit message or PR.
 
 ## Python Tools
 
@@ -67,7 +44,7 @@ This document contains critical information about working with this codebase. Fo
      - Imports: split into multiple lines
 
 2. Type Checking
-   - Tool: `uv run --frozen pyright`
+   - Tool: `uv run --frozen ty check`
    - Requirements:
      - Explicit None checks for Optional
      - Type narrowing for strings

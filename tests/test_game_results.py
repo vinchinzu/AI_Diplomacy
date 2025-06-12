@@ -23,20 +23,17 @@ def test_save_game_state_writes_history_json(tmp_path):  # Added tmp_path
     assert phase1 is not None
     phase1.add_plan("FRANCE", "Test Plan S1901M")
     phase1.add_message("ENGLAND", "FRANCE", "Test Message S1901M")
-    phase1.orders_by_power["ITALY"] = [
-        "F ROM - NAP"
-    ]  # Directly populating for simplicity
+    phase1.orders_by_power["ITALY"] = ["F ROM - NAP"]  # Directly populating for simplicity
     phase1.results_by_power["ITALY"] = [["SUCCESSFUL"]]
 
     # Mock GameConfig
     # We need a GameConfig that provides paths.
     # Let's mock the args that GameConfig constructor expects.
     mock_cli_args = MagicMock()
+    mock_cli_args.game_config_file = "game.toml"
     mock_cli_args.log_to_file = True
     mock_cli_args.game_id = "test_game_123"
-    mock_cli_args.game_id_prefix = (
-        "test_prefix"  # GameConfig uses this if game_id is None
-    )
+    mock_cli_args.game_id_prefix = "test_prefix"  # GameConfig uses this if game_id is None
     mock_cli_args.log_dir = str(tmp_path)  # Changed to tmp_path
     # Add any other attributes GameConfig's __init__ might access from args
     mock_cli_args.power_name = None
@@ -53,18 +50,15 @@ def test_save_game_state_writes_history_json(tmp_path):  # Added tmp_path
     mock_cli_args.dev_mode = False
     mock_cli_args.verbose_llm_debug = False
     mock_cli_args.max_diary_tokens = 6500
-    mock_cli_args.models_config_file = (
-        "models.toml"  # So it doesn't try to load a real one and fail tests
-    )
+    mock_cli_args.models_config_file = "models.toml"  # So it doesn't try to load a real one and fail tests
+    mock_cli_args.game_factory_path = None
 
     # Patch os.path.exists for models.toml to avoid trying to load it
-    with patch("os.path.exists", return_value=False):
+    with patch("os.path.exists", return_value=False), patch("toml.load", return_value={}) as mock_toml_load:
         mock_game_config = GameConfig(mock_cli_args)
 
     # Ensure results_dir is set correctly for the test
-    expected_results_dir = os.path.join(
-        mock_game_config.game_id_specific_log_dir, "results"
-    )
+    expected_results_dir = os.path.join(mock_game_config.game_id_specific_log_dir, "results")
     mock_game_config.results_dir = (
         expected_results_dir  # Override if necessary, though GameConfig should set it
     )
@@ -83,12 +77,8 @@ def test_save_game_state_writes_history_json(tmp_path):  # Added tmp_path
 
     # Define expected file paths using tmp_path
     results_dir_path = Path(mock_game_config.results_dir)  # GameConfig sets this up
-    expected_history_filepath = (
-        results_dir_path / f"{mock_game_config.game_id}_game_history.json"
-    )
-    expected_final_state_filepath = (
-        results_dir_path / f"{mock_game_config.game_id}_final_state.json"
-    )
+    expected_history_filepath = results_dir_path / f"{mock_game_config.game_id}_game_history.json"
+    expected_final_state_filepath = results_dir_path / f"{mock_game_config.game_id}_final_state.json"
 
     # Mock to_saved_game_format specifically for the call within save_game_state
     # This patch can remain as its output is what's being written.
@@ -113,13 +103,8 @@ def test_save_game_state_writes_history_json(tmp_path):  # Added tmp_path
         assert len(written_data_dict["phases"]) == 1
         assert written_data_dict["phases"][0]["name"] == "S1901M"
         assert written_data_dict["phases"][0]["plans"]["FRANCE"] == "Test Plan S1901M"
-        assert (
-            written_data_dict["phases"][0]["messages"][0]["content"]
-            == "Test Message S1901M"
-        )
-        assert written_data_dict["phases"][0]["orders_by_power"]["ITALY"] == [
-            "F ROM - NAP"
-        ]
+        assert written_data_dict["phases"][0]["messages"][0]["content"] == "Test Message S1901M"
+        assert written_data_dict["phases"][0]["orders_by_power"]["ITALY"] == ["F ROM - NAP"]
 
         # Assert the content of the final state file
         with open(expected_final_state_filepath, "r", encoding="utf-8") as f:
@@ -160,9 +145,7 @@ def test_save_game_state_writes_history_json(tmp_path):  # Added tmp_path
         mock_game_history_no_log = GameHistory()  # Empty history is fine
 
         results_processor_no_log = GameResultsProcessor(mock_game_config_no_log)
-        results_processor_no_log.save_game_state(
-            mock_game_instance_no_log, mock_game_history_no_log
-        )
+        results_processor_no_log.save_game_state(mock_game_instance_no_log, mock_game_history_no_log)
 
         mock_file_open_disabled.assert_not_called()  # open should not be called
         # os.makedirs might still be called by GameConfig if log_to_file=True,

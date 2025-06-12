@@ -99,9 +99,7 @@ def mock_load_prompt_file_func():
 
 @pytest.fixture
 def mock_game_config_results(tmp_path) -> GameConfig:
-    return create_game_config(
-        game_id="results_test_game", log_dir=str(tmp_path / "test_results_logs")
-    )
+    return create_game_config(game_id="results_test_game", log_dir=str(tmp_path / "test_results_logs"))
 
 
 @pytest.fixture
@@ -204,7 +202,7 @@ def fake_game_factory():
             phase,
             powers_names=powers_names,
             build_conditions=build_conditions,
-            retreat_conditions=retreat_conditions
+            retreat_conditions=retreat_conditions,
         )
 
     return _create_fake_game
@@ -225,9 +223,7 @@ def mock_agent_manager_for_orchestrator():
 
 
 @pytest.fixture
-def default_dummy_orchestrator(
-    mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator
-):
+def default_dummy_orchestrator(mock_game_config_for_orchestrator, mock_agent_manager_for_orchestrator):
     default_powers = ["FRANCE", "GERMANY"]
     orchestrator = fakes_module.DummyOrchestrator(
         default_powers,
@@ -251,6 +247,4 @@ ALL_POWERS_IN_GAME_CONSTANT = [  # Renamed to avoid conflict if a global was imp
 
 @pytest.fixture
 def all_powers() -> List[str]:
-    return (
-        ALL_POWERS_IN_GAME_CONSTANT.copy()
-    )  # Return a copy to prevent modification by tests
+    return ALL_POWERS_IN_GAME_CONSTANT.copy()  # Return a copy to prevent modification by tests

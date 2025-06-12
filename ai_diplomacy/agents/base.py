@@ -30,21 +30,15 @@ class BaseAgent(ABC):
         self.model_id: Optional[str] = None
 
     @abstractmethod
-    async def decide_orders(
-        self, phase: PhaseState
-    ) -> List["Order"]:  # Use quotes for forward ref
+    async def decide_orders(self, phase: PhaseState) -> List["Order"]:  # Use quotes for forward ref
         pass
 
     @abstractmethod
-    async def negotiate(
-        self, phase: PhaseState
-    ) -> List["Message"]:  # Use quotes for forward ref
+    async def negotiate(self, phase: PhaseState) -> List["Message"]:  # Use quotes for forward ref
         pass
 
     @abstractmethod
-    async def update_state(
-        self, phase: PhaseState, events: List[Dict[str, Any]]
-    ) -> None:
+    async def update_state(self, phase: PhaseState, events: List[Dict[str, Any]]) -> None:
         pass
 
     def get_agent_info(self) -> Dict[str, Any]:

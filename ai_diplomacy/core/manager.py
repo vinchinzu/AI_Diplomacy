@@ -52,9 +52,7 @@ class GameManager:
         """
         return PhaseState.from_game(self.game)
 
-    def validate_orders(
-        self, country: str, orders: List[str]
-    ) -> Tuple[List[str], List[str]]:
+    def validate_orders(self, country: str, orders: List[str]) -> Tuple[List[str], List[str]]:
         """
         Validate orders for a country and return valid/invalid orders.
 
@@ -142,9 +140,7 @@ class GameManager:
             # Add events to log
             self.events_log.extend(phase_events)
 
-            logger.info(
-                f"Phase {current_phase} processed, generated {len(phase_events)} events"
-            )
+            logger.info(f"Phase {current_phase} processed, generated {len(phase_events)} events")
 
         except Exception as e:
             logger.error(f"Error processing phase {current_phase}: {e}", exc_info=True)
@@ -159,9 +155,7 @@ class GameManager:
 
         return phase_events
 
-    def _generate_phase_events(
-        self, pre_phase_state: PhaseState, phase: str
-    ) -> List[GameEvent]:
+    def _generate_phase_events(self, pre_phase_state: PhaseState, phase: str) -> List[GameEvent]:
         """
         Generate events by comparing pre and post phase states.
 
@@ -179,28 +173,20 @@ class GameManager:
             post_phase_state = self.get_current_phase_state()
 
             # Compare unit positions to detect moves, attacks, supports, etc.
-            events.extend(
-                self._detect_unit_movements(pre_phase_state, post_phase_state, phase)
-            )
+            events.extend(self._detect_unit_movements(pre_phase_state, post_phase_state, phase))
 
             # Compare supply center ownership
-            events.extend(
-                self._detect_center_changes(pre_phase_state, post_phase_state, phase)
-            )
+            events.extend(self._detect_center_changes(pre_phase_state, post_phase_state, phase))
 
             # Detect eliminations
-            events.extend(
-                self._detect_eliminations(pre_phase_state, post_phase_state, phase)
-            )
+            events.extend(self._detect_eliminations(pre_phase_state, post_phase_state, phase))
 
         except Exception as e:
             logger.error(f"Error generating phase events: {e}", exc_info=True)
 
         return events
 
-    def _detect_unit_movements(
-        self, pre: PhaseState, post: PhaseState, phase: str
-    ) -> List[GameEvent]:
+    def _detect_unit_movements(self, pre: PhaseState, post: PhaseState, phase: str) -> List[GameEvent]:
         """Detect unit movements and related events."""
         events = []
 
@@ -237,9 +223,7 @@ class GameManager:
 
         return events
 
-    def _detect_center_changes(
-        self, pre: PhaseState, post: PhaseState, phase: str
-    ) -> List[GameEvent]:
+    def _detect_center_changes(self, pre: PhaseState, post: PhaseState, phase: str) -> List[GameEvent]:
         """Detect supply center ownership changes."""
         events = []
 
@@ -295,9 +279,7 @@ class GameManager:
 
         return events
 
-    def _detect_eliminations(
-        self, pre: PhaseState, post: PhaseState, phase: str
-    ) -> List[GameEvent]:
+    def _detect_eliminations(self, pre: PhaseState, post: PhaseState, phase: str) -> List[GameEvent]:
         """Detect power eliminations."""
         events = []
 
@@ -338,9 +320,7 @@ class GameManager:
 
         return winner
 
-    def get_events_for_country(
-        self, country: str, phase: Optional[str] = None
-    ) -> List[GameEvent]:
+    def get_events_for_country(self, country: str, phase: Optional[str] = None) -> List[GameEvent]:
         """
         Get events relevant to a specific country.
 

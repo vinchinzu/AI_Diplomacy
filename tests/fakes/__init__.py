@@ -44,13 +44,9 @@ class GameConfigAttributesMixin:
         self.log_dir = log_dir
         # Common paths, can be overridden by subclasses if needed after super().__init__()
         if self.log_to_file:
-            _base_log_dir = self.log_dir or os.path.join(
-                os.getcwd(), "logs_mixin_default"
-            )
+            _base_log_dir = self.log_dir or os.path.join(os.getcwd(), "logs_mixin_default")
             self.game_id_specific_log_dir = os.path.join(_base_log_dir, self.game_id)
-            self.general_log_path = os.path.join(
-                self.game_id_specific_log_dir, f"{self.game_id}_general.log"
-            )
+            self.general_log_path = os.path.join(self.game_id_specific_log_dir, f"{self.game_id}_general.log")
             self.llm_log_path = os.path.join(
                 self.game_id_specific_log_dir, f"{self.game_id}_llm_interactions.csv"
             )
@@ -62,26 +58,16 @@ class GameConfigAttributesMixin:
 
 
 class FakeGame(PhaseProviderMixin):
-    _phase_attribute_name = (
-        "_actual_phase_name"  # Define which attribute holds the phase
-    )
+    _phase_attribute_name = "_actual_phase_name"  # Define which attribute holds the phase
 
-    def __init__(
-        self, phase, powers_names, build_conditions=None, retreat_conditions=None
-    ):
+    def __init__(self, phase, powers_names, build_conditions=None, retreat_conditions=None):
         super().__init__()  # Initialize mixins if any in MRO
         self._actual_phase_name = phase  # Store phase in the designated attribute
-        self.year = (
-            int(phase[1:5])
-            if phase and len(phase) >= 5 and phase[1:5].isdigit()
-            else 1901
-        )
+        self.year = int(phase[1:5]) if phase and len(phase) >= 5 and phase[1:5].isdigit() else 1901
         self.powers = {}
         for name in powers_names:
             n_builds_val = build_conditions.get(name, 0) if build_conditions else 0
-            must_retreat_val = (
-                retreat_conditions.get(name, False) if retreat_conditions else False
-            )
+            must_retreat_val = retreat_conditions.get(name, False) if retreat_conditions else False
             self.powers[name] = SimpleNamespace(
                 is_eliminated=lambda: False,
                 must_retreat=must_retreat_val,
@@ -193,16 +179,12 @@ class MockLLMInterface_PhaseSummary(LoggingMixin):
         phase_str,
         request_identifier,
     ):
-        self.logger.info(
-            f"request called for {phase_str} by {agent_name} with prompt: {prompt_text[:50]}..."
-        )
+        self.logger.info(f"request called for {phase_str} by {agent_name} with prompt: {prompt_text[:50]}...")
         return f"This is a generated summary for {agent_name} for phase {phase_str}. Events: ..."
 
 
 class MockGame_PhaseSummary(PhaseProviderMixin):
-    _phase_attribute_name = (
-        "current_short_phase"  # Define which attribute holds the phase
-    )
+    _phase_attribute_name = "current_short_phase"  # Define which attribute holds the phase
 
     def __init__(self, current_phase_name="SPRING 1901M"):
         super().__init__()
@@ -329,21 +311,15 @@ class MinimalGameConfig_LoggingSetup(GameConfigAttributesMixin):
 
         # Overwrite log paths if custom logic is needed beyond what mixin provides
         # For example, if base_log_dir logic is different:
-        if (
-            log_dir is None
-        ):  # This check is also in mixin, but can be more specific here
+        if log_dir is None:  # This check is also in mixin, but can be more specific here
             self.base_log_dir = os.path.join(os.getcwd(), "logs_minimal_specific")
         else:
             self.base_log_dir = log_dir
 
         # Re-generate paths if base_log_dir changed or other specific logic:
         if self.log_to_file:
-            self.game_id_specific_log_dir = os.path.join(
-                self.base_log_dir, self.game_id
-            )
-            self.general_log_path = os.path.join(
-                self.game_id_specific_log_dir, f"{self.game_id}_general.log"
-            )
+            self.game_id_specific_log_dir = os.path.join(self.base_log_dir, self.game_id)
+            self.general_log_path = os.path.join(self.game_id_specific_log_dir, f"{self.game_id}_general.log")
             self.llm_log_path = os.path.join(
                 self.game_id_specific_log_dir, f"{self.game_id}_llm_interactions.csv"
             )

@@ -35,9 +35,7 @@ def get_log_paths(game_id: str, base_log_dir: str) -> Dict[str, str]:
         general logs, results, and manifestos.
     """
     game_id_specific_log_dir = os.path.join(base_log_dir, game_id)
-    llm_log_path = os.path.join(
-        game_id_specific_log_dir, f"{game_id}_llm_interactions.csv"
-    )
+    llm_log_path = os.path.join(game_id_specific_log_dir, f"{game_id}_llm_interactions.csv")
     general_log_path = os.path.join(game_id_specific_log_dir, f"{game_id}_general.log")
     results_dir = os.path.join(game_id_specific_log_dir, "results")
     manifestos_dir = os.path.join(results_dir, "manifestos")
@@ -59,9 +57,7 @@ class LLMVerboseFilter(logging.Filter):  # Removed comment: # Define the custom 
     def filter(self, record: logging.LogRecord) -> bool:  # Added type hints
         if not self.verbose_llm_debug and record.levelno == logging.INFO:
             # Check logger name or message content for typical LLM verbose logs
-            msg_lower = (
-                record.getMessage().lower()
-            )  # getMessage ensures msg % args is done
+            msg_lower = record.getMessage().lower()  # getMessage ensures msg % args is done
             is_llm_log = (
                 "llm_coordinator" in record.name
                 or "prompt:" in msg_lower
@@ -73,10 +69,7 @@ class LLMVerboseFilter(logging.Filter):  # Removed comment: # Define the custom 
             if is_llm_log:
                 # Truncate the message
                 original_msg = record.getMessage()  # Get the fully formatted message
-                record.msg = (
-                    original_msg[:150]
-                    + "... (set verbose_llm_debug=True for full details)"
-                )
+                record.msg = original_msg[:150] + "... (set verbose_llm_debug=True for full details)"
                 record.args = ()  # Clear args as msg is now pre-formatted
         return True
 
@@ -107,9 +100,7 @@ class JsonFormatter(logging.Formatter):
         super().format(record)  # This populates record.asctime and record.message
 
         log_entry = {
-            "timestamp": getattr(
-                record, "asctime", datetime.fromtimestamp(record.created).isoformat()
-            ),
+            "timestamp": getattr(record, "asctime", datetime.fromtimestamp(record.created).isoformat()),
             "level": record.levelname,
             "name": record.name,
             "message": record.message,  # Contains the fully formatted message string
@@ -126,15 +117,11 @@ class JsonFormatter(logging.Formatter):
         # Add exception info if present and formatted
         if record.exc_info and record.exc_text:
             log_entry["exception"] = {
-                "type": record.exc_info[0].__name__
-                if record.exc_info[0]
-                else "Exception",
+                "type": record.exc_info[0].__name__ if record.exc_info[0] else "Exception",
                 "message": str(record.exc_info[1]) if record.exc_info[1] else "",
                 "stacktrace": record.exc_text,
             }
-        elif (
-            record.exc_info
-        ):  # Fallback if exc_text is not pre-formatted (should be by super().format)
+        elif record.exc_info:  # Fallback if exc_text is not pre-formatted (should be by super().format)
             log_entry["exception_info"] = self.formatException(record.exc_info)
 
         # Add any extra fields passed to the logger via logging.Logger.debug("...", extra=dict(...))
@@ -213,9 +200,7 @@ def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of
     try:
         numeric_log_level = getattr(logging, config.log_level.upper(), None)
         if not isinstance(numeric_log_level, int):
-            logging.warning(
-                f"Invalid log level: {config.log_level}. Defaulting to INFO."
-            )
+            logging.warning(f"Invalid log level: {config.log_level}. Defaulting to INFO.")
             numeric_log_level = logging.INFO
     except AttributeError:
         logging.error(f"Log level {config.log_level} not found. Defaulting to INFO.")
@@ -229,9 +214,7 @@ def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of
         # formatter.default_time_format = '%Y-%m-%dT%H:%M:%S'
         # formatter.default_msec_format = '%s.%03dZ' # Example for UTC
     else:
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     root_logger = logging.getLogger()  # Removed comment: # Get the root logger
     root_logger.setLevel(numeric_log_level)
@@ -242,9 +225,7 @@ def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of
         root_logger.removeHandler(handler)
         handler.close()
 
-    console_handler = logging.StreamHandler(
-        sys.stdout
-    )  # Removed comment: # Console Handler
+    console_handler = logging.StreamHandler(sys.stdout)  # Removed comment: # Console Handler
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     logging.info(f"Console logging configured at level {config.log_level}.")
@@ -256,9 +237,7 @@ def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of
             if log_dir and not os.path.exists(log_dir):  # Check if log_dir is not empty
                 os.makedirs(log_dir, exist_ok=True)
 
-            file_handler = logging.FileHandler(
-                config.general_log_path, mode="a", encoding="utf-8"
-            )
+            file_handler = logging.FileHandler(config.general_log_path, mode="a", encoding="utf-8")
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler)
             logging.info(
@@ -299,10 +278,7 @@ def setup_logging(config: "GameConfig") -> None:  # verbose_llm_debug is part of
         # File logs might still retain full detail if desired, or filter can be added there too.
         for handler in root_logger.handlers:
             if (
-                isinstance(handler, logging.StreamHandler)
-                and handler.stream == sys.stdout
+                isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout
             ):  # Target console handler
-                logging.info(
-                    "Applying LLMVerboseFilter to console handler as verbose_llm_debug is False."
-                )
+                logging.info("Applying LLMVerboseFilter to console handler as verbose_llm_debug is False.")
                 handler.addFilter(llm_filter)

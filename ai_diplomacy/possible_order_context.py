@@ -63,18 +63,12 @@ def build_diplomacy_graph(game_map: GameMap) -> Dict[str, Dict[str, List[str]]]:
 
     for province_short_source in all_short_province_names:  # e.g. 'PAR', 'STP'
         # Get all full names for this source province (e.g. 'STP' -> ['STP/NC', 'STP/SC', 'STP'])
-        full_names_for_source = game_map.loc_coasts.get(
-            province_short_source, [province_short_source]
-        )
+        full_names_for_source = game_map.loc_coasts.get(province_short_source, [province_short_source])
 
-        for (
-            loc_full_source_variant
-        ) in full_names_for_source:  # e.g. 'STP/NC', then 'STP/SC', then 'STP'
+        for loc_full_source_variant in full_names_for_source:  # e.g. 'STP/NC', then 'STP/SC', then 'STP'
             # province_short_source is already the short name like 'STP'
             # game_map.loc_abut provides general adjacencies, which might include specific coasts or lowercase names
-            for raw_adj_loc_from_loc_abut in game_map.loc_abut.get(
-                province_short_source, []
-            ):
+            for raw_adj_loc_from_loc_abut in game_map.loc_abut.get(province_short_source, []):
                 # Normalize this raw adjacent location to its short, uppercase form
                 adj_short_name_normalized = raw_adj_loc_from_loc_abut[:3].upper()
 
@@ -94,13 +88,8 @@ def build_diplomacy_graph(game_map: GameMap) -> Dict[str, Dict[str, List[str]]]:
                     )
                     for full_dest_variant in full_names_for_adj_dest
                 ):
-                    if (
-                        adj_short_name_normalized
-                        not in graph[province_short_source]["ARMY"]
-                    ):
-                        graph[province_short_source]["ARMY"].append(
-                            adj_short_name_normalized
-                        )
+                    if adj_short_name_normalized not in graph[province_short_source]["ARMY"]:
+                        graph[province_short_source]["ARMY"].append(adj_short_name_normalized)
 
                 # Check for FLEET movement
                 unit_char_fleet = "F"
@@ -113,24 +102,15 @@ def build_diplomacy_graph(game_map: GameMap) -> Dict[str, Dict[str, List[str]]]:
                     )
                     for full_dest_variant in full_names_for_adj_dest
                 ):
-                    if (
-                        adj_short_name_normalized
-                        not in graph[province_short_source]["FLEET"]
-                    ):
-                        graph[province_short_source]["FLEET"].append(
-                            adj_short_name_normalized
-                        )
+                    if adj_short_name_normalized not in graph[province_short_source]["FLEET"]:
+                        graph[province_short_source]["FLEET"].append(adj_short_name_normalized)
 
     # Remove duplicates from adjacency lists (just in case)
     for province_short in graph:
         if "ARMY" in graph[province_short]:
-            graph[province_short]["ARMY"] = sorted(
-                list(set(graph[province_short]["ARMY"]))
-            )
+            graph[province_short]["ARMY"] = sorted(list(set(graph[province_short]["ARMY"])))
         if "FLEET" in graph[province_short]:
-            graph[province_short]["FLEET"] = sorted(
-                list(set(graph[province_short]["FLEET"]))
-            )
+            graph[province_short]["FLEET"] = sorted(list(set(graph[province_short]["FLEET"])))
 
     return graph
 
@@ -147,9 +127,7 @@ def bfs_shortest_path(
 
     # Convert full start location to short province name
     start_loc_short = game_map.loc_name.get(start_loc_full, start_loc_full)
-    if (
-        "/" in start_loc_short
-    ):  # If it was STP/SC, loc_name gives STP. If it was VIE, loc_name gives VIE.
+    if "/" in start_loc_short:  # If it was STP/SC, loc_name gives STP. If it was VIE, loc_name gives VIE.
         start_loc_short = start_loc_short[:3]
     # If start_loc_full was already short (e.g. 'VIE'), get might return it as is, or its value if it was a key.
     # A simpler way for non-coastal full (like 'VIE') or already short:
@@ -179,9 +157,7 @@ def bfs_shortest_path(
 
         for next_loc_short in possible_neighbors_short:
             if next_loc_short not in visited_nodes:
-                if (
-                    next_loc_short not in graph
-                ):  # Defensive check for neighbors not in graph keys
+                if next_loc_short not in graph:  # Defensive check for neighbors not in graph keys
                     logger.warning(
                         f"BFS: Neighbor {next_loc_short} of {current_loc_short} not in graph. Skipping."
                     )
@@ -205,9 +181,7 @@ def get_unit_at_location(board_state: Dict[str, Any], location: str) -> Optional
     return None
 
 
-def get_sc_controller(
-    game_map: GameMap, board_state: BoardState, location: str
-) -> Optional[str]:
+def get_sc_controller(game_map: GameMap, board_state: BoardState, location: str) -> Optional[str]:
     """Returns the controlling power's name if the location is an SC, else None."""
     # Normalize location to base province name, as SCs are tied to provinces, not specific coasts
     loc_province_name = game_map.loc_name.get(location, location).upper()[:3]
@@ -257,9 +231,7 @@ def get_shortest_path_to_friendly_unit(
         target_loc_short = path_short_names[-1]
         # Find the actual friendly unit string at one of the full locations of target_loc_short
         friendly_unit_str = "UNKNOWN_FRIENDLY_UNIT"
-        full_locs_for_target_short = game_map.loc_coasts.get(
-            target_loc_short, [target_loc_short]
-        )
+        full_locs_for_target_short = game_map.loc_coasts.get(target_loc_short, [target_loc_short])
         for fl_variant in full_locs_for_target_short:
             unit_str = get_unit_at_location(board_state, fl_variant)
             if unit_str and unit_str.split(" ")[2][1:4] == power_name:
@@ -281,35 +253,23 @@ def get_nearest_enemy_units(
     """Finds up to N nearest enemy units, sorted by path length."""
     enemy_paths: List[Tuple[str, List[str]]] = []  # (enemy_unit_str, path_short_names)
 
-    all_enemy_unit_locations_full: List[
-        Tuple[str, str]
-    ] = []  # (loc_full, unit_str_full)
+    all_enemy_unit_locations_full: List[Tuple[str, str]] = []  # (loc_full, unit_str_full)
     # board_state.get("units", {}) has format: { "POWER_NAME": ["A PAR", "F BRE"], ... }
     for p_name, unit_list_for_power in board_state.get("units", {}).items():
         if p_name != power_name:  # If it's an enemy power
-            for (
-                unit_repr_from_state
-            ) in unit_list_for_power:  # e.g., "A PAR" or "F STP/SC"
+            for unit_repr_from_state in unit_list_for_power:  # e.g., "A PAR" or "F STP/SC"
                 parts = unit_repr_from_state.split(" ")
                 if len(parts) == 2:
                     # unit_type_char = parts[0] # 'A' or 'F'
                     loc_full = parts[1]  # 'PAR' or 'STP/SC'
 
                     # Use get_unit_at_location to get the consistent full unit string like "A PAR (POWER_NAME)"
-                    full_unit_str_with_power = get_unit_at_location(
-                        board_state, loc_full
-                    )
-                    if (
-                        full_unit_str_with_power
-                    ):  # Should find the unit if iteration is correct
-                        all_enemy_unit_locations_full.append(
-                            (loc_full, full_unit_str_with_power)
-                        )
+                    full_unit_str_with_power = get_unit_at_location(board_state, loc_full)
+                    if full_unit_str_with_power:  # Should find the unit if iteration is correct
+                        all_enemy_unit_locations_full.append((loc_full, full_unit_str_with_power))
 
     for target_enemy_loc_full, enemy_unit_str in all_enemy_unit_locations_full:
-        target_enemy_loc_short = game_map.loc_name.get(
-            target_enemy_loc_full, target_enemy_loc_full
-        )
+        target_enemy_loc_short = game_map.loc_name.get(target_enemy_loc_full, target_enemy_loc_full)
         if target_enemy_loc_short:  # Ensure it's not None
             if "/" in target_enemy_loc_short:
                 target_enemy_loc_short = target_enemy_loc_short[:3]
@@ -323,9 +283,7 @@ def get_nearest_enemy_units(
                 :3
             ]  # Fallback, might be incorrect if target_enemy_loc_full is complex
 
-        def is_specific_enemy_loc(
-            loc_short: str, current_board_state: BoardState
-        ) -> bool:
+        def is_specific_enemy_loc(loc_short: str, current_board_state: BoardState) -> bool:
             # Check if loc_short corresponds to target_enemy_loc_full
             return loc_short == target_enemy_loc_short
 
@@ -412,9 +370,7 @@ def get_adjacent_territory_details(
 
     adjacent_locs_short_for_unit = graph.get(unit_loc_short, {}).get(unit_type, [])
 
-    processed_adj_provinces = (
-        set()
-    )  # To handle cases like STP/NC and STP/SC both being adjacent to BOT
+    processed_adj_provinces = set()  # To handle cases like STP/NC and STP/SC both being adjacent to BOT
 
     for adj_loc_short in adjacent_locs_short_for_unit:  # adj_loc_short is already short
         # adj_province_short = game_map.loc_name.get(adj_loc_full, adj_loc_full).upper()[:3] # No longer needed
@@ -446,9 +402,9 @@ def get_adjacent_territory_details(
         # "Can support/move to" - Simplified: list units in *further* adjacent provinces
         # A true "can support/move to" would require checking possible orders of those further units.
         # further_adj_provinces are short names from the graph
-        further_adj_provinces_short = graph.get(adj_loc_short, {}).get(
-            "ARMY", []
-        ) + graph.get(adj_loc_short, {}).get("FLEET", [])
+        further_adj_provinces_short = graph.get(adj_loc_short, {}).get("ARMY", []) + graph.get(
+            adj_loc_short, {}
+        ).get("FLEET", [])
 
         supporting_units_info = []
         processed_further_provinces = set()
@@ -456,8 +412,7 @@ def get_adjacent_territory_details(
             # further_adj_province_short = game_map.loc_name.get(further_adj_loc_full, further_adj_loc_full).upper()[:3]
             # No conversion needed, it's already short
             if (
-                further_adj_loc_short == adj_loc_short
-                or further_adj_loc_short == unit_loc_short
+                further_adj_loc_short == adj_loc_short or further_adj_loc_short == unit_loc_short
             ):  # Don't list itself or origin
                 continue
             if further_adj_loc_short in processed_further_provinces:
@@ -513,17 +468,13 @@ def generate_rich_order_context(
         unit_specific_possible_orders,
     ) in possible_orders_for_power.items():
         unit_str_full = get_unit_at_location(board_state, unit_loc_full)
-        if (
-            not unit_str_full
-        ):  # Should not happen if unit_loc_full is from possible_orders keys
+        if not unit_str_full:  # Should not happen if unit_loc_full is from possible_orders keys
             continue
 
         unit_type_char = unit_str_full.split(" ")[0]  # 'A' or 'F'
         unit_type_long = "ARMY" if unit_type_char == "A" else "FLEET"
 
-        loc_province_short = game_map.loc_name.get(
-            unit_loc_full, unit_loc_full
-        ).upper()[:3]
+        loc_province_short = game_map.loc_name.get(unit_loc_full, unit_loc_full).upper()[:3]
         loc_type_short = game_map.loc_type.get(loc_province_short, "UNKNOWN").upper()
         if loc_type_short == "COAST" or loc_type_short == "LAND":
             loc_type_display = "LAND" if loc_type_short == "LAND" else "COAST"
@@ -573,17 +524,13 @@ def generate_rich_order_context(
         )
         current_unit_lines.append("    <NearestUncontrolledSupplyCenters>")
         if uncontrolled_scs_info:
-            current_unit_lines.append(
-                "      Nearest supply centers (not controlled by us):"
-            )
+            current_unit_lines.append("      Nearest supply centers (not controlled by us):")
             for sc_str, dist, sc_path_short in uncontrolled_scs_info:
                 current_unit_lines.append(
                     f"        {sc_str}, dist={dist}, path=[{unit_loc_full}→{('→'.join(sc_path_short[1:])) if len(sc_path_short) > 1 else sc_path_short[0]}]"
                 )
         else:
-            current_unit_lines.append(
-                "      Nearest supply centers (not controlled by us): None found"
-            )
+            current_unit_lines.append("      Nearest supply centers (not controlled by us): None found")
         current_unit_lines.append("    </NearestUncontrolledSupplyCenters>")
 
         # Adjacent territories details section
@@ -599,9 +546,7 @@ def generate_rich_order_context(
             # We might need to indent adj_details_str if it's a single block of text
             # For now, let's add a standard indent to each line of adj_details_str if it contains newlines
             if "\n" in adj_details_str:
-                indented_adj_details = "\n".join(
-                    [f"        {line}" for line in adj_details_str.split("\n")]
-                )
+                indented_adj_details = "\n".join([f"        {line}" for line in adj_details_str.split("\n")])
                 current_unit_lines.append(indented_adj_details)
             else:
                 current_unit_lines.append(f"        {adj_details_str}")
@@ -625,15 +570,11 @@ def get_enemy_unit_context_for_orders(
     max_enemy_units_to_report: int = 10,
 ) -> str:
     """Generates context about enemy units for the order generation prompt."""
-    all_enemy_unit_locations_full: List[
-        Tuple[str, str]
-    ] = []  # (loc_full, unit_str_full)
+    all_enemy_unit_locations_full: List[Tuple[str, str]] = []  # (loc_full, unit_str_full)
     # board_state.get("units", {}) has format: { "POWER_NAME": ["A PAR", "F BRE"], ... }
     for p_name, unit_list_for_power in board_state.get("units", {}).items():
         if p_name != power_name:  # If it's an enemy power
-            for (
-                unit_repr_from_state
-            ) in unit_list_for_power:  # e.g., "A PAR" or "F STP/SC"
+            for unit_repr_from_state in unit_list_for_power:  # e.g., "A PAR" or "F STP/SC"
                 parts = unit_repr_from_state.split(" ")
                 if len(parts) == 2:
                     loc_full = parts[1]  # 'PAR' or 'STP/SC'
@@ -641,9 +582,7 @@ def get_enemy_unit_context_for_orders(
                         board_state, loc_full
                     )  # Use existing helper
                     if full_unit_str_with_power:
-                        all_enemy_unit_locations_full.append(
-                            (loc_full, full_unit_str_with_power)
-                        )
+                        all_enemy_unit_locations_full.append((loc_full, full_unit_str_with_power))
 
     # Sort by location for consistent output, then take the top N
     all_enemy_unit_locations_full.sort()

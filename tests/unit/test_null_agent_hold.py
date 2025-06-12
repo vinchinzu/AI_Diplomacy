@@ -35,9 +35,7 @@ async def test_neutral_agent_hold_orders_from_power_units(mock_phase_state: Magi
     assert Order("F MAR HLD") in orders
     # Check exact order objects if necessary, or just their string representations
     expected_orders = [Order("A PAR HLD"), Order("F MAR HLD")]
-    assert all(o in orders for o in expected_orders) and len(orders) == len(
-        expected_orders
-    )
+    assert all(o in orders for o in expected_orders) and len(orders) == len(expected_orders)
 
 
 async def test_neutral_agent_hold_orders_fallback_to_game_get_units(
@@ -62,9 +60,7 @@ async def test_neutral_agent_hold_orders_fallback_to_game_get_units(
     assert Order("A ROM HLD") in orders
     assert Order("F NAP HLD") in orders
     expected_orders = [Order("A ROM HLD"), Order("F NAP HLD")]
-    assert all(o in orders for o in expected_orders) and len(orders) == len(
-        expected_orders
-    )
+    assert all(o in orders for o in expected_orders) and len(orders) == len(expected_orders)
 
     # Reset mocks for Scenario 2
     mock_phase_state.reset_mock()
@@ -83,9 +79,9 @@ async def test_neutral_agent_hold_orders_fallback_to_game_get_units(
     assert Order("A VEN HLD") in orders_scenario2
     assert Order("F TRI HLD") in orders_scenario2
     expected_orders_s2 = [Order("A VEN HLD"), Order("F TRI HLD")]
-    assert all(o in orders_scenario2 for o in expected_orders_s2) and len(
-        orders_scenario2
-    ) == len(expected_orders_s2)
+    assert all(o in orders_scenario2 for o in expected_orders_s2) and len(orders_scenario2) == len(
+        expected_orders_s2
+    )
 
 
 async def test_neutral_agent_no_units(mock_phase_state: MagicMock):
@@ -141,6 +137,4 @@ async def test_neutral_agent_unit_object_to_string(mock_phase_state: MagicMock):
     assert Order("A VIE HLD") in orders
     assert Order("F BUD HLD") in orders
     expected_orders = [Order("A VIE HLD"), Order("F BUD HLD")]
-    assert all(o in orders for o in expected_orders) and len(orders) == len(
-        expected_orders
-    )
+    assert all(o in orders for o in expected_orders) and len(orders) == len(expected_orders)

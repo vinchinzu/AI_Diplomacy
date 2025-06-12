@@ -44,17 +44,11 @@ def create_llm_stub(
 
     # If expected_json_fields is provided, mock a check for missing fields
     if expected_json_fields:
-        missing_fields = [
-            field for field in expected_json_fields if field not in json_response
-        ]
+        missing_fields = [field for field in expected_json_fields if field not in json_response]
         if missing_fields:
             mock_json_result.success = False
-            mock_json_result.error_message = (
-                f"Missing expected fields: {missing_fields}"
-            )
+            mock_json_result.error_message = f"Missing expected fields: {missing_fields}"
 
-    mock_coordinator.call_llm_with_json_parsing = AsyncMock(
-        return_value=mock_json_result
-    )
+    mock_coordinator.call_llm_with_json_parsing = AsyncMock(return_value=mock_json_result)
 
-    return mock_coordinator 
+    return mock_coordinator

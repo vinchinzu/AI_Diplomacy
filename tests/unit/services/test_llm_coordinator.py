@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, AsyncMock, patch  # call might not be neede
 import logging
 
 # Assuming llm_coordinator.py is in ai_diplomacy.services
-from generic_llm_framework import (llm_coordinator)  
+from generic_llm_framework import llm_coordinator
 from generic_llm_framework.llm_coordinator import (
     LLMCallResult,
     LLMCoordinator,
@@ -189,12 +189,8 @@ async def test_llmcoordinator_call_text_propagates_exception(coordinator):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
-async def test_llmcoordinator_call_text_uses_internal_call(
-    mock_llm_call_internal, coordinator
-):
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_call_text_uses_internal_call(mock_llm_call_internal, coordinator):
     mock_llm_call_internal.return_value = "Internal response text"
 
     prompt = "Hello internal"
@@ -228,12 +224,8 @@ async def test_llmcoordinator_call_text_uses_internal_call(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
-async def test_llmcoordinator_call_text_internal_call_exception(
-    mock_llm_call_internal, coordinator
-):
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_call_text_internal_call_exception(mock_llm_call_internal, coordinator):
     mock_llm_call_internal.side_effect = ValueError("Internal LLM Error")
 
     with pytest.raises(ValueError, match="Internal LLM Error"):
@@ -250,17 +242,13 @@ async def test_llmcoordinator_call_text_internal_call_exception(
 @pytest.mark.unit
 @pytest.mark.asyncio
 @patch.object(LLMCoordinator, "call_llm_with_json_parsing", new_callable=AsyncMock)
-async def test_llmcoordinator_call_json_success(
-    mock_call_llm_with_json_parsing, coordinator
-):
+async def test_llmcoordinator_call_json_success(mock_call_llm_with_json_parsing, coordinator):
     expected_result = {"key": "value"}
     mock_call_llm_with_json_parsing.return_value = LLMCallResult(
         raw_response='{"key": "value"}', parsed_json=expected_result, success=True
     )
 
-    response = await coordinator.call_json(
-        prompt="Json prompt", model_id="json_model", agent_id="json_agent"
-    )
+    response = await coordinator.call_json(prompt="Json prompt", model_id="json_model", agent_id="json_agent")
 
     assert response == expected_result
     mock_call_llm_with_json_parsing.assert_called_once_with(
@@ -287,17 +275,13 @@ async def test_llmcoordinator_call_json_failure_from_internal_call(
     )
 
     with pytest.raises(ValueError, match="LLM call failed: LLM Error"):
-        await coordinator.call_json(
-            prompt="fail prompt", model_id="fail_model", agent_id="fail_agent"
-        )
+        await coordinator.call_json(prompt="fail prompt", model_id="fail_model", agent_id="fail_agent")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 @patch.object(LLMCoordinator, "call_llm_with_json_parsing", new_callable=AsyncMock)
-async def test_llmcoordinator_call_json_parsed_is_none(
-    mock_call_llm_with_json_parsing, coordinator
-):
+async def test_llmcoordinator_call_json_parsed_is_none(mock_call_llm_with_json_parsing, coordinator):
     mock_call_llm_with_json_parsing.return_value = LLMCallResult(
         raw_response="not json", parsed_json=None, success=True
     )
@@ -315,9 +299,7 @@ async def test_llmcoordinator_call_json_parsed_is_none(
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="Caplog not capturing logger output correctly in this setup")
 @patch.object(LLMCoordinator, "call_llm_with_json_parsing", new_callable=AsyncMock)
-async def test_llmcoordinator_call_json_with_tools(
-    mock_call_llm_with_json_parsing, coordinator, caplog
-):
+async def test_llmcoordinator_call_json_with_tools(mock_call_llm_with_json_parsing, coordinator, caplog):
     tools_def = [{"type": "function", "function": {"name": "get_weather"}}]
 
     with caplog.at_level(logging.DEBUG):
@@ -336,9 +318,7 @@ async def test_llmcoordinator_call_json_with_tools(
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
 @patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
 async def test_call_json_parsing_success_no_override(
     mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
 ):
@@ -396,9 +376,7 @@ async def test_call_json_parsing_success_with_override(
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
 @patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
 async def test_call_json_parsing_missing_expected_fields(
     mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
 ):
@@ -422,16 +400,15 @@ async def test_call_json_parsing_missing_expected_fields(
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
 @patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
 async def test_call_json_parsing_empty_response(
     mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
 ):
     mock_llm_call_internal.return_value = "  "
 
     result = await coordinator.call_llm_with_json_parsing(
-        model_id="empty_model", prompt="empty prompt",
+        model_id="empty_model",
+        prompt="empty prompt",
         agent_name="empty_agent",
         game_id="empty_game",
         phase_str="empty_phase",
@@ -446,9 +423,7 @@ async def test_call_json_parsing_empty_response(
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
 @patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
 async def test_call_json_parsing_json_error(
     mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
 ):
@@ -456,7 +431,8 @@ async def test_call_json_parsing_json_error(
     mock_extract_json.side_effect = Exception("JSON error")
 
     result = await coordinator.call_llm_with_json_parsing(
-        model_id="json_err_model", prompt="json err prompt",
+        model_id="json_err_model",
+        prompt="json err prompt",
         agent_name="err_agent",
         game_id="err_game",
         phase_str="err_phase",
@@ -470,16 +446,15 @@ async def test_call_json_parsing_json_error(
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
 @patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
 async def test_call_json_parsing_llm_call_exception_internal(
     mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
 ):
     mock_llm_call_internal.side_effect = ValueError("LLM blew up")
 
     result = await coordinator.call_llm_with_json_parsing(
-        model_id="exc_model", prompt="exc prompt",
+        model_id="exc_model",
+        prompt="exc prompt",
         agent_name="exc_agent",
         game_id="exc_game",
         phase_str="exc_phase",
@@ -515,9 +490,7 @@ async def test_call_json_parsing_llm_call_exception_override(
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.llm_utils.log_llm_response")
 @patch("generic_llm_framework.llm_coordinator.llm_utils.extract_json_from_text")
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
 async def test_call_json_parsing_log_to_file_path(
     mock_llm_call_internal, mock_extract_json, mock_log_response, coordinator
 ):
@@ -587,12 +560,8 @@ async def test_llmcoordinator_request_with_override_exception(coordinator):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
-async def test_llmcoordinator_request_uses_internal_call(
-    mock_llm_call_internal, coordinator
-):
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_request_uses_internal_call(mock_llm_call_internal, coordinator):
     mock_llm_call_internal.return_value = "Internal response for request"
 
     game_id = "req_game_internal"
@@ -626,12 +595,8 @@ async def test_llmcoordinator_request_uses_internal_call(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@patch(
-    "generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock
-)
-async def test_llmcoordinator_request_internal_call_exception(
-    mock_llm_call_internal, coordinator
-):
+@patch("generic_llm_framework.llm_coordinator.llm_call_internal", new_callable=AsyncMock)
+async def test_llmcoordinator_request_internal_call_exception(mock_llm_call_internal, coordinator):
     mock_llm_call_internal.side_effect = ValueError("Internal Request Error")
 
     with pytest.raises(ValueError, match="Internal Request Error"):
@@ -646,9 +611,7 @@ async def test_llmcoordinator_request_internal_call_exception(
 
 
 @pytest.mark.unit
-@patch(
-    "generic_llm_framework.llm_coordinator.ModelPool.get"
-)  # Patching ModelPool.get directly
+@patch("generic_llm_framework.llm_coordinator.ModelPool.get")  # Patching ModelPool.get directly
 def test_llmcoordinator_get_model(mock_model_pool_get, coordinator):
     mock_model_instance = MagicMock(name="MockModelInstance")
     mock_model_pool_get.return_value = mock_model_instance
@@ -747,17 +710,13 @@ async def test_llm_call_internal_success_with_system_prompt_and_tools(
     )
 
     assert response_text == "Response with tools"
-    mock_model_obj.prompt.assert_called_once_with(
-        prompt, system=system_prompt, tools=tools_def
-    )
+    mock_model_obj.prompt.assert_called_once_with(prompt, system=system_prompt, tools=tools_def)
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.logger")
-@patch(
-    "generic_llm_framework.llm_coordinator.asyncio.create_task"
-)  # Keep patching create_task
+@patch("generic_llm_framework.llm_coordinator.asyncio.create_task")  # Keep patching create_task
 @patch(
     "generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock
 )  # Keep patching record_usage
@@ -799,9 +758,7 @@ async def test_llm_call_internal_verbose_logging(
 @pytest.mark.unit
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.asyncio.create_task")  # Patch create_task
-@patch(
-    "generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock
-)  # Patch record_usage
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock)  # Patch record_usage
 @patch("generic_llm_framework.llm_coordinator.serial_if_local")
 @patch("generic_llm_framework.llm_coordinator.ModelPool.get")
 async def test_llm_call_internal_exception_from_model_prompt(
@@ -833,9 +790,7 @@ async def test_llm_call_internal_exception_from_model_prompt(
 @pytest.mark.unit
 @pytest.mark.asyncio
 @patch("generic_llm_framework.llm_coordinator.asyncio.create_task")  # Patch create_task
-@patch(
-    "generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock
-)  # Patch record_usage
+@patch("generic_llm_framework.llm_coordinator.record_usage", new_callable=AsyncMock)  # Patch record_usage
 @patch("generic_llm_framework.llm_coordinator.serial_if_local")
 @patch("generic_llm_framework.llm_coordinator.ModelPool.get")
 async def test_llm_call_internal_exception_from_model_pool_get(

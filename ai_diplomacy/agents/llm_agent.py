@@ -25,7 +25,7 @@ from .agent_state import DiplomacyAgentState  # Remains for LLMAgent's internal 
 
 # Updated imports for generic framework
 from generic_llm_framework.agent import GenericLLMAgent
-from generic_llm_framework.prompt_strategy import (
+from ..prompt_strategy import (
     DiplomacyPromptStrategy,
 )  # Using the specific Diplomacy strategy
 from generic_llm_framework.llm_coordinator import LLMCoordinator
@@ -82,16 +82,12 @@ class LLMAgent(BaseAgent):
         self.power_name = country
         self.model_id = config.model_id
         self.game_id = game_id  # Diplomacy game_id
-        self.llm_coordinator = (
-            llm_coordinator or LLMCoordinator()
-        )  # This should be the generic one
+        self.llm_coordinator = llm_coordinator or LLMCoordinator()  # This should be the generic one
 
         # Context provider setup (remains Diplomacy-specific for now)
         self.context_factory = context_provider_factory or ContextProviderFactory()
         self.resolved_context_provider_type = resolve_context_provider(config)
-        self.context_provider = self.context_factory.get_provider(
-            self.resolved_context_provider_type
-        )
+        self.context_provider = self.context_factory.get_provider(self.resolved_context_provider_type)
         self.resolved_context_provider_type = self.context_provider.get_provider_type()
 
         # Agent state (Diplomacy-specific state)
@@ -100,18 +96,14 @@ class LLMAgent(BaseAgent):
         # Prompt strategy (Diplomacy-specific, but now inherits from BasePromptStrategy)
         # Pass base_prompts_dir if available from config or elsewhere
         self.diplomacy_prompt_strategy = DiplomacyPromptStrategy(
-            config=config.prompt_strategy_config
-            if config.prompt_strategy_config
-            else None
+            config=config.prompt_strategy_config if config.prompt_strategy_config else None
         )
 
         self.prompt_loader = prompt_loader  # Potentially used by _load_system_prompt
         self.llm_caller_override = llm_caller_override
 
         # System prompt loading (Diplomacy-specific part)
-        self.system_prompt = (
-            self._load_system_prompt()
-        )  # This is the diplomacy system prompt.
+        self.system_prompt = self._load_system_prompt()  # This is the diplomacy system prompt.
         # GenericAgent's config will also get a system_prompt.
 
         # Generic Agent instantiation
@@ -148,9 +140,7 @@ class LLMAgent(BaseAgent):
     def _load_system_prompt(self) -> Optional[str]:
         """Load power-specific or default system prompt for Diplomacy."""
         power_prompt_filename = f"{self.country.lower()}_system_prompt.txt"
-        default_prompt_filename = (
-            diplomacy_constants.DEFAULT_SYSTEM_PROMPT_FILENAME
-        )  # Use aliased constant
+        default_prompt_filename = diplomacy_constants.DEFAULT_SYSTEM_PROMPT_FILENAME  # Use aliased constant
         system_prompt_str: Optional[str] = None  # Renamed to avoid conflict
 
         if self.prompt_loader:
@@ -161,16 +151,12 @@ class LLMAgent(BaseAgent):
                 )
                 system_prompt_str = self.prompt_loader(default_prompt_filename)
             else:
-                logger.info(
-                    f"Loaded power-specific system prompt for {self.country} via prompt_loader."
-                )
+                logger.info(f"Loaded power-specific system prompt for {self.country} via prompt_loader.")
         else:
             # Use generic llm_utils
             system_prompt_str = llm_utils.load_prompt_file(power_prompt_filename)
             if not system_prompt_str:
-                logger.warning(
-                    f"Power-specific prompt '{power_prompt_filename}' not found. Loading default."
-                )
+                logger.warning(f"Power-specific prompt '{power_prompt_filename}' not found. Loading default.")
                 system_prompt_str = llm_utils.load_prompt_file(default_prompt_filename)
             else:
                 logger.info(f"Loaded power-specific system prompt for {self.country}.")
@@ -259,12 +245,8 @@ class LLMAgent(BaseAgent):
                 # Decide on strictness: raise error or return empty list
                 raise ValueError(error_msg)
 
-            orders_data = parsed_json_response.get(
-                diplomacy_constants.LLM_RESPONSE_KEY_ORDERS
-            )
-            if (
-                orders_data is not None
-            ):  # Check for None explicitly, as empty list can be valid
+            orders_data = parsed_json_response.get(diplomacy_constants.LLM_RESPONSE_KEY_ORDERS)
+            if orders_data is not None:  # Check for None explicitly, as empty list can be valid
                 orders = self._extract_orders_from_response(orders_data, my_units)
                 logger.info(
                     f"[{self.country}] Generated {len(orders)} orders using {context_result.get('provider_type', 'unknown')} context via GenericAgent"
@@ -283,14 +265,14 @@ class LLMAgent(BaseAgent):
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg) from e
 
-    def _extract_orders_from_response(
-        self, response_orders_data: Any, my_units: List[str]
-    ) -> List[Order]:
+    def _extract_orders_from_response(self, response_orders_data: Any, my_units: List[str]) -> List[Order]:
         """Extract and validate orders from LLM response. Raises ValueError on failure."""
         # This method's internal logic remains the same.
         orders = []
         if not isinstance(response_orders_data, list):
-            error_msg = f"[{self.country}] Orders field from LLM is not a list. Got: {type(response_orders_data)}"
+            error_msg = (
+                f"[{self.country}] Orders field from LLM is not a list. Got: {type(response_orders_data)}"
+            )
             logger.warning(error_msg)
             raise ValueError(error_msg)
 
@@ -300,17 +282,10 @@ class LLMAgent(BaseAgent):
             elif isinstance(item, dict):
                 unit = item.get("unit")
                 action = item.get("action")
-                if (
-                    isinstance(unit, str)
-                    and isinstance(action, str)
-                    and unit.strip()
-                    and action.strip()
-                ):
+                if isinstance(unit, str) and isinstance(action, str) and unit.strip() and action.strip():
                     orders.append(Order(f"{unit.strip()} {action.strip()}"))
                 else:
-                    logger.warning(
-                        f"[{self.country}] Invalid order dictionary item: {item}"
-                    )
+                    logger.warning(f"[{self.country}] Invalid order dictionary item: {item}")
             else:
                 logger.warning(f"[{self.country}] Invalid item in orders list: {item}")
 
@@ -319,9 +294,7 @@ class LLMAgent(BaseAgent):
             logger.warning(error_msg)
             raise ValueError(error_msg)
         elif not my_units and orders:
-            logger.warning(
-                f"[{self.country}] LLM provided orders but no units to command. Orders: {orders}"
-            )
+            logger.warning(f"[{self.country}] LLM provided orders but no units to command. Orders: {orders}")
             return []
         return orders
 
@@ -339,9 +312,7 @@ class LLMAgent(BaseAgent):
             logger.info(f"[{self.country}] Skipping negotiation for neutral agent.")
             return []
 
-        logger.info(
-            f"[{self.country}] Generating messages for phase {phase.phase_name}"
-        )
+        logger.info(f"[{self.country}] Generating messages for phase {phase.phase_name}")
 
         try:
             context_data_obj = ContextData(  # Renamed
@@ -359,9 +330,7 @@ class LLMAgent(BaseAgent):
             )
 
             active_powers_list = [
-                p
-                for p in phase.powers
-                if not phase.is_power_eliminated(p) and p != self.country
+                p for p in phase.powers if not phase.is_power_eliminated(p) and p != self.country
             ]
 
             diplomacy_specific_state_for_negotiation = {
@@ -396,9 +365,7 @@ class LLMAgent(BaseAgent):
                 logger.error(error_msg)
                 return []  # Return empty on error, or raise
 
-            messages_data = parsed_json_response.get(
-                diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES
-            )
+            messages_data = parsed_json_response.get(diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES)
             if messages_data is not None:  # Check for None explicitly
                 messages = self._extract_messages_from_response(
                     parsed_json_response, phase
@@ -414,9 +381,7 @@ class LLMAgent(BaseAgent):
                 return []
 
         except Exception as e:
-            logger.error(
-                f"[{self.country}] Error generating messages: {e}", exc_info=True
-            )
+            logger.error(f"[{self.country}] Error generating messages: {e}", exc_info=True)
             return []
 
     def _extract_messages_from_response(
@@ -427,10 +392,7 @@ class LLMAgent(BaseAgent):
         """Extract and validate messages from LLM response."""
         # This method's internal logic remains largely the same.
         messages = []
-        if (
-            response is None
-            or diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES not in response
-        ):
+        if response is None or diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES not in response:
             logger.warning(
                 f"[{self.country}] No '{diplomacy_constants.LLM_RESPONSE_KEY_MESSAGES}' field in LLM response or response is None"
             )
@@ -453,21 +415,15 @@ class LLMAgent(BaseAgent):
             message_type_str = msg_item.get(diplomacy_constants.LLM_MESSAGE_KEY_TYPE)
 
             if not isinstance(recipient, str) or not recipient.strip():
-                logger.warning(
-                    f"[{self.country}] Invalid or missing recipient: {recipient}"
-                )
+                logger.warning(f"[{self.country}] Invalid or missing recipient: {recipient}")
                 continue
             if not isinstance(content, str) or not content.strip():
-                logger.warning(
-                    f"[{self.country}] Invalid or missing content for recipient {recipient}"
-                )
+                logger.warning(f"[{self.country}] Invalid or missing content for recipient {recipient}")
                 continue
 
             recipient_upper = recipient.upper()
             if recipient_upper not in valid_recipients:
-                logger.warning(
-                    f"[{self.country}] Recipient '{recipient_upper}' is not a valid power."
-                )
+                logger.warning(f"[{self.country}] Recipient '{recipient_upper}' is not a valid power.")
                 continue
 
             final_message_type = diplomacy_constants.MESSAGE_TYPE_BROADCAST  # Default
@@ -481,11 +437,7 @@ class LLMAgent(BaseAgent):
                     f"[{self.country}] Invalid message type '{message_type_str}', defaulting to BROADCAST."
                 )
 
-            messages.append(
-                Message(
-                    recipient_upper, content.strip(), message_type=final_message_type
-                )
-            )
+            messages.append(Message(recipient_upper, content.strip(), message_type=final_message_type))
         return messages
 
     async def update_state(
@@ -532,7 +484,7 @@ class LLMAgent(BaseAgent):
         # Prepare context for DiplomacyPromptStrategy
         diplomacy_specific_context = {
             "country": self.country,  # The overarching agent/country identity
-            "acting_power": log_power, # The specific power context for this action
+            "acting_power": log_power,  # The specific power context for this action
             "phase_name": phase.phase_name,
             "phase_state_repr": repr(phase),  # A string representation of the state
             "events_repr": repr(events),  # A string representation of events
@@ -547,23 +499,21 @@ class LLMAgent(BaseAgent):
         )
 
         if response.get("error"):
-            logger.error(
-                f"[{log_power}] GenericAgent failed to generate diary entry: {response['error']}"
-            )
+            logger.error(f"[{log_power}] GenericAgent failed to generate diary entry: {response['error']}")
             return
 
         diary_entry = response.get(diplomacy_constants.LLM_RESPONSE_KEY_DIARY_ENTRY)
         if diary_entry:
             self.agent_state.add_diary_entry(phase.phase_name, diary_entry)
-            logger.info(
-                f"[{log_power}] Added new diary entry for phase {phase.phase_name}"
-            )
+            logger.info(f"[{log_power}] Added new diary entry for phase {phase.phase_name}")
         else:
             logger.warning(
                 f"[{log_power}] LLM did not return a diary entry for phase {phase.phase_name}. Response: {response}"
             )
 
-    async def _analyze_and_update_goals_with_generic_agent(self, phase: PhaseState, power_name: Optional[str] = None):
+    async def _analyze_and_update_goals_with_generic_agent(
+        self, phase: PhaseState, power_name: Optional[str] = None
+    ):
         """
         Analyzes the current game state and updates the agent's goals using the generic agent.
         """
@@ -572,8 +522,8 @@ class LLMAgent(BaseAgent):
 
         # Prepare context for DiplomacyPromptStrategy
         diplomacy_specific_context = {
-            "country": self.country, # The overarching agent/country identity
-            "acting_power": log_power, # The specific power context for this action
+            "country": self.country,  # The overarching agent/country identity
+            "acting_power": log_power,  # The specific power context for this action
             "phase_name": phase.phase_name,
             "current_goals": self.agent_state.goals,
             "phase_state_repr": repr(phase),
@@ -599,9 +549,7 @@ class LLMAgent(BaseAgent):
                 f"[{log_power}] Goals response from LLM was not a list: {new_goals}. Type: {type(new_goals)}"
             )
         else:
-            logger.warning(
-                f"[{log_power}] LLM did not return new goals. Response: {response}"
-            )
+            logger.warning(f"[{log_power}] LLM did not return new goals. Response: {response}")
 
     def get_agent_info(self) -> Dict[str, Any]:
         """
@@ -623,17 +571,13 @@ class LLMAgent(BaseAgent):
             "generic_agent_info": generic_info,  # Nested info from the generic agent
         }
 
-    async def consolidate_year_diary_entries(
-        self, year: str, game: Any, llm_log_path: Optional[str]
-    ) -> None:
+    async def consolidate_year_diary_entries(self, year: str, game: Any, llm_log_path: Optional[str]) -> None:
         """
         Consolidates diary entries for a specific year using an LLM.
         Placeholder implementation.
         """
         if self.config.type == "neutral":
-            logger.info(
-                f"[{self.country}] Skipping diary consolidation for neutral agent (year {year})."
-            )
+            logger.info(f"[{self.country}] Skipping diary consolidation for neutral agent (year {year}).")
             return
 
         logger.info(

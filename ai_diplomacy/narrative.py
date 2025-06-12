@@ -63,9 +63,7 @@ def _call_llm_for_narrative(statistical_summary: str, phase_key: str) -> str:
     model_id_to_use = get_narrative_model_id()
 
     if not model_id_to_use:
-        LOGGER.warning(
-            "No model ID available for narrative generation. Returning stub."
-        )
+        LOGGER.warning("No model ID available for narrative generation. Returning stub.")
         return "(Narrative generation disabled – model not configured)."
 
     try:
@@ -76,9 +74,7 @@ def _call_llm_for_narrative(statistical_summary: str, phase_key: str) -> str:
         )
         return f"(Narrative generation failed - unknown model: {model_id_to_use})"
     except Exception as e:
-        LOGGER.error(
-            f"Narrative generation failed: Error loading model '{model_id_to_use}': {e}"
-        )
+        LOGGER.error(f"Narrative generation failed: Error loading model '{model_id_to_use}': {e}")
         return f"(Narrative generation failed - model load error: {model_id_to_use})"
 
     system_prompt = (
@@ -119,9 +115,7 @@ def _patched_generate_phase_summary(self: Game, phase_key, summary_callback=None
     try:
         phase_data = self.get_phase_from_history(str(phase_key))
         if hasattr(phase_data, "statistical_summary"):
-            LOGGER.debug(
-                f"[{phase_key}] Assigning to phase_data.statistical_summary: {statistical!r}"
-            )
+            LOGGER.debug(f"[{phase_key}] Assigning to phase_data.statistical_summary: {statistical!r}")
             phase_data.statistical_summary = statistical  # type: ignore[attr-defined]
         else:
             LOGGER.warning(
@@ -150,9 +144,7 @@ def _patched_generate_phase_summary(self: Game, phase_key, summary_callback=None
                 f"[{phase_key}] phase_data exists but does not have attribute 'summary'. Cannot store narrative. Type: {type(phase_data)}"
             )
         else:
-            LOGGER.warning(
-                f"[{phase_key}] Cannot store narrative summary because phase_data is None."
-            )
+            LOGGER.warning(f"[{phase_key}] Cannot store narrative summary because phase_data is None.")
     except Exception as exc:
         LOGGER.warning("Could not store narrative summary for %s: %s", phase_key, exc)
 
@@ -162,6 +154,4 @@ def _patched_generate_phase_summary(self: Game, phase_key, summary_callback=None
 # Monkey-patch
 Game._generate_phase_summary = _patched_generate_phase_summary  # type: ignore[assignment]
 
-LOGGER.info(
-    "Game._generate_phase_summary patched with narrative generation using the llm library."
-)
+LOGGER.info("Game._generate_phase_summary patched with narrative generation using the llm library.")

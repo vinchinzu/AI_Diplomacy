@@ -76,9 +76,7 @@ class ScriptedAgent(BaseAgent):
 
         return orders
 
-    def _decide_movement_orders(
-        self, phase: PhaseState, my_units: List[str]
-    ) -> List[Order]:
+    def _decide_movement_orders(self, phase: PhaseState, my_units: List[str]) -> List[Order]:
         """Decide movement orders based on simple heuristics."""
         orders = []
 
@@ -92,19 +90,13 @@ class ScriptedAgent(BaseAgent):
                 # Simple movement strategy
                 if self.personality == "aggressive":
                     # Try to move toward enemy supply centers
-                    order_str = self._aggressive_move(
-                        unit_type, location, phase
-                    )  # Renamed variable
+                    order_str = self._aggressive_move(unit_type, location, phase)  # Renamed variable
                 elif self.personality == "defensive":
                     # Try to defend own supply centers
-                    order_str = self._defensive_move(
-                        unit_type, location, phase
-                    )  # Renamed variable
+                    order_str = self._defensive_move(unit_type, location, phase)  # Renamed variable
                 else:
                     # Neutral: balanced expansion and defense
-                    order_str = self._neutral_move(
-                        unit_type, location, phase
-                    )  # Renamed variable
+                    order_str = self._neutral_move(unit_type, location, phase)  # Renamed variable
 
                 if order_str:
                     orders.append(Order(order_str))
@@ -163,9 +155,7 @@ class ScriptedAgent(BaseAgent):
         }
         return adjacencies.get(location, [])
 
-    def _decide_retreat_orders(
-        self, phase: PhaseState, my_units: List[str]
-    ) -> List[Order]:
+    def _decide_retreat_orders(self, phase: PhaseState, my_units: List[str]) -> List[Order]:
         """Decide retreat orders."""
         orders = []
         # Simple retreat strategy: retreat to the safest adjacent territory
@@ -195,9 +185,7 @@ class ScriptedAgent(BaseAgent):
             # Must remove units
             removes_needed = unit_count - center_count
             # Remove the "least important" units (simplified)
-            for i_unit in range(
-                min(removes_needed, len(my_units))
-            ):  # Renamed loop variable
+            for i_unit in range(min(removes_needed, len(my_units))):  # Renamed loop variable
                 unit_to_remove = my_units[i_unit]
                 orders.append(Order(f"{unit_to_remove} D"))  # Disband
 
@@ -233,11 +221,7 @@ class ScriptedAgent(BaseAgent):
     def _choose_negotiation_target(self, phase: PhaseState) -> Optional[str]:
         """Choose which country to send a message to."""
         # Simple heuristic: message the strongest neighbor or a potential ally
-        active_powers = [
-            p
-            for p in phase.powers
-            if not phase.is_power_eliminated(p) and p != self.country
-        ]
+        active_powers = [p for p in phase.powers if not phase.is_power_eliminated(p) and p != self.country]
 
         if not active_powers:
             return None
@@ -289,9 +273,7 @@ class ScriptedAgent(BaseAgent):
 
         return common_threat or "the leading power"
 
-    async def update_state(
-        self, phase: PhaseState, events: List[Dict[str, Any]]
-    ) -> None:
+    async def update_state(self, phase: PhaseState, events: List[Dict[str, Any]]) -> None:
         """
         Update internal state based on phase results.
 
@@ -329,9 +311,7 @@ class ScriptedAgent(BaseAgent):
 
         # Clamp relationship values to [-1, 1]
         for country_key in self.relationships:
-            self.relationships[country_key] = max(
-                -1.0, min(1.0, self.relationships[country_key])
-            )
+            self.relationships[country_key] = max(-1.0, min(1.0, self.relationships[country_key]))
 
         # Update priorities based on game state
         self._update_priorities(phase)

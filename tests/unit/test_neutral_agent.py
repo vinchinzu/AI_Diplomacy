@@ -26,10 +26,6 @@ def phase_state_with_units():
     # Ensure get_power_units returns an empty list to trigger the fallback to game.get_units
     mock_phase.get_power_units.return_value = []
 
-    # Remove mocking of get_power_state as it's not on PhaseState
-    # mock_power_state_france = MagicMock(spec=PowerState) # PowerState not defined
-    # mock_power_state_france.units = ["A PAR", "F MAR"]
-    # mock_phase.get_power_state = MagicMock(return_value=mock_power_state_france)
     return mock_phase
 
 
@@ -57,9 +53,7 @@ async def test_neutral_agent_decide_orders_empty(neutral_agent_france):
 
 
 @pytest.mark.asyncio
-async def test_neutral_agent_decide_orders_with_units(
-    neutral_agent_france, phase_state_with_units
-):
+async def test_neutral_agent_decide_orders_with_units(neutral_agent_france, phase_state_with_units):
     orders = await neutral_agent_france.decide_orders(phase_state_with_units)
     assert len(orders) == 2
     assert Order("A PAR HLD") in orders

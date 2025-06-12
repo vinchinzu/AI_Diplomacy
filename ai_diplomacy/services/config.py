@@ -35,30 +35,18 @@ class GameConfig(BaseModel):
 class AgentConfig(BaseModel):
     """Configuration for a single agent."""
 
-    name: str = Field(
-        ..., description="Country or bloc name (e.g., FRANCE, ENTENTE_BLOC)"
-    )
+    name: str = Field(..., description="Country or bloc name (e.g., FRANCE, ENTENTE_BLOC)")
     type: str = Field(..., description="Agent type: 'llm', 'scripted', etc.")
     model_id: Optional[str] = Field(None, description="LLM model identifier")
     context_provider: str = Field(
         constants.CONTEXT_PROVIDER_AUTO,
         description="Context provider: 'inline', 'mcp', 'auto'",
     )
-    personality_prompt: Optional[str] = Field(
-        None, description="Path to personality prompt template"
-    )
-    tool_whitelist: List[str] = Field(
-        default_factory=list, description="Allowed MCP tools"
-    )
-    verbose_llm_debug: bool = Field(
-        False, description="Enable verbose LLM request/response logging"
-    )
-    temperature: float = Field(
-        0.7, description="LLM temperature setting"
-    )  # Added from BlocLLMAgent
-    max_tokens: Optional[int] = Field(
-        default=2000, description="Maximum tokens for LLM response"
-    )
+    personality_prompt: Optional[str] = Field(None, description="Path to personality prompt template")
+    tool_whitelist: List[str] = Field(default_factory=list, description="Allowed MCP tools")
+    verbose_llm_debug: bool = Field(False, description="Enable verbose LLM request/response logging")
+    temperature: float = Field(0.7, description="LLM temperature setting")  # Added from BlocLLMAgent
+    max_tokens: Optional[int] = Field(default=2000, description="Maximum tokens for LLM response")
     prompt_strategy_config: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Configuration for the prompt strategy"
     )
@@ -133,9 +121,7 @@ class DiplomacyConfig(BaseModel):
         game_config = GameConfig(
             random_seed=getattr(args, "random_seed", None),
             use_mcp=getattr(args, "use_mcp", False),
-            token_budget=getattr(
-                args, "max_diary_tokens", constants.DEFAULT_TOKEN_BUDGET
-            ),
+            token_budget=getattr(args, "max_diary_tokens", constants.DEFAULT_TOKEN_BUDGET),
             max_years=getattr(args, "max_years", None),
             log_level=getattr(args, "log_level", constants.DEFAULT_LOG_LEVEL),
         )
@@ -212,9 +198,7 @@ MODEL_CAPABILITIES = {
 
 def supports_tools(model_id: str) -> bool:
     """Check if a model supports tool calling."""
-    return (
-        model_id in MODEL_CAPABILITIES[constants.MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS]
-    )
+    return model_id in MODEL_CAPABILITIES[constants.MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS]
 
 
 def resolve_context_provider(agent_config: AgentConfig) -> str:

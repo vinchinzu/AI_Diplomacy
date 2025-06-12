@@ -12,9 +12,7 @@ from ai_diplomacy.game_history import GameHistory  # Added import
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_retreat_generates_orders_for_retreating_power(
-    fake_game_factory, default_dummy_orchestrator
-):
+async def test_retreat_generates_orders_for_retreating_power(fake_game_factory, default_dummy_orchestrator):
     strat = RetreatPhaseStrategy()
     powers = ["ENG", "FRA"]
     retreat_conditions_map = {"FRA": True, "ENG": False}
@@ -62,9 +60,7 @@ async def test_retreat_generates_orders_for_retreating_power(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_retreat_no_retreating_powers(
-    fake_game_factory, default_dummy_orchestrator
-):
+async def test_retreat_no_retreating_powers(fake_game_factory, default_dummy_orchestrator):
     strat = RetreatPhaseStrategy()
     powers = ["ENG", "GER"]
     retreat_conditions_map = {"ENG": False, "GER": False}
@@ -91,9 +87,7 @@ async def test_retreat_no_retreating_powers(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_retreat_agent_fails_to_provide_orders(
-    fake_game_factory, default_dummy_orchestrator
-):
+async def test_retreat_agent_fails_to_provide_orders(fake_game_factory, default_dummy_orchestrator):
     strat = RetreatPhaseStrategy()
     powers = ["ITA"]
     retreat_conditions_map = {"ITA": True}
@@ -106,9 +100,7 @@ async def test_retreat_agent_fails_to_provide_orders(
 
     mock_agent_ita = MagicMock(name="AgentITA")
     dummy_orchestrator.agent_manager.get_agent.return_value = mock_agent_ita
-    dummy_orchestrator._get_orders_for_power = AsyncMock(
-        side_effect=Exception("LLM error")
-    )
+    dummy_orchestrator._get_orders_for_power = AsyncMock(side_effect=Exception("LLM error"))
 
     mock_game_history = MagicMock()
     mock_game_history.add_orders = MagicMock()
@@ -118,9 +110,7 @@ async def test_retreat_agent_fails_to_provide_orders(
     dummy_orchestrator._get_orders_for_power.assert_awaited_once_with(
         fake_game, "ITA", mock_agent_ita, mock_game_history
     )
-    mock_game_history.add_orders.assert_called_once_with(
-        fake_game.get_current_phase(), "ITA", []
-    )
+    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "ITA", [])
 
     assert isinstance(orders, dict)
     assert orders["ITA"] == []
@@ -128,9 +118,7 @@ async def test_retreat_agent_fails_to_provide_orders(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_retreat_agent_not_found(
-    fake_game_factory, default_dummy_orchestrator, caplog
-):  # Added caplog
+async def test_retreat_agent_not_found(fake_game_factory, default_dummy_orchestrator, caplog):  # Added caplog
     strat = RetreatPhaseStrategy()
     powers = ["AUS"]
     retreat_conditions_map = {"AUS": True}
@@ -151,9 +139,7 @@ async def test_retreat_agent_not_found(
 
     dummy_orchestrator._get_orders_for_power.assert_not_awaited()
     # game_history.add_orders should be called as the retreating power has no agent
-    mock_game_history.add_orders.assert_called_once_with(
-        fake_game.get_current_phase(), "AUS", []
-    )
+    mock_game_history.add_orders.assert_called_once_with(fake_game.get_current_phase(), "AUS", [])
 
     assert isinstance(orders, dict)
     # AUS should be in the final orders dict with an empty list

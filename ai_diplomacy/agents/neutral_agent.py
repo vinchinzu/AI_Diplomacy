@@ -29,9 +29,7 @@ class NeutralAgent(BaseAgent, HoldBehaviourMixin):
         """
         return []
 
-    async def update_state(
-        self, phase: PhaseState, events: List[Dict[str, Any]]
-    ) -> None:
+    async def update_state(self, phase: PhaseState, events: List[Dict[str, Any]]) -> None:
         """
         Neutral agents do not maintain complex internal state based on game events.
         """

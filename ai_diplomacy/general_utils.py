@@ -59,18 +59,14 @@ def assign_models_to_powers(fixed_models_str: Optional[str] = None) -> Dict[str,
     # Simplified logic: Use fixed_models_str if provided, else a hardcoded default.
     if fixed_models_str:
         model_list = [m.strip() for m in fixed_models_str.split(",") if m.strip()]
-        logger.info(
-            f"[Deprecated utils.assign_models] Using fixed_models_str: {model_list}"
-        )
+        logger.info(f"[Deprecated utils.assign_models] Using fixed_models_str: {model_list}")
 
     if not model_list:
         # Try POWER_MODELS env var as a secondary fallback for this deprecated function
         power_models_env = os.environ.get("POWER_MODELS")
         if power_models_env:
             model_list = [m.strip() for m in power_models_env.split(",") if m.strip()]
-            logger.info(
-                f"[Deprecated utils.assign_models] Using POWER_MODELS env var: {model_list}"
-            )
+            logger.info(f"[Deprecated utils.assign_models] Using POWER_MODELS env var: {model_list}")
         else:
             # Final fallback to a single model for all powers
             default_model_for_util = os.environ.get("MODEL_NAME", "ollama/gemma3:4b")
@@ -82,17 +78,13 @@ def assign_models_to_powers(fixed_models_str: Optional[str] = None) -> Dict[str,
             return assigned_models
 
     if not model_list:  # Should not happen if default_model_for_util logic is hit
-        logger.error(
-            "[Deprecated utils.assign_models] Model list empty. Cannot assign."
-        )
+        logger.error("[Deprecated utils.assign_models] Model list empty. Cannot assign.")
         return {}
 
     for i, power in enumerate(powers):
         assigned_models[power] = model_list[i % len(model_list)]
 
-    logger.info(
-        f"[Deprecated utils.assign_models] Final assignments: {assigned_models}"
-    )
+    logger.info(f"[Deprecated utils.assign_models] Final assignments: {assigned_models}")
     return assigned_models
 
 
@@ -148,24 +140,18 @@ def _extract_moves_from_llm_response(
         code_fence_pattern = r"```json\n(.*?)\n```"
         matches = re.search(code_fence_pattern, raw_response, re.DOTALL)
         if matches:
-            logger.debug(
-                f"[{model_id}] Found triple-backtick JSON block for {power_name}."
-            )
+            logger.debug(f"[{model_id}] Found triple-backtick JSON block for {power_name}.")
 
     json_text = None
     if matches:
         json_text = matches.group(1).strip()
         if not json_text.startswith("{"):  # Ensure it's a valid JSON object start
-            json_text = (
-                "{" + json_text
-            )  # Add missing brace if needed (e.g. from pattern_alt)
+            json_text = "{" + json_text  # Add missing brace if needed (e.g. from pattern_alt)
         if not json_text.endswith("}"):
             json_text = json_text + "}"
 
     if not json_text:
-        logger.debug(
-            f"[{model_id}] No JSON text found in LLM response for {power_name}."
-        )
+        logger.debug(f"[{model_id}] No JSON text found in LLM response for {power_name}.")
         return None
 
     try:
@@ -182,18 +168,12 @@ def _extract_moves_from_llm_response(
                 raw_list_str = "[" + bracket_match.group(1).strip() + "]"
                 moves = ast.literal_eval(raw_list_str)
                 if isinstance(moves, list):
-                    logger.debug(
-                        f"[{model_id}] Bracket fallback parse succeeded for {power_name}."
-                    )
+                    logger.debug(f"[{model_id}] Bracket fallback parse succeeded for {power_name}.")
                     return moves
             except Exception as e2:
-                logger.warning(
-                    f"[{model_id}] Bracket fallback parse also failed for {power_name}: {e2}"
-                )
+                logger.warning(f"[{model_id}] Bracket fallback parse also failed for {power_name}: {e2}")
 
-    logger.warning(
-        f"[{model_id}] All move extraction attempts failed for {power_name}."
-    )
+    logger.warning(f"[{model_id}] All move extraction attempts failed for {power_name}.")
     return None
 
 
@@ -234,9 +214,7 @@ def _validate_extracted_orders(
     Returns a list of orders to be set for the power.
     """
     if not isinstance(moves, list):
-        logger.warning(
-            f"[{model_id}] Proposed moves for {power_name} not a list: {moves}."
-        )
+        logger.warning(f"[{model_id}] Proposed moves for {power_name} not a list: {moves}.")
         if dev_mode:
             raise LLMInvalidOutputError(
                 f"LLM output for {power_name} ({model_id}) was not a list of moves.",
@@ -246,9 +224,7 @@ def _validate_extracted_orders(
             )
         return fallback_utility_fn(possible_orders)
 
-    logger.debug(
-        f"[{model_id}] Validating LLM proposed moves for {power_name}: {moves}"
-    )
+    logger.debug(f"[{model_id}] Validating LLM proposed moves for {power_name}: {moves}")
     validated = []
     invalid_moves_found = []
     used_locs = set()
@@ -273,13 +249,9 @@ def _validate_extracted_orders(
             # Extract unit location from the move (first two parts: "A PAR" from "A PAR H")
             tokens = move_str.split()
             if len(tokens) >= 2:
-                used_locs.add(
-                    tokens[1][:3]
-                )  # Add unit location (e.g., "PAR" from "A PAR H")
+                used_locs.add(tokens[1][:3])  # Add unit location (e.g., "PAR" from "A PAR H")
         else:
-            logger.debug(
-                f"[{model_id}] Invalid move from LLM for {power_name}: {move_str}"
-            )
+            logger.debug(f"[{model_id}] Invalid move from LLM for {power_name}: {move_str}")
             invalid_moves_found.append(move_str)
 
             # Additional diagnostic logging to help understand why the move is invalid
@@ -324,15 +296,12 @@ def _validate_extracted_orders(
                             f"'{invalid_move}' - {power_name} doesn't control unit {expected_unit}"
                         )
                     else:
-                        error_details.append(
-                            f"'{invalid_move}' - not a valid order for unit {expected_unit}"
-                        )
+                        error_details.append(f"'{invalid_move}' - not a valid order for unit {expected_unit}")
                 else:
                     error_details.append(f"'{invalid_move}' - malformed order")
 
-            detailed_message = (
-                f"LLM for {power_name} ({model_id}) produced invalid moves:\n"
-                + "\n".join(error_details)
+            detailed_message = f"LLM for {power_name} ({model_id}) produced invalid moves:\n" + "\n".join(
+                error_details
             )
             detailed_message += f"\n\n{power_name} controls these units: {power_units}"
 
@@ -358,9 +327,7 @@ def _validate_extracted_orders(
                 hold_candidates = [o for o in orders_list if o.endswith(" H")]
                 if hold_candidates:
                     validated.append(hold_candidates[0])
-                    logger.debug(
-                        f"[{model_id}] Added HOLD for unassigned unit at {loc} for {power_name}."
-                    )
+                    logger.debug(f"[{model_id}] Added HOLD for unassigned unit at {loc} for {power_name}.")
                 elif orders_list:
                     validated.append(orders_list[0])
                     logger.debug(
@@ -402,9 +369,7 @@ async def get_valid_orders(
     log_file_path: Optional[str] = None,  # Already present
     phase: Optional[str] = None,  # Already present
     # dev_mode: bool = False # Added dev_mode, now part of config
-    llm_caller_override: Optional[
-        Callable[..., Awaitable[str]]
-    ] = None,  # New parameter
+    llm_caller_override: Optional[Callable[..., Awaitable[str]]] = None,  # New parameter
 ) -> List[str]:
     """
     Generates orders using the specified LLM model, then validates and returns them.
@@ -426,9 +391,7 @@ async def get_valid_orders(
     )
 
     if not prompt:
-        logger.error(
-            f"[{model_id}] Prompt construction failed for {power_name}. Using fallback orders."
-        )
+        logger.error(f"[{model_id}] Prompt construction failed for {power_name}. Using fallback orders.")
         # model_error_stats.setdefault(model_id, {}).setdefault("prompt_errors", 0)
         # model_error_stats[model_id]["prompt_errors"] += 1
         return _fallback_orders_utility(possible_orders)
@@ -447,16 +410,12 @@ async def get_valid_orders(
             system_prompt_text=agent_system_prompt,
             game_id=game_id,
             agent_name=power_name,  # Using power_name as agent_name
-            phase_str=(
-                phase if phase is not None else "UNKNOWN_PHASE"
-            ),  # Using phase as phase_str
+            phase_str=(phase if phase is not None else "UNKNOWN_PHASE"),  # Using phase as phase_str
             request_identifier=f"{power_name}-{phase if phase is not None else 'unknown'}-order_gen",
             llm_caller_override=llm_caller_override,  # Pass the override
         )
 
-        llm_proposed_moves = _extract_moves_from_llm_response(
-            raw_response, power_name, model_id
-        )
+        llm_proposed_moves = _extract_moves_from_llm_response(raw_response, power_name, model_id)
         if llm_proposed_moves is None and dev_mode:
             raise LLMInvalidOutputError(
                 f"Failed to extract any moves from LLM response for {power_name} ({model_id}).",
@@ -465,9 +424,7 @@ async def get_valid_orders(
             )
 
     except Exception as e:
-        logger.error(
-            f"[{model_id}] Error during LLM call for {power_name}: {e}", exc_info=True
-        )
+        logger.error(f"[{model_id}] Error during LLM call for {power_name}: {e}", exc_info=True)
         if dev_mode:
             # If the error is already our custom one, re-raise it. Otherwise, wrap it.
             if isinstance(e, LLMInvalidOutputError):
@@ -485,9 +442,7 @@ async def get_valid_orders(
         game=game,
         power_name=power_name,
         model_id=model_id,
-        moves=(
-            llm_proposed_moves if llm_proposed_moves is not None else []
-        ),  # Pass empty list if None
+        moves=(llm_proposed_moves if llm_proposed_moves is not None else []),  # Pass empty list if None
         possible_orders=possible_orders,
         fallback_utility_fn=_fallback_orders_utility,
         dev_mode=dev_mode,
@@ -556,9 +511,7 @@ def normalize_and_compare_orders(
         issued_set = set()
         if pwr in issued_orders:
             try:
-                issued_set = {
-                    normalize_order(o) for o in issued_orders.get(pwr, []) if o
-                }
+                issued_set = {normalize_order(o) for o in issued_orders.get(pwr, []) if o}
             except Exception as e:
                 logger.error(f"Error normalizing issued orders for {pwr}: {e}")
 
@@ -566,9 +519,7 @@ def normalize_and_compare_orders(
         accepted_set = set()
         if pwr in accepted_orders_dict:
             try:
-                accepted_set = {
-                    normalize_order(o) for o in accepted_orders_dict.get(pwr, []) if o
-                }
+                accepted_set = {normalize_order(o) for o in accepted_orders_dict.get(pwr, []) if o}
             except Exception as e:
                 logger.error(f"Error normalizing accepted orders for {pwr}: {e}")
 
@@ -623,9 +574,7 @@ def log_llm_response(
 # and logging is handled by calling log_llm_response() immediately after.
 
 
-def normalize_order_for_game_map(
-    order: str, game_map: Optional[GameMap]
-) -> Optional[str]:
+def normalize_order_for_game_map(order: str, game_map: Optional[GameMap]) -> Optional[str]:
     """Normalizes an order string using the game map, if available."""
     if not game_map:
         return order  # Return original if no map
