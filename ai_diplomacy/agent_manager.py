@@ -3,26 +3,22 @@ Manages the creation, initialization, and storage of DiplomacyAgents.
 """
 
 import logging
-from typing import Dict, TYPE_CHECKING, Optional, Any  # Added Any
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from .agents.factory import AgentFactory
 from .agents.base import BaseAgent
-from .services.config import AgentConfig  # AgentConfig from services
+from .services.config import AgentConfig
 
 if TYPE_CHECKING:
-    from .game_config import GameConfig  # GameConfig from root
-    from .agents.base import BaseAgent  # noqa
+    from .game_config import GameConfig
+    from .agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["AgentManager"]
 
-# DEFAULT_AGENT_MANAGER_FALLBACK_MODEL has been moved to model_utils.py
-
 
 class AgentManager:
-    # Docstring already exists and is good.
-
     def __init__(self, game_config: "GameConfig"):
         """
         Initializes the AgentManager.
@@ -49,8 +45,6 @@ class AgentManager:
         This method is a placeholder for more complex setup that might be needed in the future.
         """
         logger.debug(f"Performing extended state initialization for {agent.agent_id} (currently minimal).")
-        # This function can be expanded if there's a need to load specific initial states
-        # from files or apply more complex power-specific heuristics here.
         pass
 
     def initialize_agents(
@@ -73,14 +67,11 @@ class AgentManager:
             agent_type = config_details.get("type")
             model_id = config_details.get("model_id")  # Can be None for neutral
 
-            # verbose_llm_debug should come from game_config
             verbose_llm_debug = getattr(self.game_config.args, "verbose_llm_debug", False)
 
-            # Adapt the incoming config_details dict to match AgentConfig model
             if "country" in config_details:
                 config_details["name"] = config_details.pop("country")
 
-            # Ensure essential fields are present before unpacking
             config_details.setdefault("name", agent_identifier)
             config_details.setdefault("type", agent_type)
             config_details.setdefault("model_id", model_id)
@@ -96,8 +87,7 @@ class AgentManager:
 
             try:
                 agent: Optional[BaseAgent] = None
-                # Refactored agent creation to be more streamlined
-                country_for_agent = agent_identifier  # The country/power name for single agents
+                country_for_agent = agent_identifier
 
                 if agent_type in ("llm", "neutral", "scripted"):
                     agent = self.agent_factory.create_agent(
@@ -108,14 +98,11 @@ class AgentManager:
                         game_id=self.game_config.game_id,
                     )
                 elif agent_type == "null":
-                    # NullAgent is not created via factory, but directly
-                    from .agents.null_agent import (
-                        NullAgent,
-                    )  # Ensure NullAgent is imported
+                    from .agents.null_agent import NullAgent
 
                     agent = NullAgent(
-                        agent_id=agent_id_str,  # agent_identifier could be "ITALY_NULL" or similar
-                        power_name=country_for_agent,  # The actual power like "ITALY"
+                        agent_id=agent_id_str,
+                        power_name=country_for_agent,
                     )
                     logger.info(f"Directly instantiating NullAgent for power: {country_for_agent}")
                 elif agent_type == "bloc_llm":
@@ -129,8 +116,8 @@ class AgentManager:
 
                     agent = self.agent_factory.create_agent(
                         agent_id=agent_id_str,
-                        country=country_for_agent,  # Not strictly used by BlocLLMAgent constructor signature's 'country'
-                        config=current_agent_config,  # type="bloc_llm", model_id for bloc
+                        country=country_for_agent,
+                        config=current_agent_config,
                         game_config=self.game_config,
                         game_id=self.game_config.game_id,
                         bloc_name=bloc_name,
@@ -154,9 +141,7 @@ class AgentManager:
                     f"Failed to create or initialize agent for '{agent_identifier}' (type {agent_type}): {e}",
                     exc_info=True,
                 )
-                # Continue with other agents
-
-        self.game_config.agents = self.agents  # Store the dict of created agents in GameConfig
+        self.game_config.agents = self.agents
         logger.info(f"All {len(self.agents)} agent entities initialized: {list(self.agents.keys())}")
 
     def get_agent(self, agent_identifier: str) -> Optional[BaseAgent]:

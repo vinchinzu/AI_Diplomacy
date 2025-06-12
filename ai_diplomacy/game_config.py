@@ -635,16 +635,16 @@ class GameConfig:
         Validates the agent configuration from the TOML file and CLI against the actual game powers.
         """
         if not game_instance:
-            logger.error(
-                "Game instance is required for building and validating agent maps."
-            )
+            logger.error("Game instance is required for building and validating agent maps.")
             raise ValueError("Game instance not provided.")
 
         game_powers = list(game_instance.powers.keys())
         num_game_powers = len(game_powers)
         num_agents_defined = len(self.players_list)
 
-        logger.info(f"Validating {num_agents_defined} agent definitions against {num_game_powers} powers in the game: {game_powers}")
+        logger.info(
+            f"Validating {num_agents_defined} agent definitions against {num_game_powers} powers in the game: {game_powers}"
+        )
 
         # Special handling for WWI two-player scenario where players are blocs
         is_wwi_scenario = self.game_factory_path and "wwi_two_player" in self.game_factory_path
@@ -654,39 +654,39 @@ class GameConfig:
             power_to_model_map = {}  # Map from power name to model ID
             agent_to_powers_map = {}  # Map from agent ID to list of powers
             power_to_agent_id_map = {}  # Map from power name to agent ID
-            
+
             for agent_id, config in agent_configurations.items():
                 if config.get("type") == "bloc_llm" and "controlled_powers" in config:
                     controlled_powers = config["controlled_powers"]
                     bloc_powers.update(controlled_powers)
                     agent_to_powers_map[agent_id] = controlled_powers
-                    
+
                     # Map each power to its model and agent ID
                     model_id = config.get("model_id")
                     if model_id:
                         for power in controlled_powers:
                             power_to_model_map[power] = model_id
                             power_to_agent_id_map[power] = agent_id
-                            
+
                 elif config.get("type") == "null" and "country" in config:
                     country = config["country"]
                     bloc_powers.add(country)
                     agent_to_powers_map[agent_id] = [country]
                     power_to_agent_id_map[country] = agent_id
-            
+
             missing_powers = set(game_powers) - bloc_powers
             if missing_powers:
                 logger.warning(f"Some powers are not covered by any bloc: {missing_powers}")
-            
+
             # Set the maps for the WWI scenario
             self.powers_and_models = power_to_model_map
             self.agent_to_powers_map = agent_to_powers_map
             self.power_to_agent_id_map = power_to_agent_id_map
-            
+
             logger.info(f"WWI two-player scenario: Powers to models map: {self.powers_and_models}")
             logger.info(f"WWI two-player scenario: Agent to powers map: {self.agent_to_powers_map}")
             logger.info(f"WWI two-player scenario: Power to agent ID map: {self.power_to_agent_id_map}")
-            
+
             # Skip the standard validation for bloc-based scenarios
             logger.info("WWI two-player scenario detected. Skipping standard power validation.")
             return
@@ -712,17 +712,14 @@ class GameConfig:
         # Build the maps
         self.agent_power_map = {
             agent_id: power_name
-            for agent_id, power_name in zip(
-                initialized_agents.keys(), self.agent_countries_list
-            )
+            for agent_id, power_name in zip(initialized_agents.keys(), self.agent_countries_list)
             if power_name and power_name in game_powers
         }
 
         self.power_agent_map = {v: k for k, v in self.agent_power_map.items()}
 
         self.agent_type_map = {
-            power: agent_type
-            for power, agent_type in zip(self.players_list, self.agent_types_list)
+            power: agent_type for power, agent_type in zip(self.players_list, self.agent_types_list)
         }
 
         # Create a map from power to its assigned LLM model
@@ -743,101 +740,3 @@ class GameConfig:
         logger.info(f"Power-Agent mapping created: {self.power_agent_map}")
         logger.info(f"Power-AgentType mapping created: {self.agent_type_map}")
         logger.info(f"Power-Model mapping created: {self.power_model_map}")
-
-
-def dummy_factory_for_test():
-    """Dummy factory for testing purposes."""
-    pass
-
-
-if __name__ == "__main__":
-    dummy_toml_content_main = """
-[scenario]
-# game_factory = "wwi_two_player" # Assuming SCENARIO_REGISTRY is populated by scenarios.py
-# For a simple test that doesn't rely on scenarios.py being found by THIS script's execution path:
-game_factory = "ai_diplomacy.game_config.dummy_factory_for_test" # A known local path
-
-[game_settings]
-num_players = 7
-game_id_prefix = "main_test"
-
-[logging]
-log_level = "INFO"
-log_to_file = false # Don't create files for simple test
-
-[dev_settings]
-dev_mode = true
-
-agents = [
-    { id = "AGENT_ONE", type = "llm", model = "model_alpha" }
-]
-"""
-    from diplomacy import Game  # Ensure Game is imported for the dummy factory
-
-    def dummy_factory_for_test():
-        logger.info("Dummy factory for test called!")
-        return Game()
-
-    if "SCENARIO_REGISTRY" in globals():
-        SCENARIO_REGISTRY["ai_diplomacy.game_config.dummy_factory_for_test"] = dummy_factory_for_test
-    else:  # If SCENARIO_REGISTRY wasn't imported (e.g. file run directly)
-        SCENARIO_REGISTRY = {"ai_diplomacy.game_config.dummy_factory_for_test": dummy_factory_for_test}
-
-    dummy_toml_path_main = "temp_main_test_config.toml"
-    with open(dummy_toml_path_main, "w") as f:
-        f.write(dummy_toml_content_main)
-
-    args_dict_main = {
-        "game_config_file": dummy_toml_path_main,
-        "log_level": None,
-        "log_dir": None,
-        "game_id": None,
-    }
-    test_args_main = argparse.Namespace(**args_dict_main)
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)",
-    )
-
-    logger.info("--- Testing GameConfig Instantiation with dummy factory ---")
-    try:
-        config = GameConfig(test_args_main)
-        logger.info(f"GameConfig instantiated successfully. Game ID: {config.game_id}")
-        assert config.game_factory is not None, "Game factory should be loaded"
-        if config.game_factory is not None:  # mypy guard
-            assert config.game_factory.__name__ == "dummy_factory_for_test", "Incorrect factory loaded"
-            logger.info(f"Successfully loaded game factory: {config.game_factory.__name__}")
-
-        # Test a case where factory is expected to fail
-        error_toml_content = """
-[scenario]
-game_factory = "this.does.not.exist"
-agents = []
-        """
-        error_toml_path = "temp_error_test_config.toml"
-        with open(error_toml_path, "w") as f:
-            f.write(error_toml_content)
-        error_args = argparse.Namespace(
-            game_config_file=error_toml_path, log_level=None, log_dir=None, game_id=None
-        )
-        logger.info("--- Testing GameConfig with non-existent factory (expect ValueError) ---")
-        try:
-            GameConfig(error_args)
-            logger.error("Error test FAILED: ValueError not raised for non-existent factory.")
-        except ValueError:
-            logger.info("Error test PASSED: ValueError raised as expected.")
-        finally:
-            if os.path.exists(error_toml_path):
-                os.remove(error_toml_path)
-
-    except Exception as e:
-        logger.error(f"Error during GameConfig __main__ test: {e}", exc_info=True)
-    finally:
-        if os.path.exists(dummy_toml_path_main):
-            os.remove(dummy_toml_path_main)
-        # Clean up the dummy factory from SCENARIO_REGISTRY if it was added for the test
-        if "ai_diplomacy.game_config.dummy_factory_for_test" in SCENARIO_REGISTRY:
-            del SCENARIO_REGISTRY["ai_diplomacy.game_config.dummy_factory_for_test"]
-
-    logger.info("--- GameConfig __main__ Test Complete ---")
