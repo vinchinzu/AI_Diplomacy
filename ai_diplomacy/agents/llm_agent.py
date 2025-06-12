@@ -463,10 +463,12 @@ class LLMAgent(BaseAgent):
 
         # The diplomacy-specific part of the state update (diary, goals) happens here.
         # Generate and add a diary entry for the concluded phase
-        await self._generate_phase_diary_entry_with_generic_agent(phase, events, power_name=log_power)
+        if self.game_config.perform_diary_generation:
+            await self._generate_phase_diary_entry_with_generic_agent(phase, events, power_name=log_power)
 
         # Re-evaluate and update goals based on the new game state
-        await self._analyze_and_update_goals_with_generic_agent(phase, power_name=log_power)
+        if self.game_config.perform_goal_analysis:
+            await self._analyze_and_update_goals_with_generic_agent(phase, power_name=log_power)
 
         logger.debug(
             f"[{log_power}] state updated for phase {phase.phase_name}. Current goals: {self.agent_state.goals}"
@@ -494,7 +496,7 @@ class LLMAgent(BaseAgent):
         # The 'generate_diary_entry' action_type will be handled by DiplomacyPromptStrategy
         response = await self.generic_agent.decide_action(
             state=diplomacy_specific_context,
-            action_type="generate_diary_entry",
+            action_type="generate_diplomacy_diary",
             possible_actions=None,  # No explicit actions, it's a generation task
         )
 
@@ -532,7 +534,7 @@ class LLMAgent(BaseAgent):
         # The 'update_goals' action_type will be handled by DiplomacyPromptStrategy
         response = await self.generic_agent.decide_action(
             state=diplomacy_specific_context,
-            action_type="update_goals",
+            action_type="analyze_diplomacy_goals",
             possible_actions=None,  # Generation task
         )
 
