@@ -7,7 +7,7 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 
-from .state import PhaseState
+from ..domain.state import PhaseState
 
 logger = logging.getLogger(__name__)
 
@@ -257,100 +257,91 @@ class GameManager:
             # Gained centers
             gained_centers = post_centers - pre_centers
             for center in gained_centers:
-                # Try to find who lost it
-                old_owner = None
-                for other_country in pre.powers:
-                    if center in pre.get_power_centers(other_country):
-                        old_owner = other_country
-                        break
-
                 events.append(
                     GameEvent(
                         event_type="center_gained",
                         phase=phase,
-                        participants={
-                            "country": country,
-                            "old_owner": old_owner,
-                            "center": center,
-                        },
+                        participants={"country": country, "center": center},
                         details={},
                     )
                 )
-
         return events
 
     def _detect_eliminations(self, pre: PhaseState, post: PhaseState, phase: str) -> List[GameEvent]:
-        """Detect power eliminations."""
+        """Detect which powers were eliminated."""
         events = []
+        pre_powers = pre.powers - pre.eliminated_powers
+        post_powers = post.powers - post.eliminated_powers
+        eliminated_powers = pre_powers - post_powers
 
-        new_eliminations = post.eliminated_powers - pre.eliminated_powers
-
-        for country in new_eliminations:
+        for power in eliminated_powers:
             events.append(
                 GameEvent(
-                    event_type="elimination",
+                    event_type="power_eliminated",
                     phase=phase,
-                    participants={"country": country},
-                    details={"centers_lost": len(pre.get_power_centers(country))},
+                    participants={"country": power},
+                    details={},
                 )
             )
-
         return events
 
     def is_game_over(self) -> bool:
-        """Check if the game is over."""
+        """Check if the game has ended."""
         return self.game.is_game_done
 
     def get_winner(self) -> Optional[str]:
-        """Get the winner if game is over."""
+        """
+        Get the winner of the game, if it has ended.
+
+        Returns:
+            The name of the winning country, or None if no winner yet.
+        """
         if not self.is_game_over():
             return None
 
-        # Find the power with the most centers
-        current_state = self.get_current_phase_state()
+        # Determine winner based on supply centers
+        state = self.get_current_phase_state()
         max_centers = 0
         winner = None
 
-        for country in current_state.powers:
-            if not current_state.is_power_eliminated(country):
-                center_count = current_state.get_center_count(country)
-                if center_count > max_centers:
-                    max_centers = center_count
-                    winner = country
+        for power in state.powers:
+            center_count = state.get_center_count(power)
+            if center_count > max_centers:
+                max_centers = center_count
+                winner = power
+            elif center_count == max_centers:
+                winner = None  # Draw
 
         return winner
 
-    def get_events_for_country(self, country: str, phase: Optional[str] = None) -> List[GameEvent]:
+    def get_events_for_country(
+        self, country: str, phase: Optional[str] = None
+    ) -> List[GameEvent]:
         """
-        Get events relevant to a specific country.
+        Get all events relevant to a specific country.
 
         Args:
             country: The country to get events for
-            phase: Optional phase filter
+            phase: Optional phase to filter by
 
         Returns:
-            List of relevant events
+            List of relevant game events
         """
         relevant_events = []
-
         for event in self.events_log:
-            # Filter by phase if specified
             if phase and event.phase != phase:
                 continue
-
-            # Check if country is involved in this event
-            if (
-                country in event.participants.values()
-                or event.participants.get("country") == country
-                or event.participants.get("attacker") == country
-                or event.participants.get("target") == country
-            ):
+            if country in event.participants.values():
                 relevant_events.append(event)
-
         return relevant_events
 
-    def _is_order_valid(self, country, order_text):
-        """Check if an order is valid for a country."""
-        # This is a simplified check. A real implementation would involve
-        # more complex validation logic based on game rules.
-        return order_text in self.game.get_orders(country)
+    def _is_order_valid(self, country: str, order_text: str) -> bool:
+        """
+        Check if a single order is valid for a country.
+        (Internal helper)
+        """
+        try:
+            possible_orders = self.game.get_all_possible_orders().get(country, [])
+            return order_text in possible_orders
+        except Exception:
+            return False 

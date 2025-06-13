@@ -7,34 +7,32 @@ an agent's goals, relationships with other powers, and private logs
 """
 
 from typing import List, Dict, Any
-from .. import constants  # Import constants
 
 __all__ = ["DiplomacyAgentState"]
+
+ALLOWED_RELATIONSHIPS = ["Enemy", "Unfriendly", "Neutral", "Friendly", "Ally"]
 
 
 class DiplomacyAgentState:
     # Class docstring already exists and is good.
 
-    # ALL_POWERS and ALLOWED_RELATIONSHIPS are now sourced from constants.py
-    # However, they are used here for validation and default initialization logic.
-    # For validation, it's fine to reference them directly from constants.
-
-    def __init__(self, country: str):
+    def __init__(self, country: str, all_powers_in_game: List[str]):
         """
         Initializes the agent's state.
 
         Args:
             country (str): The country this state belongs to.
+            all_powers_in_game (List[str]): A list of all powers in the game.
         """
-        if country not in constants.ALL_POWERS:  # Use constant for validation
-            raise ValueError(f"Invalid country '{country}'. Must be one of {constants.ALL_POWERS}")
+        if country not in all_powers_in_game:
+            raise ValueError(f"Invalid country '{country}'. Must be one of {all_powers_in_game}")
 
         self.country: str = country
         self.goals: List[str] = []
         self.relationships: Dict[str, str] = {
             power: "Neutral"
-            for power in constants.ALL_POWERS
-            if power != self.country  # Use constant for iteration
+            for power in all_powers_in_game
+            if power != self.country
         }
         self.private_journal: List[str] = []
         self.private_diary: List[str] = []
@@ -121,7 +119,7 @@ class DiplomacyAgentState:
             # This might indicate a logic error elsewhere if they are expected to always match.
             pass
 
-        relationship_levels = constants.ALLOWED_RELATIONSHIPS  # Use constant
+        relationship_levels = ALLOWED_RELATIONSHIPS
 
         for event in events:
             event_type = event.get("type")
