@@ -1,0 +1,48 @@
+name: E2E Tests
+
+on:
+  schedule:
+    # Run nightly at midnight UTC
+    - cron: "0 0 * * *"
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        shell: bash
+
+      - name: Install dependencies
+        run: ~/.local/bin/uv sync --with dev
+        shell: bash
+
+      - name: Start Ollama
+        run: docker-compose up -d
+
+      - name: Wait for Ollama to be ready
+        run: |
+          echo "Waiting for Ollama..."
+          while ! curl -s --fail http://localhost:11434/api/tags > /dev/null; do
+            sleep 1
+            echo -n "."
+          done
+          echo "Ollama is ready!"
+        shell: bash
+
+      - name: Pull a small model for testing
+        run: docker-compose exec ollama ollama pull qwen:0.5b
+        shell: bash
+
+      - name: Run E2E tests
+        run: ~/.local/bin/uv run pytest -m e2e --llm-endpoint=http://localhost:11434/api --maxfail=1
+        shell: bash 
