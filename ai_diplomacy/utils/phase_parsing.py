@@ -62,7 +62,6 @@ def get_phase_type_from_game(game: "Game") -> str:
 
     first_part_is_valid_season_or_compact_season_year = True
     if len(parts) > 1 and year_val is not None:
-        
         if _is_valid_season_keyword(parts[0]):
             first_part_is_valid_season_or_compact_season_year = True
         elif (
@@ -76,7 +75,6 @@ def get_phase_type_from_game(game: "Game") -> str:
     elif len(parts) == 1 and year_val is not None:
         pass
 
-    
     if (
         (
             "MOVEMENT" in phase_str_upper
@@ -103,7 +101,6 @@ def get_phase_type_from_game(game: "Game") -> str:
     ):
         return PhaseType.MVT.value
 
-    
     if (
         (
             "RETREAT" in phase_str_upper
@@ -125,7 +122,6 @@ def get_phase_type_from_game(game: "Game") -> str:
     ):
         return PhaseType.RET.value
 
-    
     if (
         (
             ("ADJUSTMENT" in phase_str_upper or "BUILD" in phase_str_upper)

@@ -14,7 +14,6 @@ from ..services.config import (
     AgentConfig,
     DiplomacyConfig,
 )
-from ..game_config import GameConfig as DiplomacyGameConfig
 
 # Removed incorrect import: from ..services.llm_coordinator import LLMCoordinator
 from generic_llm_framework.llm_coordinator import (
@@ -61,7 +60,6 @@ class AgentFactory:
         agent_id: str,
         country: str,  # For NeutralAgent and LLMAgent (single country)
         config: AgentConfig,
-        game_config: DiplomacyGameConfig,
         game_id: str = "unknown_game",
         # New optional parameters for BlocLLMAgent
         bloc_name: Optional[str] = None,
@@ -74,7 +72,6 @@ class AgentFactory:
             agent_id: Unique identifier for the agent
             country: Country/power the agent represents (for single-power agents)
             config: Agent configuration (contains agent_type, model_id, etc.)
-            game_config: Game configuration for the game
             game_id: Game identifier for tracking
             bloc_name: Name of the bloc, if creating a BlocLLMAgent (e.g., "ENTENTE_BLOC")
             controlled_powers: List of powers controlled by the bloc, if creating a BlocLLMAgent
@@ -90,7 +87,7 @@ class AgentFactory:
         )
 
         if config.type == "llm":
-            return self._create_llm_agent(agent_id, country, config, game_config, game_id)
+            return self._create_llm_agent(agent_id, country, config, game_id)
         elif config.type == "scripted":
             return self._create_scripted_agent(agent_id, country, config)
         elif config.type == "neutral":  # New condition for NeutralAgent
@@ -103,7 +100,7 @@ class AgentFactory:
             # The 'country' argument to create_agent is not directly used by BlocLLMAgent's constructor,
             # as it takes controlled_powers. We pass it along for consistency but it's overshadowed.
             return self._create_bloc_llm_agent(
-                agent_id, bloc_name, controlled_powers, config, game_config, game_id
+                agent_id, bloc_name, controlled_powers, config, game_id
             )
         else:
             raise ValueError(f"Unsupported agent type: {config.type}")
@@ -113,7 +110,6 @@ class AgentFactory:
         agent_id: str,
         country: str,
         config: AgentConfig,
-        game_config: DiplomacyGameConfig,
         game_id: str,
     ) -> LLMAgent:
         """Create an LLM-based agent."""
@@ -124,7 +120,6 @@ class AgentFactory:
             agent_id=agent_id,
             country=country,
             config=config,
-            game_config=game_config,
             game_id=game_id,
             llm_coordinator=self.llm_coordinator,
             context_provider_factory=self.context_provider_factory,
@@ -158,7 +153,6 @@ class AgentFactory:
         bloc_name: str,
         controlled_powers: List[str],
         config: AgentConfig,  # Config for the LLM model of the bloc
-        game_config: DiplomacyGameConfig,
         game_id: str,
     ) -> BlocLLMAgent:
         """Create a BlocLLMAgent."""
@@ -175,7 +169,6 @@ class AgentFactory:
             bloc_name=bloc_name,
             controlled_powers=controlled_powers,
             config=config,  # Contains model_id, temperature, etc.
-            game_config=game_config,
             game_id=game_id,
             llm_coordinator=self.llm_coordinator,
             context_provider_factory=self.context_provider_factory,
@@ -224,7 +217,6 @@ class AgentFactory:
                     agent_id=f"{agent_id_country_part.lower()}_{game_id}",
                     country=agent_config.name,  # Used for single agents
                     config=agent_config,
-                    game_config=game_config,
                     game_id=game_id,
                     # bloc_name and controlled_powers would be None here, problematic for bloc_llm
                 )

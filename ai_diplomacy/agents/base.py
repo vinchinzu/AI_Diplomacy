@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-"""
-Abstract base agent interface.
-Defines the contract all agents must implement without coupling to specific LLM providers.
-"""
-
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Protocol, Optional
 
-# Import PhaseState directly
-from ..core.state import PhaseState
-
-# TYPE_CHECKING block for Order and Message
 if TYPE_CHECKING:
-    from ..core.order import Order
-    from ..core.message import Message
+    from ai_diplomacy.domain import DiploMessage, Order, PhaseState
 
-__all__ = ["BaseAgent"]
+__all__ = ["BaseAgent", "Agent"]
+
+
+class Agent(Protocol):
+    async def decide_orders(self, phase: "PhaseState") -> List["Order"]: ...
+    async def receive_messages(self, msgs: List["DiploMessage"]) -> None: ...
 
 
 class BaseAgent(ABC):
@@ -26,22 +21,22 @@ class BaseAgent(ABC):
 
     def __init__(self, agent_id: str, country: str):
         self.agent_id = agent_id
-        self.country = country.upper()  # Ensure country is uppercase
+        self.country = country.upper()
         self.model_id: Optional[str] = None
 
     @abstractmethod
-    async def decide_orders(self, phase: PhaseState) -> List["Order"]:  # Use quotes for forward ref
+    async def decide_orders(self, phase: "PhaseState") -> List["Order"]:
         pass
 
     @abstractmethod
-    async def negotiate(self, phase: PhaseState) -> List["Message"]:  # Use quotes for forward ref
+    async def negotiate(self, phase: "PhaseState") -> List["DiploMessage"]:
         pass
 
     @abstractmethod
-    async def update_state(self, phase: PhaseState, events: List[Dict[str, Any]]) -> None:
+    async def update_state(self, phase: "PhaseState", events: list) -> None:
         pass
 
-    def get_agent_info(self) -> Dict[str, Any]:
+    def get_agent_info(self) -> dict:
         return {
             "agent_id": self.agent_id,
             "country": self.country,

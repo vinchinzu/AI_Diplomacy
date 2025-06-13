@@ -11,7 +11,7 @@ from typing import Dict, List, TYPE_CHECKING, Set
 # Import the new negotiation function
 from .negotiation import perform_negotiation_rounds
 from ..agents.bloc_llm_agent import BlocLLMAgent
-from ..core.state import PhaseState
+from ai_diplomacy.domain import PhaseState
 
 if TYPE_CHECKING:
     from diplomacy import Game
@@ -29,14 +29,16 @@ class MovementPhaseStrategy:
     async def get_orders(
         self,
         game: "Game",
+        phase: "PhaseState",
         orchestrator: "PhaseOrchestrator",
         game_history: "GameHistory",
     ) -> Dict[str, List[str]]:
         logger.info("Executing Movement Phase actions via MovementPhaseStrategy...")
-        current_phase_name = game.get_current_phase()
+        current_phase_name = phase.name
 
         await perform_negotiation_rounds(
             game,
+            phase,
             game_history,
             orchestrator.agent_manager,
             orchestrator.active_powers,  # active_powers are individual game power names
@@ -45,7 +47,6 @@ class MovementPhaseStrategy:
 
         orders_by_power: Dict[str, List[str]] = {}
         processed_bloc_agent_ids: Set[str] = set()
-        current_phase_state = PhaseState.from_game(game)
 
         active_game_powers = orchestrator.active_powers
 
@@ -90,30 +91,30 @@ class MovementPhaseStrategy:
                     )
                     try:
                         # Decide orders for the entire bloc. This populates the agent's internal cache.
-                        await agent.decide_orders(current_phase_state)
+                        await agent.decide_orders(phase)
 
                         # Construct the phase key to retrieve all bloc orders.
                         # This key must match the one used in BlocLLMAgent.decide_orders caching.
                         # Reconstruct the key carefully as done in BlocLLMAgent.
                         phase_repr_parts = []
-                        if current_phase_state.units:  # Check if there are any units on the board
+                        if phase.board.units:  # Check if there are any units on the board
                             for p_n in sorted(agent.controlled_powers):
-                                power_units_locs_list = current_phase_state.units.get(p_n, [])
+                                power_units_locs_list = phase.board.units.get(p_n, [])
                                 phase_repr_parts.append(f"{p_n}_units:{tuple(sorted(power_units_locs_list))}")
 
-                        if current_phase_state.supply_centers:  # Check if there is supply center data
+                        if phase.board.supply_centers:  # Check if there is supply center data
                             sorted_scs_items = sorted(
                                 [
                                     (p, tuple(sorted(cs)))
-                                    for p, cs in current_phase_state.supply_centers.items()
+                                    for p, cs in phase.board.supply_centers.items()
                                 ]
                             )
                             phase_repr_parts.append(f"scs:{tuple(sorted_scs_items)}")
 
                         current_phase_key_for_bloc = (
-                            current_phase_state.year,
-                            current_phase_state.season,
-                            current_phase_state.phase_name,
+                            phase.key.year,
+                            phase.key.season,
+                            phase.name,
                             tuple(phase_repr_parts),
                         )
 
@@ -214,7 +215,7 @@ class MovementPhaseStrategy:
                 logger.info(
                     f"Power {italy_power_name} has no assigned agent and was not processed. Assuming neutral hold orders."
                 )
-                italy_units = game.get_units(italy_power_name)
+                italy_units = phase.board.get_units(italy_power_name)
                 if italy_units:
                     hold_orders = [f"{unit_name} H" for unit_name in italy_units]
                     orders_by_power[italy_power_name] = hold_orders

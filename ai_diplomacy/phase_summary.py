@@ -8,7 +8,7 @@ game phase. This summary is then recorded in the game history.
 
 import logging
 from typing import Optional, Dict, List, TYPE_CHECKING, Any
-from .services.llm_coordinator import LLMCoordinator
+from .services import LLMCoordinator
 from . import llm_utils
 
 if TYPE_CHECKING:

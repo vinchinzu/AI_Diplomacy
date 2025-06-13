@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, TYPE_CHECKING, Any, Callable  # Added Callable
 import toml
 import importlib  # Added importlib
+from scenarios import SCENARIO_REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +29,6 @@ if TYPE_CHECKING:
     from diplomacy import Game  # Game is already here for type hint
     from .game_history import GameHistory
     from .agents.base import BaseAgent
-
-try:
-    from ..scenarios import SCENARIO_REGISTRY
-except ImportError:
-    logger.warning("Could not import SCENARIO_REGISTRY via 'from ..scenarios'. Trying 'from scenarios'.")
-    try:
-        from scenarios import SCENARIO_REGISTRY
-    except ImportError:
-        logger.error("Failed to import SCENARIO_REGISTRY. Registry-based scenario loading will fail.")
-        SCENARIO_REGISTRY = {}  # Define as empty to prevent NameError during runtime
 
 # Default values that might be used if not in TOML
 DEFAULT_LOG_LEVEL = "INFO"
@@ -70,9 +61,6 @@ def setup_logging(
 
     log_level = getattr(logging, level.upper(), logging.INFO)
 
-    # Use a basic config that plays nicely with others if they also use basicConfig
-    # The `force=True` argument (Python 3.8+) is essential to allow re-configuration.
-    # Without it, subsequent calls to basicConfig are ignored if a handler is already set.
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

@@ -11,7 +11,7 @@ import asyncio
 from typing import Dict, List, TYPE_CHECKING, Set
 
 from ..agents.bloc_llm_agent import BlocLLMAgent
-from ..core.state import PhaseState
+from ai_diplomacy.domain import PhaseState
 
 if TYPE_CHECKING:
     from diplomacy import Game
@@ -27,16 +27,16 @@ class BuildPhaseStrategy:
     async def get_orders(
         self,
         game: "Game",
+        phase: "PhaseState",
         orchestrator: "PhaseOrchestrator",
         game_history: "GameHistory",
     ) -> Dict[str, List[str]]:
         # Docstring already exists and is good.
         logger.info("Executing Build Phase actions via BuildPhaseStrategy...")
-        current_phase_name = game.get_current_phase()
+        current_phase_name = phase.name
         orders_by_power: Dict[str, List[str]] = {}
 
         processed_bloc_agent_ids: Set[str] = set()
-        current_phase_state = PhaseState.from_game(game)
 
         game_state = game.get_state()
         build_info = game_state.get("builds", {})
@@ -76,13 +76,13 @@ class BuildPhaseStrategy:
                         f"Processing BlocLLMAgent {agent.agent_id} for builds involving {power_name}..."
                     )
                     try:
-                        await agent.decide_orders(current_phase_state)
+                        await agent.decide_orders(phase)
                         current_phase_key_for_bloc = (
-                            current_phase_state.state,
-                            current_phase_state.scs,
-                            current_phase_state.year,
-                            current_phase_state.season,
-                            current_phase_state.name,
+                            phase.key.state,
+                            phase.key.scs,
+                            phase.key.year,
+                            phase.key.season,
+                            phase.name,
                         )
                         all_bloc_orders_obj = agent.get_all_bloc_orders_for_phase(current_phase_key_for_bloc)
 

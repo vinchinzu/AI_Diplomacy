@@ -1,14 +1,14 @@
 import logging
 import asyncio
 from typing import List, Dict, TYPE_CHECKING
+from .. import constants
 
-from ..core.state import PhaseState  # Added this import
+from ai_diplomacy.domain import PhaseState, DiploMessage
 from ..agents.llm_agent import LLMAgent  # Added this import
 
 if TYPE_CHECKING:
     from diplomacy import Game
     from ..game_history import GameHistory
-    from ..core.message import Message  # For type checking messages_list_objects
     from ..core.state import PhaseState  # For type checking current_phase_state
     from ..services.config import GameConfig  # For num_negotiation_rounds
     from ..agent_manager import AgentManager  # For get_agent
@@ -19,7 +19,6 @@ This module provides the `perform_negotiation_rounds` asynchronous function,
 which manages multiple rounds of message exchange between active agents,
 allowing them to communicate and strategize.
 """
-from .. import constants  # Import constants
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,7 @@ __all__ = ["perform_negotiation_rounds"]
 
 async def perform_negotiation_rounds(
     game: "Game",
+    phase: "PhaseState",
     game_history: "GameHistory",
     agent_manager: "AgentManager",  # Added
     active_powers: List[str],  # Added
@@ -42,12 +42,13 @@ async def perform_negotiation_rounds(
 
     Args:
         game: The current diplomacy.Game object.
+        phase: The current phase state
         game_history: The GameHistory object to record messages.
         agent_manager: The AgentManager to retrieve agent instances.
         active_powers: A list of power names that are currently active.
         config: The GameConfig object, used to determine the number of negotiation rounds.
     """
-    current_phase_name = game.get_current_phase()
+    current_phase_name = phase.name
     logger.info(f"Performing negotiation rounds for phase: {current_phase_name}")
 
     # Ensure the phase is known to GameHistory before adding messages.
@@ -69,11 +70,9 @@ async def perform_negotiation_rounds(
                     f"[Negotiation] Starting message generation for {power_name} (round {round_num})..."
                 )
                 try:
-                    current_phase_state = PhaseState.from_game(game)
-
                     if isinstance(agent, LLMAgent):
-                        messages_list_objects: List[Message] = await asyncio.wait_for(
-                            agent.negotiate(current_phase_state),
+                        messages_list_objects: List[DiploMessage] = await asyncio.wait_for(
+                            agent.negotiate(phase),
                             timeout=constants.NEGOTIATION_MESSAGE_TIMEOUT_SECONDS,
                         )
                         messages_as_dicts = []

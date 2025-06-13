@@ -10,7 +10,6 @@ from typing import Optional, Dict, List, Any
 
 # Assuming llm_utils will be in the same generic framework package.
 # This import is for BasePromptStrategy's _load_generic_system_prompt
-from generic_llm_framework import llm_utils  # Ensure this is available
 from generic_llm_framework.prompt_strategy import BasePromptStrategy
 
 logger = logging.getLogger(__name__)
@@ -103,6 +102,21 @@ class DiplomacyPromptStrategy(BasePromptStrategy):  # Inherit from BasePromptStr
             # or passed in context if generic_agent needs to set it.
             # For now, assume prompt_content is the full user prompt.
             return context["prompt_content"]
+        elif action_type == "update_goals":
+            # Use the state_update_prompt.txt template for updating goals and relationships
+            return self.build_update_goals_prompt(context)
+        elif action_type == "generate_diary_entry":
+            # Treat as a diary/phase reflection, use the same logic as generate_diplomacy_diary
+            return self.build_diary_generation_prompt(
+                country=context.get("country"),
+                phase_name=context.get("phase_name", "Unknown Phase"),
+                power_units=context.get("power_units", []),
+                power_centers=context.get("power_centers", []),
+                is_game_over=context.get("is_game_over", False),
+                events=context.get("events", []),
+                goals=context.get("goals", []),
+                relationships=context.get("relationships", {}),
+            )
         else:  # This is the single, final else block
             logger.warning(
                 f"Unknown action_type '{action_type}' for DiplomacyPromptStrategy. Falling back to generic system prompt or error."
@@ -382,4 +396,49 @@ If the game is over, the goals might reflect on final objectives or be empty.
 If no change to goals is needed, you can return the current goals.
 Do not add any commentary or explanation outside of the JSON structure.
 """
+        return prompt
+
+    def build_update_goals_prompt(self, context: Dict[str, Any]) -> str:
+        """
+        Constructs the prompt for updating goals and relationships after a phase.
+        Uses the state_update_prompt.txt template.
+        """
+        from ai_diplomacy.prompt_utils import load_prompt
+        
+        template = load_prompt("state_update_prompt.txt")
+        
+        # Extract context values with defaults
+        power_name = context.get("power_name") or context.get("country") or "UNKNOWN"
+        current_year = context.get("current_year", "UNKNOWN")
+        current_phase = context.get("current_phase") or context.get("phase_name") or "UNKNOWN"
+        board_state_str = context.get("board_state_str", "(No board state)")
+        phase_summary = context.get("phase_summary", "(No summary)")
+        current_goals = context.get("current_goals", [])
+        current_relationships = context.get("current_relationships", {})
+        other_powers = context.get("other_powers")
+        if other_powers is None:
+            # Try to infer from relationships keys if not provided
+            if isinstance(current_relationships, dict):
+                other_powers = list(current_relationships.keys())
+            else:
+                other_powers = []
+        
+        # Format for template
+        current_goals_str = "\n".join(f"- {g}" for g in current_goals) if current_goals else "None"
+        current_relationships_str = (
+            "\n".join(f"- {p}: {s}" for p, s in current_relationships.items())
+            if isinstance(current_relationships, dict) and current_relationships else "None"
+        )
+        other_powers_str = ", ".join(other_powers) if other_powers else "None"
+        
+        prompt = template.format(
+            power_name=power_name,
+            current_year=current_year,
+            current_phase=current_phase,
+            board_state_str=board_state_str,
+            phase_summary=phase_summary,
+            current_goals=current_goals_str,
+            current_relationships=current_relationships_str,
+            other_powers=other_powers_str,
+        )
         return prompt

@@ -1,7 +1,6 @@
 import pytest
 import sqlite3
-import logging
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 
 # Assuming llm_coordinator.py is in ai_diplomacy.services
 from generic_llm_framework import llm_coordinator  # Updated import
@@ -24,7 +23,9 @@ def test_db_path(tmp_path, monkeypatch):
 
 @pytest.fixture
 def mock_llm_response():
-    response = MagicMock(spec=llm_coordinator.LLMResponse)  # Use the imported LLMResponse
+    response = MagicMock(
+        spec=llm_coordinator.LLMResponse
+    )  # Use the imported LLMResponse
     response.model = MagicMock()
     response.model.model_id = "test_model"
 
@@ -48,7 +49,9 @@ async def test_record_usage_success(mock_llm_response, test_db_path):
 
     # Verify data in DB
     with sqlite3.connect(test_db_path) as conn:
-        cursor = conn.execute("SELECT game_id, agent, phase, model, input, output FROM usage")
+        cursor = conn.execute(
+            "SELECT game_id, agent, phase, model, input, output FROM usage"
+        )
         row = cursor.fetchone()
         assert row is not None
         assert row == ("game1", "agent1", "phase1", "test_model", 100, 50)
@@ -102,6 +105,7 @@ def test_get_usage_stats_by_country_no_data_for_game(test_db_path):
     assert stats == {}
 
 
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_get_total_usage_stats_success(test_db_path):
@@ -141,7 +145,9 @@ def test_initialize_database_success(
         llm_coordinator.initialize_database()
         assert db_file.exists()
         with sqlite3.connect(db_file) as conn:
-            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='usage';")
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='usage';"
+            )
             assert cursor.fetchone() is not None
             cursor = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='index' AND name='usage_game_agent';"

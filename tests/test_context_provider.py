@@ -73,10 +73,15 @@ async def test_inline_context_provider():
     )
 
     # Create test agent config
-    agent_config = AgentConfig(name="FRANCE", country="FRANCE", type="llm", model_id="gemma3:12b")
+    #TODO: make sure this doesn't make a live call to the LLM
+    agent_config = AgentConfig(
+        name="FRANCE", country="FRANCE", type="llm", model_id="gemma3:12b"
+    )
 
     # Test context provision
-    result = await provider.provide_context("test-agent", "FRANCE", context_data, agent_config)
+    result = await provider.provide_context(
+        "test-agent", "FRANCE", context_data, agent_config
+    )
 
     assert result["provider_type"] == "inline"
     assert "context_text" in result
@@ -121,10 +126,14 @@ async def test_mcp_context_provider():
         recent_messages="Test message",
     )
 
-    agent_config = AgentConfig(name="FRANCE", country="FRANCE", type="llm", model_id="gpt-4o-mini")
+    agent_config = AgentConfig(
+        name="FRANCE", country="FRANCE", type="llm", model_id="gpt-4o-mini"
+    )
 
     # Test context provision (should show tools not available)
-    result = await provider.provide_context("test-agent", "FRANCE", context_data, agent_config)
+    result = await provider.provide_context(
+        "test-agent", "FRANCE", context_data, agent_config
+    )
 
     assert result["provider_type"] == "mcp"
     assert result["tools_available"] is False

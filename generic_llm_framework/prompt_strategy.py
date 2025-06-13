@@ -6,7 +6,7 @@ This module provides:
 """
 
 import logging
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, Any
 
 # Assuming llm_utils will be in the same generic framework package.
 # This import is for BasePromptStrategy's _load_generic_system_prompt

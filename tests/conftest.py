@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 from pathlib import Path
+import tests.fakes as fakes_module
 from ai_diplomacy.services.config import AgentConfig
 from generic_llm_framework.llm_coordinator import LLMCoordinator  # Updated import
 from ai_diplomacy.services.context_provider import (
@@ -16,7 +17,7 @@ from ai_diplomacy.game_config import GameConfig
 
 # Register assert rewrite for fakes
 pytest.register_assert_rewrite("tests.fakes")
-import tests.fakes as fakes_module
+
 
 
 @pytest.fixture
@@ -32,7 +33,6 @@ def agent_cfg_builder():
     Returns a builder function for AgentConfig.
     The builder injects a default 'context_provider'.
     """
-    from ai_diplomacy.services.config import AgentConfig
 
     def _builder(**kwargs) -> AgentConfig:
         data = {}

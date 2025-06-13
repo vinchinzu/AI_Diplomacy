@@ -44,9 +44,10 @@ class GenericLLMAgent(GenericLLMAgentInterface):
         """
         Decides the next action to take based on the current state and possible actions.
         """
-        logger.debug(
-            f"Agent {self.agent_id}: Deciding action with type '{action_type}'. State: {state}, Possible Actions: {possible_actions}"
-        )
+        if self.config.get("verbose_llm_debug", False):
+            logger.debug(
+                f"Agent {self.agent_id}: Deciding action with type '{action_type}'. State: {state}, Possible Actions: {possible_actions}"
+            )
         try:
             # Construct prompt_context, flattening state if it's a dictionary
             prompt_context = {
@@ -156,9 +157,10 @@ class GenericLLMAgent(GenericLLMAgentInterface):
         Updates the agent's internal state based on recent events and current environment state.
         This is a placeholder and should be expanded based on specific agent needs.
         """
-        logger.info(
-            f"Agent {self.agent_id}: Updating internal state. Current env state: {state}, Events: {events}"
-        )
+        if self.config.get("verbose_llm_debug", False):
+            logger.debug(
+                f"Agent {self.agent_id}: Updating internal state. Current env state: {state}, Events: {events}"
+            )
         # Example: Store last seen state and events. More sophisticated logic would go here.
         self._internal_state["last_env_state"] = state
         self._internal_state["recent_events"] = events

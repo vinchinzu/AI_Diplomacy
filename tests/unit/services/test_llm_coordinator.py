@@ -1,6 +1,5 @@
 import pytest
 import asyncio
-import os
 
 # import sqlite3 # No longer needed here
 from unittest.mock import MagicMock, AsyncMock, patch  # call might not be needed

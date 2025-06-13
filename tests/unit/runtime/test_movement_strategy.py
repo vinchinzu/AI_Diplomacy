@@ -4,10 +4,12 @@ from unittest.mock import MagicMock, AsyncMock, patch, call
 # SimpleNamespace is no longer needed here as it's encapsulated in FakeGame in _diplomacy_fakes.py
 # from types import SimpleNamespace
 
-from ai_diplomacy.orchestrators.movement import MovementPhaseStrategy
+from ai_diplomacy.domain import PhaseState
+from ai_diplomacy.runtime.movement import MovementPhaseStrategy
 from ai_diplomacy.game_history import GameHistory  # Added import
 # FakeGame and DummyOrchestrator are now injected via fixtures from conftest
 # from tests._diplomacy_fakes import FakeGame, DummyOrchestrator
+from tests.fakes import FakeDiplomacyGame, FakeDiplomacyAgent
 
 
 @pytest.mark.unit

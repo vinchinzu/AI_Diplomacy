@@ -5,9 +5,10 @@ Useful for testing and as a baseline for LLM agent performance.
 
 import random
 from typing import List, Dict, Any, Optional
-from .base import BaseAgent, PhaseState  # Corrected
-from ..core.order import Order  # Corrected
+from ai_diplomacy.domain import Order, PhaseState
+from .base import BaseAgent
 from ..core.message import Message  # Corrected
+from diplomacy import Game
 
 __all__ = ["ScriptedAgent"]
 

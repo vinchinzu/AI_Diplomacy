@@ -191,7 +191,7 @@ class GameHistory:
             return []
 
         recent_phases = self.phases[-2:] if len(self.phases) >= 2 else self.phases[-1:]
-        
+
         messages_to_power = []
         for phase in recent_phases:
             for msg in phase.messages:

@@ -10,16 +10,15 @@ from typing import (
     Any,
     Protocol,
 )
-from diplomacy import Game
+from .. import constants  # Import constants
+
+from ai_diplomacy.domain import game_to_phase, PhaseState, Order
 
 # Relative imports will need to be adjusted based on the new location
-from ..core.state import PhaseState  # Adjusted import
 from ..agents.base import BaseAgent  # Corrected: Order and Message removed
-from ..core.order import Order  # Added: Correct import for Order
 from ..services.config import GameConfig  # Adjusted import
 from ..utils.phase_parsing import (
     get_phase_type_from_game,
-    extract_year_from_phase,
     PhaseType,
 )  # Adjusted import
 
@@ -43,6 +42,7 @@ class PhaseStrategy(Protocol):
     async def get_orders(
         self,
         game: "Game",
+        phase: "PhaseState",
         orchestrator: "PhaseOrchestrator",
         game_history: "GameHistory",
     ) -> Dict[str, List[str]]: ...
@@ -65,7 +65,6 @@ order submissions, and game state processing across different game phases
 (Movement, Retreat, Build). It utilizes specific strategy classes for each
 phase type.
 """
-from .. import constants  # Import constants
 
 logger = logging.getLogger(__name__)
 
@@ -130,11 +129,10 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 if self.config.max_phases and self.phase_counter >= self.config.max_phases:
                     logger.info(f"Reached max_phases {self.config.max_phases}. Ending game.")
                     break
-
-                current_phase_val = getattr(game, "phase", constants.DEFAULT_PHASE_NAME)
-                current_year = getattr(game, "year", None)
-                if current_year is None:
-                    current_year = extract_year_from_phase(current_phase_val)
+                
+                phase = game_to_phase(game)
+                current_phase_val = phase.name
+                current_year = phase.key.year
 
                 if (
                     self.config.max_years
@@ -187,7 +185,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                         continue
 
                 if strategy:
-                    all_orders_for_phase = await strategy.get_orders(game, self, game_history)
+                    all_orders_for_phase = await strategy.get_orders(game, phase, self, game_history)
                     # ---- MODIFICATION START: Set orders and process ----
                     logger.info("Submitting all collected orders to the game engine.")
                     for power_name, orders in all_orders_for_phase.items():
@@ -221,10 +219,11 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 )
 
                 self.phase_counter += 1
-
-                current_year = getattr(game, "year", None)
-                if current_year is None:
-                    current_year = extract_year_from_phase(current_phase_val)
+                
+                phase = game_to_phase(game)
+                current_year = phase.key.year
+                current_phase_val = phase.name
+                
                 if (
                     self.config.max_years
                     and current_year is not None
@@ -266,15 +265,16 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         agent: "BaseAgent",
         game_history: "GameHistory",  # may not be needed here anymore
     ) -> List[str]:
-        current_phase_state = PhaseState.from_game(game)
+        """Gets orders for a single power from its assigned agent."""
+        phase = game_to_phase(game)
         try:
             logger.debug(f"Calling agent.decide_orders() for {power_name} (type: {type(agent).__name__})")
             order_objects: List[Order] = await asyncio.wait_for(
-                agent.decide_orders(current_phase_state),
+                agent.decide_orders(phase),
                 timeout=constants.ORDER_DECISION_TIMEOUT_SECONDS,
             )
             logger.debug(f"✅ {power_name}: Generated {len(order_objects)} orders")
-            return [str(o) for o in order_objects]
+            return [str(o.value) for o in order_objects]
         except asyncio.TimeoutError:
             logger.error(f"❌ Timeout getting orders for {power_name}.")
             raise RuntimeError(f"Timeout getting orders for {power_name}")
@@ -289,58 +289,20 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
         all_orders_for_phase: Dict[str, List[str]],
         processed_phase_name: str,
     ):
+        """Processes and logs the results of a game phase."""
+        phase = game_to_phase(game)
         logger.info(f"Processing results for phase: {processed_phase_name}")
-        try:
-            power_names_with_orders = list(all_orders_for_phase.keys())
-            adjudicated_results = self.result_parser.extract_adjudicated_orders(game, power_names_with_orders)
 
-            for power_name, results in adjudicated_results.items():
-                if results:
-                    game_history.add_results(processed_phase_name, power_name, results)
-                else:
-                    logger.debug(f"No results to add to history for {power_name}.")
+        # Log results using GameResultParser
+        phase_results = self.result_parser.parse(game, processed_phase_name)
+        game_history.add_phase_results(processed_phase_name, phase_results)
+        logger.info(f"Phase results for {processed_phase_name} logged.")
 
-        except ValueError as e:
-            logger.error(f"Failed to extract results: {e}", exc_info=True)
-            # Decide on a failure policy: re-raise, stop the game, etc.
-            raise
-
-        # --- The rest of the method (agent state updates, diary consolidation) remains ---
-        current_phase = game.get_current_phase()
-        current_year = extract_year_from_phase(current_phase)
-        if current_year is not None and current_year > 1902:
-            year_to_consolidate = str(current_year - 2)
-            logger.info(f"Checking for diary consolidation for year {year_to_consolidate}.")
-            for power_name in self.active_powers:
-                agent = self.agent_manager.get_agent_by_power(power_name)
-                if agent:
-                    logger.debug(f"Consolidating diary for {power_name} (year {year_to_consolidate})...")
-                    try:
-                        await agent.consolidate_year_diary_entries(
-                            year_to_consolidate, game, self.config.llm_log_path
-                        )
-                        logger.debug(f"✅ {power_name}: Consolidated diary entries")
-                    except Exception as e:
-                        logger.error(
-                            f"❌ Error consolidating diary for {power_name}: {e}",
-                            exc_info=e,
-                        )
-        # Agent state update logic
-        for power_name in self.active_powers:
-            agent = self.agent_manager.get_agent_by_power(power_name)
-            if agent:
-                logger.debug(f"Updating agent state for {power_name}...")
-                try:
-                    current_phase_state = PhaseState.from_game(game)
-                    power_orders = adjudicated_results.get(power_name, [])
-                    await agent.update_state(current_phase_state, power_orders, power_name=power_name)
-                except AttributeError as ae:
-                    logger.error(
-                        f"❌ AttributeError during state update for {power_name} (likely an issue with game/agent state access): {ae}",
-                        exc_info=True,
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"❌ Error during phase summary processing for {power_name}: {e}",
-                        exc_info=e,
-                    )
+        # Update agents with the new state
+        update_tasks = [
+            agent.update_state(phase, phase_results.get(power, []))
+            for power, agent in self.agent_manager.get_agents_for_powers(self.active_powers).items()
+        ]
+        if update_tasks:
+            await asyncio.gather(*update_tasks)
+            logger.info("All agents have been updated with the new phase state.")

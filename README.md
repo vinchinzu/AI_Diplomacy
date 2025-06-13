@@ -4,23 +4,37 @@
 
 This repository aims to create a versatile AI-driven system for playing the game of Diplomacy, supporting 2 to 7 players in various configurations. The project intends to allow for games with all LLM agents, all human players, or mixed human-AI games. A key design goal is to provide robust support for LLM-controlled powers, enabling them to engage in strategic decision-making, negotiation, and bloc-level coordination. The system is designed to be compatible with a wide range of Large Language Models (LLMs), both local (e.g., via Ollama) and API-based.
 
-The current development focus and primary testbed is a WWI two-player scenario, run using `python lm_game.py --scenario wwi_two_player --config wwi_scenario.toml`, which serves to refine core mechanics and agent capabilities.
+The project is structured into three distinct layers to ensure a clean, testable, and maintainable codebase.
 
-## Core Components (as demonstrated in the WWI testbed)
+## Architectural Layers
 
-*   **`lm_game.py --scenario wwi_two_player --config wwi_scenario.toml`**: This command executes the WWI two-player scenario. `lm_game.py` is the main game runner, and these arguments configure it for the WWI testbed.
-*   **`scenarios.py`**: Defines game scenarios, including `wwi_two_player`.
-*   **`ai_diplomacy/`**: Directory containing the core AI logic:
-    *   **`agents/llm_agent.py`**: Implements the `LLMAgent` that uses an LLM for decision-making.
-    *   **`orchestrators/`**: Manages game phases (movement, retreat, build) and negotiation.
-        *   `phase_orchestrator.py`: Main orchestrator for the game loop.
-        *   `movement.py`, `build.py`, `retreat.py`, `negotiation.py`: Strategies for specific phases.
-    *   **`services/`**: Supporting services.
-        *   `llm_coordinator.py`: Handles communication with LLMs (via the `llm` library), including serial access for local models.
-        *   `game_config.py`: Manages game configuration.
-        *   `logging_setup.py`: Configures logging.
-    *   **`constants.py`**: Defines project-wide constants.
-    *   **`game_history.py`**: Tracks game events and messages.
+The codebase is organized into three core packages:
+
+### 1. `ai_diplomacy.domain`
+
+This is the pure, core logic of the game. It has no dependencies on LLMs, logging, or any external services. It defines the data structures that represent the game state.
+
+-   **`board.py`**: Defines the `BoardState` of the game.
+-   **`phase.py`**: Defines the `PhaseState` of the game.
+-   **`order.py`**: Defines `Order` objects.
+-   **`messaging.py`**: Defines `DiploMessage` objects.
+-   **`adapter_diplomacy.py`**: A thin wrapper that maps the upstream `diplomacy.Game` objects into the domain's dataclasses.
+
+### 2. `ai_diplomacy.agents`
+
+This layer contains the logic for the different types of agents that can play the game. It depends only on the `domain` layer.
+
+-   **`base.py`**: Defines the `Agent` protocol that all agents must implement.
+-   **`llm/`**: Contains the logic for LLM-based agents.
+-   **`rule_based/`**: Contains the logic for rule-based agents.
+
+### 3. `ai_diplomacy.runtime`
+
+This layer is responsible for the "glue" code that runs the game. It contains the game loop, persistence logic, and other components that are not part of the core domain or agent logic.
+
+-   **`engine.py`**: Contains the main game engine.
+-   **`bloc_manager.py`**: Manages blocs of agents.
+-   **`persistence.py`**: Handles saving and loading game state.
 
 ## Running the Current WWI Test Scenario
 
@@ -29,10 +43,7 @@ The current development focus and primary testbed is a WWI two-player scenario, 
     *   Install dependencies using `uv` (see `pyproject.toml`):
         ```bash
         uv pip install . 
-        # Or, if you have specific dependencies for this test:
-        # uv pip install -r requirements_test.txt 
         ```
-        (Adjust based on your actual dependency management with `uv` and `pyproject.toml`)
     *   Set up any necessary LLM API keys or local LLM (e.g., Ollama with a model like Gemma) as environment variables (refer to `.env.example` if available, or create a `.env` file).
 
 2.  **Execute the Test**:
