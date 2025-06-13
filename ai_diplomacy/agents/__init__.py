@@ -17,8 +17,8 @@ from .bloc_llm_agent import BlocLLMAgent
 from .null_agent import NullAgent
 from .factory import AgentFactory
 from .agent_state import DiplomacyAgentState
-from ..prompt_strategy import (
-    DiplomacyPromptStrategy as LLMPromptStrategy,
+from .llm.prompt.strategy import (
+    JinjaPromptStrategy as LLMPromptStrategy,
 )  # Import and alias
 
 __all__ = [

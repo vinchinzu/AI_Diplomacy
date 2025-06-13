@@ -54,7 +54,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["ai_diplomacy*"]
+where = ["."]
 namespaces = false
 
 [tool.pytest.ini_options]

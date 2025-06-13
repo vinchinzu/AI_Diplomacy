@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from generic_llm_framework.llm_coordinator import LLMCoordinator  # Updated import
 import logging
 from typing import List, Any, Optional, Dict
 from datetime import datetime
@@ -146,21 +145,6 @@ class FakeDiplomacyGame(PhaseProviderMixin):
 
     def get_winners(self):
         return self._winners
-
-
-class FakeLLMCoordinator(LLMCoordinator):
-    async def request(
-        self,
-        model_id,
-        prompt_text,
-        system_prompt_text,
-        game_id="test_game",
-        agent_name="test_agent",
-        phase_str="test_phase",
-        request_identifier="request",
-        llm_caller_override=None,
-    ):
-        return "This is a dummy LLM response."
 
 
 class MockLLMInterface_PhaseSummary(LoggingMixin):

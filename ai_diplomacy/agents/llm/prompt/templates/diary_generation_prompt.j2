@@ -1,0 +1,28 @@
+You are an AI agent playing as {{ country }} in a game of Diplomacy.
+The phase '{{ phase_name }}' has just concluded.
+{{ "The game is now over." if is_game_over else "The game is ongoing." }}
+
+Your situation:
+- Your Units: {{ power_units | join(', ') if power_units else "None" }}
+- Your Supply Centers: {{ power_centers | join(', ') if power_centers else "None" }}
+- Your Current Goals:
+{% for goal in goals %}- {{ goal }}
+{% else %}No specific goals set.{% endfor %}
+- Your Relationships:
+{% for power, status in relationships.items() %}- {{ power }}: {{ status }}
+{% else %}No specific relationship data.{% endfor %}
+
+Events that occurred during the '{{ phase_name }}' phase:
+{% for event in events %}{{ event }}
+{% else %}No significant events.{% endfor %}
+
+Reflect on what happened in this phase. Consider the outcomes of your orders, any surprising moves by other powers, changes in your relationships, and progress towards your goals.
+Write a brief, insightful diary entry from the perspective of {{ country }}. This entry is for your private thoughts and should help you plan for future phases.
+Focus on your key observations, successes, failures, and any new intentions or suspicions.
+
+Return your response as a JSON object with a single key "diary_entry", which should be a string.
+For example:
+{
+  "diary_entry": "The move to Burgundy was successful, but Germany's support for Austria in Galicia is concerning. I need to watch Germany closely. Italy seems open to an alliance."
+}
+Do not add any commentary or explanation outside of the JSON structure. 

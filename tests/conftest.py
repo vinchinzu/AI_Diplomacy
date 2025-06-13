@@ -2,18 +2,13 @@ import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 from pathlib import Path
 import tests.fakes as fakes_module
-from ai_diplomacy.services.config import AgentConfig
-from generic_llm_framework.llm_coordinator import LLMCoordinator  # Updated import
-from ai_diplomacy.services.context_provider import (
-    ContextProviderFactory,
-    ContextProvider,
-)
+from types import SimpleNamespace
 from ai_diplomacy.core.state import PhaseState
 from typing import List
 
 # Import the shared factory
 from ._shared_fixtures import create_game_config
-from ai_diplomacy.game_config import GameConfig
+from ai_diplomacy.config.game_config import GameConfig
 
 # Register assert rewrite for fakes
 pytest.register_assert_rewrite("tests.fakes")
@@ -34,7 +29,7 @@ def agent_cfg_builder():
     The builder injects a default 'context_provider'.
     """
 
-    def _builder(**kwargs) -> AgentConfig:
+    def _builder(**kwargs) -> SimpleNamespace:
         data = {}
         # Set default, but allow override
         if "context_provider" not in kwargs:
@@ -43,7 +38,7 @@ def agent_cfg_builder():
         data.update(kwargs)
 
         # 'name' and 'type' are mandatory, tests must provide them.
-        return AgentConfig(**data)
+        return SimpleNamespace(**data)
 
     return _builder
 
@@ -52,32 +47,6 @@ def agent_cfg_builder():
 def agent_config(agent_cfg_builder):
     """Provides a default, valid AgentConfig instance."""
     return agent_cfg_builder(name="ENGLAND", type="llm", model_id="test_model")
-
-
-@pytest.fixture
-def mock_llm_coordinator():
-    return AsyncMock(spec=LLMCoordinator, autospec=True)
-
-
-@pytest.fixture
-def mock_context_provider():
-    provider = AsyncMock(spec=ContextProvider, autospec=True)
-    provider.provide_context = AsyncMock(
-        return_value={
-            "context_text": "Mocked context",
-            "tools_available": False,
-            "tools": [],
-            "provider_type": "mock_inline",
-        }
-    )
-    return provider
-
-
-@pytest.fixture
-def mock_context_provider_factory(mock_context_provider):
-    factory = Mock(spec=ContextProviderFactory, autospec=True)
-    factory.get_provider.return_value = mock_context_provider
-    return factory
 
 
 @pytest.fixture

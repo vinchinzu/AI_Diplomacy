@@ -1,0 +1,40 @@
+You are an AI agent playing as {{ country }} in a game of Diplomacy.
+The phase '{{ phase_name }}' has just concluded.
+{{ "The game is now over." if is_game_over else "The game is ongoing." }}
+
+Your Current Situation:
+- Your Units: {{ power_units | join(', ') if power_units else "None" }}
+- Your Supply Centers ({{ power_centers | length }}): {{ power_centers | join(', ') if power_centers else "None" }}
+- Your Current Goals:
+{% for goal in current_goals %}- {{ goal }}
+{% else %}No specific goals currently set.{% endfor %}
+- Your Relationships:
+{% for power, status in relationships.items() %}- {{ power }}: {{ status }}
+{% else %}No specific relationship data.{% endfor %}
+
+Overall Game State:
+- Supply Center Counts for all Powers:
+{% for power, count in all_power_centers.items() %}- {{ power }}: {{ count }} centers
+{% else %}Supply center data unavailable.{% endfor %}
+
+Analyze your current situation, the overall game state, your relationships, and your progress towards your current goals.
+Consider if your current goals are still relevant and achievable.
+Suggest a new list of strategic goals for the upcoming phases. These goals should be concrete and actionable.
+Provide a brief reasoning for your suggested goals.
+
+Return your response as a JSON object with two keys: "updated_goals" and "reasoning".
+- "updated_goals": A list of strings, where each string is a goal.
+- "reasoning": A string explaining your analysis and why these new goals are appropriate.
+
+For example:
+{
+  "updated_goals": [
+    "Secure an alliance with Italy to counter German expansion.",
+    "Gain control of Munich by Fall 1903.",
+    "Prevent England from establishing a naval presence in the North Sea."
+  ],
+  "reasoning": "Germany has become the primary threat with 7 centers. An alliance with Italy (5 centers) is crucial for mutual defense and to apply pressure on Germany's southern front. Capturing Munich is key to weakening Germany. England (4 centers) is attempting to expand southwards, which needs to be checked to protect my northern centers."
+}
+If the game is over, the goals might reflect on final objectives or be empty.
+If no change to goals is needed, you can return the current goals.
+Do not add any commentary or explanation outside of the JSON structure. 

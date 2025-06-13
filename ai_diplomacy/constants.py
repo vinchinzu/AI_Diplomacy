@@ -59,6 +59,8 @@ __all__ = [
     # Model pricing
     "MODEL_PRICING_ESTIMATES",
     "DEFAULT_MODEL_PRICE_ESTIMATE_PAIR",
+    # Dialogue
+    "SAVE_DIALOGUE_TO_FILE",
 ]
 
 # --- Game Structure & Diplomacy Specific ---
@@ -108,9 +110,9 @@ PHASE_STRING_WINTER = "WINTER"  # Used in orchestrators.phase_orchestrator (for 
 # --- Service Configurations & Defaults ---
 DEFAULT_TOKEN_BUDGET = 6500  # Used in services.config.GameConfig
 DEFAULT_LOG_LEVEL = "INFO"  # Used in services.config.GameConfig
-CONTEXT_PROVIDER_AUTO = "auto"  # Used in services.config.AgentConfig, services.context_provider
-CONTEXT_PROVIDER_MCP = "mcp"  # Used in services.config.AgentConfig, services.context_provider
-CONTEXT_PROVIDER_INLINE = "inline"  # Used in services.config.AgentConfig, services.context_provider
+CONTEXT_PROVIDER_AUTO = "auto"
+CONTEXT_PROVIDER_MCP = "mcp"
+CONTEXT_PROVIDER_INLINE = "inline"
 MODEL_CAPABILITIES_KEY_SUPPORTS_TOOLS = "supports_tools"  # Used in services.config
 
 # --- Context Provider Specific ---
@@ -145,3 +147,6 @@ DEFAULT_MODEL_PRICE_ESTIMATE_PAIR = (
     0.00015,
     0.0006,
 )  # Fallback for services.usage_tracker
+
+# Dialogue
+SAVE_DIALOGUE_TO_FILE = "dialogue"

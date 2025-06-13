@@ -5,6 +5,9 @@ from .. import constants
 
 from ai_diplomacy.domain import PhaseState, DiploMessage
 from ..agents.llm_agent import LLMAgent  # Added this import
+from ..game_config import GameConfig
+from ..game_state import GameState
+from .agents import get_agent_by_power
 
 if TYPE_CHECKING:
     from diplomacy import Game
@@ -12,6 +15,7 @@ if TYPE_CHECKING:
     from ..core.state import PhaseState  # For type checking current_phase_state
     from ..services.config import GameConfig  # For num_negotiation_rounds
     from ..agent_manager import AgentManager  # For get_agent
+    from ..agents.base import BaseAgent
 """
 Handles the negotiation process between agents during a Diplomacy game phase.
 
@@ -128,3 +132,39 @@ async def perform_negotiation_rounds(
             logger.info(f"End of Negotiation Round {round_num}. Next round starting...")
         else:
             logger.info(f"Final Negotiation Round {round_num} completed.")
+
+
+async def conduct_negotiations(
+    game_config: "GameConfig",
+    game: "GameState",
+    game_history: "GameHistory",
+    powers: List[str],
+):
+    """
+    Args:
+        game_config: The game configuration object.
+        game: The current game state object.
+        game_history: The history of the game.
+        powers: The list of powers to run negotiations for.
+    """
+    current_phase = game.get_current_phase()
+    logger.info(f"<{current_phase}> Conducting bilateral negotiations for powers: {powers}")
+
+    # This example shows a simple loop; a more advanced implementation
+    # could involve parallel execution or more complex scheduling.
+    for power_name in powers:
+        agent = get_agent_by_power(game_config, power_name)
+        if not agent:
+            logger.warning(
+                f"Could not find agent for power '{power_name}' during negotiation phase. Skipping."
+            )
+            continue
+
+        if not hasattr(agent, "negotiate"):
+            logger.info(f"Agent for {power_name} does not have a 'negotiate' method. Skipping.")
+            continue
+
+        try:
+            await agent.negotiate(game, game_history)
+        except Exception as e:
+            logger.error(f"Error during negotiation for {power_name}: {e}", exc_info=True)

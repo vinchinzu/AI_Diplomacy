@@ -1,7 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: false
----
-use pytest
-no live api calls made during tests

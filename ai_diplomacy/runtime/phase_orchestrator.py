@@ -23,10 +23,11 @@ from ..utils.phase_parsing import (
 )  # Adjusted import
 
 # Import actual strategy classes
-from .movement import MovementPhaseStrategy
+from .movement import MovementPhaseStrategy, execute_movement_phase
 from .retreat import RetreatPhaseStrategy
 from .build import BuildPhaseStrategy
 from .result_parser import GameResultParser
+from .negotiation import conduct_negotiations
 
 try:
     from diplomacy.utils.game_phase_data import GamePhaseData
@@ -50,12 +51,10 @@ class PhaseStrategy(Protocol):
 
 if TYPE_CHECKING:
     from diplomacy import Game
-    from ..agent_manager import AgentManager  # Adjusted import
     from ..game_history import GameHistory  # Adjusted import
     from ..agents.base import BaseAgent  # Corrected: Order and Message removed
-
-    # Order and Message already imported above, no need to re-import here if this block is separate
     from ..services.config import GameConfig  # Adjusted import
+
 """
 Orchestrates the main game loop and phase transitions in a Diplomacy game.
 
@@ -94,21 +93,15 @@ GetValidOrdersFuncType = Callable[
 class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
     # Class docstring already exists and is good.
 
-    def __init__(
-        self,
-        game_config: "GameConfig",
-        agent_manager: "AgentManager",
-        get_valid_orders_func: GetValidOrdersFuncType,  # This might be removed if all agents use the new API
-    ):
-        self.config = game_config
-        self.agent_manager = agent_manager
+    def __init__(self, game_config: "GameConfig", get_valid_orders_func: GetValidOrdersFuncType):
+        self.game_config = game_config
         self.get_valid_orders_func = get_valid_orders_func
         self.active_powers: List[str] = []
         self.result_parser = GameResultParser()
         self.phase_counter = 0
 
-        if self.config.powers_and_models:
-            self.active_powers = list(self.config.powers_and_models.keys())
+        if self.game_config.powers_and_models:
+            self.active_powers = list(self.game_config.powers_and_models.keys())
         else:
             logger.warning(
                 "GameConfig.powers_and_models not set when PhaseOrchestrator is initialized. Active powers list will be empty initially."
@@ -120,14 +113,16 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
             PhaseType.BLD: BuildPhaseStrategy(),
         }
 
-    async def run_game_loop(self, game: "Game", game_history: "GameHistory"):
-        logger.info(f"Starting game loop for game ID: {self.config.game_id}")
-        self.config.game_instance = game
+        logger.info("PhaseOrchestrator initialized.")
+
+    async def run_game_loop(self, game: "GameState", game_history: "GameHistory"):
+        logger.info(f"Starting game loop for game ID: {self.game_config.game_id}")
+        self.game_config.game_instance = game
 
         try:
             while True:
-                if self.config.max_phases and self.phase_counter >= self.config.max_phases:
-                    logger.info(f"Reached max_phases {self.config.max_phases}. Ending game.")
+                if self.game_config.max_phases and self.phase_counter >= self.game_config.max_phases:
+                    logger.info(f"Reached max_phases {self.game_config.max_phases}. Ending game.")
                     break
                 
                 phase = game_to_phase(game)
@@ -135,11 +130,11 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 current_year = phase.key.year
 
                 if (
-                    self.config.max_years
+                    self.game_config.max_years
                     and current_year is not None
-                    and current_year >= self.config.max_years
+                    and current_year >= self.game_config.max_years
                 ):
-                    logger.info(f"Reached max_year {self.config.max_years}. Ending game.")
+                    logger.info(f"Reached max_year {self.game_config.max_years}. Ending game.")
                     try:
                         game.draw()
                         logger.info("Game marked as completed via draw.")
@@ -161,7 +156,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 self.active_powers = [
                     p
                     for p in game.powers
-                    if p in self.config.powers_and_models and not game.powers[p].is_eliminated()
+                    if p in self.game_config.powers_and_models and not game.powers[p].is_eliminated()
                 ]
                 if not self.active_powers:
                     logger.info("No active LLM-controlled powers remaining. Ending game.")
@@ -225,9 +220,9 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                 current_phase_val = phase.name
                 
                 if (
-                    self.config.max_years
+                    self.game_config.max_years
                     and current_year is not None
-                    and current_year >= self.config.max_years
+                    and current_year >= self.game_config.max_years
                 ):
                     current_phase_type_val = get_phase_type_from_game(game)
                     if (
@@ -235,7 +230,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                         and constants.PHASE_STRING_WINTER in current_phase_val.upper()
                     ) or (constants.PHASE_STRING_WINTER in current_phase_val.upper() and game.is_game_done):
                         logger.info(
-                            f"Reached max_years ({self.config.max_years}). Ending game after {current_phase_val}."
+                            f"Reached max_years ({self.game_config.max_years}). Ending game after {current_phase_val}."
                         )
                         try:
                             game.draw()
@@ -247,7 +242,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
                             if hasattr(game, "phase"):
                                 game.phase = constants.GAME_STATUS_COMPLETED
                         break
-            logger.info(f"Game {self.config.game_id} finished. Final phase: {game.get_current_phase()}")
+            logger.info(f"Game {self.game_config.game_id} finished. Final phase: {game.get_current_phase()}")
         except AttributeError as e:
             logger.error(
                 f"AttributeError in game loop: {e}. This might indicate an issue with the game object's structure.",

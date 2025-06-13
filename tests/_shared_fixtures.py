@@ -5,9 +5,7 @@ import os
 import pytest
 from pathlib import Path
 
-# Assuming GameConfig is imported from the correct path
-# Adjust the import path if GameConfig is located elsewhere.
-from ai_diplomacy.game_config import (
+from ai_diplomacy.config.game_config import (
     GameConfig,
     DEFAULT_LOG_LEVEL,
     DEFAULT_GAME_ID_PREFIX,
@@ -38,8 +36,6 @@ DEFAULT_ARGS_VALUES = {
     "models_config_file": "models.toml",  # Default, can be overridden
     "game_id": None,  # Will be auto-generated if None
     "log_dir": None,  # GameConfig handles default log dir creation
-    # The following are args used in some test setups, but not directly by GameConfig init
-    # They are included here to allow tests to pass them through kwargs if needed elsewhere.
     "use_mocks": True,  # Common in tests
     "test_powers": "FRANCE",  # Example, specific tests might override
 }
@@ -69,14 +65,8 @@ def create_game_config(**kwargs: Any) -> GameConfig:
 
     args = argparse.Namespace(**args_dict)
 
-    # Before creating GameConfig, ensure the models.toml exists if GameConfig tries to load it,
-    # or mock its loading path if it's not essential for the test.
-    # For simplicity, we'll assume tests can manage this (e.g., by providing a dummy file or overriding models_config_path to None).
-    # If models_config_file is None, GameConfig should handle it gracefully.
     if "models_config_file" in args_dict and args_dict["models_config_file"] is not None:
         if not os.path.exists(args.models_config_file) and args.models_config_file == "models.toml":
-            # If the default "models.toml" is specified and doesn't exist, skip the test.
-            # Tests requiring it should create a dummy file or ensure it exists.
             pytest.skip(f"Default models_config_file '{args.models_config_file}' not found.")
 
     return GameConfig(args)
@@ -89,8 +79,6 @@ def game_config_fixture(cfg_file: Path, **kwargs: Any) -> GameConfig:
     Allows overrides via kwargs passed during fixture parametrization or direct use.
     Example: @pytest.mark.parametrize("game_config", [{"num_players": 2}], indirect=True)
     """
-    # This internal function call allows monkeypatching create_game_config in tests if needed,
-    # though typically, overriding kwargs or monkeypatching the GameConfig object itself is preferred.
     if "game_config_file" not in kwargs:
         kwargs["game_config_file"] = str(cfg_file)
     return create_game_config(**kwargs)
