@@ -30,7 +30,6 @@ logger = logging.getLogger("utils")  # Consider using __name__
 load_dotenv()
 
 __all__ = [
-    "assign_models_to_powers",  # Deprecated, but might be kept for a version
     "gather_possible_orders",
     "LLMInvalidOutputError",
     "get_valid_orders",
@@ -38,54 +37,6 @@ __all__ = [
     "log_llm_response",
     "normalize_order_for_game_map",
 ]
-
-
-def assign_models_to_powers(fixed_models_str: Optional[str] = None) -> Dict[str, str]:
-    """
-    DEPRECATED: Model assignment is now primarily handled by AgentManager using GameConfig
-    which loads from a TOML file and considers command-line arguments.
-    This function remains for potential standalone utilities that might not have a full GameConfig.
-    It provides a very basic assignment logic.
-    """
-    logger.warning(
-        "DEPRECATION WARNING: utils.assign_models_to_powers() is deprecated. "
-        "Model assignment is primarily handled by AgentManager and GameConfig. "
-        "This function provides a basic fallback and may be removed in the future."
-    )
-    powers = ["AUSTRIA", "ENGLAND", "FRANCE", "GERMANY", "ITALY", "RUSSIA", "TURKEY"]
-    assigned_models: Dict[str, str] = {}
-    model_list: List[str] = []
-
-    # Simplified logic: Use fixed_models_str if provided, else a hardcoded default.
-    if fixed_models_str:
-        model_list = [m.strip() for m in fixed_models_str.split(",") if m.strip()]
-        logger.info(f"[Deprecated utils.assign_models] Using fixed_models_str: {model_list}")
-
-    if not model_list:
-        # Try POWER_MODELS env var as a secondary fallback for this deprecated function
-        power_models_env = os.environ.get("POWER_MODELS")
-        if power_models_env:
-            model_list = [m.strip() for m in power_models_env.split(",") if m.strip()]
-            logger.info(f"[Deprecated utils.assign_models] Using POWER_MODELS env var: {model_list}")
-        else:
-            # Final fallback to a single model for all powers
-            default_model_for_util = os.environ.get("MODEL_NAME", "ollama/gemma3:4b")
-            logger.info(
-                f"[Deprecated utils.assign_models] No fixed_models_str or POWER_MODELS. Defaulting all to: {default_model_for_util}"
-            )
-            for power in powers:
-                assigned_models[power] = default_model_for_util
-            return assigned_models
-
-    if not model_list:  # Should not happen if default_model_for_util logic is hit
-        logger.error("[Deprecated utils.assign_models] Model list empty. Cannot assign.")
-        return {}
-
-    for i, power in enumerate(powers):
-        assigned_models[power] = model_list[i % len(model_list)]
-
-    logger.info(f"[Deprecated utils.assign_models] Final assignments: {assigned_models}")
-    return assigned_models
 
 
 def gather_possible_orders(game: Game, power_name: str) -> Dict[str, List[str]]:
