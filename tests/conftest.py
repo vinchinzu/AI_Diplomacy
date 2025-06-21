@@ -1,7 +1,6 @@
 import random
 from typing import Generator
 
-import numpy
 import pytest
 
 
@@ -58,9 +57,8 @@ def rule_agent():
 
 @pytest.fixture(scope="function")
 def seed_random() -> Generator[None, None, None]:
-    """random.seed(123) + numpy.random.seed(123); guards flakiness."""
+    """random.seed(123) guards flakiness."""
     random.seed(123)
-    numpy.random.seed(123)
     yield
     # No cleanup needed after
 

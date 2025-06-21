@@ -5,8 +5,8 @@ Mixin class providing a simple hold order generation behaviour.
 from typing import List
 
 # Adjusted import path assuming core is one level up from agents directory
-from ...core.state import PhaseState
-from ...core.order import Order
+from ...domain.state import PhaseState
+from ...domain.order import Order
 
 __all__ = ["HoldBehaviourMixin"]
 

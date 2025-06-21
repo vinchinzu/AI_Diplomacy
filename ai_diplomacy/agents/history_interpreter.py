@@ -2,7 +2,7 @@
 Functions to interpret and format game history for consumption by AI agents.
 """
 
-from __future__ in annotations
+from __future__ import annotations
 
 import logging
 from collections import defaultdict
@@ -14,9 +14,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_messages_this_round(
-    history: GameHistory, power_name: str, current_phase_name: str
-) -> str:
+def get_messages_this_round(history: GameHistory, power_name: str, current_phase_name: str) -> str:
     current_phase: Optional[Phase] = None
     for phase_obj in history.phases:
         if phase_obj.name == current_phase_name:
@@ -55,9 +53,7 @@ def get_messages_this_round(
             messages_str += conversation_content
             messages_str += "\n"
     else:
-        messages_str += (
-            "\n**PRIVATE MESSAGES TO/FROM YOU THIS ROUND:**\n (No private messages this round)\n"
-        )
+        messages_str += "\n**PRIVATE MESSAGES TO/FROM YOU THIS ROUND:**\n (No private messages this round)\n"
 
     if not global_msgs_content and not conversations:
         return f"\n(No messages recorded for current phase: {current_phase_name})\n"
@@ -65,7 +61,9 @@ def get_messages_this_round(
     return messages_str.strip()
 
 
-def get_recent_messages_to_power(history: GameHistory, power_name: str, limit: int = 3) -> List[Dict[str, str]]:
+def get_recent_messages_to_power(
+    history: GameHistory, power_name: str, limit: int = 3
+) -> List[Dict[str, str]]:
     """
     Gets the most recent messages sent TO this power, useful for tracking messages that need replies.
     Returns a list of dictionaries with 'sender', 'content', and 'phase' keys.
@@ -152,10 +150,7 @@ def get_ignored_messages_by_power(
                     else:
                         if m["sender"] == recipient and (
                             m["recipient"] == sender_name
-                            or (
-                                m["recipient"] in ["GLOBAL", "ALL"]
-                                and sender_name in m.get("content", "")
-                            )
+                            or (m["recipient"] in ["GLOBAL", "ALL"] and sender_name in m.get("content", ""))
                         ):
                             response_msgs.append(m)
 
@@ -267,4 +262,4 @@ def get_previous_phases_history(
     ).strip():
         return "\n(No relevant previous game history to display)\n"
 
-    return game_history_str.strip() 
+    return game_history_str.strip()

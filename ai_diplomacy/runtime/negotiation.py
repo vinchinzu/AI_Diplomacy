@@ -12,10 +12,9 @@ from .agents import get_agent_by_power
 if TYPE_CHECKING:
     from diplomacy import Game
     from ..game_history import GameHistory
-    from ..core.state import PhaseState  # For type checking current_phase_state
+    from ..domain.state import PhaseState  # For type checking current_phase_state
     from ..services.config import GameConfig  # For num_negotiation_rounds
     from ..agent_manager import AgentManager  # For get_agent
-    from ..agents.base import BaseAgent
 """
 Handles the negotiation process between agents during a Diplomacy game phase.
 
