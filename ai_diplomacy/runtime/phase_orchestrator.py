@@ -115,7 +115,7 @@ class PhaseOrchestrator:  # Renamed from GamePhaseOrchestrator
 
         logger.info("PhaseOrchestrator initialized.")
 
-    async def run_game_loop(self, game: "GameState", game_history: "GameHistory"):
+    async def run_game_loop(self, game: "Game", game_history: "GameHistory"):
         logger.info(f"Starting game loop for game ID: {self.game_config.game_id}")
         self.game_config.game_instance = game
 
