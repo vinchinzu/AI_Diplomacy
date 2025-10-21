@@ -6,8 +6,8 @@ LLM-based agents and scripted agents, as well as factories for creating agents.
 """
 
 from .base import BaseAgent
-from ..core.order import Order
-from ..core.message import Message
+from ..domain.order import Order
+from ..domain.message import Message
 from .llm_agent import LLMAgent
 from .scripted_agent import ScriptedAgent
 from .neutral_agent import NeutralAgent

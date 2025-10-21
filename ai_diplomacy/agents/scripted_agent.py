@@ -7,8 +7,7 @@ import random
 from typing import List, Dict, Any, Optional
 from ai_diplomacy.domain import Order, PhaseState
 from .base import BaseAgent
-from ..core.message import Message  # Corrected
-from diplomacy import Game
+from ..domain.message import Message
 
 __all__ = ["ScriptedAgent"]
 
